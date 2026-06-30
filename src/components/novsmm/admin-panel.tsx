@@ -72,6 +72,8 @@ import {
   useAdminWebhooks,
   useAdminSettings,
   useUpdateSettings,
+  useAdminRoles,
+  useDeleteRole,
 } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
@@ -679,48 +681,62 @@ function AdminSecurity() {
 
 /* ─────────── Roles ─────────── */
 function AdminRoles() {
-  const { data: usersData } = useAdminUsers();
-  const users = usersData?.users ?? [];
-
-  // Count users per role
-  const roleCounts: Record<string, number> = {};
-  users.forEach((u: any) => {
-    roleCounts[u.role] = (roleCounts[u.role] ?? 0) + 1;
-  });
-
-  const roleInfo: Record<string, { color: string; permissions: string }> = {
-    admin: { color: "#0052ff", permissions: "Full platform access" },
-    agency: { color: "#10b981", permissions: "Manage creators, orders, analytics" },
-    reseller: { color: "#f59e0b", permissions: "Marketplace, own orders, wallet" },
-    user: { color: "#64748b", permissions: "Buy services, view own data" },
-  };
-  const roles = Object.entries(roleCounts).map(([name, count]) => ({
-    name,
-    count,
-    ...roleInfo[name],
-  }));
+  const { data } = useAdminRoles();
+  const deleteRole = useDeleteRole();
+  const roles = data?.roles ?? [];
 
   return (
-    <RevealStagger stagger={0.05} className="grid grid-cols-1 gap-3 md:grid-cols-2">
-      {roles.map((r) => (
-        <RevealItem key={r.name}>
-          <div className="rounded-2xl border border-border/60 bg-background p-5">
-            <div className="flex items-start justify-between">
-              <div className="flex items-center gap-2.5">
-                <span className="h-9 w-1.5 rounded-full" style={{ background: r.color }} />
-                <div>
-                  <div className="text-sm font-semibold capitalize text-foreground">{r.name}</div>
-                  <div className="text-[11px] text-muted-foreground">{r.permissions}</div>
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div>
+          <div className="text-base font-semibold">Roles & Permissions · {roles.length}</div>
+          <div className="text-xs text-muted-foreground">Granular access control per resource and action</div>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          {roles.map((r: any) => (
+            <div key={r.id} className="rounded-2xl border border-border/60 bg-background p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-9 w-1.5 rounded-full" style={{ background: r.color }} />
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold capitalize text-foreground">{r.name}</span>
+                      {r.isSystem && (
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">SYSTEM</span>
+                      )}
+                    </div>
+                    <div className="text-[11px] text-muted-foreground">{r.description}</div>
+                  </div>
                 </div>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                  {r.userCount} users
+                </span>
               </div>
-              <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
-                {r.count.toLocaleString()}
-              </span>
+              {/* Permissions grid */}
+              <div className="mt-3 flex flex-wrap gap-1">
+                {r.permissions?.map((p: any) => (
+                  <span key={p.resource} className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground/70">
+                    <span className="text-muted-foreground">{p.resource}:</span>
+                    {p.actions}
+                  </span>
+                ))}
+                {(!r.permissions || r.permissions.length === 0) && (
+                  <span className="text-[10px] text-muted-foreground">No specific permissions (inherits all)</span>
+                )}
+              </div>
+              {!r.isSystem && (
+                <button
+                  onClick={() => deleteRole.mutate(r.id)}
+                  className="mt-3 w-full rounded-lg border border-red-500/30 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/5"
+                >
+                  Delete role
+                </button>
+              )}
             </div>
-          </div>
-        </RevealItem>
-      ))}
-    </RevealStagger>
+          ))}
+        </div>
+      </div>
+    </Reveal>
   );
 }
 

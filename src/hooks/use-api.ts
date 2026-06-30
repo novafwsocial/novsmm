@@ -515,3 +515,39 @@ export function useDeleteOffer() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+
+// ── Admin: Roles & Permissions ──
+export function useAdminRoles() {
+  return useQuery({
+    queryKey: ["admin-roles"],
+    queryFn: () => api.get<{ roles: any[]; resources: string[]; actions: string[] }>("/api/admin/roles"),
+  });
+}
+export function useCreateRole() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post("/api/admin/roles", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-roles"] }); toast({ title: "Role created" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateRolePermissions() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { roleId: string; permissions: { resource: string; actions: string }[] }) =>
+      api.patch("/api/admin/roles", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-roles"] }); toast({ title: "Permissions updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useDeleteRole() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/admin/roles?id=${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-roles"] }); toast({ title: "Role deleted" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
