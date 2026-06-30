@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
 import { createNotificationSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
+import { sanitizeMessage } from "@/lib/sanitize";
 
 /**
  * POST /api/admin/notifications — broadcast a notification to all users.
@@ -21,6 +22,13 @@ export async function POST(req: NextRequest) {
 
   const { broadcast, userId, ...notifData } = parsed.data;
 
+  // Sanitize title and message
+  const cleanData = {
+    ...notifData,
+    title: sanitizeMessage(notifData.title),
+    message: sanitizeMessage(notifData.message),
+  };
+
   if (broadcast) {
     // Broadcast to all users
     const users = await db.user.findMany({
@@ -29,7 +37,7 @@ export async function POST(req: NextRequest) {
     });
 
     await db.notification.createMany({
-      data: users.map((u) => ({ ...notifData, userId: u.id })),
+      data: users.map((u) => ({ ...cleanData, userId: u.id })),
     });
 
     // Email all users
@@ -55,7 +63,7 @@ export async function POST(req: NextRequest) {
 
   // Single user
   const notif = await createNotification({
-    ...notifData,
+    ...cleanData,
     userId,
     sendEmail: true,
   });

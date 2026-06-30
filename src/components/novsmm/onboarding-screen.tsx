@@ -48,6 +48,7 @@ const LANGUAGES = [
 export function OnboardingScreen() {
   const { setView, signIn } = useApp();
   const [step, setStep] = useState(0);
+  const [saving, setSaving] = useState(false);
   const [data, setData] = useState({
     role: "Reseller",
     currency: "USD",
@@ -55,7 +56,28 @@ export function OnboardingScreen() {
     notifs: { orders: true, sales: true, tickets: true, system: false },
   });
 
-  const next = () => (step < STEPS.length - 1 ? setStep(step + 1) : signIn());
+  const next = async () => {
+    if (step < STEPS.length - 1) {
+      setStep(step + 1);
+    } else {
+      // Final step — persist onboarding data to DB
+      setSaving(true);
+      try {
+        await fetch("/api/me", {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            currency: data.currency,
+            language: data.language,
+          }),
+        });
+      } catch (e) {
+        // Non-critical — continue to dashboard even if save fails
+      }
+      setSaving(false);
+      signIn();
+    }
+  };
   const back = () => (step > 0 ? setStep(step - 1) : setView("register"));
 
   return (

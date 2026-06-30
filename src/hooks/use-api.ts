@@ -421,6 +421,15 @@ export function useServiceDetail(id?: string) {
   });
 }
 
+// ── Analytics ──
+export function useAnalytics() {
+  return useQuery({
+    queryKey: ["analytics"],
+    queryFn: () => api.get<any>("/api/analytics"),
+    refetchInterval: 30 * 1000,
+  });
+}
+
 // ── Update profile (currency/language) ──
 export function useUpdateProfile() {
   const qc = useQueryClient();

@@ -329,6 +329,63 @@ model WebhookLog {
   @@index([status])
 }
 
+// ─────────── Referrals ───────────
+model Referral {
+  id           String   @id @default(cuid())
+  referrerId   String   // user who referred
+  referredId   String?  // user who was referred (null until they sign up)
+  referredEmail String  // email of the referred person
+  code         String   @unique // unique referral code
+  status       String   @default("pending") // pending | completed | rewarded
+  earnings     Float    @default(0)
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  @@index([referrerId])
+  @@index([code])
+}
+
+// ─────────── Coupons ───────────
+model Coupon {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  type        String   @default("percent") // percent | fixed
+  value       Float    // percentage (0-100) or fixed amount in USD
+  maxUses     Int      @default(100)
+  usedCount   Int      @default(0)
+  status      String   @default("active") // active | disabled | expired
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+  @@index([status])
+}
+
+// ─────────── Favorites ───────────
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  serviceId String
+  createdAt DateTime @default(now())
+
+  @@unique([userId, serviceId])
+  @@index([userId])
+}
+
+// ─────────── Ticket attachments ───────────
+model TicketAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  filename  String
+  url       String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
 // ─────────── Payment intents (real payment tracking) ───────────
 model PaymentIntent {
   id              String   @id @default(cuid())

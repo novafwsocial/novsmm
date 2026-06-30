@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
+import { isStripeConfigured, createPaymentIntent } from "@/lib/stripe";
 
 /**
  * POST /api/wallet/topup — process a payment and credit the wallet.
@@ -58,18 +59,60 @@ export async function POST(req: NextRequest) {
     });
 
     // ── Payment processing ──
-    // Sandbox mode: simulate gateway confirmation with 100% success.
-    // Production: uncomment the Stripe block below.
+    // If Stripe is configured, create a real PaymentIntent.
+    // The frontend will use Stripe.js to collect card details with the client_secret.
+    // The webhook (/api/webhooks/stripe) will credit the balance when payment succeeds.
     //
-    // import Stripe from "stripe";
-    // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!);
-    // const intent = await stripe.paymentIntents.create({
-    //   amount: Math.round(amount * 100),
-    //   currency: "usd",
-    //   metadata: { userId, txnId: txn.id },
-    // });
+    // If Stripe is NOT configured, fall back to sandbox mode (instant success).
 
-    const paymentResult = await processPayment(pm, amount, txn.reference ?? "");
+    let paymentResult: { success: boolean; reference: string };
+
+    if (pm.name === "Stripe" && isStripeConfigured()) {
+      // ── Real Stripe flow ──
+      // Create a PaymentIntent — the client_secret is returned to the frontend
+      // so Stripe.js can collect card details securely (we never touch PAN)
+      const intent = await createPaymentIntent(amount, "usd");
+      if (!intent) {
+        await db.transaction.update({
+          where: { id: txn.id },
+          data: { status: "failed" },
+        });
+        return apiError("Payment gateway unavailable", 503);
+      }
+
+      // Store the payment intent ID on the transaction
+      await db.transaction.update({
+        where: { id: txn.id },
+        data: { reference: intent.paymentIntentId },
+      });
+
+      // Also create a PaymentIntent record for tracking
+      await db.paymentIntent.create({
+        data: {
+          publicId: intent.paymentIntentId,
+          userId,
+          amount,
+          currency: "USD",
+          method: "stripe",
+          providerIntentId: intent.paymentIntentId,
+          status: "pending",
+          description: `Top-up via Stripe`,
+        },
+      });
+
+      // Return the client_secret to the frontend
+      // The frontend will confirm the payment with Stripe.js
+      // The webhook will credit the balance when payment succeeds
+      return apiOk({
+        transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+        clientSecret: intent.clientSecret,
+        paymentIntentId: intent.paymentIntentId,
+        message: "Payment intent created. Complete the payment with Stripe.js.",
+      });
+    } else {
+      // ── Sandbox mode (no real payment) ──
+      paymentResult = await processPayment(pm, amount, txn.reference ?? "");
+    }
 
     if (!paymentResult.success) {
       await db.transaction.update({

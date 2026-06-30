@@ -17,16 +17,28 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { ArrowUpRight, TrendingUp, ShoppingCart, DollarSign, Repeat2, Gift } from "lucide-react";
+import { ArrowUpRight, TrendingUp, ShoppingCart, DollarSign, Repeat2, Gift, Loader2 } from "lucide-react";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
-import {
-  REVENUE_SERIES,
-  HOURLY_ORDERS,
-  MARKETPLACE_BREAKDOWN,
-} from "./dashboard-data";
+import { useAnalytics } from "@/hooks/use-api";
+import { formatPrice } from "@/lib/currency-utils";
+import { useSession } from "@/hooks/use-api";
 
 export function DashboardAnalytics() {
+  const { data, isLoading } = useAnalytics();
+  const { data: sessionData } = useSession();
+  const currency = (sessionData?.user as any)?.currency ?? "USD";
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const { kpis, series, hourlyOrders, marketplaceBreakdown, referrals } = data;
+
   return (
     <div className="flex flex-col gap-6">
       <Reveal>
@@ -38,7 +50,7 @@ export function DashboardAnalytics() {
             Performance
           </h1>
           <p className="text-sm text-muted-foreground">
-            Real-time metrics across orders, revenue, conversions, and marketplace.
+            Real-time metrics from your transaction history.
           </p>
         </div>
       </Reveal>
@@ -46,16 +58,16 @@ export function DashboardAnalytics() {
       {/* KPI strip */}
       <RevealStagger stagger={0.05} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <RevealItem>
-          <Kpi icon={<ShoppingCart className="h-3.5 w-3.5" />} label="Orders (30d)" value={<Counter to={4287} duration={2.2} />} delta="+8.1%" />
+          <Kpi icon={<ShoppingCart className="h-3.5 w-3.5" />} label="Orders (30d)" value={<Counter to={kpis.totalOrders} duration={1.5} />} delta="live" />
         </RevealItem>
         <RevealItem>
-          <Kpi icon={<DollarSign className="h-3.5 w-3.5" />} label="Revenue (30d)" value={<>$<Counter to={84320} duration={2.4} /></>} delta="+24.8%" />
+          <Kpi icon={<DollarSign className="h-3.5 w-3.5" />} label="Revenue (30d)" value={formatPrice(kpis.totalRevenue, currency)} delta="live" />
         </RevealItem>
         <RevealItem>
-          <Kpi icon={<TrendingUp className="h-3.5 w-3.5" />} label="Conversion" value={<><Counter to={94.2} decimals={1} duration={2} />%</>} delta="+0.4pp" />
+          <Kpi icon={<TrendingUp className="h-3.5 w-3.5" />} label="Conversion" value={<><Counter to={kpis.conversionRate} decimals={1} duration={1.5} />%</>} delta="live" />
         </RevealItem>
         <RevealItem>
-          <Kpi icon={<Repeat2 className="h-3.5 w-3.5" />} label="Repeat rate" value={<><Counter to={68.4} decimals={1} duration={2} />%</>} delta="+3.2pp" />
+          <Kpi icon={<Repeat2 className="h-3.5 w-3.5" />} label="Active orders" value={<Counter to={kpis.activeOrders} duration={1.5} />} delta="live" />
         </RevealItem>
       </RevealStagger>
 
@@ -74,7 +86,7 @@ export function DashboardAnalytics() {
             </div>
             <div className="mt-4 h-[260px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_SERIES} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                   <defs>
                     <linearGradient id="aRev" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
@@ -89,8 +101,8 @@ export function DashboardAnalytics() {
                   <XAxis dataKey="d" hide />
                   <YAxis hide />
                   <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12, boxShadow: "0 8px 24px -8px rgba(0,0,0,0.12)" }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#aRev)" animationDuration={1400} />
-                  <Area type="monotone" dataKey="orders" stroke="#10b981" strokeWidth={2} fill="url(#aOrd)" animationDuration={1600} />
+                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#aRev)" animationDuration={1000} />
+                  <Area type="monotone" dataKey="orders" stroke="#10b981" strokeWidth={2} fill="url(#aOrd)" animationDuration={1200} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -104,35 +116,43 @@ export function DashboardAnalytics() {
               By platform
             </div>
             <div className="text-base font-semibold">Marketplace share</div>
-            <div className="mx-auto mt-2 h-[150px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={MARKETPLACE_BREAKDOWN}
-                    dataKey="value"
-                    nameKey="name"
-                    innerRadius={42}
-                    outerRadius={66}
-                    paddingAngle={2}
-                    animationDuration={1100}
-                  >
-                    {MARKETPLACE_BREAKDOWN.map((e) => (
-                      <Cell key={e.name} fill={e.color} stroke="none" />
-                    ))}
-                  </Pie>
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} formatter={(v: number, n: string) => [`${v}%`, n]} />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-            <div className="mt-3 flex flex-col gap-1.5">
-              {MARKETPLACE_BREAKDOWN.map((m) => (
-                <div key={m.name} className="flex items-center gap-2 text-xs">
-                  <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />
-                  <span className="flex-1 text-muted-foreground">{m.name}</span>
-                  <span className="font-medium tabular-nums text-foreground">{m.value}%</span>
+            {marketplaceBreakdown.length > 0 ? (
+              <div>
+                <div className="mx-auto mt-2 h-[150px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={marketplaceBreakdown}
+                        dataKey="value"
+                        nameKey="name"
+                        innerRadius={42}
+                        outerRadius={66}
+                        paddingAngle={2}
+                        animationDuration={1100}
+                      >
+                        {marketplaceBreakdown.map((e: any) => (
+                          <Cell key={e.name} fill={e.color} stroke="none" />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} formatter={(v: number, n: string) => [`${v} orders`, n]} />
+                    </PieChart>
+                  </ResponsiveContainer>
                 </div>
-              ))}
-            </div>
+                <div className="mt-3 flex flex-col gap-1.5">
+                  {marketplaceBreakdown.map((m: any) => (
+                    <div key={m.name} className="flex items-center gap-2 text-xs">
+                      <span className="h-2 w-2 rounded-full" style={{ background: m.color }} />
+                      <span className="flex-1 text-muted-foreground">{m.name}</span>
+                      <span className="font-medium tabular-nums text-foreground">{m.value}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
+                No completed orders yet
+              </div>
+            )}
           </div>
         </Reveal>
       </div>
@@ -146,20 +166,22 @@ export function DashboardAnalytics() {
                 <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   Hourly orders · today
                 </div>
-                <div className="text-base font-semibold">Peak at 19:00 — 96 orders</div>
+                <div className="text-base font-semibold">
+                  Peak: {Math.max(...hourlyOrders.map((h: any) => h.v))} orders/hour
+                </div>
               </div>
               <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-3 w-3" /> +18% vs avg
+                <ArrowUpRight className="h-3 w-3" /> live
               </span>
             </div>
             <div className="mt-4 h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={HOURLY_ORDERS} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
+                <BarChart data={hourlyOrders} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
                   <XAxis dataKey="h" tick={{ fontSize: 10, fill: "rgb(107 114 128)" }} interval={2} axisLine={false} tickLine={false} />
                   <YAxis tick={{ fontSize: 10, fill: "rgb(107 114 128)" }} axisLine={false} tickLine={false} />
                   <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Bar dataKey="v" radius={[4, 4, 0, 0]} fill="#0052ff" maxBarSize={18} animationDuration={1200} />
+                  <Bar dataKey="v" radius={[4, 4, 0, 0]} fill="#0052ff" maxBarSize={18} animationDuration={1000} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -172,18 +194,19 @@ export function DashboardAnalytics() {
               <Gift className="h-3.5 w-3.5" /> Referrals
             </div>
             <div className="mt-2 text-2xl font-semibold tabular-nums">
-              <Counter to={284} duration={2} /> <span className="text-sm font-normal text-muted-foreground">invited</span>
+              <Counter to={referrals.count} duration={1.5} />{" "}
+              <span className="text-sm font-normal text-muted-foreground">referrals</span>
             </div>
             <div className="text-xs text-muted-foreground">
-              <span className="font-medium text-emerald-600">$1,420</span> earned · 5% lifetime
+              <span className="font-medium text-emerald-600">{formatPrice(referrals.total, currency)}</span> earned · 5% lifetime
             </div>
             <div className="mt-4 h-[120px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={REVENUE_SERIES.slice(-14)} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
+                <LineChart data={referrals.series} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
                   <XAxis dataKey="d" hide />
                   <YAxis hide />
                   <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} dot={false} animationDuration={1400} />
+                  <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} dot={false} animationDuration={1200} />
                 </LineChart>
               </ResponsiveContainer>
             </div>

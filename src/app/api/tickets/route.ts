@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
+import { sanitizeMessage } from "@/lib/sanitize";
 
 /** GET /api/tickets — list current user's tickets. */
 export async function GET() {
@@ -38,11 +39,11 @@ export async function POST(req: NextRequest) {
     data: {
       publicId,
       userId,
-      subject,
+      subject: sanitizeMessage(subject),
       priority: priority ?? "medium",
       status: "open",
       messages: {
-        create: { sender: "user", text: message },
+        create: { sender: "user", text: sanitizeMessage(message) },
       },
     },
     include: { messages: true },
@@ -82,7 +83,7 @@ export async function PATCH(req: NextRequest) {
   }
 
   const msg = await db.ticketMessage.create({
-    data: { ticketId, sender: "user", text },
+    data: { ticketId, sender: "user", text: sanitizeMessage(text) },
   });
 
   await db.ticket.update({

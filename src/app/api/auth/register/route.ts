@@ -3,7 +3,8 @@ import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { registerSchema } from "@/lib/validations";
 import { apiError, apiOk } from "@/lib/api-utils";
-import { createNotification } from "@/lib/notify";
+import { createNotification, sendEmail } from "@/lib/notify";
+import { sanitizeText } from "@/lib/sanitize";
 
 /**
  * POST /api/auth/register
@@ -40,7 +41,7 @@ export async function POST(req: NextRequest) {
 
     const user = await db.user.create({
       data: {
-        name,
+        name: sanitizeText(name),
         username,
         email: email.toLowerCase(),
         passwordHash,
@@ -69,6 +70,25 @@ export async function POST(req: NextRequest) {
       severity: "success",
       sendEmail: true,
     });
+
+    // Generate email verification token
+    const crypto = await import("crypto");
+    const verifyToken = crypto.randomBytes(32).toString("hex");
+    await db.verificationToken.create({
+      data: {
+        identifier: email.toLowerCase(),
+        token: verifyToken,
+        expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
+      },
+    });
+
+    // Send verification email
+    const verifyUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/?verify=${verifyToken}`;
+    await sendEmail({
+      to: email.toLowerCase(),
+      subject: "Verify your NOVSMM email",
+      text: `Hi ${name}!\n\nPlease verify your email by clicking the link below:\n\n${verifyUrl}\n\nThis link expires in 24 hours.\n\n— NOVSMM Team`,
+    }).catch((e) => console.error("[register] verification email error:", e));
 
     // Audit log
     await db.auditLog.create({
