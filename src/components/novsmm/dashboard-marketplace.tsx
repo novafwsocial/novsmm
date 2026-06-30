@@ -443,17 +443,22 @@ function ServiceDetailModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
         className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
       >
         <button
           onClick={onClose}
-          className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+          className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close"
         >
-          <X className="h-4 w-4" />
+          <X className="h-5 w-5" />
         </button>
 
         {/* Header */}
@@ -840,8 +845,21 @@ function SellTab() {
 
       {/* Publish modal */}
       {showPublish && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div
+          className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+          onClick={() => setShowPublish(false)}
+        >
+          <div
+            className="relative w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowPublish(false)}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <div className="text-base font-semibold">Publish offer</div>
             <p className="mt-1 text-xs text-muted-foreground">Select a service and set your resale price. The margin is calculated automatically.</p>
             <div className="mt-4 flex flex-col gap-3">

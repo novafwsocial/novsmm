@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 import { Mail, Lock, ArrowRight, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import { useApp } from "./app-store";
 import { Field, SocialButton } from "./auth-fields";
@@ -24,41 +25,14 @@ export function LoginScreen() {
     setLoading(true);
     setError(null);
 
-    try {
-      // Get CSRF token first
-      const csrfRes = await fetch("/api/auth/csrf", { credentials: "include" });
-      if (!csrfRes.ok) throw new Error("Failed to get CSRF token");
-      const { csrfToken } = await csrfRes.json();
-
-      // Submit credentials to NextAuth callback
-      const formData = new URLSearchParams();
-      formData.append("csrfToken", csrfToken);
-      formData.append("email", email);
-      formData.append("password", password);
-      formData.append("redirect", "false");
-      formData.append("json", "true");
-      formData.append("callbackUrl", "/");
-
-      const res = await fetch("/api/auth/callback/credentials", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-        credentials: "include",
-      });
-
-      // NextAuth returns a redirect (302) on success
-      if (res.ok || res.status === 302 || res.redirected) {
-        setLoading(false);
-        window.location.reload();
-        return;
-      }
-
-      setError("Invalid email or password. Try again.");
-      setLoading(false);
-    } catch (err) {
-      setError("Login failed. Please try again.");
-      setLoading(false);
-    }
+    // Use redirect: true to avoid CLIENT_FETCH_ERROR behind reverse proxy
+    // The page will reload to the dashboard on success
+    await signIn("credentials", {
+      email,
+      password,
+      redirect: true,
+      callbackUrl: "/",
+    });
   };
 
   const handleSocial = async (provider: string) => {
@@ -69,8 +43,7 @@ export function LoginScreen() {
       setLoading(false);
       return;
     }
-    // Redirect to OAuth provider via NextAuth
-    window.location.href = `/api/auth/signin/${provider}?callbackUrl=/`;
+    await signIn(provider, { callbackUrl: "/" });
   };
 
   return (

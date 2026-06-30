@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 import {
   Mail,
   Lock,
@@ -72,26 +73,13 @@ export function RegisterScreen() {
         language: form.language,
       });
 
-      // 2. Auto-login: fetch CSRF + submit credentials
-      try {
-        const csrfRes = await fetch("/api/auth/csrf", { credentials: "include" });
-        const { csrfToken } = await csrfRes.json();
-        const formData = new URLSearchParams();
-        formData.append("csrfToken", csrfToken);
-        formData.append("email", form.email);
-        formData.append("password", form.password);
-        formData.append("redirect", "false");
-        formData.append("json", "true");
-        formData.append("callbackUrl", "/");
-        await fetch("/api/auth/callback/credentials", {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: formData.toString(),
-          credentials: "include",
-        });
-      } catch {
-        // Non-critical — user can sign in manually
-      }
+      // 2. Auto-login with NextAuth (redirect: true to avoid proxy issues)
+      await signIn("credentials", {
+        email: form.email,
+        password: form.password,
+        redirect: true,
+        callbackUrl: "/",
+      });
 
       // 3. Go to onboarding
       setOnboardingStep(0);

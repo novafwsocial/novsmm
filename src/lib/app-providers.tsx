@@ -1,15 +1,15 @@
 "use client";
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { SessionProvider } from "next-auth/react";
 import { useState, type ReactNode } from "react";
 
 /**
- * App providers — TanStack Query only.
+ * App providers — TanStack Query + NextAuth SessionProvider.
  *
- * NextAuth's SessionProvider is removed because it auto-fetches /api/auth/session
- * and throws CLIENT_FETCH_ERROR when behind a reverse proxy (Caddy gateway).
- * Instead, we use our custom useSession() hook (in use-api.ts) that fetches
- * the session via TanStack Query with proper error handling.
+ * SessionProvider is needed for signIn/signOut to work correctly.
+ * The CLIENT_FETCH_ERROR is suppressed by setting refetchOnWindowFocus=false
+ * and refetchInterval=0 (we use our own useSession hook via TanStack Query).
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   const [queryClient] = useState(
@@ -26,6 +26,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
   );
 
   return (
-    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    <SessionProvider
+      refetchOnWindowFocus={false}
+      refetchInterval={0}
+    >
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </SessionProvider>
   );
 }

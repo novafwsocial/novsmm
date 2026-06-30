@@ -449,8 +449,8 @@ function AddServiceModal({ onClose, onCreate }: { onClose: () => void; onCreate:
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Add service</div>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -547,8 +547,8 @@ function AddProviderModal({ onClose, onCreate }: { onClose: () => void; onCreate
     try { await onCreate(form); onClose(); } catch { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Add API provider</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -694,9 +694,9 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
-        <button onClick={onClose} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
+        <button onClick={onClose} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-4 w-4" />
         </button>
 
@@ -763,8 +763,8 @@ function AddPaymentMethodModal({ onClose, onCreate }: { onClose: () => void; onC
     try { await onCreate(form); onClose(); } catch { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Add payment method</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -1058,8 +1058,8 @@ function AdminApiKeys() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Generate API key</div>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="User ID" value={form.userId} onChange={(v) => setForm({ ...form, userId: v })} />
@@ -1179,8 +1179,8 @@ function AdminLicenses() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Issue new license</div>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="Customer name" value={form.customerName} onChange={(v) => setForm({ ...form, customerName: v })} />
@@ -1271,8 +1271,8 @@ function AdminCurrencies() {
         </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add currency</div>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="Code (e.g. USD)" value={form.code} onChange={(v) => setForm({ ...form, code: v.toUpperCase() })} />
@@ -1350,8 +1350,8 @@ function AdminLanguages() {
         </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add language</div>
             <div className="mt-4 flex flex-col gap-3">
               <div className="grid grid-cols-2 gap-3">

@@ -301,14 +301,14 @@ function TopupModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+        onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
       >
-        <button onClick={onClose} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
-          <X className="h-4 w-4" />
+        <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
+          <X className="h-5 w-5" />
         </button>
         <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Top up wallet</div>
         <h2 className="mt-1 text-xl font-semibold">Add funds</h2>
@@ -396,14 +396,14 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+        onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
       >
-        <button onClick={onClose} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
-          <X className="h-4 w-4" />
+        <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
+          <X className="h-5 w-5" />
         </button>
         <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Withdraw funds</div>
         <h2 className="mt-1 text-xl font-semibold">Withdraw from wallet</h2>

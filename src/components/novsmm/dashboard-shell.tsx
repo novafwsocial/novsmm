@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, type ReactNode } from "react";
+import { signOut } from "next-auth/react";
 import {
   LayoutGrid,
   ShoppingCart,
@@ -53,22 +54,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const isAdmin = user?.role === "admin";
 
   const handleSignOut = async () => {
-    try {
-      const csrfRes = await fetch("/api/auth/csrf", { credentials: "include" });
-      const { csrfToken } = await csrfRes.json();
-      const formData = new URLSearchParams();
-      formData.append("csrfToken", csrfToken);
-      formData.append("callbackUrl", "/");
-      formData.append("json", "true");
-      await fetch("/api/auth/signout", {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: formData.toString(),
-        credentials: "include",
-      });
-    } catch {
-      // Non-critical
-    }
+    await signOut({ redirect: false });
     storeSignOut();
     window.location.reload();
   };
