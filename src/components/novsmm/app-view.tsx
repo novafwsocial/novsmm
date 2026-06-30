@@ -1,7 +1,9 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import { useEffect, type ReactNode } from "react";
+import { useEffect } from "react";
+import dynamic from "next/dynamic";
+import { Loader2 } from "lucide-react";
 import { useSession } from "@/hooks/use-api";
 import { useApp } from "./app-store";
 import { LoginScreen } from "./login-screen";
@@ -9,14 +11,24 @@ import { RegisterScreen } from "./register-screen";
 import { OnboardingScreen } from "./onboarding-screen";
 import { DashboardShell } from "./dashboard-shell";
 import { DashboardHome } from "./dashboard-home";
-import { DashboardAnalytics } from "./dashboard-analytics";
-import { DashboardMarketplace } from "./dashboard-marketplace";
-import { DashboardOrders } from "./dashboard-orders";
-import { DashboardWallet } from "./dashboard-wallet";
-import { DashboardTickets } from "./dashboard-tickets";
-import { DashboardNotifications } from "./dashboard-notifications";
-import { DashboardProfile } from "./dashboard-profile";
-import { AdminPanel } from "./admin-panel";
+
+// ── Lazy load heavy components for better initial load ──
+const DashboardAnalytics = dynamic(() => import("./dashboard-analytics").then(m => ({ default: m.DashboardAnalytics })), { loading: () => <TabLoader /> });
+const DashboardMarketplace = dynamic(() => import("./dashboard-marketplace").then(m => ({ default: m.DashboardMarketplace })), { loading: () => <TabLoader /> });
+const DashboardOrders = dynamic(() => import("./dashboard-orders").then(m => ({ default: m.DashboardOrders })), { loading: () => <TabLoader /> });
+const DashboardWallet = dynamic(() => import("./dashboard-wallet").then(m => ({ default: m.DashboardWallet })), { loading: () => <TabLoader /> });
+const DashboardTickets = dynamic(() => import("./dashboard-tickets").then(m => ({ default: m.DashboardTickets })), { loading: () => <TabLoader /> });
+const DashboardNotifications = dynamic(() => import("./dashboard-notifications").then(m => ({ default: m.DashboardNotifications })), { loading: () => <TabLoader /> });
+const DashboardProfile = dynamic(() => import("./dashboard-profile").then(m => ({ default: m.DashboardProfile })), { loading: () => <TabLoader /> });
+const AdminPanel = dynamic(() => import("./admin-panel").then(m => ({ default: m.AdminPanel })), { loading: () => <TabLoader /> });
+
+function TabLoader() {
+  return (
+    <div className="flex h-64 items-center justify-center">
+      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+    </div>
+  );
+}
 
 /**
  * Top-level view router — now driven by the REAL NextAuth session.

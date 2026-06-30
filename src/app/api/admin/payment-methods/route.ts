@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
 import { createPaymentMethodSchema } from "@/lib/validations";
+import { encryptJSON, decryptJSON, maskValue } from "@/lib/crypto-utils";
 
 /** GET /api/admin/payment-methods */
 export async function GET() {
@@ -21,15 +22,20 @@ export async function GET() {
 /** Mask sensitive config values for display (show only last 4 chars) */
 function maskConfig(configStr: string): string {
   try {
-    const config = JSON.parse(configStr);
-    const masked: Record<string, string> = {};
-    for (const [key, value] of Object.entries(config)) {
-      const str = String(value);
-      if (str.length > 8) {
-        masked[key] = "••••••••" + str.slice(-4);
-      } else {
-        masked[key] = "••••";
+    // Try decrypting first (new format)
+    const config = decryptJSON(configStr);
+    if (config) {
+      const masked: Record<string, string> = {};
+      for (const [key, value] of Object.entries(config)) {
+        masked[key] = maskValue(String(value));
       }
+      return JSON.stringify(masked);
+    }
+    // Fallback: try plain JSON (old format, not encrypted)
+    const oldConfig = JSON.parse(configStr);
+    const masked: Record<string, string> = {};
+    for (const [key, value] of Object.entries(oldConfig)) {
+      masked[key] = maskValue(String(value));
     }
     return JSON.stringify(masked);
   } catch {
@@ -49,9 +55,9 @@ export async function POST(req: NextRequest) {
     return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
   }
 
-  // Extract config fields (credentials)
+  // Extract config fields (credentials) and encrypt before storing
   const { config, ...methodData } = body;
-  const configStr = config ? JSON.stringify(config) : null;
+  const configStr = config ? encryptJSON(config) : null;
 
   try {
     const method = await db.paymentMethod.create({
@@ -89,9 +95,9 @@ export async function PATCH(req: NextRequest) {
 
   const updateData: any = { ...data };
 
-  // If config is provided, save it as JSON
+  // If config is provided, encrypt before saving
   if (config !== undefined) {
-    updateData.config = config ? JSON.stringify(config) : null;
+    updateData.config = config ? encryptJSON(config) : null;
   }
 
   const method = await db.paymentMethod.update({ where: { id }, data: updateData });

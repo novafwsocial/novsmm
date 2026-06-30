@@ -6,6 +6,28 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
+// ── Brute-force protection: in-memory failed attempt tracking ──
+const MAX_FAILED_ATTEMPTS = 5;
+const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
+
+function trackFailedAttempt(key: string) {
+  const existing = loginAttempts.get(key);
+  const count = (existing?.count ?? 0) + 1;
+  if (count >= MAX_FAILED_ATTEMPTS) {
+    loginAttempts.set(key, { count, lockedUntil: Date.now() + LOCK_DURATION_MS });
+  } else {
+    loginAttempts.set(key, { count, lockedUntil: 0 });
+  }
+  // Cleanup old entries every 100 calls
+  if (loginAttempts.size > 1000) {
+    const now = Date.now();
+    for (const [k, v] of loginAttempts) {
+      if (v.lockedUntil < now && v.count === 0) loginAttempts.delete(k);
+    }
+  }
+}
+
 /**
  * NextAuth configuration.
  *
@@ -29,11 +51,22 @@ const providers: NextAuthOptions["providers"] = [
         throw new Error("Email and password are required");
       }
 
+      const email = credentials.email.toLowerCase();
+
+      // ── Brute-force protection: track failed attempts ──
+      const lockKey = `login_lock:${email}`;
+      const lockData = loginAttempts.get(lockKey);
+      if (lockData && lockData.lockedUntil > Date.now()) {
+        const minsLeft = Math.ceil((lockData.lockedUntil - Date.now()) / 60000);
+        throw new Error(`Account temporarily locked. Try again in ${minsLeft} minute(s).`);
+      }
+
       const user = await db.user.findUnique({
-        where: { email: credentials.email.toLowerCase() },
+        where: { email },
       });
 
       if (!user || !user.passwordHash) {
+        trackFailedAttempt(lockKey);
         throw new Error("Invalid credentials");
       }
 
@@ -46,8 +79,12 @@ const providers: NextAuthOptions["providers"] = [
         user.passwordHash
       );
       if (!valid) {
+        trackFailedAttempt(lockKey);
         throw new Error("Invalid credentials");
       }
+
+      // Reset failed attempts on successful login
+      loginAttempts.delete(lockKey);
 
       // Audit log
       await db.auditLog.create({

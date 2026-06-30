@@ -4,6 +4,7 @@ import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { isStripeConfigured, createPaymentIntent } from "@/lib/stripe";
+import { decryptJSON } from "@/lib/crypto-utils";
 
 /**
  * POST /api/wallet/topup — process a payment and credit the wallet.
@@ -59,18 +60,25 @@ export async function POST(req: NextRequest) {
     });
 
     // ── Payment processing ──
-    // If Stripe is configured, create a real PaymentIntent.
-    // The frontend will use Stripe.js to collect card details with the client_secret.
-    // The webhook (/api/webhooks/stripe) will credit the balance when payment succeeds.
-    //
-    // If Stripe is NOT configured, fall back to sandbox mode (instant success).
+    // Check if the payment method has encrypted credentials in the DB
+    let hasCredentials = false;
+    if (pm.config) {
+      const creds = decryptJSON(pm.config);
+      hasCredentials = !!creds && Object.keys(creds).length > 0;
+
+      // For Stripe: set env vars from DB config so the stripe.ts module can use them
+      if (pm.name === "Stripe" && creds?.secretKey) {
+        process.env.STRIPE_SECRET_KEY = creds.secretKey;
+        if (creds.webhookSecret) {
+          process.env.STRIPE_WEBHOOK_SECRET = creds.webhookSecret;
+        }
+      }
+    }
 
     let paymentResult: { success: boolean; reference: string };
 
-    if (pm.name === "Stripe" && isStripeConfigured()) {
+    if (pm.name === "Stripe" && (isStripeConfigured() || hasCredentials)) {
       // ── Real Stripe flow ──
-      // Create a PaymentIntent — the client_secret is returned to the frontend
-      // so Stripe.js can collect card details securely (we never touch PAN)
       const intent = await createPaymentIntent(amount, "usd");
       if (!intent) {
         await db.transaction.update({
