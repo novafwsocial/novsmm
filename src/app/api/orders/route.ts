@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { createOrderSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
+import { placeHuntSMMOrder, extractProviderServiceId } from "@/lib/huntsmm";
 
 /**
  * GET /api/orders — list the authenticated user's orders.
@@ -190,6 +191,44 @@ export async function POST(req: NextRequest) {
  * In production this would be a background job polling the real provider API.
  */
 async function simulateFulfillment(orderId: string, userId: string) {
+  // Fetch the full order to get the link and service name
+  const order = await db.order.findUnique({
+    where: { id: orderId },
+    select: {
+      id: true, status: true, publicId: true, serviceName: true,
+      totalPrice: true, link: true, quantity: true,
+    },
+  });
+  if (!order || order.status === "cancelled") return;
+
+  // Try to place the order on HuntSMM
+  const providerServiceId = extractProviderServiceId(order.serviceName);
+  if (providerServiceId && order.link) {
+    const result = await placeHuntSMMOrder(
+      providerServiceId,
+      order.link,
+      order.quantity
+    );
+
+    if ("orderId" in result) {
+      // Real order placed — update with provider order ID
+      await db.order.update({
+        where: { id: orderId },
+        data: {
+          status: "in_progress",
+          progress: 10,
+          eta: "Processing on HuntSMM",
+          providerName: `HuntSMM #${result.orderId}`,
+        },
+      });
+      return; // Real fulfillment — status will be updated via webhook/cron
+    } else {
+      console.error("[fulfillment] HuntSMM order failed:", result.error);
+      // Fall through to simulation
+    }
+  }
+
+  // Fallback: simulate fulfillment (when no link, or provider fails)
   const steps = [
     { delay: 2000, progress: 15, status: "in_progress" },
     { delay: 5000, progress: 40, status: "in_progress" },
@@ -200,11 +239,11 @@ async function simulateFulfillment(orderId: string, userId: string) {
   for (const step of steps) {
     await new Promise((r) => setTimeout(r, step.delay));
 
-    const order = await db.order.findUnique({
+    const currentOrder = await db.order.findUnique({
       where: { id: orderId },
       select: { id: true, status: true, publicId: true, serviceName: true, totalPrice: true },
     });
-    if (!order || order.status === "cancelled") return;
+    if (!currentOrder || currentOrder.status === "cancelled") return;
 
     await db.order.update({
       where: { id: orderId },
@@ -220,9 +259,9 @@ async function simulateFulfillment(orderId: string, userId: string) {
       await createNotification({
         userId,
         type: "order",
-        title: `Order #${order.publicId} completed ✅`,
-        message: `${order.serviceName} — delivery complete.`,
-        amount: order.totalPrice,
+        title: `Order #${currentOrder.publicId} completed ✅`,
+        message: `${currentOrder.serviceName} — delivery complete.`,
+        amount: currentOrder.totalPrice,
         severity: "success",
         sendEmail: true,
       });

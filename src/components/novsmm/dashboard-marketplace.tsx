@@ -46,19 +46,29 @@ import { useApp } from "./app-store";
 import { cn } from "@/lib/utils";
 
 const PLATFORM_FILTERS = [
-  "All", "Instagram", "TikTok", "YouTube", "Spotify",
-  "Telegram", "X", "Twitch", "Discord",
+  "All", "Instagram", "TikTok", "YouTube", "Facebook",
+  "Telegram", "Spotify", "X", "Twitch", "Kick",
+  "WhatsApp", "LinkedIn", "Threads", "Snapchat",
+  "Discord", "Pinterest", "Other",
 ];
 
 const PLATFORM_ICONS: Record<string, string> = {
   Instagram: "📷",
   TikTok: "🎵",
   YouTube: "▶️",
+  Facebook: "👤",
   Spotify: "🎧",
   Telegram: "✈️",
   X: "🐦",
   Twitch: "🎮",
   Discord: "💬",
+  Kick: "🟢",
+  WhatsApp: "💬",
+  LinkedIn: "💼",
+  Threads: "🧵",
+  Snapchat: "👻",
+  Pinterest: "📌",
+  Other: "🌐",
 };
 
 const QUALITY_BADGES: Record<string, { label: string; cls: string }> = {
