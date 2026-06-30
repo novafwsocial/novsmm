@@ -2,11 +2,13 @@
 
 import { motion } from "framer-motion";
 import { useState, useMemo } from "react";
-import { Search, Filter, Download } from "lucide-react";
-import { useOrders } from "@/hooks/use-api";
+import { Search, Filter, Download, Repeat2 } from "lucide-react";
+import { useOrders, useRepeatOrder } from "@/hooks/use-api";
 import { type OrderStatus } from "./dashboard-data";
 import { StatusPill } from "./status-pill";
 import { Reveal } from "./reveal";
+import { formatPrice } from "@/lib/currency-utils";
+import { useApp } from "./app-store";
 import { cn } from "@/lib/utils";
 
 const FILTERS: { id: OrderStatus | "all"; label: string }[] = [
@@ -22,6 +24,9 @@ export function DashboardOrders() {
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [query, setQuery] = useState("");
   const { data, isLoading } = useOrders(filter !== "all" ? filter : undefined, query || undefined);
+  const repeatOrder = useRepeatOrder();
+  const { user } = useApp();
+  const currency = user?.currency ?? "USD";
 
   const filtered = data?.orders ?? [];
 
@@ -101,6 +106,7 @@ export function DashboardOrders() {
                   <th className="px-4 py-3 text-left font-medium">Progress</th>
                   <th className="px-4 py-3 text-left font-medium">Provider</th>
                   <th className="px-4 py-3 text-right font-medium">ETA</th>
+                  <th className="px-4 py-3 text-right font-medium">Repeat</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -132,10 +138,10 @@ export function DashboardOrders() {
                       {o.quantity.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      ${o.unitCost.toFixed(2)}
+                      {formatPrice(o.unitCost, currency)}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">
-                      ${o.totalPrice.toFixed(2)}
+                      {formatPrice(o.totalPrice, currency)}
                     </td>
                     <td className="px-4 py-3"><StatusPill status={o.status} /></td>
                     <td className="px-4 py-3">
@@ -162,11 +168,20 @@ export function DashboardOrders() {
                     <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">
                       {o.eta}
                     </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => repeatOrder.mutate({ orderId: o.id })}
+                        disabled={repeatOrder.isPending}
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                      >
+                        <Repeat2 className="h-3 w-3" />
+                      </button>
+                    </td>
                   </motion.tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
                       No orders match your filters.
                     </td>
                   </tr>

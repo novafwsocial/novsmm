@@ -558,3 +558,58 @@ Stage Summary:
 - Notifications broadcast in real-time via WebSocket (no more polling-only)
 - WhatsApp live chat is always visible across the entire app
 - All currencies, languages, and settings are admin-editable via the UI
+
+---
+Task ID: SERVICES-FULL (user dashboard services + currency conversion + repeat orders)
+Agent: main (orchestrator)
+Task: Develop the services section with dynamic catalog, full detail modal, purchase flow, currency conversion, profile customization, and repeat orders
+
+Work Log:
+- Schema: added description, quality (standard/hq/premium/real), deliveryTime, category fields to Service model
+- Seed: updated all 12 services with full descriptions, quality badges, delivery times, and categories
+- APIs built:
+  - GET /api/services (with platform/category/search filters, includes description+quality+deliveryTime)
+  - GET /api/services/[id] (full detail + order stats)
+  - PATCH /api/me (update name/country/currency/language with DB validation)
+  - POST /api/orders/repeat (re-order from history: same service+quantity, debits balance, creates transaction, emits notification)
+  - GET /api/public/currencies (with rates for conversion)
+  - GET /api/public/languages (with flags + native names)
+- Currency conversion system (`src/lib/currency-utils.ts`):
+  - loadCurrencyRates() fetches rates from DB via public API
+  - convertFromUSD() converts using the rate
+  - formatPrice() formats with correct symbol + decimal rules (no decimals for JPY/COP/ARS)
+  - Applied to: marketplace cards, service detail modal, wallet balances, transaction history, orders table
+- NextAuth JWT upgraded: session now includes currency, language, country, lifetimeEarnings
+- Dashboard Marketplace rebuilt:
+  - Services tab: cards grouped by platform with emoji icons, quality badges (HQ/Premium/Standard/Real), delivery time, speed, min/max qty, price per 1000 in user's currency
+  - Platform filters (All/Instagram/TikTok/YouTube/etc.)
+  - Search bar (filters by name, platform, description)
+  - Service Detail Modal: full description, specs grid (delivery time, speed, min/max qty), price breakdown, quantity input with quick buttons (1K/5K/10K), link input, total cost in local currency + USD equivalent, balance check, place order button
+  - Purchase History tab: summary cards (total orders, total spent, completed, active), full orders table with Repeat button per order
+- Dashboard Profile tab:
+  - Profile summary card (avatar, name, email, balance, held, role, member since)
+  - Name + country fields
+  - Currency selector grid (9 currencies with symbols + names + preview conversion)
+  - Language selector grid (5 languages with flags + native names)
+  - Save button (only enabled when changes exist)
+- Dashboard Orders tab: updated to use formatPrice for currency conversion + Repeat button column
+- Dashboard Wallet: updated balance cards + transaction amounts to use formatPrice
+- All currency displays are real-time from the session, so changing currency in Profile instantly updates all prices across the app
+
+Verification (Agent Browser + VLM):
+- ✅ Services tab: 12 services grouped by 8 platforms, each card shows description, quality badge, delivery time, price per 1000 in user's currency
+- ✅ Service detail modal: full description, specs (delivery/speed/min/max), price breakdown, quantity input with 1K/5K/10K quick buttons, link field, total in local currency + USD
+- ✅ Purchase flow: selected Instagram Followers HQ, set qty 1000, placed order for $2.40 — balance debited, order in DB, notification sent
+- ✅ Currency conversion: changed to MXN in profile → all prices re-displayed in pesos ($2.40 USD → $41.28 MXN at rate 17.2), balance shows $146,504.10 MXN
+- ✅ Profile tab: currency selector with 9 options, language selector with 5 options, save works (PATCH /api/me updates DB, session refreshes on reload)
+- ✅ Purchase history: summary cards (4 orders, $7805.22 spent, 2 completed, 2 active), table with Repeat button
+- ✅ Repeat order: clicked Repeat on an order → new order created (5th order in table), balance debited, notification sent
+- ✅ Lint clean, no runtime errors
+
+Stage Summary:
+- Services section is fully dynamic with real DB data (descriptions, quality, delivery times, prices)
+- Currency conversion works in real-time — change currency in Profile → all prices update across Services, Wallet, Orders, History
+- Language selection persists to DB and is available for future i18n
+- Purchase flow is complete: browse → detail → order → balance debit → notification → order history
+- Repeat order feature: one click re-orders the same service+quantity, debits balance, creates new order+transaction
+- All prices displayed in the user's preferred currency with correct symbols and decimal rules

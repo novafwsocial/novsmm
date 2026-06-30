@@ -26,6 +26,7 @@ export type DashboardTab =
   | "wallet"
   | "tickets"
   | "notifications"
+  | "profile"
   | "admin";
 
 export type AdminTab =

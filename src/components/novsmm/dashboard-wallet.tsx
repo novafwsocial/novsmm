@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { formatPrice } from "@/lib/currency-utils";
 import {
   Wallet,
   ArrowDownLeft,
@@ -83,16 +84,16 @@ export function DashboardWallet() {
               <Wallet className="h-4 w-4 opacity-70" />
             </div>
             <div className="mt-3 text-3xl font-semibold tabular-nums">
-              $<Counter to={balance} decimals={2} duration={1.5} />
+              {formatPrice(balance, currency)}
             </div>
             <div className="mt-1 text-xs opacity-70">{currency} · live</div>
           </div>
         </RevealItem>
         <RevealItem>
-          <BalanceCard label="Held" value={heldBalance} icon={<Clock className="h-4 w-4" />} sub="Pending order completion" tone="amber" />
+          <BalanceCard label="Held" value={heldBalance} currency={currency} icon={<Clock className="h-4 w-4" />} sub="Pending order completion" tone="amber" />
         </RevealItem>
         <RevealItem>
-          <BalanceCard label="Lifetime earnings" value={lifetimeEarnings} icon={<TrendingUp className="h-4 w-4" />} sub="All-time revenue" tone="emerald" />
+          <BalanceCard label="Lifetime earnings" value={lifetimeEarnings} currency={currency} icon={<TrendingUp className="h-4 w-4" />} sub="All-time revenue" tone="emerald" />
         </RevealItem>
       </RevealStagger>
 
@@ -178,7 +179,7 @@ export function DashboardWallet() {
                       "px-5 py-3 text-right font-semibold tabular-nums",
                       t.amount > 0 ? "text-emerald-600" : "text-foreground"
                     )}>
-                      {t.amount > 0 ? "+" : ""}${Math.abs(t.amount).toFixed(2)}
+                      {t.amount > 0 ? "+" : "-"}{formatPrice(Math.abs(t.amount), currency)}
                     </td>
                     <td className="px-5 py-3">
                       <span className={cn(
@@ -212,7 +213,7 @@ export function DashboardWallet() {
   );
 }
 
-function BalanceCard({ label, value, icon, sub, tone }: { label: string; value: number; icon: React.ReactNode; sub: string; tone: "amber" | "emerald" }) {
+function BalanceCard({ label, value, currency, icon, sub, tone }: { label: string; value: number; currency: string; icon: React.ReactNode; sub: string; tone: "amber" | "emerald" }) {
   const toneCls = tone === "amber" ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600";
   return (
     <div className="h-full rounded-2xl border border-border/60 bg-background p-5">
@@ -221,7 +222,7 @@ function BalanceCard({ label, value, icon, sub, tone }: { label: string; value: 
         <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", toneCls)}>{icon}</span>
       </div>
       <div className="mt-3 text-3xl font-semibold tabular-nums">
-        $<Counter to={value} decimals={2} duration={1.5} />
+        {formatPrice(value, currency)}
       </div>
       <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
     </div>

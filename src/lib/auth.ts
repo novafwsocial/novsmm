@@ -78,13 +78,18 @@ export const authOptions: NextAuthOptions = {
         try {
           const dbUser = await db.user.findUnique({
             where: { id: token.id as string },
-            select: { balance: true, heldBalance: true, role: true, status: true },
+            select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, lifetimeEarnings: true },
           });
           if (dbUser) {
             token.balance = dbUser.balance;
             token.heldBalance = dbUser.heldBalance;
             token.role = dbUser.role;
             token.status = dbUser.status;
+            token.currency = dbUser.currency;
+            token.language = dbUser.language;
+            token.country = dbUser.country;
+            token.name = dbUser.name;
+            token.lifetimeEarnings = dbUser.lifetimeEarnings;
           }
         } catch (e) {
           // DB might not be available during build — ignore
@@ -100,6 +105,10 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).balance = token.balance;
         (session.user as any).heldBalance = token.heldBalance;
         (session.user as any).status = token.status;
+        (session.user as any).currency = token.currency;
+        (session.user as any).language = token.language;
+        (session.user as any).country = token.country;
+        (session.user as any).lifetimeEarnings = token.lifetimeEarnings;
       }
       return session;
     },

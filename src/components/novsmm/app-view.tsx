@@ -15,6 +15,7 @@ import { DashboardOrders } from "./dashboard-orders";
 import { DashboardWallet } from "./dashboard-wallet";
 import { DashboardTickets } from "./dashboard-tickets";
 import { DashboardNotifications } from "./dashboard-notifications";
+import { DashboardProfile } from "./dashboard-profile";
 import { AdminPanel } from "./admin-panel";
 
 /**
@@ -64,6 +65,7 @@ export function AppView({ landing }: { landing: ReactNode }) {
             {dashboardTab === "wallet" && <DashboardWallet />}
             {dashboardTab === "tickets" && <DashboardTickets />}
             {dashboardTab === "notifications" && <DashboardNotifications />}
+            {dashboardTab === "profile" && <DashboardProfile />}
             {dashboardTab === "admin" && <AdminPanel />}
           </DashboardShell>
         </motion.div>

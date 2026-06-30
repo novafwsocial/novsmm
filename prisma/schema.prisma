@@ -91,21 +91,24 @@ model Provider {
 }
 
 model Service {
-  id         String   @id @default(cuid())
-  name       String   @unique
-  platform   String
-  category   String   @default("general")
-  cost       Float
-  price      Float
-  minQty     Int      @default(1)
-  maxQty     Int      @default(100000)
-  status     String   @default("active") // active | paused | deleted
-  rate       String   @default("0/d")
-  providerId String?
-  provider   Provider? @relation(fields: [providerId], references: [id])
-  orders     Order[]
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id           String   @id @default(cuid())
+  name         String   @unique
+  platform     String
+  category     String   @default("general")
+  description  String   @default("")
+  quality      String   @default("standard") // standard | hq | premium | real
+  deliveryTime String   @default("0-1h") // estimated delivery window
+  cost         Float
+  price        Float
+  minQty       Int      @default(1)
+  maxQty       Int      @default(100000)
+  status       String   @default("active") // active | paused | deleted
+  rate         String   @default("0/d")
+  providerId   String?
+  provider     Provider? @relation(fields: [providerId], references: [id])
+  orders       Order[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([platform])
   @@index([status])

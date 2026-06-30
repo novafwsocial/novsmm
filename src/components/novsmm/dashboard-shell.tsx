@@ -31,11 +31,12 @@ import { cn } from "@/lib/utils";
 const NAV: { id: DashboardTab; label: string; icon: any }[] = [
   { id: "home", label: "Dashboard", icon: LayoutGrid },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "marketplace", label: "Marketplace", icon: Store },
+  { id: "marketplace", label: "Services", icon: Store },
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "wallet", label: "Wallet", icon: Wallet },
   { id: "tickets", label: "Tickets", icon: Ticket },
   { id: "notifications", label: "Notifications", icon: Bell },
+  { id: "profile", label: "Profile", icon: Settings },
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {

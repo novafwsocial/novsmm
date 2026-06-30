@@ -411,3 +411,62 @@ export function useUpdateSettings() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+
+// ── Service detail ──
+export function useServiceDetail(id?: string) {
+  return useQuery({
+    queryKey: ["service", id],
+    queryFn: () => api.get<{ service: any }>(`/api/services/${id}`),
+    enabled: !!id,
+  });
+}
+
+// ── Update profile (currency/language) ──
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch<{ user: any; message: string }>("/api/me", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["session"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      toast({ title: "Profile updated", description: data.message });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Repeat order ──
+export function useRepeatOrder() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { orderId: string; link?: string }) =>
+      api.post<{ order: any; message: string }>("/api/orders/repeat", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      toast({ title: "Order repeated", description: data.message });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Public currencies (for conversion) ──
+export function usePublicCurrencies() {
+  return useQuery({
+    queryKey: ["public-currencies"],
+    queryFn: () => api.get<{ currencies: any[] }>("/api/public/currencies"),
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+}
+
+// ── Public languages ──
+export function usePublicLanguages() {
+  return useQuery({
+    queryKey: ["public-languages"],
+    queryFn: () => api.get<{ languages: any[] }>("/api/public/languages"),
+    staleTime: 5 * 60 * 1000,
+  });
+}
