@@ -46,18 +46,15 @@ export function LoginScreen() {
   const handleSocial = async (provider: string) => {
     setLoading(true);
     setError(null);
-    // For demo, social login signs in with the demo credentials
-    const res = await signIn("credentials", {
-      email: "daniela@pulsemedia.io",
-      password: "novsmm2024",
-      redirect: false,
-    });
-    if (res?.error) {
-      setError("Social login failed. Try email instead.");
+    // Google and Discord are configured as real OAuth providers.
+    // Telegram and Apple require custom providers — show a message if clicked.
+    if (provider === "telegram" || provider === "apple") {
+      setError(`${provider.charAt(0).toUpperCase() + provider.slice(1)} login is coming soon. Please use email or Google.`);
       setLoading(false);
       return;
     }
-    window.location.reload();
+    // Redirect to the OAuth provider's consent screen
+    await signIn(provider, { callbackUrl: "/" });
   };
 
   return (

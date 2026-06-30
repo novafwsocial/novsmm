@@ -1,71 +1,104 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
+import GoogleProvider from "next-auth/providers/google";
+import DiscordProvider from "next-auth/providers/discord";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 
 /**
- * NextAuth configuration — credentials validated against the database
- * with bcrypt. JWT strategy for stateless sessions.
+ * NextAuth configuration.
+ *
+ * Providers:
+ * - Credentials (email + password, validated against DB with bcrypt)
+ * - Google OAuth (requires GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+ * - Discord OAuth (requires DISCORD_CLIENT_ID + DISCORD_CLIENT_SECRET)
+ *
+ * OAuth providers are only registered when their env vars are set,
+ * so the app works in sandbox mode without them.
  */
+const providers: NextAuthOptions["providers"] = [
+  CredentialsProvider({
+    name: "credentials",
+    credentials: {
+      email: { label: "Email", type: "email" },
+      password: { label: "Password", type: "password" },
+    },
+    async authorize(credentials) {
+      if (!credentials?.email || !credentials?.password) {
+        throw new Error("Email and password are required");
+      }
+
+      const user = await db.user.findUnique({
+        where: { email: credentials.email.toLowerCase() },
+      });
+
+      if (!user || !user.passwordHash) {
+        throw new Error("Invalid credentials");
+      }
+
+      if (user.status !== "active") {
+        throw new Error("Account suspended. Contact support.");
+      }
+
+      const valid = await bcrypt.compare(
+        credentials.password,
+        user.passwordHash
+      );
+      if (!valid) {
+        throw new Error("Invalid credentials");
+      }
+
+      // Audit log
+      await db.auditLog.create({
+        data: {
+          userId: user.id,
+          action: "login",
+          entity: "user",
+          entityId: user.id,
+        },
+      });
+
+      return {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        username: user.username,
+      } as any;
+    },
+  }),
+];
+
+// ── Google OAuth ──
+if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+  providers.push(
+    GoogleProvider({
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+    })
+  );
+}
+
+// ── Discord OAuth ──
+if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
+  providers.push(
+    DiscordProvider({
+      clientId: process.env.DISCORD_CLIENT_ID,
+      clientSecret: process.env.DISCORD_CLIENT_SECRET,
+      allowDangerousEmailAccountLinking: true,
+    })
+  );
+}
+
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
   pages: {
     signIn: "/",
   },
-  providers: [
-    CredentialsProvider({
-      name: "credentials",
-      credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        if (!credentials?.email || !credentials?.password) {
-          throw new Error("Email and password are required");
-        }
-
-        const user = await db.user.findUnique({
-          where: { email: credentials.email.toLowerCase() },
-        });
-
-        if (!user || !user.passwordHash) {
-          throw new Error("Invalid credentials");
-        }
-
-        if (user.status !== "active") {
-          throw new Error("Account suspended. Contact support.");
-        }
-
-        const valid = await bcrypt.compare(
-          credentials.password,
-          user.passwordHash
-        );
-        if (!valid) {
-          throw new Error("Invalid credentials");
-        }
-
-        // Audit log
-        await db.auditLog.create({
-          data: {
-            userId: user.id,
-            action: "login",
-            entity: "user",
-            entityId: user.id,
-          },
-        });
-
-        return {
-          id: user.id,
-          email: user.email,
-          name: user.name,
-          role: user.role,
-          username: user.username,
-        } as any;
-      },
-    }),
-  ],
+  providers,
   callbacks: {
     async jwt({ token, user }) {
       if (user) {

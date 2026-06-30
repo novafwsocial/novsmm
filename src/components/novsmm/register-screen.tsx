@@ -15,7 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useApp } from "./app-store";
-import { Field, PasswordStrength, SocialButton } from "./auth-fields";
+import { Field, PasswordStrength } from "./auth-fields";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { cn } from "@/lib/utils";

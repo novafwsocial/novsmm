@@ -479,3 +479,39 @@ export function usePublicLanguages() {
     staleTime: 5 * 60 * 1000,
   });
 }
+
+// ── Offers (marketplace sell) ──
+export function useOffers() {
+  return useQuery({
+    queryKey: ["offers"],
+    queryFn: () => api.get<{ offers: any[]; totalEarnings: number; totalSales: number }>("/api/offers"),
+  });
+}
+export function useCreateOffer() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { serviceId: string; price: number }) =>
+      api.post("/api/offers", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["offers"] }); toast({ title: "Offer published" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateOffer() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/offers", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["offers"] }); toast({ title: "Offer updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useDeleteOffer() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/offers?id=${id}`),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["offers"] }); toast({ title: "Offer removed" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
