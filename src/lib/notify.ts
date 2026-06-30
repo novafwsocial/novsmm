@@ -28,6 +28,19 @@ export async function createNotification(input: NotifInput) {
     },
   });
 
+  // Broadcast to WebSocket mini-service for real-time push
+  // (fire-and-forget — don't block the request)
+  broadcastToWs({
+    id: notif.id,
+    type: notif.type,
+    title: notif.title,
+    message: notif.message,
+    amount: notif.amount,
+    severity: notif.severity,
+    timestamp: notif.createdAt.toISOString(),
+    userId: notif.userId,
+  }).catch((e) => console.error("[ws broadcast] failed:", e));
+
   // Send email if requested and user has email
   if (input.sendEmail && input.userId) {
     const user = await db.user.findUnique({
@@ -95,3 +108,33 @@ export async function sendEmail(opts: {
 
   return { sandbox: false, delivered: true, messageId: info.messageId };
 }
+
+/**
+ * Broadcast a notification to the WebSocket mini-service for real-time push.
+ * Server-side fetch uses localhost:3003 directly (XTransformPort is browser-only).
+ */
+async function broadcastToWs(payload: any): Promise<void> {
+  const WS_SERVICE_URL =
+    process.env.WS_SERVICE_URL ?? "http://localhost:3003/broadcast";
+  await fetch(WS_SERVICE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+    signal: AbortSignal.timeout(3000), // don't hang if service is down
+  });
+}
+
+/**
+ * Notify all admins (used for system-level events: new withdrawal request,
+ * new license issued, payment failure, etc.)
+ */
+export async function notifyAdmins(input: Omit<NotifInput, "userId">) {
+  const admins = await db.user.findMany({
+    where: { role: "admin", status: "active" },
+    select: { id: true, email: true, name: true },
+  });
+  for (const admin of admins) {
+    await createNotification({ ...input, userId: admin.id, sendEmail: true });
+  }
+}
+

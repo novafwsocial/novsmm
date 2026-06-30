@@ -256,3 +256,158 @@ export function useUpdateUser() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+
+// ── Admin: Currencies ──
+export function useAdminCurrencies() {
+  return useQuery({
+    queryKey: ["admin-currencies"],
+    queryFn: () => api.get<{ currencies: any[] }>("/api/admin/currencies"),
+  });
+}
+export function useCreateCurrency() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post("/api/admin/currencies", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-currencies"] }); toast({ title: "Currency added" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateCurrency() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/currencies", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-currencies"] }); toast({ title: "Currency updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Languages ──
+export function useAdminLanguages() {
+  return useQuery({
+    queryKey: ["admin-languages"],
+    queryFn: () => api.get<{ languages: any[] }>("/api/admin/languages"),
+  });
+}
+export function useCreateLanguage() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post("/api/admin/languages", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-languages"] }); toast({ title: "Language added" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateLanguage() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/languages", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-languages"] }); toast({ title: "Language updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: API Keys ──
+export function useAdminApiKeys() {
+  return useQuery({
+    queryKey: ["admin-api-keys"],
+    queryFn: () => api.get<{ apiKeys: any[] }>("/api/admin/api-keys"),
+  });
+}
+export function useCreateApiKey() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post<{ key: string; apiKey: any }>("/api/admin/api-keys", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin-api-keys"] });
+      toast({ title: "API key created", description: "Copy the key now — it won't be shown again." });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useRevokeApiKey() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { id: string; action: "revoke" }) => api.patch("/api/admin/api-keys", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-api-keys"] }); toast({ title: "API key revoked" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Licenses ──
+export function useAdminLicenses() {
+  return useQuery({
+    queryKey: ["admin-licenses"],
+    queryFn: () => api.get<{ licenses: any[] }>("/api/admin/licenses"),
+  });
+}
+export function useCreateLicense() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post<{ licenseKey: string; license: any }>("/api/admin/licenses", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-licenses"] });
+      toast({ title: "License issued", description: "Copy the key — it won't be shown again." });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateLicense() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/licenses", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-licenses"] }); toast({ title: "License updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Withdrawals ──
+export function useAdminWithdrawals(status = "pending") {
+  return useQuery({
+    queryKey: ["admin-withdrawals", status],
+    queryFn: () => api.get<{ withdrawals: any[] }>(`/api/admin/withdrawals?status=${status}`),
+  });
+}
+export function useProcessWithdrawal() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { id: string; action: "approve" | "reject" }) => api.patch("/api/admin/withdrawals", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-withdrawals"] });
+      toast({ title: "Withdrawal processed" });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Webhooks ──
+export function useAdminWebhooks() {
+  return useQuery({
+    queryKey: ["admin-webhooks"],
+    queryFn: () => api.get<{ webhooks: any[] }>("/api/admin/webhooks?limit=50"),
+  });
+}
+
+// ── Admin: Settings ──
+export function useAdminSettings() {
+  return useQuery({
+    queryKey: ["admin-settings"],
+    queryFn: () => api.get<{ settings: Record<string, string> }>("/api/admin/settings"),
+  });
+}
+export function useUpdateSettings() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: Record<string, string>) => api.patch("/api/admin/settings", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-settings"] }); toast({ title: "Settings updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}

@@ -11,6 +11,7 @@ import { Plans } from "@/components/novsmm/plans";
 import { Security } from "@/components/novsmm/security";
 import { Footer } from "@/components/novsmm/footer";
 import { AppView } from "@/components/novsmm/app-view";
+import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
 
 export default function Home() {
   return (
@@ -35,6 +36,8 @@ export default function Home() {
             </>
           }
         />
+        {/* WhatsApp live chat — always visible across the entire app */}
+        <WhatsAppWidget />
       </div>
     </SmoothScroll>
   );

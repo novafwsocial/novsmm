@@ -38,6 +38,7 @@ model User {
   notifications Notification[]
   tickets       Ticket[]
   auditLogs     AuditLog[]
+  apiKeys       ApiKey[]
 }
 
 model Account {
@@ -239,4 +240,108 @@ model Setting {
   id    String @id @default(cuid())
   key   String @unique
   value String
+}
+
+// ─────────── API Keys (reseller integrations) ───────────
+model ApiKey {
+  id          String   @id @default(cuid())
+  publicId    String   @unique // nvsk_... prefix
+  keyHash     String   @unique // bcrypt hash of the full key (never store plaintext)
+  name        String   // label e.g. "Production key"
+  userId      String
+  permissions String   @default("read,order") // comma-separated: read,order,wallet,marketplace
+  status      String   @default("active") // active | revoked
+  lastUsedAt  DateTime?
+  lastUsedIp  String?
+  createdAt   DateTime @default(now())
+  revokedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+}
+
+// ─────────── Licenses (panel rental / sale system) ───────────
+model License {
+  id            String   @id @default(cuid())
+  licenseKey    String   @unique // encrypted, validated server-side
+  licenseHash   String   @unique // bcrypt hash for lookup
+  customerName  String
+  customerEmail String
+  customerId    String?  // linked user
+  plan          String   @default("reseller") // reseller | agency | enterprise | white_label
+  status        String   @default("active") // active | suspended | expired | revoked
+  domain        String?  // allowed domain (for white-label)
+  ipAllowlist   String?  // comma-separated allowed IPs
+  maxUsers      Int      @default(1)
+  maxOrders     Int      @default(10000)
+  issuedAt      DateTime @default(now())
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([customerEmail])
+}
+
+// ─────────── Currencies (admin-managed) ───────────
+model Currency {
+  id        String  @id @default(cuid())
+  code      String  @unique // USD, EUR, MXN...
+  name      String
+  symbol    String
+  rate      Float   @default(1.0) // rate vs USD (for conversion)
+  status    String  @default("active") // active | disabled
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────── Languages (admin-managed) ───────────
+model Language {
+  id        String  @id @default(cuid())
+  code      String  @unique // en, es, pt, fr, de
+  name      String
+  nativeName String
+  flag      String  @default("🌍")
+  status    String  @default("active") // active | disabled
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────── Webhook logs (payment providers) ───────────
+model WebhookLog {
+  id        String   @id @default(cuid())
+  provider  String   // stripe | mercadopago | paypal | aurora | manual
+  eventType String   // payment.intent.succeeded, etc.
+  payload   String   // raw JSON body
+  signature String?
+  status    String   @default("received") // received | processed | failed
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([provider])
+  @@index([status])
+}
+
+// ─────────── Payment intents (real payment tracking) ───────────
+model PaymentIntent {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // pi_...
+  userId          String
+  amount          Float
+  currency        String   @default("USD")
+  method          String   // stripe | mercadopago | paypal | aurora | manual
+  providerIntentId String? // stripe payment_intent_id, MP preference_id
+  status          String   @default("pending") // pending | succeeded | failed | refunded
+  description     String?
+  metadata        String?  // JSON
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([providerIntentId])
 }

@@ -34,6 +34,13 @@ export type AdminTab =
   | "services"
   | "providers"
   | "payments"
+  | "apiKeys"
+  | "licenses"
+  | "currencies"
+  | "languages"
+  | "webhooks"
+  | "withdrawals"
+  | "settings"
   | "security"
   | "roles";
 
