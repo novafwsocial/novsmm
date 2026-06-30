@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, type ReactNode } from "react";
+import { signOut } from "next-auth/react";
 import {
   LayoutGrid,
   ShoppingCart,
@@ -22,22 +23,40 @@ import {
   ArrowLeft,
 } from "lucide-react";
 import { useApp, type DashboardTab } from "./app-store";
+import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
 import { Logo } from "./logo";
+import { Counter } from "./counter";
 import { cn } from "@/lib/utils";
 
-const NAV: { id: DashboardTab; label: string; icon: any; badge?: string }[] = [
+const NAV: { id: DashboardTab; label: string; icon: any }[] = [
   { id: "home", label: "Dashboard", icon: LayoutGrid },
   { id: "analytics", label: "Analytics", icon: BarChart3 },
   { id: "marketplace", label: "Marketplace", icon: Store },
-  { id: "orders", label: "Orders", icon: ShoppingCart, badge: "12" },
+  { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "wallet", label: "Wallet", icon: Wallet },
-  { id: "tickets", label: "Tickets", icon: Ticket, badge: "2" },
-  { id: "notifications", label: "Notifications", icon: Bell, badge: "5" },
+  { id: "tickets", label: "Tickets", icon: Ticket },
+  { id: "notifications", label: "Notifications", icon: Bell },
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { dashboardTab, setDashboardTab, user, signOut, setView } = useApp();
+  const { dashboardTab, setDashboardTab, signOut: storeSignOut, setView } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { data: sessionData } = useSession();
+  const { data: notifData } = useNotifications();
+  const { data: dashData } = useDashboard();
+
+  const user = (sessionData?.user as any) ?? null;
+  const unreadCount = notifData?.unreadCount ?? 0;
+  const balance = dashData?.stats?.balance ?? (user?.balance ?? 0);
+  const activeOrders = dashData?.stats?.activeOrders ?? 0;
+  const openTickets = dashData?.stats?.openTickets ?? 0;
+  const isAdmin = user?.role === "admin";
+
+  const handleSignOut = async () => {
+    await signOut({ redirect: false });
+    storeSignOut();
+    window.location.reload();
+  };
 
   return (
     <div className="relative flex min-h-screen bg-background">
@@ -53,42 +72,72 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Workspace
           </div>
-          {NAV.map((n) => (
-            <NavButton
-              key={n.id}
-              active={dashboardTab === n.id}
-              icon={n.icon}
-              label={n.label}
-              badge={n.badge}
-              onClick={() => setDashboardTab(n.id)}
-            />
-          ))}
+          {NAV.map((n) => {
+            const badge =
+              n.id === "orders" && activeOrders > 0
+                ? String(activeOrders)
+                : n.id === "tickets" && openTickets > 0
+                ? String(openTickets)
+                : n.id === "notifications" && unreadCount > 0
+                ? String(unreadCount)
+                : undefined;
+            return (
+              <NavButton
+                key={n.id}
+                active={dashboardTab === n.id}
+                icon={n.icon}
+                label={n.label}
+                badge={badge}
+                onClick={() => setDashboardTab(n.id)}
+              />
+            );
+          })}
 
-          <div className="mt-5 px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Admin
-          </div>
-          <NavButton
-            active={dashboardTab === "admin"}
-            icon={ShieldCheck}
-            label="Admin Panel"
-            onClick={() => setDashboardTab("admin")}
-          />
+          {isAdmin && (
+            <>
+              <div className="mt-5 px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                Admin
+              </div>
+              <NavButton
+                active={dashboardTab === "admin"}
+                icon={ShieldCheck}
+                label="Admin Panel"
+                onClick={() => setDashboardTab("admin")}
+              />
+            </>
+          )}
         </nav>
 
         {/* wallet mini */}
         <div className="m-3 rounded-2xl border border-border/60 bg-background p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
             <span>Available balance</span>
-            <span className="text-emerald-600">+12.4%</span>
+            <span className="text-emerald-600">live</span>
           </div>
-          <div className="mt-1 text-xl font-semibold tabular-nums">$8,420.50</div>
-          <button className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
+          <div className="mt-1 text-xl font-semibold tabular-nums">
+            $<Counter to={balance} decimals={2} duration={1.5} />
+          </div>
+          <button
+            onClick={() => setDashboardTab("wallet")}
+            className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
+          >
             <Plus className="h-3.5 w-3.5" /> Top up
           </button>
         </div>
 
         {/* user */}
-        <UserPill user={user} onSignOut={signOut} />
+        <UserPill
+          user={
+            user
+              ? {
+                  name: user.name ?? "User",
+                  email: user.email ?? "",
+                  username: user.username ?? "",
+                }
+              : { name: "", email: "", username: "" }
+          }
+          onSignOut={handleSignOut}
+        />
       </aside>
 
       {/* Mobile sidebar */}
@@ -119,30 +168,53 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 </button>
               </div>
               <nav className="flex-1 overflow-y-auto px-3 py-3 nov-scroll">
-                {NAV.map((n) => (
+                {NAV.map((n) => {
+                  const badge =
+                    n.id === "orders" && activeOrders > 0
+                      ? String(activeOrders)
+                      : n.id === "tickets" && openTickets > 0
+                      ? String(openTickets)
+                      : n.id === "notifications" && unreadCount > 0
+                      ? String(unreadCount)
+                      : undefined;
+                  return (
+                    <NavButton
+                      key={n.id}
+                      active={dashboardTab === n.id}
+                      icon={n.icon}
+                      label={n.label}
+                      badge={badge}
+                      onClick={() => {
+                        setDashboardTab(n.id);
+                        setMobileOpen(false);
+                      }}
+                    />
+                  );
+                })}
+                {isAdmin && (
                   <NavButton
-                    key={n.id}
-                    active={dashboardTab === n.id}
-                    icon={n.icon}
-                    label={n.label}
-                    badge={n.badge}
+                    active={dashboardTab === "admin"}
+                    icon={ShieldCheck}
+                    label="Admin Panel"
                     onClick={() => {
-                      setDashboardTab(n.id);
+                      setDashboardTab("admin");
                       setMobileOpen(false);
                     }}
                   />
-                ))}
-                <NavButton
-                  active={dashboardTab === "admin"}
-                  icon={ShieldCheck}
-                  label="Admin Panel"
-                  onClick={() => {
-                    setDashboardTab("admin");
-                    setMobileOpen(false);
-                  }}
-                />
+                )}
               </nav>
-              <UserPill user={user} onSignOut={signOut} />
+              <UserPill
+                user={
+                  user
+                    ? {
+                        name: user.name ?? "User",
+                        email: user.email ?? "",
+                        username: user.username ?? "",
+                      }
+                    : { name: "", email: "", username: "" }
+                }
+                onSignOut={handleSignOut}
+              />
             </motion.aside>
           </>
         )}

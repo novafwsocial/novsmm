@@ -1,7 +1,8 @@
 "use client";
 
 import { AnimatePresence, motion } from "framer-motion";
-import type { ReactNode } from "react";
+import { useEffect, type ReactNode } from "react";
+import { useSession } from "@/hooks/use-api";
 import { useApp } from "./app-store";
 import { LoginScreen } from "./login-screen";
 import { RegisterScreen } from "./register-screen";
@@ -17,35 +18,37 @@ import { DashboardNotifications } from "./dashboard-notifications";
 import { AdminPanel } from "./admin-panel";
 
 /**
- * Top-level view router.
+ * Top-level view router — now driven by the REAL NextAuth session.
  *
- * The platform constraint is "only the / route is visible", so the entire
- * auth + dashboard flow is a single-page app driven by the Zustand store.
- * Transitions are instant (no reloads, no flashes) with shared motion —
- * exactly as the master prompt requires.
+ * If the user has an active session, they're taken to the dashboard
+ * regardless of which view the store says (unless they're in the middle
+ * of onboarding). If no session, they see landing/login/register.
  */
 export function AppView({ landing }: { landing: ReactNode }) {
-  const { view, dashboardTab } = useApp();
+  const { data: session, isLoading } = useSession();
+  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed } = useApp();
+
+  // Sync auth state with session
+  useEffect(() => {
+    setAuthLoading(isLoading);
+    const isAuthed = !!session?.user;
+    if (isAuthed !== authed) {
+      setAuthed(isAuthed, session?.user as any);
+    }
+    // If session exists but we're on landing/login/register, go to dashboard
+    if (isAuthed && view === "landing") {
+      setView("dashboard");
+    }
+    // If no session and we're on dashboard/onboarding, go to landing
+    if (!isAuthed && !isLoading && (view === "dashboard" || view === "onboarding")) {
+      setView("landing");
+    }
+  }, [session, isLoading, view, authed, setAuthed, setAuthLoading, setView]);
 
   return (
     <AnimatePresence mode="wait">
-      {view === "landing" && (
-        <motion.div
-          key="landing"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.4 }}
-        >
-          {landing}
-        </motion.div>
-      )}
-
-      {view === "login" && <LoginScreen />}
-      {view === "register" && <RegisterScreen />}
-      {view === "onboarding" && <OnboardingScreen />}
-
-      {view === "dashboard" && (
+      {/* Authed → dashboard (unless in onboarding) */}
+      {session?.user && view !== "onboarding" && (
         <motion.div
           key="dashboard"
           initial={{ opacity: 0, scale: 0.98 }}
@@ -63,6 +66,24 @@ export function AppView({ landing }: { landing: ReactNode }) {
             {dashboardTab === "notifications" && <DashboardNotifications />}
             {dashboardTab === "admin" && <AdminPanel />}
           </DashboardShell>
+        </motion.div>
+      )}
+
+      {/* Onboarding (authed but in onboarding flow) */}
+      {session?.user && view === "onboarding" && <OnboardingScreen />}
+
+      {/* Not authed → landing/login/register */}
+      {!session?.user && (
+        <motion.div
+          key={view}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.4 }}
+        >
+          {view === "login" && <LoginScreen />}
+          {view === "register" && <RegisterScreen />}
+          {(view === "landing" || (!session && isLoading)) && landing}
         </motion.div>
       )}
     </AnimatePresence>

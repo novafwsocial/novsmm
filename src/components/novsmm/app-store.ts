@@ -1,14 +1,14 @@
 "use client";
 
 import { create } from "zustand";
+import { useSession } from "@/hooks/use-api";
 
 /**
  * NOVSMM app view-state store.
  *
- * Because the platform constraint is "only the / route is visible", the entire
- * auth + dashboard flow lives as a single-page app driven by this store.
- * This actually matches the master-prompt requirement perfectly:
- *   "Sin recargas. Sin pantallas vacías. Sin flashes. Utilizar animaciones compartidas."
+ * The `authed` state is now driven by the real NextAuth session (via
+ * useSession in the AppView component). The store holds the navigation
+ * state (which view/tab is active) and the onboarding step.
  */
 
 export type AppView =
@@ -42,25 +42,21 @@ type AppState = {
   dashboardTab: DashboardTab;
   adminTab: AdminTab;
   authed: boolean;
+  authLoading: boolean;
   onboardingStep: number;
   user: {
     name: string;
     username: string;
     email: string;
-    country: string;
-    currency: string;
-    language: string;
-    role: "user" | "admin";
-  };
-  // navigation
+    role: string;
+  } | null;
   setView: (v: AppView) => void;
   setDashboardTab: (t: DashboardTab) => void;
   setAdminTab: (t: AdminTab) => void;
   setOnboardingStep: (n: number) => void;
-  signIn: () => void;
+  setAuthed: (a: boolean, user?: AppState["user"]) => void;
+  setAuthLoading: (b: boolean) => void;
   signOut: () => void;
-  goDashboard: () => void;
-  goAdmin: () => void;
 };
 
 export const useApp = create<AppState>((set) => ({
@@ -68,29 +64,22 @@ export const useApp = create<AppState>((set) => ({
   dashboardTab: "home",
   adminTab: "overview",
   authed: false,
+  authLoading: true,
   onboardingStep: 0,
-  user: {
-    name: "Daniela Ríos",
-    username: "@daniela",
-    email: "daniela@pulsemedia.io",
-    country: "Mexico",
-    currency: "USD",
-    language: "English",
-    role: "admin",
-  },
+  user: null,
 
   setView: (v) => set({ view: v }),
   setDashboardTab: (t) => set({ dashboardTab: t }),
   setAdminTab: (t) => set({ adminTab: t }),
   setOnboardingStep: (n) => set({ onboardingStep: n }),
-  signIn: () => set({ authed: true, view: "dashboard", dashboardTab: "home" }),
+  setAuthed: (a, user) => set({ authed: a, user: user ?? null }),
+  setAuthLoading: (b) => set({ authLoading: b }),
   signOut: () =>
     set({
       authed: false,
+      user: null,
       view: "landing",
       dashboardTab: "home",
       onboardingStep: 0,
     }),
-  goDashboard: () => set({ view: "dashboard", dashboardTab: "home" }),
-  goAdmin: () => set({ view: "dashboard", dashboardTab: "admin" }),
 }));

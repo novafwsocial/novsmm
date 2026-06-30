@@ -15,21 +15,15 @@ import {
   Bell,
   Trash2,
   Wifi,
+  Loader2,
 } from "lucide-react";
+import { useNotifications } from "@/hooks/use-api";
+import { api } from "@/lib/api-client";
+import { useQueryClient } from "@tanstack/react-query";
 import { Reveal } from "./reveal";
 import { cn } from "@/lib/utils";
 
 type NotifType = "order" | "sale" | "marketplace" | "ticket" | "recharge" | "withdrawal" | "referral" | "system";
-
-type Notification = {
-  id: string;
-  type: NotifType;
-  title: string;
-  message: string;
-  amount?: number;
-  timestamp: string;
-  severity: "info" | "success" | "warning";
-};
 
 const TYPE_META: Record<NotifType, { icon: any; cls: string }> = {
   order: { icon: ShoppingCart, cls: "bg-primary/10 text-primary" },
@@ -42,21 +36,14 @@ const TYPE_META: Record<NotifType, { icon: any; cls: string }> = {
   system: { icon: ShieldCheck, cls: "bg-muted text-muted-foreground" },
 };
 
-const SEED: Notification[] = [
-  { id: "s1", type: "system", title: "All systems operational", message: "All NOVSMM infrastructure is running nominally.", timestamp: new Date(Date.now() - 60000).toISOString(), severity: "info" },
-  { id: "s2", type: "order", title: "Order #A-10428 started", message: "Telegram · Members — provider confirmed.", amount: 19.5, timestamp: new Date(Date.now() - 240000).toISOString(), severity: "info" },
-  { id: "s3", type: "sale", title: "Sale completed", message: "Instagram · Followers HQ — $2.40 credited.", amount: 2.4, timestamp: new Date(Date.now() - 480000).toISOString(), severity: "success" },
-];
-
 export function DashboardNotifications() {
-  const [items, setItems] = useState<Notification[]>(SEED);
+  const { data, isLoading } = useNotifications();
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState<NotifType | "all">("all");
   const socketRef = useRef<Socket | null>(null);
+  const qc = useQueryClient();
 
   useEffect(() => {
-    // Connect to the NOVSMM notifications mini-service on port 3003
-    // ALWAYS via XTransformPort query — never http://localhost:3003
     const socket = io("/?XTransformPort=3003", {
       transports: ["websocket", "polling"],
       reconnection: true,
@@ -67,16 +54,26 @@ export function DashboardNotifications() {
     socket.on("connect", () => setConnected(true));
     socket.on("disconnect", () => setConnected(false));
     socket.on("connected", () => setConnected(true));
-    socket.on("notification", (n: Notification) => {
-      setItems((prev) => [n, ...prev].slice(0, 50));
+    // When a WS notification arrives, invalidate the query to refetch from DB
+    socket.on("notification", () => {
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
     });
 
     return () => {
       socket.disconnect();
     };
-  }, []);
+  }, [qc]);
 
-  const visible = filter === "all" ? items : items.filter((i) => i.type === filter);
+  const items = data?.notifications ?? [];
+  const visible = filter === "all" ? items : items.filter((i: any) => i.type === filter);
+
+  const markAllRead = async () => {
+    await api.post("/api/notifications", { all: true });
+    qc.invalidateQueries({ queryKey: ["notifications"] });
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -88,7 +85,7 @@ export function DashboardNotifications() {
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Notifications</h1>
             <p className="text-sm text-muted-foreground">
-              Live, WebSocket-delivered. No refresh required.
+              Live, WebSocket-delivered from the database. No refresh required.
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -110,16 +107,15 @@ export function DashboardNotifications() {
               <Wifi className="h-3 w-3" />
             </div>
             <button
-              onClick={() => setItems(SEED)}
+              onClick={markAllRead}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <Trash2 className="h-3 w-3" /> Clear
+              <Trash2 className="h-3 w-3" /> Mark all read
             </button>
           </div>
         </div>
       </Reveal>
 
-      {/* filters */}
       <Reveal>
         <div className="flex items-center gap-1 overflow-x-auto nov-scroll">
           {(["all", "order", "sale", "marketplace", "ticket", "recharge", "withdrawal", "referral", "system"] as const).map((t) => (
@@ -139,60 +135,68 @@ export function DashboardNotifications() {
         </div>
       </Reveal>
 
-      {/* feed */}
-      <Reveal blur>
-        <div className="flex flex-col gap-2">
-          <AnimatePresence initial={false}>
-            {visible.map((n) => {
-              const meta = TYPE_META[n.type];
-              return (
-                <motion.div
-                  key={n.id}
-                  layout
-                  initial={{ opacity: 0, y: -12, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: -20 }}
-                  transition={{ type: "spring", stiffness: 300, damping: 24 }}
-                  className="group flex items-start gap-3 rounded-2xl border border-border/60 bg-background p-4 transition-shadow hover:nov-ring"
-                >
-                  <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", meta.cls)}>
-                    <meta.icon className="h-4 w-4" />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="truncate text-sm font-semibold text-foreground">
-                        {n.title}
-                      </div>
-                      <span className="shrink-0 text-[10px] text-muted-foreground">
-                        {timeAgo(n.timestamp)}
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>
-                    {n.amount !== undefined && (
-                      <div
-                        className={cn(
-                          "mt-1.5 inline-flex items-center gap-1 text-xs font-semibold tabular-nums",
-                          n.amount > 0 ? "text-emerald-600" : "text-rose-600"
-                        )}
-                      >
-                        {n.amount > 0 ? "+" : ""}${Math.abs(n.amount).toFixed(2)}
-                      </div>
-                    )}
-                  </div>
-                  <button className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground opacity-0 transition-all hover:bg-muted hover:text-foreground group-hover:opacity-100">
-                    <Bell className="h-3.5 w-3.5" />
-                  </button>
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-          {visible.length === 0 && (
-            <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-              No notifications of this type yet.
-            </div>
-          )}
+      {isLoading ? (
+        <div className="flex h-40 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
         </div>
-      </Reveal>
+      ) : (
+        <Reveal blur>
+          <div className="flex flex-col gap-2">
+            <AnimatePresence initial={false}>
+              {visible.map((n: any) => {
+                const meta = TYPE_META[n.type as NotifType] ?? TYPE_META.system;
+                return (
+                  <motion.div
+                    key={n.id}
+                    layout
+                    initial={{ opacity: 0, y: -12, scale: 0.97 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ type: "spring", stiffness: 300, damping: 24 }}
+                    className={cn(
+                      "group flex items-start gap-3 rounded-2xl border bg-background p-4 transition-shadow hover:nov-ring",
+                      n.read ? "border-border/40" : "border-primary/30 bg-primary/[0.02]"
+                    )}
+                  >
+                    <span className={cn("flex h-9 w-9 shrink-0 items-center justify-center rounded-lg", meta.cls)}>
+                      <meta.icon className="h-4 w-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="truncate text-sm font-semibold text-foreground">
+                          {n.title}
+                        </div>
+                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                          {timeAgo(n.createdAt)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>
+                      {n.amount !== null && n.amount !== undefined && (
+                        <div
+                          className={cn(
+                            "mt-1.5 inline-flex items-center gap-1 text-xs font-semibold tabular-nums",
+                            n.amount > 0 ? "text-emerald-600" : "text-rose-600"
+                          )}
+                        >
+                          {n.amount > 0 ? "+" : ""}${Math.abs(n.amount).toFixed(2)}
+                        </div>
+                      )}
+                    </div>
+                    {!n.read && (
+                      <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+            {visible.length === 0 && (
+              <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+                No notifications of this type yet.
+              </div>
+            )}
+          </div>
+        </Reveal>
+      )}
     </div>
   );
 }

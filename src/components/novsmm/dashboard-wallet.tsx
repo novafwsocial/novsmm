@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useState } from "react";
 import {
   Wallet,
   ArrowDownLeft,
@@ -10,6 +11,8 @@ import {
   TrendingUp,
   Clock,
   ShieldCheck,
+  X,
+  Loader2,
 } from "lucide-react";
 import {
   AreaChart,
@@ -21,10 +24,28 @@ import {
 } from "recharts";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
-import { WALLET_TXNS, TOPUP_METHODS, REVENUE_SERIES, DASHBOARD_STATS } from "./dashboard-data";
+import {
+  useWallet,
+  useTopup,
+  useWithdraw,
+  usePaymentMethods,
+} from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 
 export function DashboardWallet() {
+  const { data, isLoading } = useWallet();
+  const [showTopup, setShowTopup] = useState(false);
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  const { balance, heldBalance, lifetimeEarnings, currency, transactions, series } = data;
+
   return (
     <div className="flex flex-col gap-6">
       <Reveal>
@@ -33,23 +54,27 @@ export function DashboardWallet() {
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
               Wallet
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Balance & activity</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
+              Balance & activity
+            </h1>
             <p className="text-sm text-muted-foreground">
-              Manage balances, top up, withdraw, and export statements.
+              Real-time balance, top up, withdraw, and export statements.
             </p>
           </div>
           <div className="flex gap-2">
             <button className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
               <Download className="h-3.5 w-3.5" /> Export
             </button>
-            <button className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
+            <button
+              onClick={() => setShowTopup(true)}
+              className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
+            >
               <Plus className="h-3.5 w-3.5" /> Top up
             </button>
           </div>
         </div>
       </Reveal>
 
-      {/* Balance cards */}
       <RevealStagger stagger={0.06} className="grid grid-cols-1 gap-3 sm:gap-4 md:grid-cols-3">
         <RevealItem>
           <div className="h-full rounded-2xl border border-border/60 bg-gradient-to-br from-foreground to-foreground/90 p-5 text-background">
@@ -58,34 +83,19 @@ export function DashboardWallet() {
               <Wallet className="h-4 w-4 opacity-70" />
             </div>
             <div className="mt-3 text-3xl font-semibold tabular-nums">
-              $<Counter to={DASHBOARD_STATS.balance} decimals={2} duration={2} />
+              $<Counter to={balance} decimals={2} duration={1.5} />
             </div>
-            <div className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-300">
-              <TrendingUp className="h-3 w-3" /> +12.4% this month
-            </div>
+            <div className="mt-1 text-xs opacity-70">{currency} · live</div>
           </div>
         </RevealItem>
         <RevealItem>
-          <BalanceCard
-            label="Held"
-            value={DASHBOARD_STATS.heldBalance}
-            icon={<Clock className="h-4 w-4" />}
-            sub="Pending order completion"
-            tone="amber"
-          />
+          <BalanceCard label="Held" value={heldBalance} icon={<Clock className="h-4 w-4" />} sub="Pending order completion" tone="amber" />
         </RevealItem>
         <RevealItem>
-          <BalanceCard
-            label="Lifetime earnings"
-            value={92480.5}
-            icon={<TrendingUp className="h-4 w-4" />}
-            sub="+$4,820 this month"
-            tone="emerald"
-          />
+          <BalanceCard label="Lifetime earnings" value={lifetimeEarnings} icon={<TrendingUp className="h-4 w-4" />} sub="All-time revenue" tone="emerald" />
         </RevealItem>
       </RevealStagger>
 
-      {/* Chart + top-up methods */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Reveal blur className="lg:col-span-2">
           <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
@@ -94,20 +104,17 @@ export function DashboardWallet() {
                 <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                   Cash flow · 30 days
                 </div>
-                <div className="text-base font-semibold">Net +$12,420</div>
+                <div className="text-base font-semibold">Live from transactions</div>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
                 <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full bg-primary" /> In
-                </span>
-                <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full bg-emerald-500" /> Out
+                  <span className="h-2 w-2 rounded-full bg-primary" /> Revenue
                 </span>
               </div>
             </div>
             <div className="mt-4 h-[200px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_SERIES} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
+                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                   <defs>
                     <linearGradient id="wIn" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
@@ -117,7 +124,7 @@ export function DashboardWallet() {
                   <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
                   <XAxis dataKey="d" hide />
                   <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#wIn)" animationDuration={1400} />
+                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#wIn)" animationDuration={1000} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -125,29 +132,7 @@ export function DashboardWallet() {
         </Reveal>
 
         <Reveal blur delay={0.06}>
-          <div className="h-full rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
-            <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              Top-up methods
-            </div>
-            <div className="text-base font-semibold">6 rails available</div>
-            <div className="mt-3 flex flex-col gap-1.5">
-              {TOPUP_METHODS.map((m) => (
-                <div
-                  key={m.name}
-                  className="flex items-center gap-2.5 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/30"
-                >
-                  <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold", m.tone)}>
-                    {m.glyph}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-semibold text-foreground">{m.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{m.time} · {m.fee}</div>
-                  </div>
-                  <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
-                </div>
-              ))}
-            </div>
-          </div>
+          <PaymentMethodsList />
         </Reveal>
       </div>
 
@@ -159,7 +144,7 @@ export function DashboardWallet() {
               <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
                 Transaction history
               </div>
-              <div className="text-base font-semibold">All activity</div>
+              <div className="text-base font-semibold">{transactions.length} transactions</div>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
               <ShieldCheck className="h-3 w-3" /> Encrypted
@@ -178,19 +163,17 @@ export function DashboardWallet() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {WALLET_TXNS.map((t, i) => (
+                {transactions.map((t: any, i: number) => (
                   <motion.tr
                     key={t.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.03 }}
+                    transition={{ delay: i * 0.02 }}
                     className="transition-colors hover:bg-muted/30"
                   >
-                    <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-muted-foreground">{t.id}</td>
-                    <td className="px-5 py-3 font-medium text-foreground">{t.desc}</td>
-                    <td className="px-5 py-3">
-                      <TypePill type={t.type} />
-                    </td>
+                    <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-muted-foreground">{t.publicId}</td>
+                    <td className="px-5 py-3 font-medium text-foreground">{t.description}</td>
+                    <td className="px-5 py-3"><TypePill type={t.type} /></td>
                     <td className={cn(
                       "px-5 py-3 text-right font-semibold tabular-nums",
                       t.amount > 0 ? "text-emerald-600" : "text-foreground"
@@ -199,19 +182,23 @@ export function DashboardWallet() {
                     </td>
                     <td className="px-5 py-3">
                       <span className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
                         t.status === "completed"
                           ? "bg-emerald-500/10 text-emerald-700"
-                          : "bg-amber-500/10 text-amber-700"
+                          : t.status === "pending"
+                          ? "bg-amber-500/10 text-amber-700"
+                          : "bg-red-500/10 text-red-700"
                       )}>
                         <span className={cn(
                           "h-1.5 w-1.5 rounded-full",
-                          t.status === "completed" ? "bg-emerald-500" : "bg-amber-500"
+                          t.status === "completed" ? "bg-emerald-500" : t.status === "pending" ? "bg-amber-500" : "bg-red-500"
                         )} />
                         {t.status}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right text-xs text-muted-foreground">{t.time}</td>
+                    <td className="px-5 py-3 text-right text-xs text-muted-foreground">
+                      {new Date(t.createdAt).toLocaleString()}
+                    </td>
                   </motion.tr>
                 ))}
               </tbody>
@@ -219,23 +206,13 @@ export function DashboardWallet() {
           </div>
         </div>
       </Reveal>
+
+      {showTopup && <TopupModal onClose={() => setShowTopup(false)} />}
     </div>
   );
 }
 
-function BalanceCard({
-  label,
-  value,
-  icon,
-  sub,
-  tone,
-}: {
-  label: string;
-  value: number;
-  icon: React.ReactNode;
-  sub: string;
-  tone: "amber" | "emerald";
-}) {
+function BalanceCard({ label, value, icon, sub, tone }: { label: string; value: number; icon: React.ReactNode; sub: string; tone: "amber" | "emerald" }) {
   const toneCls = tone === "amber" ? "bg-amber-500/10 text-amber-600" : "bg-emerald-500/10 text-emerald-600";
   return (
     <div className="h-full rounded-2xl border border-border/60 bg-background p-5">
@@ -244,9 +221,36 @@ function BalanceCard({
         <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", toneCls)}>{icon}</span>
       </div>
       <div className="mt-3 text-3xl font-semibold tabular-nums">
-        $<Counter to={value} decimals={2} duration={2} />
+        $<Counter to={value} decimals={2} duration={1.5} />
       </div>
       <div className="mt-1 text-xs text-muted-foreground">{sub}</div>
+    </div>
+  );
+}
+
+function PaymentMethodsList() {
+  const { data } = usePaymentMethods();
+  const methods = data?.methods ?? [];
+  return (
+    <div className="h-full rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
+      <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+        Top-up methods
+      </div>
+      <div className="text-base font-semibold">{methods.length} rails available</div>
+      <div className="mt-3 flex flex-col gap-1.5">
+        {methods.map((m: any) => (
+          <div key={m.id} className="flex items-center gap-2.5 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/30">
+            <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold", m.tone)}>
+              {m.glyph}
+            </span>
+            <div className="min-w-0 flex-1">
+              <div className="text-xs font-semibold text-foreground">{m.name}</div>
+              <div className="text-[10px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
+            </div>
+            <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -258,6 +262,7 @@ const TYPE_META: Record<string, { label: string; cls: string; icon: any }> = {
   fee: { label: "Fee", cls: "bg-amber-500/10 text-amber-700", icon: ArrowUpRight },
   referral: { label: "Referral", cls: "bg-violet-500/10 text-violet-700", icon: ArrowDownLeft },
   held: { label: "Held", cls: "bg-amber-500/10 text-amber-700", icon: Clock },
+  release: { label: "Release", cls: "bg-emerald-500/10 text-emerald-700", icon: ArrowDownLeft },
 };
 
 function TypePill({ type }: { type: string }) {
@@ -267,5 +272,102 @@ function TypePill({ type }: { type: string }) {
       <m.icon className="h-3 w-3" />
       {m.label}
     </span>
+  );
+}
+
+function TopupModal({ onClose }: { onClose: () => void }) {
+  const { data: pmData } = usePaymentMethods();
+  const topup = useTopup();
+  const [amount, setAmount] = useState(100);
+  const [method, setMethod] = useState("Stripe");
+  const methods = pmData?.methods ?? [];
+
+  const presets = [50, 100, 500, 1000, 5000];
+
+  const handleSubmit = async () => {
+    await topup.mutateAsync({ amount, method });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+      >
+        <button onClick={onClose} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
+          <X className="h-4 w-4" />
+        </button>
+        <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Top up wallet</div>
+        <h2 className="mt-1 text-xl font-semibold">Add funds</h2>
+
+        <div className="mt-5">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Amount (USD)</label>
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">$</span>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(Math.max(1, Number(e.target.value)))}
+              className="h-12 w-full rounded-xl border border-border bg-background pl-8 pr-4 text-lg font-semibold text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            />
+          </div>
+          <div className="mt-2 flex gap-2">
+            {presets.map((p) => (
+              <button
+                key={p}
+                onClick={() => setAmount(p)}
+                className={cn(
+                  "flex-1 rounded-lg border py-1.5 text-xs font-medium transition-colors",
+                  amount === p ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
+                )}
+              >
+                ${p}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Payment method</label>
+          <div className="grid grid-cols-2 gap-2">
+            {methods.map((m: any) => (
+              <button
+                key={m.id}
+                onClick={() => setMethod(m.name)}
+                className={cn(
+                  "flex items-center gap-2 rounded-xl border p-2.5 text-left transition-all",
+                  method === m.name ? "border-primary bg-primary/[0.04] nov-ring" : "border-border hover:bg-muted/30"
+                )}
+              >
+                <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold", m.tone)}>
+                  {m.glyph}
+                </span>
+                <span className="text-xs font-medium text-foreground">{m.name}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={topup.isPending || amount < 1}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+        >
+          {topup.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Processing payment…
+            </>
+          ) : (
+            <>Top up ${amount.toFixed(2)}</>
+          )}
+        </button>
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+          Sandbox mode · no real charge · processes in ~2s
+        </p>
+      </motion.div>
+    </div>
   );
 }

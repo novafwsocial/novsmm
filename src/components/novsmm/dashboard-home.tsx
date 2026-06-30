@@ -23,21 +23,34 @@ import {
 } from "recharts";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
-import { DASHBOARD_STATS, REVENUE_SERIES, ORDERS, TICKETS } from "./dashboard-data";
-import { PLATFORMS } from "./platforms";
+import { useDashboard } from "@/hooks/use-api";
+import { useApp } from "./app-store";
+import { StatusPill } from "./status-pill";
 import { cn } from "@/lib/utils";
 
 export function DashboardHome() {
+  const { data, isLoading } = useDashboard();
+  const { setDashboardTab } = useApp();
+
+  if (isLoading || !data) {
+    return (
+      <div className="flex h-96 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      </div>
+    );
+  }
+
+  const { user, stats, series, recentOrders, recentNotifications } = data;
+
   return (
     <div className="flex flex-col gap-6">
-      {/* Heading */}
       <Reveal>
         <div className="flex flex-col gap-1">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
             Workspace overview
           </div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Good evening, Daniela 👋
+            Welcome back, {user?.name?.split(" ")[0] ?? "there"} 👋
           </h1>
           <p className="text-sm text-muted-foreground">
             Here&apos;s what&apos;s happening across your workspace today.
@@ -45,14 +58,13 @@ export function DashboardHome() {
         </div>
       </Reveal>
 
-      {/* Stat cards */}
       <RevealStagger stagger={0.06} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <RevealItem>
           <StatCard
             icon={<Wallet className="h-4 w-4" />}
             label="Available balance"
-            value={<>$<Counter to={DASHBOARD_STATS.balance} decimals={2} duration={2} /></>}
-            delta="+12.4%"
+            value={<>$<Counter to={stats.balance} decimals={2} duration={1.5} /></>}
+            delta="live"
             up
             tint="primary"
           />
@@ -61,19 +73,17 @@ export function DashboardHome() {
           <StatCard
             icon={<ShoppingCart className="h-4 w-4" />}
             label="Active orders"
-            value={<Counter to={DASHBOARD_STATS.activeOrders} duration={1.6} />}
-            delta="3 starting"
-            up
+            value={<Counter to={stats.activeOrders} duration={1.5} />}
+            delta="in progress"
             tint="amber"
           />
         </RevealItem>
         <RevealItem>
           <StatCard
             icon={<CheckCircle2 className="h-4 w-4" />}
-            label="Completed (30d)"
-            value={<Counter to={DASHBOARD_STATS.completedOrders} duration={2.2} />}
-            delta="+8.1%"
-            up
+            label="Completed (all)"
+            value={<Counter to={stats.completedOrders} duration={2} />}
+            delta="total"
             tint="emerald"
           />
         </RevealItem>
@@ -81,17 +91,15 @@ export function DashboardHome() {
           <StatCard
             icon={<TrendingUp className="h-4 w-4" />}
             label="Revenue today"
-            value={<>$<Counter to={DASHBOARD_STATS.revenueToday} decimals={2} duration={2} /></>}
-            delta="+24.8%"
+            value={<>$<Counter to={stats.revenueToday} decimals={2} duration={1.5} /></>}
+            delta="live"
             up
             tint="violet"
           />
         </RevealItem>
       </RevealStagger>
 
-      {/* Chart + side column */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        {/* Revenue chart */}
         <Reveal blur className="lg:col-span-2">
           <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
             <div className="flex flex-wrap items-start justify-between gap-3">
@@ -100,15 +108,11 @@ export function DashboardHome() {
                   Revenue · last 30 days
                 </div>
                 <div className="mt-1 text-3xl font-semibold tabular-nums">
-                  $<Counter to={DASHBOARD_STATS.revenueMonth} duration={2.4} />
-                </div>
-                <div className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                  <ArrowUpRight className="h-3 w-3" />
-                  +24.8% vs prev period
+                  $<Counter to={stats.revenueMonth} duration={2} />
                 </div>
               </div>
               <div className="flex items-center gap-2 text-xs">
-                {["7D", "30D", "90D", "YTD"].map((t, i) => (
+                {["7D", "30D", "90D"].map((t, i) => (
                   <button
                     key={t}
                     className={cn(
@@ -125,7 +129,7 @@ export function DashboardHome() {
             </div>
             <div className="mt-5 h-[220px] w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={REVENUE_SERIES} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                <AreaChart data={series} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
                   <defs>
                     <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="0%" stopColor="#0052ff" stopOpacity={0.28} />
@@ -139,10 +143,9 @@ export function DashboardHome() {
                       borderRadius: 10,
                       border: "1px solid rgba(0,0,0,0.08)",
                       fontSize: 12,
-                      boxShadow: "0 8px 24px -8px rgba(0,0,0,0.12)",
                     }}
                     labelStyle={{ display: "none" }}
-                    formatter={(v: number) => [`$${v.toFixed(0)}`, "Revenue"]}
+                    formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]}
                   />
                   <Area
                     type="monotone"
@@ -150,7 +153,7 @@ export function DashboardHome() {
                     stroke="#0052ff"
                     strokeWidth={2}
                     fill="url(#revArea)"
-                    animationDuration={1400}
+                    animationDuration={1000}
                   />
                 </AreaChart>
               </ResponsiveContainer>
@@ -158,7 +161,6 @@ export function DashboardHome() {
           </div>
         </Reveal>
 
-        {/* Side: wallet + quick actions */}
         <div className="flex flex-col gap-4">
           <Reveal blur delay={0.06}>
             <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-foreground to-foreground/90 p-5 text-background">
@@ -169,16 +171,22 @@ export function DashboardHome() {
                 <Wallet className="h-4 w-4 opacity-70" />
               </div>
               <div className="mt-4 text-3xl font-semibold tabular-nums">
-                $<Counter to={DASHBOARD_STATS.balance} decimals={2} duration={2} />
+                $<Counter to={stats.balance} decimals={2} duration={1.5} />
               </div>
               <div className="mt-1 text-xs opacity-70">
-                Held: <span className="tabular-nums">${DASHBOARD_STATS.heldBalance.toFixed(2)}</span>
+                Held: <span className="tabular-nums">${stats.heldBalance.toFixed(2)}</span>
               </div>
               <div className="mt-4 flex gap-2">
-                <button className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
+                <button
+                  onClick={() => setDashboardTab("wallet")}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
+                >
                   <Plus className="h-3.5 w-3.5" /> Top up
                 </button>
-                <button className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-background/20 py-2 text-xs font-medium transition-colors hover:bg-background/10">
+                <button
+                  onClick={() => setDashboardTab("wallet")}
+                  className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-background/20 py-2 text-xs font-medium transition-colors hover:bg-background/10"
+                >
                   Withdraw
                 </button>
               </div>
@@ -191,14 +199,11 @@ export function DashboardHome() {
                 Quick stats
               </div>
               <div className="mt-3 flex flex-col gap-3">
-                <QuickStat icon={<Zap className="h-3.5 w-3.5" />} label="Avg. order start">
-                  <Counter to={DASHBOARD_STATS.avgStart} decimals={1} duration={1.6} />s
+                <QuickStat icon={<Zap className="h-3.5 w-3.5" />} label="Lifetime earnings">
+                  $<Counter to={stats.lifetimeEarnings} decimals={2} duration={2} />
                 </QuickStat>
-                <QuickStat icon={<Activity className="h-3.5 w-3.5" />} label="Conversion">
-                  <Counter to={DASHBOARD_STATS.conversion} decimals={1} duration={2} />%
-                </QuickStat>
-                <QuickStat icon={<TrendingUp className="h-3.5 w-3.5" />} label="Uptime (90d)">
-                  <Counter to={DASHBOARD_STATS.uptime} decimals={2} duration={2} />%
+                <QuickStat icon={<Activity className="h-3.5 w-3.5" />} label="Open tickets">
+                  {stats.openTickets}
                 </QuickStat>
               </div>
             </div>
@@ -206,125 +211,69 @@ export function DashboardHome() {
         </div>
       </div>
 
-      {/* Recent orders + favorites */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Reveal blur className="lg:col-span-2">
-          <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Recent orders
-                </div>
-                <div className="mt-1 text-base font-semibold">Live activity</div>
+      {/* Recent orders */}
+      <Reveal blur>
+        <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                Recent orders
               </div>
-              <button className="text-xs font-medium text-primary hover:underline">
-                View all →
-              </button>
+              <div className="mt-1 text-base font-semibold">Live activity</div>
             </div>
-            <div className="mt-4 flex flex-col gap-1">
-              {ORDERS.slice(0, 6).map((o, i) => (
+            <button
+              onClick={() => setDashboardTab("orders")}
+              className="text-xs font-medium text-primary hover:underline"
+            >
+              View all →
+            </button>
+          </div>
+          <div className="mt-4 flex flex-col gap-1">
+            {recentOrders.length === 0 ? (
+              <div className="py-8 text-center text-sm text-muted-foreground">
+                No orders yet. Browse the marketplace to place your first order.
+              </div>
+            ) : (
+              recentOrders.map((o: any, i: number) => (
                 <motion.div
                   key={o.id}
                   initial={{ opacity: 0, y: 8 }}
-                  whileInView={{ opacity: 1, y: 0 }}
-                  viewport={{ once: true }}
+                  animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: i * 0.04 }}
                   className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
                 >
                   <span className="text-base leading-none">{o.flag}</span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">
-                      {o.platform} · {o.service}
+                      {o.platform} · {o.serviceName}
                     </div>
                     <div className="text-[11px] text-muted-foreground tabular-nums">
-                      #{o.id} · {o.date}
+                      #{o.publicId} · {timeAgo(o.createdAt)}
                     </div>
                   </div>
                   <StatusPill status={o.status} />
                   <span className="w-16 text-right text-sm font-semibold tabular-nums text-emerald-600">
-                    +${o.price.toFixed(2)}
+                    ${o.totalPrice.toFixed(2)}
                   </span>
                 </motion.div>
-              ))}
-            </div>
+              ))
+            )}
           </div>
-        </Reveal>
-
-        {/* Favorites + tickets */}
-        <div className="flex flex-col gap-4">
-          <Reveal blur delay={0.06}>
-            <div className="rounded-2xl border border-border/60 bg-background p-5">
-              <div className="flex items-center justify-between">
-                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Favorite services
-                </div>
-                <Star className="h-3.5 w-3.5 text-amber-400" fill="currentColor" />
-              </div>
-              <div className="mt-3 flex flex-col gap-2">
-                {PLATFORMS.slice(0, 4).map((p) => (
-                  <div
-                    key={p.name}
-                    className="group flex items-center gap-3 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/40"
-                  >
-                    <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
-                      <p.Icon className="h-4 w-4" />
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium text-foreground">
-                        {p.name}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {p.services} services
-                      </div>
-                    </div>
-                    <button className="rounded-full bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground opacity-0 transition-opacity group-hover:opacity-100">
-                      Order
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Reveal>
-
-          <Reveal blur delay={0.12}>
-            <div className="rounded-2xl border border-border/60 bg-background p-5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  <Ticket className="h-3.5 w-3.5" /> Tickets
-                </div>
-                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
-                  {TICKETS.length} open
-                </span>
-              </div>
-              <div className="mt-3 flex flex-col gap-2">
-                {TICKETS.map((t) => (
-                  <div
-                    key={t.id}
-                    className="flex items-start gap-2 rounded-xl border border-border/60 p-2.5"
-                  >
-                    <span
-                      className={cn(
-                        "mt-1 h-1.5 w-1.5 rounded-full",
-                        t.priority === "high" ? "bg-red-500" : "bg-amber-500"
-                      )}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-xs font-medium text-foreground">
-                        #{t.id} · {t.subject}
-                      </div>
-                      <div className="text-[10px] text-muted-foreground">
-                        {t.lastReply}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Reveal>
         </div>
-      </div>
+      </Reveal>
     </div>
   );
+}
+
+function timeAgo(date: string | Date): string {
+  const d = new Date(date);
+  const s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return "just now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h ago`;
+  return `${Math.floor(h / 24)}d ago`;
 }
 
 const TINTS: Record<string, string> = {
@@ -390,22 +339,5 @@ function QuickStat({
         {children}
       </span>
     </div>
-  );
-}
-
-export function StatusPill({ status }: { status: string }) {
-  const map: Record<string, { label: string; cls: string; dot: string }> = {
-    processing: { label: "Processing", cls: "bg-blue-500/10 text-blue-700", dot: "bg-blue-500" },
-    in_progress: { label: "In progress", cls: "bg-primary/10 text-primary", dot: "bg-primary" },
-    completed: { label: "Completed", cls: "bg-emerald-500/10 text-emerald-700", dot: "bg-emerald-500" },
-    partial: { label: "Partial", cls: "bg-amber-500/10 text-amber-700", dot: "bg-amber-500" },
-    pending: { label: "Pending", cls: "bg-muted text-muted-foreground", dot: "bg-muted-foreground" },
-  };
-  const s = map[status] ?? map.pending;
-  return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium", s.cls)}>
-      <span className={cn("h-1.5 w-1.5 rounded-full", s.dot)} />
-      {s.label}
-    </span>
   );
 }

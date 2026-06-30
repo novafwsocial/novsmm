@@ -3,8 +3,9 @@
 import { motion } from "framer-motion";
 import { useState, useMemo } from "react";
 import { Search, Filter, Download } from "lucide-react";
-import { ORDERS, type OrderStatus } from "./dashboard-data";
-import { StatusPill } from "./dashboard-home";
+import { useOrders } from "@/hooks/use-api";
+import { type OrderStatus } from "./dashboard-data";
+import { StatusPill } from "./status-pill";
 import { Reveal } from "./reveal";
 import { cn } from "@/lib/utils";
 
@@ -20,22 +21,9 @@ const FILTERS: { id: OrderStatus | "all"; label: string }[] = [
 export function DashboardOrders() {
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [query, setQuery] = useState("");
+  const { data, isLoading } = useOrders(filter !== "all" ? filter : undefined, query || undefined);
 
-  const filtered = useMemo(() => {
-    return ORDERS.filter((o) => {
-      if (filter !== "all" && o.status !== filter) return false;
-      if (query) {
-        const q = query.toLowerCase();
-        return (
-          o.id.toLowerCase().includes(q) ||
-          o.platform.toLowerCase().includes(q) ||
-          o.service.toLowerCase().includes(q) ||
-          o.provider.toLowerCase().includes(q)
-        );
-      }
-      return true;
-    });
-  }, [filter, query]);
+  const filtered = data?.orders ?? [];
 
   return (
     <div className="flex flex-col gap-6">
@@ -49,7 +37,7 @@ export function DashboardOrders() {
               All orders
             </h1>
             <p className="text-sm text-muted-foreground">
-              {ORDERS.length} total · live status, filters & instant search.
+              {filtered.length} shown · live status, filters & instant search.
             </p>
           </div>
           <button className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
@@ -116,7 +104,7 @@ export function DashboardOrders() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {filtered.map((o, i) => (
+                {filtered.map((o: any, i: number) => (
                   <motion.tr
                     key={o.id}
                     layout
@@ -129,23 +117,25 @@ export function DashboardOrders() {
                       <div className="flex items-center gap-2">
                         <span>{o.flag}</span>
                         <div>
-                          <div className="font-medium text-foreground">#{o.id}</div>
-                          <div className="text-[10px] text-muted-foreground">{o.date}</div>
+                          <div className="font-medium text-foreground">#{o.publicId}</div>
+                          <div className="text-[10px] text-muted-foreground">
+                            {new Date(o.createdAt).toLocaleDateString()}
+                          </div>
                         </div>
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{o.platform}</div>
-                      <div className="text-[11px] text-muted-foreground">{o.service}</div>
+                      <div className="text-[11px] text-muted-foreground">{o.serviceName}</div>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      {o.qty.toLocaleString()}
+                      {o.quantity.toLocaleString()}
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
-                      ${o.cost.toFixed(2)}
+                      ${o.unitCost.toFixed(2)}
                     </td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">
-                      ${o.price.toFixed(2)}
+                      ${o.totalPrice.toFixed(2)}
                     </td>
                     <td className="px-4 py-3"><StatusPill status={o.status} /></td>
                     <td className="px-4 py-3">
@@ -153,8 +143,7 @@ export function DashboardOrders() {
                         <div className="h-1.5 w-20 overflow-hidden rounded-full bg-muted">
                           <motion.div
                             initial={{ width: 0 }}
-                            whileInView={{ width: `${o.progress}%` }}
-                            viewport={{ once: true }}
+                            animate={{ width: `${o.progress}%` }}
                             transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
                             className={cn(
                               "h-full rounded-full",
@@ -168,7 +157,7 @@ export function DashboardOrders() {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                      {o.provider}
+                      {o.providerName ?? "—"}
                     </td>
                     <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">
                       {o.eta}

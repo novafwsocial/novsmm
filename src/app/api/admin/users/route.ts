@@ -1,0 +1,79 @@
+import { NextRequest } from "next/server";
+import { db } from "@/lib/db";
+import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { updateUserSchema } from "@/lib/validations";
+import { createNotification } from "@/lib/notify";
+
+/** GET /api/admin/users */
+export async function GET() {
+  const { error } = await requireAdmin();
+  if (error) return error;
+  const users = await db.user.findMany({
+    select: {
+      id: true,
+      email: true,
+      name: true,
+      username: true,
+      role: true,
+      balance: true,
+      heldBalance: true,
+      status: true,
+      createdAt: true,
+      _count: { select: { orders: true } },
+    },
+    orderBy: { createdAt: "desc" },
+    take: 100,
+  });
+  return apiOk({ users });
+}
+
+/** PATCH /api/admin/users — update role, status, balance. */
+export async function PATCH(req: NextRequest) {
+  const { session, error } = await requireAdmin();
+  if (error) return error;
+  const adminId = (session!.user as any).id;
+
+  const body = await req.json();
+  const parsed = updateUserSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+  }
+
+  const { id, role, status, balance } = parsed.data;
+
+  const user = await db.user.findUnique({ where: { id }, select: { balance: true, status: true } });
+  if (!user) return apiError("User not found", 404);
+
+  const updateData: any = {};
+  if (role) updateData.role = role;
+  if (status) {
+    updateData.status = status;
+    // Notify the user
+    await createNotification({
+      userId: id,
+      type: "system",
+      title: status === "suspended" ? "Account suspended" : "Account reactivated",
+      message:
+        status === "suspended"
+          ? "Your account has been suspended. Contact support for details."
+          : "Your account is now active. Welcome back!",
+      severity: status === "suspended" ? "warning" : "success",
+      sendEmail: true,
+    });
+  }
+  if (balance !== undefined) updateData.balance = balance;
+
+  const updated = await db.user.update({ where: { id }, data: updateData });
+
+  await db.auditLog.create({
+    data: {
+      userId: adminId,
+      action: "update",
+      entity: "user",
+      entityId: id,
+      metadata: JSON.stringify({ role, status, balance }),
+    },
+  });
+
+  return apiOk({ user: updated });
+}

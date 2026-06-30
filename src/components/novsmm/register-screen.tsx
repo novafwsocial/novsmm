@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 import {
   Mail,
   Lock,
@@ -11,12 +12,14 @@ import {
   ArrowLeft,
   Check,
   Sparkles,
+  Loader2,
 } from "lucide-react";
 import { useApp } from "./app-store";
 import { Field, PasswordStrength, SocialButton } from "./auth-fields";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { cn } from "@/lib/utils";
+import { api } from "@/lib/api-client";
 
 const COUNTRIES = [
   "Mexico", "United States", "Brazil", "Argentina", "Spain", "Colombia",
@@ -37,6 +40,8 @@ export function RegisterScreen() {
     currency: "USD",
     language: "English",
   });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email);
   const usernameValid = /^[a-zA-Z0-9_]{3,}$/.test(form.username);
@@ -44,16 +49,51 @@ export function RegisterScreen() {
   const confirmValid = form.confirm.length > 0 && form.confirm === form.password;
   const nameValid = form.name.trim().length >= 2;
   const canSubmit =
-    nameValid && usernameValid && emailValid && pwValid && confirmValid;
+    nameValid && usernameValid && emailValid && pwValid && confirmValid && !loading;
 
   const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    setOnboardingStep(0);
-    setView("onboarding");
+    setLoading(true);
+    setError(null);
+
+    try {
+      // 1. Register
+      await api.post("/api/auth/register", {
+        name: form.name,
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        confirm: form.confirm,
+        country: form.country,
+        currency: form.currency,
+        language: form.language,
+      });
+
+      // 2. Sign in with NextAuth
+      const res = await signIn("credentials", {
+        email: form.email,
+        password: form.password,
+        redirect: false,
+      });
+
+      if (res?.error) {
+        setError("Account created but auto-login failed. Please sign in.");
+        setView("login");
+        return;
+      }
+
+      // 3. Go to onboarding
+      setOnboardingStep(0);
+      setView("onboarding");
+    } catch (e: any) {
+      setError(e.message || "Registration failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -65,7 +105,6 @@ export function RegisterScreen() {
       transition={{ duration: 0.4 }}
       className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12"
     >
-      {/* Background continues from landing */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 nov-grid-bg nov-radial-fade opacity-60" />
         <div className="absolute left-1/2 top-[-10%] h-[420px] w-[760px] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-[120px]" />
@@ -98,21 +137,23 @@ export function RegisterScreen() {
             </p>
           </div>
 
-          {/* Social */}
-          <div className="mt-6 grid grid-cols-4 gap-2">
-            <SocialButton provider="google" onClick={() => { setOnboardingStep(0); setView("onboarding"); }} />
-            <SocialButton provider="discord" onClick={() => { setOnboardingStep(0); setView("onboarding"); }} />
-            <SocialButton provider="telegram" onClick={() => { setOnboardingStep(0); setView("onboarding"); }} />
-            <SocialButton provider="apple" onClick={() => { setOnboardingStep(0); setView("onboarding"); }} />
-          </div>
-
           <div className="my-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-border" />
             <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              or sign up with email
+              sign up with email
             </span>
             <div className="h-px flex-1 bg-border" />
           </div>
+
+          {error && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="mb-4 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm text-red-600"
+            >
+              {error}
+            </motion.div>
+          )}
 
           <form onSubmit={submit} className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3">
@@ -182,7 +223,6 @@ export function RegisterScreen() {
               }
             />
 
-            {/* Locale row */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <SelectField
                 label="Country"
@@ -216,8 +256,17 @@ export function RegisterScreen() {
                     : "cursor-not-allowed bg-muted text-muted-foreground"
                 )}
               >
-                Create account
-                <ArrowRight className="h-4 w-4" />
+                {loading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Creating account…
+                  </>
+                ) : (
+                  <>
+                    Create account
+                    <ArrowRight className="h-4 w-4" />
+                  </>
+                )}
               </button>
             </Magnetic>
 

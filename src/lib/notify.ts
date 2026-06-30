@@ -1,0 +1,97 @@
+import { db } from "./db";
+
+/**
+ * NOVSMM notification service.
+ * Creates in-app notifications in the DB + sends email when configured.
+ * The WebSocket mini-service polls/broadcasts new notifications to clients.
+ */
+
+type NotifInput = {
+  userId?: string;
+  type: "order" | "sale" | "marketplace" | "ticket" | "recharge" | "withdrawal" | "referral" | "system";
+  title: string;
+  message: string;
+  amount?: number;
+  severity?: "info" | "success" | "warning";
+  sendEmail?: boolean;
+};
+
+export async function createNotification(input: NotifInput) {
+  const notif = await db.notification.create({
+    data: {
+      userId: input.userId ?? null,
+      type: input.type,
+      title: input.title,
+      message: input.message,
+      amount: input.amount,
+      severity: input.severity ?? "info",
+    },
+  });
+
+  // Send email if requested and user has email
+  if (input.sendEmail && input.userId) {
+    const user = await db.user.findUnique({
+      where: { id: input.userId },
+      select: { email: true, name: true },
+    });
+    if (user) {
+      await sendEmail({
+        to: user.email,
+        subject: input.title,
+        text: `Hi ${user.name ?? "there"},\n\n${input.message}\n\n— NOVSMM Team`,
+      }).catch((e) => console.error("[email] send failed:", e));
+    }
+  }
+
+  return notif;
+}
+
+/**
+ * Email sender — uses Nodemailer if SMTP env vars are set,
+ * otherwise logs to console (sandbox mode).
+ *
+ * To enable real email, set in .env:
+ *   SMTP_HOST=smtp.gmail.com
+ *   SMTP_PORT=587
+ *   SMTP_USER=...
+ *   SMTP_PASS=...
+ *   EMAIL_FROM="NOVSMM <noreply@novsmm.io>"
+ */
+export async function sendEmail(opts: {
+  to: string;
+  subject: string;
+  text: string;
+  html?: string;
+}) {
+  const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM } = process.env;
+
+  if (!SMTP_HOST || !SMTP_USER) {
+    // Sandbox mode — log the email
+    console.log(`\n📧 [EMAIL · sandbox] ────────────────────`);
+    console.log(`  To:      ${opts.to}`);
+    console.log(`  From:    ${EMAIL_FROM ?? "noreply@novsmm.io"}`);
+    console.log(`  Subject: ${opts.subject}`);
+    console.log(`  Body:    ${opts.text.slice(0, 200)}...`);
+    console.log(`  ────────────────────────────────────────\n`);
+    return { sandbox: true, delivered: false };
+  }
+
+  // Real SMTP delivery
+  const nodemailer = await import("nodemailer");
+  const transporter = nodemailer.createTransport({
+    host: SMTP_HOST,
+    port: parseInt(SMTP_PORT ?? "587"),
+    secure: parseInt(SMTP_PORT ?? "587") === 465,
+    auth: { user: SMTP_USER, pass: SMTP_PASS },
+  });
+
+  const info = await transporter.sendMail({
+    from: EMAIL_FROM ?? "NOVSMM <noreply@novsmm.io>",
+    to: opts.to,
+    subject: opts.subject,
+    text: opts.text,
+    html: opts.html,
+  });
+
+  return { sandbox: false, delivered: true, messageId: info.messageId };
+}
