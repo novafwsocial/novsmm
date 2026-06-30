@@ -221,3 +221,294 @@ Stage Summary:
 - Payment processing runs in sandbox mode (structured for real Stripe — just add STRIPE_SECRET_KEY)
 - Email runs in sandbox mode (structured for real SMTP — just add SMTP_HOST/USER/PASS)
 - All flows tested end-to-end in the browser with DB verification
+
+---
+Task ID: AUDIT
+Agent: auditor
+Task: Read-only technical audit of the entire NOVSMM codebase — produce detailed gap analysis (no code changes except this worklog).
+
+Work Log:
+- Read worklog.md (Tasks 1-13, 14, 15, WS-2, PROD-1) for project history.
+- Read all source files relevant to the audit:
+  - DB / config: prisma/schema.prisma, prisma/seed.ts (240 lines), package.json, .env, next.config.ts, src/lib/db.ts
+  - Lib: src/lib/auth.ts, src/lib/api-utils.ts, src/lib/validations.ts, src/lib/notify.ts, src/lib/api-client.ts, src/lib/app-providers.tsx
+  - Hooks: src/hooks/use-api.ts (259 lines, all TanStack Query hooks)
+  - All API routes (17 files): api/route.ts (stub), api/auth/[...nextauth]/route.ts, api/auth/register/route.ts, api/dashboard/route.ts, api/me/route.ts, api/orders/route.ts, api/services/route.ts, api/payment-methods/route.ts, api/wallet/route.ts, api/wallet/topup/route.ts, api/wallet/withdraw/route.ts, api/notifications/route.ts, api/tickets/route.ts, api/admin/{overview,users,services,providers,payment-methods,notifications}/route.ts
+  - All dashboard components: dashboard-home.tsx, dashboard-analytics.tsx, dashboard-marketplace.tsx, dashboard-orders.tsx, dashboard-wallet.tsx, dashboard-tickets.tsx, dashboard-notifications.tsx, dashboard-shell.tsx, dashboard-data.ts, admin-panel.tsx (667 lines), onboarding-screen.tsx, login-screen.tsx, register-screen.tsx, app-store.ts, app-view.tsx
+  - Notifications mini-service: mini-services/notifications-service/index.ts (382 lines)
+- Confirmed no middleware.ts exists (no rate limiting, no CSRF, no edge security).
+- Grep-verified: NO Next.js API route calls POST /broadcast on the WebSocket service (the WS-2 upgrade is unused).
+- Grep-verified: no stripe/mercadopago SDK install; all payment integration is commented-out stubs in topup/route.ts.
+- Grep-verified: no rate-limit, csrf, sanitize, helmet usage anywhere in src/.
+- Verified .env contains only DATABASE_URL + NEXTAUTH_SECRET + NEXTAUTH_URL (no STRIPE_SECRET_KEY, no SMTP_*).
+
+Stage Summary:
+- Full audit report delivered to the orchestrator below (see "Audit Report" section).
+- No code files were modified; only this worklog append was added.
+- The audit identifies 4 P0, 7 P1, and 10 P2 gaps that need to be addressed before NOVSMM can ship as a real SMM panel.
+
+# NOVSMM Audit Report
+
+## 1. What's FULLY IMPLEMENTED and working (DB-backed, real APIs, real UI)
+
+**Auth & session (real)**
+- `src/lib/auth.ts` — NextAuth credentials provider with bcrypt (cost 12), JWT strategy, session callback exposing id/role/username/balance/heldBalance/status, audit logging on login & logout.
+- `src/app/api/auth/register/route.ts` — Zod-validated registration, bcrypt hash, duplicate email/username check, welcome notification + audit log.
+- `src/app/api/auth/[...nextauth]/route.ts` — NextAuth handler.
+- `src/components/novsmm/register-screen.tsx` — real `api.post("/api/auth/register")` + NextAuth `signIn()` → onboarding → dashboard.
+- `src/components/novsmm/login-screen.tsx` — real NextAuth `signIn("credentials")`.
+
+**Orders (real end-to-end)**
+- `src/app/api/orders/route.ts` — GET list (filterable by status + search), POST create real purchase: validates service/qty/balance, atomically debits balance + creates Order + Transaction, fires notifications, kicks off `simulateFulfillment()` which advances progress through processing → in_progress → completed over 12s and emits a completion notification.
+- `src/components/novsmm/dashboard-orders.tsx` — uses `useOrders()` hook, polls every 5s, real status pills + progress bars.
+
+**Wallet (real)**
+- `src/app/api/wallet/route.ts` — real balance, 50 recent transactions, 30-day daily revenue/orders series.
+- `src/app/api/wallet/topup/route.ts` — real Zod validation, creates pending Transaction, processes (sandbox), credits balance atomically on success, audit log + notification + email. **Structured for real Stripe** (lines 64-70 are commented-out reference code).
+- `src/app/api/wallet/withdraw/route.ts` — real balance check, atomic debit + pending Transaction.
+- `src/components/novsmm/dashboard-wallet.tsx` — uses `useWallet`, `useTopup`, `useWithdraw`, `usePaymentMethods`; TopupModal fully wired.
+
+**Services & payment methods (real)**
+- `src/app/api/services/route.ts`, `src/app/api/payment-methods/route.ts` — DB reads.
+- Admin CRUD: `src/app/api/admin/services/route.ts` (GET/POST/PATCH/DELETE soft-delete), `src/app/api/admin/providers/route.ts` (GET/POST/PATCH), `src/app/api/admin/payment-methods/route.ts` (GET/POST/PATCH), all RBAC-protected via `requireAdmin()`.
+- Admin overview & users: `src/app/api/admin/overview/route.ts` (real aggregate stats + 30d revenue series), `src/app/api/admin/users/route.ts` (GET list, PATCH role/status/balance + notifications).
+
+**Dashboard Home & Notifications (real)**
+- `src/app/api/dashboard/route.ts` — real aggregate (balance, activeOrders, completedOrders, revenueToday, revenueMonth, lifetimeEarnings, openTickets, 30d series, recentOrders, recentNotifications).
+- `src/components/novsmm/dashboard-home.tsx` — uses `useDashboard()` (polls 10s), real stats, charts, recent orders.
+- `src/app/api/notifications/route.ts` — GET user + broadcast notifications, POST mark-read (single IDs or all).
+- `src/components/novsmm/dashboard-notifications.tsx` — uses `useNotifications()` (polls 5s) + live WebSocket via `io("/?XTransformPort=3003")`, WS events invalidate TanStack queries, mark-all-read wired. The WS indicator ("Live · connected") is real.
+
+**Marketplace Buy tab (real)**
+- `src/components/novsmm/dashboard-marketplace.tsx` `BuyGrid` — uses `useServices()` from DB; `OrderModal` calls `useCreateOrder()` which hits `POST /api/orders` and invalidates orders/dashboard/wallet/notifications.
+
+**Admin Panel (mostly real)**
+- `src/components/novsmm/admin-panel.tsx`: Overview (useAdminOverview ✓), Users (useAdminUsers + useUpdateUser ✓, suspend/activate/promote actions work), Services (useAdminServices + useCreateService ✓, Add modal works), Providers (useAdminProviders + useCreateProvider ✓, Add modal works), Payments (useAdminPaymentMethods + useCreatePaymentMethod ✓, Add modal works).
+- `src/app/api/admin/notifications/route.ts` — broadcast to all active users (createMany + email loop), audit logged.
+
+**Tickets (API only — UI not wired)**
+- `src/app/api/tickets/route.ts` — real CRUD: GET list with messages, POST create with first message + admin notification, PATCH reply with simulated support auto-reply after 2s.
+
+**Notifications mini-service**
+- `mini-services/notifications-service/index.ts` — Socket.IO on port 3003, `connected` event on connection, ambient system-only emits every 8-15s, validated `POST /broadcast` endpoint (200/400/413/422).
+
+**Cross-cutting**
+- `src/lib/notify.ts` — DB notification creation + Nodemailer email (sandbox if SMTP env absent, real SMTP if env set).
+- `src/lib/api-utils.ts` — `requireAuth()` + `requireAdmin()` RBAC guards used on every route.
+- `src/lib/validations.ts` — Zod schemas for register, login, createOrder, topup, withdraw, createService, createProvider, createPaymentMethod, createNotification, updateUser.
+- `src/hooks/use-api.ts` — 16 TanStack Query hooks + mutations, all with cache invalidation + toasts.
+- AuditLog is populated on all privileged actions (login, logout, create order/service/provider/payment_method/user/notification, update user/service/provider).
+- Setting model exists in schema (key/value store) for future system settings.
+
+## 2. What's PARTIALLY implemented (mock data, sandbox, incomplete)
+
+**`dashboard-analytics.tsx` — 100% MOCK** (file: `src/components/novsmm/dashboard-analytics.tsx`)
+- Lines 27, 49-58, 77, 111, 119, 157, 174-178: imports `REVENUE_SERIES`, `HOURLY_ORDERS`, `MARKETPLACE_BREAKDOWN` from `dashboard-data.ts` (all hardcoded). KPI counters `4287`, `84320`, `94.2`, `68.4`, referral `284 / $1,420` are literal numbers. "Share referral link" button does nothing. No `/api/analytics` route exists.
+
+**`dashboard-marketplace.tsx` Sell + History tabs — MOCK** (file: `src/components/novsmm/dashboard-marketplace.tsx`)
+- Lines 219-312: `SellBoard` and `HistoryTable` render hardcoded `MARKETPLACE_OFFERS` from `dashboard-data.ts`. "Publish offer" button (line 232) is non-functional. "Edit price" link is non-functional. No backend route for marketplace offers exists.
+
+**`dashboard-tickets.tsx` — 100% MOCK** (file: `src/components/novsmm/dashboard-tickets.tsx`)
+- Line 15: imports `TICKETS` from `dashboard-data.ts`. Lines 22-53: uses local `useState` for messages, simulated reply. "New ticket" button (line 68) does nothing. Search box does nothing. The hooks `useTickets`, `useCreateTicket`, `useReplyTicket` exist in `use-api.ts` (lines 129-158) but the component doesn't use them — even though `src/app/api/tickets/route.ts` is fully implemented.
+
+**`admin-panel.tsx` — Security & Roles tabs 100% MOCK** (file: `src/components/novsmm/admin-panel.tsx`)
+- Lines 603-637 `AdminSecurity`: 6 hardcoded "layers" (2FA 92% adoption, IP allowlists 48 rules, anomaly 0.01% FP, bot 2.4M blocked, CSRF/XSS/SQLi 0 breaches, audit logs 8.2M events). Entirely decorative.
+- Lines 640-666 `AdminRoles`: hardcoded `ROLES` array from `dashboard-data.ts`. "Configure permissions" button does nothing. No Role/Permission model in schema.
+- Line 86: "Real-time · 184,500 users" hardcoded in admin header.
+- Admin users table (line 223): search input has no state, doesn't filter.
+- Admin services table (lines 363-381): no edit or delete buttons in the rows, even though PATCH and DELETE endpoints exist on `/api/admin/services`.
+- Admin providers cards: no edit UI for status/latency, no delete.
+- Admin payments table: no edit/delete UI, no config editing (the `config` JSON column is never written or read by the UI).
+- AdminOverview's `health` array (`src/app/api/admin/overview/route.ts` lines 71-81): hardcoded — "Provider sync (P-03) degraded" is always shown regardless of actual DB state.
+
+**`onboarding-screen.tsx` — LOCAL ONLY** (file: `src/components/novsmm/onboarding-screen.tsx`)
+- Lines 50-56, 58: collects role/currency/language/notifs/name in local `useState`. The `next()` function on the last step calls `signIn()` from `app-store` which only flips the view state. Nothing is persisted to the DB. The user's `currency`/`language` set during register (which DID write to DB) get overridden visually but never updated. The ProfileStep (line 287-323) shows hardcoded "DR" avatar, "Daniela Ríos", "Verified email · daniela@pulsemedia.io" — not pulled from the real session.
+- `WelcomeStep` (line 223) has buggy `active = setData && false` — RoleCard selection state is purely local and the parent never knows which role was picked.
+
+**`login-screen.tsx` — partial**
+- Line 14: pre-fills demo creds `daniela@pulsemedia.io / novsmm2024` (fine for dev, must be removed for prod).
+- Line 46-61 `handleSocial`: all 4 social buttons (Google/Discord/Telegram/Apple) just sign in with the demo creds. No OAuth providers configured in `auth.ts`.
+- Line 181-186: "Forgot password?" is `<a href="#">` — dead link.
+
+**Payment processing — sandbox only** (file: `src/app/api/wallet/topup/route.ts`)
+- Lines 60-72, 150-170: `processPayment()` simulates 1.5s delay + 99.5% success rate. Stripe code is commented out (lines 64-70). `stripe` package is NOT in `package.json`. No webhook signature verification, no idempotency keys, no payment intent creation, no refund handling. The `PaymentMethod.config` JSON column (schema line 173) is never read by the topup flow — it ignores any stored Stripe secret.
+
+**Withdrawals — half-implemented**
+- `src/app/api/wallet/withdraw/route.ts` creates a `pending` Transaction with `type: "withdrawal"` and debits the user immediately. But there is NO admin route to approve/reject/process the withdrawal. The pending withdrawal sits forever in the Transaction table.
+
+**Real-time push — half-wired**
+- `mini-services/notifications-service/index.ts` exposes `POST /broadcast` (verified in WS-2 task).
+- BUT no Next.js API route calls it. `src/lib/notify.ts`'s `createNotification()` only writes to the DB. Grep-confirmed: zero occurrences of `localhost:3003` or `/broadcast` in `src/`.
+- Clients receive new notifications only via TanStack Query polling (5-15s intervals). The WebSocket ambient loop emits only `system` templates.
+- Order status updates (processing → in_progress → completed, written by `simulateFulfillment`) are NOT pushed in real time — the client polls `/api/orders` every 5s.
+
+**AuditLog.ip — schema has it, never populated**
+- `prisma/schema.prisma` line 229: `ip String?` column. No `auditLog.create()` call anywhere passes `ip`. `src/lib/api-utils.ts`'s `requireAuth`/`requireAdmin` don't capture `x-forwarded-for`.
+
+## 3. What's COMPLETELY MISSING
+
+### Missing DB models (for a real SMM panel)
+- **ApiKey** — user-scoped tokens for programmatic API access (with scopes, rate limits, last-used IP/time, revocation).
+- **WebhookLog** — every inbound webhook (Stripe/MP/crypto) row with raw payload, signature, processed status, error.
+- **PaymentIntent** — track Stripe payment_intent_id, status, amount, currency, customer, capture/expire lifecycle.
+- **Refund** — original transaction link, amount, reason, status, processor refund ID.
+- **Coupon / Promotion** — code, discount type (% / fixed), value, max uses, per-user limits, validity window, applies-to scope.
+- **Referral** — referrerId, referredId, code, status, payoutAmount, payoutAt, payoutTransactionId. (The Transaction schema has a `referral` type but no referral entity to back it.)
+- **TwoFactorSecret** — TOTP secret, backup codes, enabledAt, lastUsedAt. (User.emailVerified column exists but is never set; no 2FA columns.)
+- **DeviceSession** — userId, userAgent, ip, location, lastSeen, revoked. (The Session table is NextAuth's JWT session table, not a device-management table.)
+- **IpAllowlist** — userId/role, cidr, note, created/updated.
+- **Subscription / Plan** — recurring billing entity (monthly/yearly tier, status, currentPeriodEnd, cancelAt, stripeSubscriptionId).
+- **Invoice** — for tax/accounting (number, line items, tax, total, pdfUrl, status).
+- **Favorite** — userId + serviceId, for the "favorite services" UI shown on dashboard home.
+- **TicketAttachment** — fileId, filename, mimeType, size, ticketId/messageId.
+- **WithdrawalRequest** — as its own entity (currently folded into Transaction with `type:"withdrawal"` and `status:"pending"`, which conflates ledger entries with workflow).
+- **CurrencyRate** — for multi-currency conversion (base → quote, rate, fetchedAt).
+- **ApiLog** — every external API call (provider order placement, provider status check, latency, response code, error).
+- **EmailVerificationToken** — `VerificationToken` model exists (NextAuth's), but no route uses it for email verification.
+
+### Missing API routes
+
+**User-facing:**
+- `GET/POST/DELETE /api/api-keys` — API key management (CRUD + revoke).
+- `GET/POST/DELETE /api/favorites` — favorite services.
+- `GET /api/referrals` — referral dashboard (invited count, earnings, payout history, referral link).
+- `PATCH /api/me` — update profile (name, avatar, country, currency, language).
+- `POST /api/me/password` — change password (current pw + new pw).
+- `POST /api/me/2fa/setup` + `POST /api/me/2fa/verify` + `POST /api/me/2fa/disable` — TOTP flow.
+- `GET /api/export/orders` + `GET /api/export/transactions` — CSV/JSON export.
+- `POST /api/auth/forgot-password` + `POST /api/auth/reset-password` — password reset flow.
+- `POST /api/auth/verify-email` + `POST /api/auth/resend-verification` — email verification.
+- `GET /api/me/sessions` + `DELETE /api/me/sessions/:id` — device session management.
+
+**Admin:**
+- `GET/POST/PATCH/DELETE /api/admin/webhooks` — webhook endpoint configuration.
+- `GET/POST/PATCH/DELETE /api/admin/coupons` — coupon CRUD.
+- `GET/POST/PATCH/DELETE /api/admin/promotions` — promotional campaign management.
+- `POST /api/admin/refunds` — issue refund (links to original Transaction, calls Stripe refund API).
+- `POST /api/admin/orders` — manual order creation on behalf of a user.
+- `POST /api/admin/providers/:id/sync` — trigger provider catalog/status sync.
+- `GET /api/admin/logs/api` — API log viewer.
+- `GET/PATCH /api/admin/settings` — system settings (uses the existing `Setting` key/value model; no route yet).
+- `GET/PATCH /api/admin/fees` — marketplace fees configuration.
+- `GET/PATCH /api/admin/tax` — tax rules per region.
+- `GET/PATCH /api/admin/withdrawals` + `POST /api/admin/withdrawals/:id/approve|reject` — withdrawal approval workflow. **Critical**: withdrawals are created as pending but no admin action exists to move them to completed/failed.
+- `GET/POST/PATCH/DELETE /api/admin/roles` + `/api/admin/permissions` — role & permission management.
+
+**Webhooks (none exist):**
+- `POST /api/webhooks/stripe` — Stripe webhook signature verification + event handler (payment_intent.succeeded, payment_intent.payment_failed, charge.refunded, customer.subscription.updated, etc.).
+- `POST /api/webhooks/mercadopago` — Mercado Pago webhook.
+- `POST /api/webhooks/crypto` — crypto confirmation callback (or polling job).
+
+**Public:**
+- `GET /api/status` — public service status page (no auth).
+- `GET /api/docs` — API documentation endpoint (OpenAPI spec).
+- `GET /api/v1/services` + `POST /api/v1/orders` — public v1 API for programmatic access via API key (currently all routes are session-only).
+
+### Missing auth features (file: `src/lib/auth.ts`)
+- **2FA / TOTP** — no provider, no DB columns, no verify flow.
+- **Email verification** — `emailVerified` column exists but never set; `VerificationToken` table never used.
+- **Password reset** — no forgot/reset endpoints, no token email.
+- **Magic links** — no email magic link provider.
+- **OAuth providers** — Google/Discord/Telegram/Apple buttons exist in `login-screen.tsx` but `auth.ts` only registers the credentials provider.
+- **Session device management** — no IP/userAgent capture on login; no "revoke other sessions" UI.
+- **IP logging** — `AuditLog.ip` column exists but never populated.
+- **Account lockout** — no failed-attempts counter; bcrypt timing-attack mitigation only.
+- **Password policy** — `validations.ts` only enforces min 8 chars (no complexity).
+
+## 4. Security gaps
+
+| # | Gap | Severity | Location |
+|---|---|---|---|
+| S1 | **No middleware.ts** — no rate limiting, no CSRF, no edge security, no bot protection. | High | project root |
+| S2 | **No rate limiting anywhere** — every API endpoint is unbounded. A single user can DoS balance or create infinite orders. Admin "Rate limit + WAF + CAPTCHA" card (admin-panel.tsx:608) is decorative. | High | all routes |
+| S3 | **No CSRF protection** — relies solely on NextAuth SameSite cookies. State-changing POST endpoints (topup, withdraw, createOrder, admin actions) have no CSRF token. | High | all POST routes |
+| S4 | **No file upload validation** — ticket composer has Paperclip + ImageIcon buttons (`dashboard-tickets.tsx:169-174`) but they're non-functional; no upload route exists. When added, will need MIME sniffing, size cap, magic-byte validation, AV scan. | Medium | `src/app/api/tickets` (missing) |
+| S5 | **No API key auth** — every route requires NextAuth session; no programmatic API access for resellers. The whole "API" promise of an SMM panel is unfulfilled. | High | n/a (missing) |
+| S6 | **No input sanitization beyond Zod** — Zod validates shape but doesn't sanitize. Ticket messages / notification titles / admin broadcast messages are stored verbatim. React escapes on render so XSS is largely mitigated, but if any of these ever flow to email HTML (`notify.ts` line 93 `html: opts.html`) or to an external API, XSS/HTML injection is possible. | Medium | `src/lib/notify.ts`, `src/app/api/tickets/route.ts`, `src/app/api/admin/notifications/route.ts` |
+| S7 | **`next.config.ts` disables safety nets** — `typescript.ignoreBuildErrors: true` (line 7) and `reactStrictMode: false` (line 9). Type errors silently ship; React bugs that strict mode would catch go undetected. | Medium | `next.config.ts` |
+| S8 | **`NEXTAUTH_URL` is localhost** (`.env` line 3) — fine for dev, will break production cookie domain if not updated. | Low | `.env` |
+| S9 | **No HTTPS/HSTS enforcement** — no `Strict-Transport-Security` header. Caddy terminates TLS but app doesn't set HSTS. | Medium | n/a |
+| S10 | **No account lockout / brute-force protection** — failed login attempts aren't counted; bcrypt is the only mitigation. Combined with no rate limiting (S2), credential stuffing is unimpeded. | High | `src/lib/auth.ts` |
+| S11 | **Sandbox payment logs reference real card brand** — `dashboard-data.ts:76` hardcodes "Stripe •••• 4242" in mock transactions; the real topup flow doesn't capture card last4. No PCI concerns yet, but if real card data ever flows through `topup/route.ts` it must use Stripe.js + Payment Elements (never touch PAN). | Low | `src/app/api/wallet/topup/route.ts` |
+| S12 | **Admin promote-to-admin has no confirmation** — `admin-panel.tsx:276` lets any admin promote any user to admin with a single click, no confirmation dialog, no audit-trail preview. | Medium | `src/components/novsmm/admin-panel.tsx` |
+| S13 | **No Content-Security-Policy header** — no CSP configured anywhere. | Medium | n/a |
+| S14 | **`PaymentMethod.config` JSON column stores secrets in plaintext** — schema line 173 says "API keys, webhook secrets, etc." If populated, Stripe secret keys would be readable from the DB. Needs envelope encryption (KMS) before this column is used. | High (latent) | `prisma/schema.prisma:173` |
+| S15 | **`prisma/db.ts` logs all queries** in dev (`log: ['query']` line 10) — fine for dev, must be reduced in production. | Low | `src/lib/db.ts` |
+
+## 5. Priority recommendations (ranked)
+
+### P0 — must fix before any production deploy
+
+1. **Add `middleware.ts` with rate limiting** (per-IP + per-user) using an in-memory or Redis-backed limiter. Apply to `/api/auth/*` (login throttling), `/api/wallet/topup`, `/api/wallet/withdraw`, `/api/orders`, and all `/api/admin/*` routes. Suggested: 5 req/s per IP, 10 req/min per user on sensitive routes.
+2. **Wire `createNotification()` to `POST /broadcast`** so real DB events (order placed, order completed, topup success, ticket reply, admin broadcast) push to clients in real time via the existing WS service. One-liner fetch in `src/lib/notify.ts`. The infrastructure already exists (Task WS-2 built the endpoint) — it's just not called.
+3. **Real Stripe integration**: `bun add stripe`, set `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` in `.env`, uncomment the Stripe block in `topup/route.ts` (lines 64-70), create `POST /api/webhooks/stripe` with `stripe.webhooks.constructEvent()` signature verification, store `payment_intent_id` on the Transaction (add a column or use `reference`), make topup idempotent via `Idempotency-Key` header, create the PaymentIntent client-side with Stripe.js and only confirm server-side.
+4. **Withdrawal approval workflow**: add `GET/PATCH /api/admin/withdrawals` + `POST /api/admin/withdrawals/:id/approve|reject`. Currently withdrawals debit the user immediately and sit as `pending` forever with no admin action — that's a funds-loss bug for users if a withdrawal is bad.
+
+### P1 — needed for a real SMM panel product
+
+5. **Wire `dashboard-tickets.tsx` to the existing `useTickets` / `useCreateTicket` / `useReplyTicket` hooks** (the API and hooks both exist and work; only the component uses hardcoded `TICKETS`). Also wire the "New ticket" button to a create-ticket modal, and make the search box actually filter.
+6. **Build `dashboard-analytics.tsx` against a new `GET /api/analytics` route** that returns KPIs (orders 30d, revenue 30d, conversion, repeat rate), 30d revenue+orders series, hourly orders today, marketplace breakdown by platform (group orders by `platform`), referrals series. All numbers currently hardcoded.
+7. **Build the Sell / Publish flow** for `dashboard-marketplace.tsx`: new `Offer` model (userId, serviceId, askingPrice, status, salesCount, revenue), `POST /api/offers` to publish, `GET /api/offers/me` for the sell board, `GET /api/offers/:id/earnings` for the history table. Currently the Sell and History tabs render hardcoded `MARKETPLACE_OFFERS`.
+8. **API key system**: new `ApiKey` model + `GET/POST/DELETE /api/api-keys` + middleware that accepts `Authorization: Bearer nvsk_...` on `/api/v1/*` public API routes. Required for any reseller integration.
+9. **Email verification + password reset**: use the existing `VerificationToken` model; add `POST /api/auth/verify-email` and `POST /api/auth/forgot-password` + `POST /api/auth/reset-password`. Wire the "Forgot password?" link in `login-screen.tsx`. Set `emailVerified` on verification. Configure SMTP env vars (notify.ts already supports real SMTP).
+10. **2FA (TOTP)**: add `TwoFactorSecret` model, `POST /api/me/2fa/setup` (returns QR + secret), `POST /api/me/2fa/verify` (enables), `POST /api/me/2fa/disable` (re-verify pw). Update `auth.ts` to challenge 2FA after credentials. Use `otplib` + `qrcode`.
+11. **Persist onboarding data**: `PATCH /api/me` to save the role/currency/language/notification preferences collected in `onboarding-screen.tsx`. Currently all onboarding input is discarded.
+
+### P2 — hardening & feature completeness
+
+12. **Referral system**: `Referral` model, `GET /api/referrals` (stats + invitees + payouts), `POST /api/referrals/payout` (admin), referral link generation, 5% lifetime commission calculation on every completed order.
+13. **Coupons & promotions**: `Coupon` model, `GET/POST/PATCH/DELETE /api/admin/coupons`, `POST /api/orders` accepts `couponCode` and applies discount, validation against max-uses/expiry/per-user limits.
+14. **CSRF protection**: add CSRF token cookie + header pattern (e.g. `next-csrf` library) on all state-changing endpoints.
+15. **IP logging**: populate `AuditLog.ip` from `x-forwarded-for` in `requireAuth()` / `requireAdmin()`; add a "Recent sessions" panel in user settings.
+16. **Data export**: `GET /api/export/orders?format=csv` and `GET /api/export/transactions?format=csv` returning a streaming CSV. Wire the Export buttons in `dashboard-orders.tsx:43` and `dashboard-wallet.tsx:65`.
+17. **File uploads for tickets**: `POST /api/uploads` (multipart, MIME-sniff, size cap, store in `/upload/` or S3), `TicketAttachment` model, wire the Paperclip/ImageIcon buttons in the ticket composer.
+18. **Provider sync**: real background job (BullMQ or cron) that polls each Provider's API, refreshes service catalog, updates `Provider.latency` and `status`, writes `ApiLog` rows. Replace `simulateFulfillment()` in `orders/route.ts` with a real provider order-placement call.
+19. **Subscription/recurring billing**: `Subscription` model + Stripe Billing integration for the Growth/Scale/Enterprise plans shown in `plans.tsx`. Currently `plans.tsx` is purely decorative — no checkout, no subscription, no plan enforcement on the user.
+20. **Multi-currency conversion**: `CurrencyRate` model + daily FX fetch job + display balances/orders in `user.currency` (currently everything is hardcoded USD despite `User.currency` existing).
+21. **Tax & invoicing**: `Invoice` model + tax rules per country + PDF generation (use the `pdf` skill) + `GET /api/invoices` and `GET /api/invoices/:id/pdf`.
+22. **Re-enable TypeScript safety**: remove `typescript.ignoreBuildErrors: true` from `next.config.ts`, set `reactStrictMode: true`, fix resulting type errors. Currently type errors silently ship to production.
+23. **Wire admin table edit/delete UIs**: admin services/providers/payment-methods tables have PATCH/DELETE endpoints but no buttons. Add row-level edit + delete actions.
+24. **Replace admin Security & Roles tabs with real data**: build the Role/Permission model + permission assignment UI; replace the hardcoded 6 security cards with real metrics from `AuditLog` (failed logins last 24h, blocked IPs, 2FA adoption % computed from `TwoFactorSecret` table).
+25. **Public status page + API docs**: `GET /api/status` (no auth, returns provider health + uptime), `GET /api/docs` (OpenAPI 3.1 spec for the v1 public API).
+
+---
+
+### Quick-reference: route inventory
+
+**Exists (17 files, ~22 endpoints):**
+- `GET /api` (stub "Hello world")
+- `GET/POST /api/auth/[...nextauth]`
+- `POST /api/auth/register`
+- `GET /api/dashboard`
+- `GET /api/me`
+- `GET/POST /api/orders`
+- `GET /api/services`
+- `GET /api/payment-methods`
+- `GET /api/wallet` · `POST /api/wallet/topup` · `POST /api/wallet/withdraw`
+- `GET/POST /api/notifications`
+- `GET/POST/PATCH /api/tickets`
+- `GET /api/admin/overview`
+- `GET/PATCH /api/admin/users`
+- `GET/POST/PATCH/DELETE /api/admin/services`
+- `GET/POST/PATCH /api/admin/providers`
+- `GET/POST/PATCH /api/admin/payment-methods`
+- `POST /api/admin/notifications`
+
+**Critical missing routes (P0/P1):**
+- `POST /api/webhooks/stripe` (P0)
+- `GET/PATCH /api/admin/withdrawals` + `/approve|reject` (P0)
+- `GET /api/analytics` (P1)
+- `GET/POST/DELETE /api/api-keys` (P1)
+- `PATCH /api/me` · `POST /api/me/password` · `POST /api/me/2fa/*` (P1)
+- `POST /api/auth/forgot-password` · `POST /api/auth/reset-password` · `POST /api/auth/verify-email` (P1)
+- `GET/POST /api/offers` + `GET /api/offers/me` (P1)
+- `GET /api/referrals` (P2)
+- `GET/POST/PATCH/DELETE /api/admin/coupons` (P2)
+- `GET /api/export/orders` · `GET /api/export/transactions` (P2)
+- `GET /api/status` · `GET /api/docs` · `GET/POST /api/v1/orders` (P2)
+
+### Quick-reference: Prisma model inventory
+
+**Exists (14 models):** User, Account, Session, VerificationToken, Provider, Service, Order, Transaction, PaymentMethod, Notification, Ticket, TicketMessage, AuditLog, Setting.
+
+**Critical missing models:** ApiKey, WebhookLog, PaymentIntent, Refund, Coupon, Referral, TwoFactorSecret, DeviceSession, IpAllowlist, Subscription, Invoice, Favorite, TicketAttachment, WithdrawalRequest, CurrencyRate, ApiLog, Offer, Role, Permission.
