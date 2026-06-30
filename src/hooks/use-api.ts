@@ -234,6 +234,16 @@ export function useCreatePaymentMethod() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+export function useUpdatePaymentMethod() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/payment-methods", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-payment-methods"] });
+      qc.invalidateQueries({ queryKey: ["payment-methods"] });
+    },
+  });
+}
 
 export function useBroadcastNotification() {
   const { toast } = useToast();

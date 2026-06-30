@@ -5,6 +5,7 @@ import { ShieldCheck, Globe2, Clock, Zap } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { Counter } from "./counter";
+import { PaymentLogo } from "./payment-logo";
 
 /* ── Provider data ────────────────────────────────────── */
 const PROVIDERS = [
@@ -98,10 +99,8 @@ export function Payments() {
               <Reveal key={p.name} blur delay={i * 0.08}>
                 <div className="group relative h-full overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-shadow hover:nov-ring-lg">
                   <div className="flex items-center justify-between">
-                    <span
-                      className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${p.tone} text-base font-semibold`}
-                    >
-                      {p.glyph}
+                    <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50">
+                      <PaymentLogo name={p.name} size={24} />
                     </span>
                     <span className="text-xs font-medium text-muted-foreground">
                       {p.coverage}

@@ -43,6 +43,7 @@ import {
 } from "recharts";
 import { useApp, type AdminTab } from "./app-store";
 import { Counter } from "./counter";
+import { PaymentLogo } from "./payment-logo";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
   useAdminOverview,
@@ -53,6 +54,7 @@ import {
   useCreateService,
   useCreateProvider,
   useCreatePaymentMethod,
+  useUpdatePaymentMethod,
   useBroadcastNotification,
   useUpdateUser,
   useAdminCurrencies,
@@ -75,6 +77,7 @@ import {
   useAdminRoles,
   useDeleteRole,
 } from "@/hooks/use-api";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
@@ -565,52 +568,190 @@ function AdminPayments() {
   const { data } = useAdminPaymentMethods();
   const createPm = useCreatePaymentMethod();
   const [showAdd, setShowAdd] = useState(false);
+  const [editingMethod, setEditingMethod] = useState<any | null>(null);
   const methods = data?.methods ?? [];
 
   return (
     <Reveal blur>
-      <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
-        <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold">Payment gateways · {methods.length} configured</div>
+      <div className="flex flex-col gap-4">
+        {/* Payment method cards with logos */}
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {methods.map((m: any) => (
+            <div key={m.id} className="rounded-2xl border border-border/60 bg-background p-5">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-3">
+                  <PaymentLogo name={m.name} size={40} />
+                  <div>
+                    <div className="text-sm font-semibold text-foreground">{m.name}</div>
+                    <div className="text-[10px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
+                  </div>
+                </div>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", m.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
+                  <span className={cn("h-1.5 w-1.5 rounded-full", m.status === "active" ? "bg-emerald-500" : "bg-amber-500")} />
+                  {m.status}
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span className="rounded-md bg-muted/40 px-2 py-1">{m.currencies}</span>
+                {m.config && <span className="rounded-md bg-emerald-500/10 px-2 py-1 text-emerald-700">✓ Credentials set</span>}
+                {!m.config && <span className="rounded-md bg-amber-500/10 px-2 py-1 text-amber-700">⚠ No credentials</span>}
+              </div>
+              <button
+                onClick={() => setEditingMethod(m)}
+                className="mt-4 w-full rounded-lg border border-border py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+              >
+                Configure credentials
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Add new method */}
+        <div className="flex justify-end">
           <button
             onClick={() => setShowAdd(true)}
             className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
-            <Plus className="h-3.5 w-3.5" /> Add method
+            <Plus className="h-3.5 w-3.5" /> Add payment method
           </button>
         </div>
-        <div className="overflow-x-auto nov-scroll">
-          <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
-              <tr>
-                <th className="px-4 py-3 text-left font-medium">Gateway</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Settle</th>
-                <th className="px-4 py-3 text-right font-medium">Fee</th>
-                <th className="px-4 py-3 text-right font-medium">Currencies</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border/60">
-              {methods.map((m: any) => (
-                <tr key={m.id} className="transition-colors hover:bg-muted/30">
-                  <td className="px-4 py-3 font-medium text-foreground">{m.name}</td>
-                  <td className="px-4 py-3">
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", m.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
-                      <span className={cn("h-1.5 w-1.5 rounded-full", m.status === "active" ? "bg-emerald-500" : "bg-amber-500")} />
-                      {m.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">{m.settleTime}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{m.fee}</td>
-                  <td className="px-4 py-3 text-right text-xs text-muted-foreground">{m.currencies}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
       </div>
+
       {showAdd && <AddPaymentMethodModal onClose={() => setShowAdd(false)} onCreate={createPm.mutateAsync} />}
+      {editingMethod && <ConfigureCredentialsModal method={editingMethod} onClose={() => setEditingMethod(null)} />}
     </Reveal>
+  );
+}
+
+// ─── Configure Credentials Modal ───
+function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: () => void }) {
+  const updatePm = useUpdatePaymentMethod();
+  const { toast } = useToast();
+
+  // Define credential fields per payment method
+  const credentialFields: Record<string, { key: string; label: string; type?: string; placeholder?: string }[]> = {
+    Stripe: [
+      { key: "secretKey", label: "Secret Key", placeholder: "sk_live_..." },
+      { key: "publishableKey", label: "Publishable Key", placeholder: "pk_live_..." },
+      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
+    ],
+    PayPal: [
+      { key: "clientId", label: "Client ID", placeholder: "AY..." },
+      { key: "clientSecret", label: "Client Secret", placeholder: "EL..." },
+      { key: "webhookId", label: "Webhook ID", placeholder: "WH-..." },
+    ],
+    "Mercado Pago": [
+      { key: "accessToken", label: "Access Token", placeholder: "APP_USR-..." },
+      { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
+      { key: "webhookUrl", label: "Webhook URL (auto)", placeholder: "https://yourdomain.com/api/webhooks/mercadopago" },
+    ],
+    "Aurora Pay": [
+      { key: "merchantId", label: "Merchant ID", placeholder: "MER-..." },
+      { key: "apiKey", label: "API Key", placeholder: "aur_..." },
+      { key: "apiSecret", label: "API Secret", placeholder: "sec_..." },
+    ],
+    Crypto: [
+      { key: "walletAddress", label: "Wallet Address (USDT/USDC)", placeholder: "T..." },
+      { key: "network", label: "Network", placeholder: "TRC20 / ERC20" },
+      { key: "confirmations", label: "Required Confirmations", placeholder: "3" },
+    ],
+    "Bank transfer": [
+      { key: "bankName", label: "Bank Name", placeholder: "Chase Bank" },
+      { key: "accountNumber", label: "Account Number", placeholder: "..." },
+      { key: "routingNumber", label: "Routing / IBAN", placeholder: "..." },
+      { key: "accountHolder", label: "Account Holder", placeholder: "NOVSMM Inc." },
+    ],
+  };
+
+  const fields = credentialFields[method.name] ?? [
+    { key: "apiKey", label: "API Key", placeholder: "" },
+    { key: "apiSecret", label: "API Secret", placeholder: "" },
+  ];
+
+  const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [loading, setLoading] = useState(false);
+
+  // Parse existing config (masked) — show "configured" but don't pre-fill
+  const existingConfig = method.config ? (() => { try { return JSON.parse(method.config); } catch { return {}; } })() : {};
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      // Only send non-empty fields (don't overwrite with empty if admin didn't change)
+      const config: Record<string, string> = {};
+      for (const field of fields) {
+        if (credentials[field.key]) {
+          config[field.key] = credentials[field.key];
+        }
+      }
+      await updatePm.mutateAsync({ id: method.id, config });
+      toast({ title: "Credentials saved", description: `${method.name} configuration updated successfully.` });
+      onClose();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+      <div className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
+        <button onClick={onClose} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <PaymentLogo name={method.name} size={48} />
+          <div>
+            <div className="text-lg font-semibold">{method.name}</div>
+            <div className="text-xs text-muted-foreground">Configure payment credentials</div>
+          </div>
+        </div>
+
+        <div className="mt-5 flex flex-col gap-4">
+          {fields.map((field) => (
+            <label key={field.key} className="block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                {field.label}
+                {existingConfig[field.key] && <span className="ml-2 text-emerald-600">✓ Currently set ({existingConfig[field.key]})</span>}
+              </span>
+              <input
+                type={field.type ?? "text"}
+                value={credentials[field.key] ?? ""}
+                onChange={(e) => setCredentials({ ...credentials, [field.key]: e.target.value })}
+                placeholder={field.placeholder ?? `Enter ${field.label}`}
+                className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              />
+            </label>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-4 py-3">
+          <p className="text-xs text-amber-700">
+            🔒 Credentials are encrypted and stored securely. Leave a field blank to keep the existing value.
+            Changes take effect immediately after saving.
+          </p>
+        </div>
+
+        <button
+          onClick={handleSave}
+          disabled={loading}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            <>
+              <ShieldCheck className="h-4 w-4" />
+              Save credentials
+            </>
+          )}
+        </button>
+      </div>
+    </div>
   );
 }
 

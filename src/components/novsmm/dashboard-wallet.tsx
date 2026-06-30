@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { useState } from "react";
 import { formatPrice } from "@/lib/currency-utils";
+import { PaymentLogo } from "./payment-logo";
 import {
   Wallet,
   ArrowDownLeft,
@@ -252,9 +253,7 @@ function PaymentMethodsList() {
       <div className="mt-3 flex flex-col gap-1.5">
         {methods.map((m: any) => (
           <div key={m.id} className="flex items-center gap-2.5 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/30">
-            <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold", m.tone)}>
-              {m.glyph}
-            </span>
+            <PaymentLogo name={m.name} size={32} />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-foreground">{m.name}</div>
               <div className="text-[10px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
@@ -353,9 +352,7 @@ function TopupModal({ onClose }: { onClose: () => void }) {
                   method === m.name ? "border-primary bg-primary/[0.04] nov-ring" : "border-border hover:bg-muted/30"
                 )}
               >
-                <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br text-sm font-semibold", m.tone)}>
-                  {m.glyph}
-                </span>
+                <PaymentLogo name={m.name} size={32} />
                 <span className="text-xs font-medium text-foreground">{m.name}</span>
               </button>
             ))}

@@ -10,10 +10,34 @@ export async function GET() {
   const methods = await db.paymentMethod.findMany({
     orderBy: { sortOrder: "asc" },
   });
-  return apiOk({ methods });
+  // Don't expose full config (credentials) in the list — mask them
+  const safe = methods.map((m) => ({
+    ...m,
+    config: m.config ? maskConfig(m.config) : null,
+  }));
+  return apiOk({ methods: safe });
 }
 
-/** POST /api/admin/payment-methods — add a new payment method. */
+/** Mask sensitive config values for display (show only last 4 chars) */
+function maskConfig(configStr: string): string {
+  try {
+    const config = JSON.parse(configStr);
+    const masked: Record<string, string> = {};
+    for (const [key, value] of Object.entries(config)) {
+      const str = String(value);
+      if (str.length > 8) {
+        masked[key] = "••••••••" + str.slice(-4);
+      } else {
+        masked[key] = "••••";
+      }
+    }
+    return JSON.stringify(masked);
+  } catch {
+    return "••••";
+  }
+}
+
+/** POST /api/admin/payment-methods — add a new payment method with config. */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAdmin();
   if (error) return error;
@@ -25,17 +49,27 @@ export async function POST(req: NextRequest) {
     return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
   }
 
+  // Extract config fields (credentials)
+  const { config, ...methodData } = body;
+  const configStr = config ? JSON.stringify(config) : null;
+
   try {
-    const method = await db.paymentMethod.create({ data: parsed.data });
+    const method = await db.paymentMethod.create({
+      data: {
+        ...methodData,
+        ...(configStr ? { config: configStr } : {}),
+      },
+    });
     await db.auditLog.create({
       data: {
         userId: adminId,
         action: "create",
         entity: "payment_method",
         entityId: method.id,
+        metadata: JSON.stringify({ name: method.name, hasConfig: !!configStr }),
       },
     });
-    return apiOk({ method, message: "Payment method added" }, 201);
+    return apiOk({ method: { ...method, config: configStr ? maskConfig(configStr) : null }, message: "Payment method added" }, 201);
   } catch (e: any) {
     if (e.code === "P2002")
       return apiError("Payment method name already exists", 409);
@@ -43,19 +77,32 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** PATCH /api/admin/payment-methods */
+/** PATCH /api/admin/payment-methods — update method + save credentials. */
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAdmin();
   if (error) return error;
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { id, ...data } = body;
+  const { id, config, ...data } = body;
   if (!id) return apiError("ID required", 422);
 
-  const method = await db.paymentMethod.update({ where: { id }, data });
+  const updateData: any = { ...data };
+
+  // If config is provided, save it as JSON
+  if (config !== undefined) {
+    updateData.config = config ? JSON.stringify(config) : null;
+  }
+
+  const method = await db.paymentMethod.update({ where: { id }, data: updateData });
   await db.auditLog.create({
-    data: { userId: adminId, action: "update", entity: "payment_method", entityId: id },
+    data: {
+      userId: adminId,
+      action: "update",
+      entity: "payment_method",
+      entityId: id,
+      metadata: JSON.stringify({ fields: Object.keys(updateData), hasConfig: !!config }),
+    },
   });
-  return apiOk({ method });
+  return apiOk({ method: { ...method, config: method.config ? maskConfig(method.config) : null } });
 }
