@@ -64,6 +64,7 @@ type AppState = {
   setOnboardingStep: (n: number) => void;
   setAuthed: (a: boolean, user?: AppState["user"]) => void;
   setAuthLoading: (b: boolean) => void;
+  signIn: () => void;
   signOut: () => void;
 };
 
@@ -82,6 +83,7 @@ export const useApp = create<AppState>((set) => ({
   setOnboardingStep: (n) => set({ onboardingStep: n }),
   setAuthed: (a, user) => set({ authed: a, user: user ?? null }),
   setAuthLoading: (b) => set({ authLoading: b }),
+  signIn: () => set({ authed: true, view: "dashboard" }),
   signOut: () =>
     set({
       authed: false,

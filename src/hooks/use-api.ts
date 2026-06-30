@@ -5,11 +5,26 @@ import { api } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 
 // ── Auth ──
+// Custom session fetch via TanStack Query instead of NextAuth's useSession
+// to avoid CLIENT_FETCH_ERROR when behind reverse proxy (Caddy gateway)
 export function useSession() {
   return useQuery({
     queryKey: ["session"],
-    queryFn: () => api.get<{ user?: any }>("/api/auth/session"),
+    queryFn: async () => {
+      try {
+        const res = await fetch("/api/auth/session", {
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!res.ok) return { user: null };
+        const data = await res.json();
+        return data;
+      } catch {
+        return { user: null };
+      }
+    },
     staleTime: 30 * 1000,
+    retry: false,
   });
 }
 

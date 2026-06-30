@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { Mail, Lock, ArrowRight, ArrowLeft, Sparkles, Loader2 } from "lucide-react";
 import { useApp } from "./app-store";
 import { Field, SocialButton } from "./auth-fields";
@@ -25,36 +24,53 @@ export function LoginScreen() {
     setLoading(true);
     setError(null);
 
-    const res = await signIn("credentials", {
-      email,
-      password,
-      redirect: false,
-    });
+    try {
+      // Get CSRF token first
+      const csrfRes = await fetch("/api/auth/csrf", { credentials: "include" });
+      if (!csrfRes.ok) throw new Error("Failed to get CSRF token");
+      const { csrfToken } = await csrfRes.json();
 
-    if (res?.error) {
+      // Submit credentials to NextAuth callback
+      const formData = new URLSearchParams();
+      formData.append("csrfToken", csrfToken);
+      formData.append("email", email);
+      formData.append("password", password);
+      formData.append("redirect", "false");
+      formData.append("json", "true");
+      formData.append("callbackUrl", "/");
+
+      const res = await fetch("/api/auth/callback/credentials", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: formData.toString(),
+        credentials: "include",
+      });
+
+      // NextAuth returns a redirect (302) on success
+      if (res.ok || res.status === 302 || res.redirected) {
+        setLoading(false);
+        window.location.reload();
+        return;
+      }
+
       setError("Invalid email or password. Try again.");
       setLoading(false);
-      return;
+    } catch (err) {
+      setError("Login failed. Please try again.");
+      setLoading(false);
     }
-
-    // Success — the AppView will detect the session and switch to dashboard
-    setLoading(false);
-    // Force a session refetch by reloading the view
-    window.location.reload();
   };
 
   const handleSocial = async (provider: string) => {
     setLoading(true);
     setError(null);
-    // Google and Discord are configured as real OAuth providers.
-    // Telegram and Apple require custom providers — show a message if clicked.
     if (provider === "telegram" || provider === "apple") {
       setError(`${provider.charAt(0).toUpperCase() + provider.slice(1)} login is coming soon. Please use email or Google.`);
       setLoading(false);
       return;
     }
-    // Redirect to the OAuth provider's consent screen
-    await signIn(provider, { callbackUrl: "/" });
+    // Redirect to OAuth provider via NextAuth
+    window.location.href = `/api/auth/signin/${provider}?callbackUrl=/`;
   };
 
   return (
