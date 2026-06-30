@@ -10,24 +10,31 @@ import { Testimonials } from "@/components/novsmm/testimonials";
 import { Plans } from "@/components/novsmm/plans";
 import { Security } from "@/components/novsmm/security";
 import { Footer } from "@/components/novsmm/footer";
+import { AppView } from "@/components/novsmm/app-view";
 
 export default function Home() {
   return (
     <SmoothScroll>
       <div className="relative flex min-h-screen flex-col bg-background">
         <ScrollProgress />
-        <Navbar />
-        <main className="flex-1">
-          <Hero />
-          <Services />
-          <Marketplace />
-          <Payments />
-          <Stats />
-          <Testimonials />
-          <Plans />
-          <Security />
-        </main>
-        <Footer />
+        <AppView
+          landing={
+            <>
+              <Navbar />
+              <main className="flex-1">
+                <Hero />
+                <Services />
+                <Marketplace />
+                <Payments />
+                <Stats />
+                <Testimonials />
+                <Plans />
+                <Security />
+              </main>
+              <Footer />
+            </>
+          }
+        />
       </div>
     </SmoothScroll>
   );

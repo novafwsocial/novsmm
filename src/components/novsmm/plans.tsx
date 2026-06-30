@@ -7,6 +7,7 @@ import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { Magnetic } from "./magnetic";
 import { Counter } from "./counter";
+import { useApp } from "./app-store";
 import { cn } from "@/lib/utils";
 
 type Plan = {
@@ -230,9 +231,9 @@ function PlanCard({ plan, yearly }: { plan: Plan; yearly: boolean }) {
 
         {/* CTA */}
         <Magnetic
-          as="a"
-          href="#"
+          as="button"
           strength={0.2}
+          onClick={() => useApp.getState().setView("register")}
           className="mt-6 block w-full"
         >
           <span

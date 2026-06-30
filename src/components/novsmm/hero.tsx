@@ -14,8 +14,10 @@ import {
 import { Magnetic } from "./magnetic";
 import { Counter } from "./counter";
 import { HeroDashboard } from "./hero-dashboard";
+import { useApp } from "./app-store";
 
 export function Hero() {
+  const { setView } = useApp();
   const ref = useRef<HTMLElement>(null);
   const { scrollYProgress } = useScroll({
     target: ref,
@@ -97,16 +99,16 @@ export function Hero() {
           transition={{ duration: 0.9, delay: 0.26, ease: [0.16, 1, 0.3, 1] }}
           className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
         >
-          <Magnetic as="a" href="#plans" strength={0.3}>
+          <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
             <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
               Start free
               <ArrowRight className="h-4 w-4" />
             </span>
           </Magnetic>
-          <Magnetic as="a" href="#services" strength={0.25}>
+          <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted">
               <Play className="h-3.5 w-3.5 fill-current" />
-              Explore platform
+              Sign in
             </span>
           </Magnetic>
         </motion.div>

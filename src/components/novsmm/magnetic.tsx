@@ -14,6 +14,7 @@ type MagneticProps = {
   strength?: number;
   as?: "div" | "button" | "a";
   href?: string;
+  onClick?: () => void;
 };
 
 /**
@@ -26,6 +27,7 @@ export function Magnetic({
   strength = 0.35,
   as = "div",
   href,
+  onClick,
 }: MagneticProps) {
   const ref = useRef<HTMLDivElement>(null);
   const x = useMotionValue(0);
@@ -56,6 +58,7 @@ export function Magnetic({
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
       href={href as never}
+      onClick={onClick}
     >
       {children}
     </MotionComp>

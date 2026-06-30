@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ArrowRight } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
+import { useApp } from "./app-store";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
@@ -19,6 +20,7 @@ const NAV_LINKS = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const { setView } = useApp();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 24);
@@ -59,13 +61,13 @@ export function Navbar() {
         </div>
 
         <div className="hidden items-center gap-2 lg:flex">
-          <a
-            href="#"
+          <button
+            onClick={() => setView("login")}
             className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
           >
             Sign in
-          </a>
-          <Magnetic as="a" href="#plans" strength={0.25}>
+          </button>
+          <Magnetic as="button" strength={0.25} onClick={() => setView("register")}>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
               Start free
               <ArrowRight className="h-3.5 w-3.5" />
@@ -102,19 +104,24 @@ export function Navbar() {
               </a>
             ))}
             <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3">
-              <a
-                href="#"
-                className="rounded-2xl px-4 py-3 text-base font-medium text-foreground/80"
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setView("login");
+                }}
+                className="rounded-2xl px-4 py-3 text-left text-base font-medium text-foreground/80"
               >
                 Sign in
-              </a>
-              <a
-                href="#plans"
-                onClick={() => setOpen(false)}
+              </button>
+              <button
+                onClick={() => {
+                  setOpen(false);
+                  setView("register");
+                }}
                 className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
               >
                 Start free
-              </a>
+              </button>
             </div>
           </motion.div>
         )}

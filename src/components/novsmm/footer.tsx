@@ -5,6 +5,7 @@ import { ArrowRight, Globe2 } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { Reveal } from "./reveal";
+import { useApp } from "./app-store";
 
 const COLUMNS = [
   {
@@ -26,6 +27,7 @@ const COLUMNS = [
 ];
 
 export function Footer() {
+  const { setView } = useApp();
   return (
     <footer className="relative mt-auto overflow-hidden border-t border-border bg-background">
       {/* Final CTA band */}
@@ -44,15 +46,15 @@ export function Footer() {
               social media marketing on NOVSMM infrastructure.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-              <Magnetic as="a" href="#plans" strength={0.3}>
+              <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
                 <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
                   Start free
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </Magnetic>
-              <Magnetic as="a" href="#" strength={0.25}>
+              <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
                 <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-7 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
-                  Talk to sales
+                  Sign in
                 </span>
               </Magnetic>
             </div>
