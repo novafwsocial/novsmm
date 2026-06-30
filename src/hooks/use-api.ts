@@ -69,11 +69,35 @@ export function useCreateOrder() {
   });
 }
 
-// ── Services ──
-export function useServices(platform?: string) {
-  const q = platform ? `?platform=${platform}` : "";
+// ── Services (paginated) ──
+export function useServices(params?: {
+  platform?: string;
+  search?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.platform && params.platform !== "All")
+    p.set("platform", params.platform);
+  if (params?.search) p.set("search", params.search);
+  if (params?.page) p.set("page", String(params.page));
+  if (params?.limit) p.set("limit", String(params.limit));
+  const q = p.toString();
   return useQuery({
-    queryKey: ["services", platform],
+    queryKey: ["services", params?.platform, params?.search, params?.page],
+    queryFn: () =>
+      api.get<{ services: any[]; pagination: any }>(
+        `/api/services${q ? `?${q}` : ""}`
+      ),
+    keepPreviousData: true,
+  });
+}
+
+// ── All services (for sell tab dropdown — lightweight, no pagination) ──
+export function useAllServices(search?: string) {
+  const q = search ? `?search=${search}&limit=60` : "?limit=60";
+  return useQuery({
+    queryKey: ["all-services", search],
     queryFn: () => api.get<{ services: any[] }>(`/api/services${q}`),
   });
 }

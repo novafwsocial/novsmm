@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import {
   Search,
   Plus,
@@ -32,6 +32,7 @@ import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
   useServices,
+  useAllServices,
   useCreateOrder,
   useWallet,
   useOrders,
@@ -62,7 +63,6 @@ const QUALITY_BADGES: Record<string, { label: string; cls: string }> = {
 
 export function DashboardMarketplace() {
   const [tab, setTab] = useState<"buy" | "sell" | "history">("buy");
-  const { data: servicesData } = useServices();
   const [selectedService, setSelectedService] = useState<any | null>(null);
 
   // Load currency rates on mount
@@ -82,7 +82,7 @@ export function DashboardMarketplace() {
               Buy · Sell · History
             </h1>
             <p className="text-sm text-muted-foreground">
-              Browse {servicesData?.services?.length ?? 0} services, place orders, and repeat past purchases.
+              Browse 6,382 services, place orders, and repeat past purchases.
             </p>
           </div>
           <WalletDisplay />
@@ -120,10 +120,7 @@ export function DashboardMarketplace() {
       </Reveal>
 
       {tab === "buy" && (
-        <BuyTab
-          services={servicesData?.services ?? []}
-          onSelectService={setSelectedService}
-        />
+        <BuyTab onSelectService={setSelectedService} />
       )}
       {tab === "sell" && <SellTab />}
       {tab === "history" && <HistoryTab onRepeat={() => {}} />}
@@ -159,44 +156,92 @@ function WalletDisplay() {
   );
 }
 
-// ─────────── Buy Tab (Service Catalog) ───────────
-function BuyTab({
-  services,
-  onSelectService,
-}: {
-  services: any[];
-  onSelectService: (s: any) => void;
-}) {
+// ─────────── Buy Tab (Service Catalog — Paginated + Infinite Scroll) ───────────
+const PAGE_SIZE = 24;
+
+function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
   const [platformFilter, setPlatformFilter] = useState("All");
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const [allServices, setAllServices] = useState<any[]>([]);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const { data: sessionData } = useSession();
   const user = (sessionData?.user as any) ?? {};
   const currency = user?.currency ?? "USD";
 
-  const filtered = useMemo(() => {
-    return services.filter((s) => {
-      if (platformFilter !== "All" && s.platform !== platformFilter) return false;
-      if (search) {
-        const q = search.toLowerCase();
-        return (
-          s.name.toLowerCase().includes(q) ||
-          s.platform.toLowerCase().includes(q) ||
-          (s.description ?? "").toLowerCase().includes(q)
-        );
-      }
-      return true;
+  // Debounce search
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setPage(1);
+      setAllServices([]);
+    }, 400);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Reset when platform changes
+  const handlePlatformChange = (p: string) => {
+    setPlatformFilter(p);
+    setPage(1);
+    setAllServices([]);
+    processedPagesRef.current.clear();
+  };
+
+  // Fetch paginated services
+  const { data, isLoading, isFetching } = useServices({
+    platform: platformFilter,
+    search: debouncedSearch || undefined,
+    page,
+    limit: PAGE_SIZE,
+  });
+
+  // Accumulate services for infinite scroll — use a ref to track if we've processed this page
+  const processedPagesRef = useRef<Set<number>>(new Set());
+  useEffect(() => {
+    if (!data?.services) return;
+    if (processedPagesRef.current.has(page)) return;
+    processedPagesRef.current.add(page);
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setAllServices((prev) => {
+      if (page === 1) return data.services;
+      const existingIds = new Set(prev.map((s) => s.id));
+      const newOnes = data.services.filter((s) => !existingIds.has(s.id));
+      return [...prev, ...newOnes];
     });
-  }, [services, platformFilter, search]);
+  }, [data, page]);
+
+  // Reset processed pages when debounced search changes
+  useEffect(() => {
+    processedPagesRef.current.clear();
+  }, [debouncedSearch]);
+
+  // Infinite scroll via IntersectionObserver
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && data?.pagination?.hasMore && !isFetching) {
+          setPage((p) => p + 1);
+        }
+      },
+      { rootMargin: "200px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [data?.pagination?.hasMore, isFetching]);
 
   // Group by platform
   const grouped = useMemo(() => {
     const g: Record<string, any[]> = {};
-    filtered.forEach((s) => {
+    allServices.forEach((s) => {
       if (!g[s.platform]) g[s.platform] = [];
       g[s.platform].push(s);
     });
     return g;
-  }, [filtered]);
+  }, [allServices]);
 
   return (
     <div className="flex flex-col gap-4">
@@ -210,6 +255,11 @@ function BuyTab({
             placeholder="Search services — Instagram, TikTok, followers, views…"
             className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
           />
+          {search && (
+            <button onClick={() => setSearch("")} className="text-muted-foreground hover:text-foreground">
+              <X className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </Reveal>
 
@@ -219,7 +269,7 @@ function BuyTab({
           {PLATFORM_FILTERS.map((p) => (
             <button
               key={p}
-              onClick={() => setPlatformFilter(p)}
+              onClick={() => handlePlatformChange(p)}
               className={cn(
                 "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
                 platformFilter === p
@@ -228,7 +278,7 @@ function BuyTab({
               )}
             >
               {p !== "All" && (
-                <span className="mr-1"><PlatformLogo platform={p} size={16} /></span>
+                <span className="mr-1 inline-flex align-middle"><PlatformLogo platform={p} size={16} /></span>
               )}
               {p}
             </button>
@@ -236,33 +286,61 @@ function BuyTab({
         </div>
       </Reveal>
 
-      {/* Service groups by platform */}
-      {Object.keys(grouped).length === 0 ? (
+      {/* Results count */}
+      {data?.pagination && (
+        <div className="text-xs text-muted-foreground">
+          Showing {allServices.length} of {data.pagination.total.toLocaleString()} services
+        </div>
+      )}
+
+      {/* Loading state */}
+      {isLoading && page === 1 ? (
+        <div className="flex h-40 items-center justify-center">
+          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        </div>
+      ) : Object.keys(grouped).length === 0 ? (
         <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
           No services match your search.
         </div>
       ) : (
-        Object.entries(grouped).map(([platform, svcs]) => (
-          <div key={platform} className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <PlatformLogo platform={platform} size={28} />
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-                {platform} · {svcs.length} services
-              </h3>
-            </div>
-            <RevealStagger stagger={0.04} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {svcs.map((s) => (
-                <RevealItem key={s.id}>
+        <>
+          {Object.entries(grouped).map(([platform, svcs]) => (
+            <div key={platform} className="flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <PlatformLogo platform={platform} size={28} />
+                <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
+                  {platform} · {svcs.length} services
+                </h3>
+              </div>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {svcs.map((s) => (
                   <ServiceCard
+                    key={s.id}
                     service={s}
                     currency={currency}
                     onClick={() => onSelectService(s)}
                   />
-                </RevealItem>
-              ))}
-            </RevealStagger>
+                ))}
+              </div>
+            </div>
+          ))}
+
+          {/* Infinite scroll sentinel */}
+          <div ref={sentinelRef} className="flex h-20 items-center justify-center">
+            {isFetching && page > 1 ? (
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            ) : data?.pagination?.hasMore ? (
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-full border border-border px-6 py-2 text-sm font-medium text-foreground hover:bg-muted"
+              >
+                Load more
+              </button>
+            ) : allServices.length > 0 ? (
+              <span className="text-xs text-muted-foreground">— End of catalog —</span>
+            ) : null}
           </div>
-        ))
+        </>
       )}
     </div>
   );
@@ -280,11 +358,9 @@ function ServiceCard({
 }) {
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
   return (
-    <motion.div
-      whileHover={{ y: -3 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+    <div
       onClick={onClick}
-      className="group relative h-full cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-shadow hover:nov-ring-lg"
+      className="group relative h-full cursor-pointer overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-all hover:-translate-y-0.5 hover:nov-ring-lg"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
@@ -330,7 +406,7 @@ function ServiceCard({
           <ChevronRight className="h-3.5 w-3.5" />
         </span>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -680,7 +756,7 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
 // ─────────── Sell Tab (Offers) ───────────
 function SellTab() {
   const { data: offersData } = useOffers();
-  const { data: servicesData } = useServices();
+  const { data: servicesData } = useAllServices();
   const createOffer = useCreateOffer();
   const deleteOffer = useDeleteOffer();
   const { data: sessionData } = useSession();
