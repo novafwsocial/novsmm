@@ -45,7 +45,10 @@ export function DashboardOrders() {
               {filtered.length} shown · live status, filters & instant search.
             </p>
           </div>
-          <button className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
+          <button
+            onClick={() => window.open("/api/export/orders?format=csv", "_blank")}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          >
             <Download className="h-3.5 w-3.5" /> Export CSV
           </button>
         </div>

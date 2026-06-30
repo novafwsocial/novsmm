@@ -37,6 +37,9 @@ import {
   useOrders,
   useRepeatOrder,
   useSession,
+  useOffers,
+  useCreateOffer,
+  useDeleteOffer,
 } from "@/hooks/use-api";
 import { formatPrice, loadCurrencyRates } from "@/lib/currency-utils";
 import { useApp } from "./app-store";
@@ -99,6 +102,7 @@ export function DashboardMarketplace() {
         <div className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background p-1">
           {[
             { id: "buy", label: "Services", icon: Store },
+            { id: "sell", label: "Sell", icon: Tag },
             { id: "history", label: "Purchase history", icon: History },
           ].map((t) => (
             <button
@@ -129,6 +133,7 @@ export function DashboardMarketplace() {
           onSelectService={setSelectedService}
         />
       )}
+      {tab === "sell" && <SellTab />}
       {tab === "history" && <HistoryTab onRepeat={() => {}} />}
 
       {selectedService && (
@@ -675,6 +680,127 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
       </span>
       {status !== "completed" && status !== "cancelled" && (
         <span className="text-[10px] tabular-nums text-muted-foreground">{progress}%</span>
+      )}
+    </div>
+  );
+}
+
+// ─────────── Sell Tab (Offers) ───────────
+function SellTab() {
+  const { data: offersData } = useOffers();
+  const { data: servicesData } = useServices();
+  const createOffer = useCreateOffer();
+  const deleteOffer = useDeleteOffer();
+  const { data: sessionData } = useSession();
+  const currency = (sessionData?.user as any)?.currency ?? "USD";
+  const [showPublish, setShowPublish] = useState(false);
+  const [selectedService, setSelectedService] = useState("");
+  const [price, setPrice] = useState(0);
+  const offers = offersData?.offers ?? [];
+  const services = servicesData?.services ?? [];
+
+  const handlePublish = async () => {
+    if (!selectedService || price <= 0) return;
+    await createOffer.mutateAsync({ serviceId: selectedService, price });
+    setShowPublish(false);
+    setSelectedService("");
+    setPrice(0);
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Summary */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-2xl border border-border/60 bg-background p-4">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Active offers</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{offers.length}</div>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-background p-4">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total sales</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{offersData?.totalSales ?? 0}</div>
+        </div>
+        <div className="rounded-2xl border border-border/60 bg-background p-4">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Earnings</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{formatPrice(offersData?.totalEarnings ?? 0, currency)}</div>
+        </div>
+      </div>
+
+      {/* Publish button */}
+      <div className="flex justify-end">
+        <button onClick={() => setShowPublish(true)} className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+          <Plus className="h-3.5 w-3.5" /> Publish offer
+        </button>
+      </div>
+
+      {/* Offers list */}
+      <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+        <table className="w-full text-sm">
+          <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <tr>
+              <th className="px-4 py-3 text-left font-medium">Service</th>
+              <th className="px-4 py-3 text-right font-medium">Cost</th>
+              <th className="px-4 py-3 text-right font-medium">Your price</th>
+              <th className="px-4 py-3 text-right font-medium">Margin</th>
+              <th className="px-4 py-3 text-right font-medium">Sales</th>
+              <th className="px-4 py-3 text-right font-medium">Action</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {offers.map((o: any) => (
+              <tr key={o.id} className="transition-colors hover:bg-muted/30">
+                <td className="px-4 py-3">
+                  <div className="font-medium text-foreground">{o.service?.name ?? "—"}</div>
+                  <div className="text-[10px] text-muted-foreground">{o.service?.platform}</div>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPrice(o.cost, currency)}</td>
+                <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">{formatPrice(o.price, currency)}</td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", o.margin > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{o.margin.toFixed(0)}%</span>
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.sales}</td>
+                <td className="px-4 py-3 text-right">
+                  <button onClick={() => deleteOffer.mutate(o.id)} className="rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20">Remove</button>
+                </td>
+              </tr>
+            ))}
+            {offers.length === 0 && (
+              <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">No offers published yet. Click "Publish offer" to start selling.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Publish modal */}
+      {showPublish && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+            <div className="text-base font-semibold">Publish offer</div>
+            <p className="mt-1 text-xs text-muted-foreground">Select a service and set your resale price. The margin is calculated automatically.</p>
+            <div className="mt-4 flex flex-col gap-3">
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Service</span>
+                <select value={selectedService} onChange={(e) => { setSelectedService(e.target.value); const svc = services.find(s => s.id === e.target.value); if (svc) setPrice(svc.price); }} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none">
+                  <option value="">Select a service…</option>
+                  {services.map((s: any) => <option key={s.id} value={s.id}>{s.name} (cost: ${s.cost.toFixed(2)}/1000)</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Your price per 1000 (USD)</span>
+                <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} step="0.01" min="0" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none" />
+              </label>
+              {selectedService && price > 0 && (() => {
+                const svc = services.find(s => s.id === selectedService);
+                if (!svc) return null;
+                const margin = ((price - svc.cost) / price) * 100;
+                return <div className="rounded-xl bg-muted/30 px-4 py-2.5 text-sm"><span className="text-muted-foreground">Margin: </span><span className={cn("font-semibold", margin > 100 ? "text-emerald-600" : "text-amber-600")}>{margin.toFixed(1)}%</span></div>;
+              })()}
+            </div>
+            <button onClick={handlePublish} disabled={createOffer.isPending || !selectedService || price <= 0} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+              {createOffer.isPending ? "Publishing…" : "Publish offer"}
+            </button>
+            <button onClick={() => setShowPublish(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   );

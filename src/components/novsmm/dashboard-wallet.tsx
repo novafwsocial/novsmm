@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 export function DashboardWallet() {
   const { data, isLoading } = useWallet();
   const [showTopup, setShowTopup] = useState(false);
+  const [showWithdraw, setShowWithdraw] = useState(false);
 
   if (isLoading || !data) {
     return (
@@ -63,7 +64,10 @@ export function DashboardWallet() {
             </p>
           </div>
           <div className="flex gap-2">
-            <button className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
+            <button
+              onClick={() => window.open("/api/export/transactions?format=csv", "_blank")}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
               <Download className="h-3.5 w-3.5" /> Export
             </button>
             <button
@@ -71,6 +75,12 @@ export function DashboardWallet() {
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
             >
               <Plus className="h-3.5 w-3.5" /> Top up
+            </button>
+            <button
+              onClick={() => setShowWithdraw(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              <ArrowUpRight className="h-3.5 w-3.5" /> Withdraw
             </button>
           </div>
         </div>
@@ -209,6 +219,7 @@ export function DashboardWallet() {
       </Reveal>
 
       {showTopup && <TopupModal onClose={() => setShowTopup(false)} />}
+      {showWithdraw && <WithdrawModal onClose={() => setShowWithdraw(false)} balance={balance} currency={currency} />}
     </div>
   );
 }
@@ -367,6 +378,97 @@ function TopupModal({ onClose }: { onClose: () => void }) {
         </button>
         <p className="mt-2 text-center text-[10px] text-muted-foreground">
           Sandbox mode · no real charge · processes in ~2s
+        </p>
+      </motion.div>
+    </div>
+  );
+}
+
+function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; balance: number; currency: string }) {
+  const withdraw = useWithdraw();
+  const { data: pmData } = usePaymentMethods();
+  const [amount, setAmount] = useState(100);
+  const [method, setMethod] = useState("Bank transfer");
+  const [destination, setDestination] = useState("");
+  const methods = pmData?.methods ?? [];
+  const sufficient = balance >= amount;
+
+  const handleSubmit = async () => {
+    await withdraw.mutateAsync({ amount, method, destination });
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/30 p-4 backdrop-blur-sm">
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="relative w-full max-w-md overflow-hidden rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+      >
+        <button onClick={onClose} className="absolute right-4 top-4 flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
+          <X className="h-4 w-4" />
+        </button>
+        <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Withdraw funds</div>
+        <h2 className="mt-1 text-xl font-semibold">Withdraw from wallet</h2>
+        <p className="mt-1 text-xs text-muted-foreground">Available: {formatPrice(balance, currency)} · Pending admin approval</p>
+
+        <div className="mt-5">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Amount (USD)</label>
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">$</span>
+            <input
+              type="number"
+              value={amount}
+              onChange={(e) => setAmount(Math.max(1, Number(e.target.value)))}
+              className="h-12 w-full rounded-xl border border-border bg-background pl-8 pr-4 text-lg font-semibold text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            />
+          </div>
+          {!sufficient && <p className="mt-1 text-xs text-red-600">Insufficient balance</p>}
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Method</label>
+          <select
+            value={method}
+            onChange={(e) => setMethod(e.target.value)}
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+          >
+            <option value="Bank transfer">Bank transfer</option>
+            <option value="Wise">Wise</option>
+            <option value="PayPal">PayPal</option>
+            <option value="Crypto">Crypto (USDT)</option>
+            {methods.map((m: any) => (
+              <option key={m.id} value={m.name}>{m.name}</option>
+            ))}
+          </select>
+        </div>
+
+        <div className="mt-4">
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Destination (account / address / email)</label>
+          <input
+            value={destination}
+            onChange={(e) => setDestination(e.target.value)}
+            placeholder="e.g. IBAN, USDT wallet address, PayPal email"
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+          />
+        </div>
+
+        <button
+          onClick={handleSubmit}
+          disabled={withdraw.isPending || !sufficient || !destination}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+        >
+          {withdraw.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Processing…
+            </>
+          ) : (
+            <>Withdraw {formatPrice(amount, currency)}</>
+          )}
+        </button>
+        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+          Withdrawals are reviewed by admin before processing · 1% fee applies
         </p>
       </motion.div>
     </div>

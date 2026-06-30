@@ -28,8 +28,32 @@ export function DashboardTickets() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [showCreate, setShowCreate] = useState(false);
+  const [attachedFile, setAttachedFile] = useState<any>(null);
+  const [uploading, setUploading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const replyTicket = useReplyTicket();
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/uploads", { method: "POST", body: formData });
+      const data = await res.json();
+      if (res.ok) {
+        setAttachedFile(data);
+      } else {
+        alert(data.error || "Upload failed");
+      }
+    } catch {
+      alert("Upload failed");
+    }
+    setUploading(false);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
 
   // Use first ticket as active if none selected
   const effectiveActiveId = activeId ?? tickets[0]?.id ?? null;
@@ -41,9 +65,15 @@ export function DashboardTickets() {
   }, [active?.messages, effectiveActiveId]);
 
   const send = () => {
-    if (!input.trim() || !effectiveActiveId) return;
-    replyTicket.mutate({ ticketId: effectiveActiveId, text: input.trim() });
+    if ((!input.trim() && !attachedFile) || !effectiveActiveId) return;
+    let message = input.trim();
+    if (attachedFile) {
+      message += message ? "\n" : "";
+      message += `📎 ${attachedFile.filename} (${attachedFile.url})`;
+    }
+    replyTicket.mutate({ ticketId: effectiveActiveId, text: message });
     setInput("");
+    setAttachedFile(null);
   };
 
   if (isLoading) {
@@ -180,11 +210,21 @@ export function DashboardTickets() {
 
                 {/* composer */}
                 <div className="border-t border-border/60 p-3">
+                  {/* Attached file preview */}
+                  {attachedFile && (
+                    <div className="mb-2 flex items-center gap-2 rounded-lg bg-muted/30 px-3 py-2 text-xs">
+                      <Paperclip className="h-3 w-3 text-primary" />
+                      <span className="flex-1 truncate text-foreground">{attachedFile.filename}</span>
+                      <button onClick={() => setAttachedFile(null)} className="text-muted-foreground hover:text-foreground"><X className="h-3 w-3" /></button>
+                    </div>
+                  )}
+                  {uploading && <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" />Uploading…</div>}
+                  <input ref={fileInputRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.zip" onChange={handleFileUpload} />
                   <div className="flex items-end gap-2 rounded-xl border border-border bg-background p-2 transition-shadow focus-within:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]">
-                    <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                    <button onClick={() => fileInputRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                       <Paperclip className="h-4 w-4" />
                     </button>
-                    <button className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+                    <button onClick={() => fileInputRef.current?.click()} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
                       <ImageIcon className="h-4 w-4" />
                     </button>
                     <textarea

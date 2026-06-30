@@ -12,6 +12,7 @@ import {
   Ticket,
   Activity,
   Zap,
+  Store,
 } from "lucide-react";
 import {
   AreaChart,
@@ -23,7 +24,7 @@ import {
 } from "recharts";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
-import { useDashboard } from "@/hooks/use-api";
+import { useDashboard, useFavorites, useTickets } from "@/hooks/use-api";
 import { useApp } from "./app-store";
 import { StatusPill } from "./status-pill";
 import { cn } from "@/lib/utils";
@@ -31,6 +32,10 @@ import { cn } from "@/lib/utils";
 export function DashboardHome() {
   const { data, isLoading } = useDashboard();
   const { setDashboardTab } = useApp();
+  const { data: favData } = useFavorites();
+  const { data: ticketsData } = useTickets();
+  const favorites = favData?.favorites ?? [];
+  const tickets = ticketsData?.tickets?.slice(0, 3) ?? [];
 
   if (isLoading || !data) {
     return (
@@ -261,6 +266,61 @@ export function DashboardHome() {
           </div>
         </div>
       </Reveal>
+
+      {/* Favorites + Recent tickets */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Favorites */}
+        <Reveal blur>
+          <div className="rounded-2xl border border-border/60 bg-background p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <Star className="h-3.5 w-3.5 text-amber-400" fill="currentColor" /> Favorite services
+              </div>
+              <button onClick={() => setDashboardTab("marketplace")} className="text-xs font-medium text-primary hover:underline">Browse →</button>
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              {favorites.length > 0 ? favorites.map((f: any) => (
+                <div key={f.id} className="group flex items-center gap-3 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/40">
+                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
+                    <Store className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium text-foreground">{f.service?.name}</div>
+                    <div className="text-[10px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
+                  </div>
+                </div>
+              )) : (
+                <div className="py-6 text-center text-sm text-muted-foreground">No favorites yet. Star a service to pin it here.</div>
+              )}
+            </div>
+          </div>
+        </Reveal>
+
+        {/* Recent tickets */}
+        <Reveal blur delay={0.06}>
+          <div className="rounded-2xl border border-border/60 bg-background p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                <Ticket className="h-3.5 w-3.5" /> Recent tickets
+              </div>
+              <button onClick={() => setDashboardTab("tickets")} className="text-xs font-medium text-primary hover:underline">View all →</button>
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              {tickets.length > 0 ? tickets.map((t: any) => (
+                <div key={t.id} className="flex items-start gap-2.5 rounded-xl border border-border/60 p-2.5">
+                  <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", t.priority === "high" ? "bg-red-500" : "bg-amber-500")} />
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs font-medium text-foreground">#{t.publicId} · {t.subject}</div>
+                    <div className="text-[10px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
+                  </div>
+                </div>
+              )) : (
+                <div className="py-6 text-center text-sm text-muted-foreground">No tickets yet.</div>
+              )}
+            </div>
+          </div>
+        </Reveal>
+      </div>
     </div>
   );
 }
