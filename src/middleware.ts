@@ -76,10 +76,10 @@ function addSecurityHeaders(res: NextResponse) {
     "Strict-Transport-Security",
     "max-age=31536000; includeSubDomains; preload"
   );
-  // Basic CSP — allows inline styles for Tailwind, blocks external scripts
+  // CSP — allows Tailwind inline styles, Google favicons, WebSocket
   res.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss: ws: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
   );
 }
 

@@ -8,9 +8,8 @@ import { db } from "@/lib/db";
 const HUNTSMM_API_URL = "https://huntsmm.com/api/v2";
 
 function getProviderApiKey(): string | null {
-  // Fetch the API key from the DB provider record
-  // This is called server-side only
-  return "496a90dabe070ff3ca5a98e814ad04a113c619b3";
+  // Read from environment variable — never hardcode secrets in source
+  return process.env.HUNTSMM_API_KEY ?? null;
 }
 
 /**

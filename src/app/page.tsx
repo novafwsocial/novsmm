@@ -1,3 +1,4 @@
+import { ErrorBoundary } from "@/components/novsmm/error-boundary";
 import { SmoothScroll } from "@/components/novsmm/smooth-scroll";
 import { ScrollProgress } from "@/components/novsmm/scroll-progress";
 import { Navbar } from "@/components/novsmm/navbar";
@@ -15,6 +16,7 @@ import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
 
 export default function Home() {
   return (
+    <ErrorBoundary>
     <SmoothScroll>
       <div className="relative flex min-h-screen flex-col bg-background">
         <ScrollProgress />
@@ -40,5 +42,6 @@ export default function Home() {
         <WhatsAppWidget />
       </div>
     </SmoothScroll>
+    </ErrorBoundary>
   );
 }

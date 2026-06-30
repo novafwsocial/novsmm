@@ -18,7 +18,7 @@ export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api.get<any>("/api/dashboard"),
-    refetchInterval: 10 * 1000, // near-real-time
+    refetchInterval: 30 * 1000, // 30s — reduced from 10s for performance
   });
 }
 
@@ -31,7 +31,7 @@ export function useOrders(status?: string, search?: string) {
   return useQuery({
     queryKey: ["orders", status, search],
     queryFn: () => api.get<{ orders: any[] }>(`/api/orders${q ? `?${q}` : ""}`),
-    refetchInterval: 5 * 1000,
+    refetchInterval: 30 * 1000, // 30s — reduced from 5s
   });
 }
 
@@ -68,7 +68,7 @@ export function useWallet() {
   return useQuery({
     queryKey: ["wallet"],
     queryFn: () => api.get<any>("/api/wallet"),
-    refetchInterval: 10 * 1000,
+    refetchInterval: 30 * 1000, // 30s — reduced from 10s
   });
 }
 
@@ -121,7 +121,7 @@ export function useNotifications() {
     queryFn: () => api.get<{ notifications: any[]; unreadCount: number }>(
       "/api/notifications"
     ),
-    refetchInterval: 5 * 1000,
+    refetchInterval: 15 * 1000, // 15s — reduced from 5s (WebSocket handles real-time)
   });
 }
 
@@ -162,7 +162,7 @@ export function useAdminOverview() {
   return useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => api.get<any>("/api/admin/overview"),
-    refetchInterval: 15 * 1000,
+    refetchInterval: 60 * 1000, // 60s — reduced from 15s
   });
 }
 
@@ -436,7 +436,7 @@ export function useAnalytics() {
   return useQuery({
     queryKey: ["analytics"],
     queryFn: () => api.get<any>("/api/analytics"),
-    refetchInterval: 30 * 1000,
+    refetchInterval: 60 * 1000, // 60s — reduced from 30s
   });
 }
 

@@ -1,7 +1,7 @@
 import { db } from "../src/lib/db";
 
 const HUNTSMM_API_URL = "https://huntsmm.com/api/v2";
-const HUNTSMM_API_KEY = "496a90dabe070ff3ca5a98e814ad04a113c619b3";
+const HUNTSMM_API_KEY = process.env.HUNTSMM_API_KEY || "";
 
 // Categories → platform mapping
 const PLATFORM_MAP: Record<string, string> = {

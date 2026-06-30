@@ -11,8 +11,8 @@ import { Magnetic } from "./magnetic";
 
 export function LoginScreen() {
   const { setView } = useApp();
-  const [email, setEmail] = useState("daniela@pulsemedia.io");
-  const [password, setPassword] = useState("novsmm2024");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
