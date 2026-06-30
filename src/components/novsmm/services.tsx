@@ -3,6 +3,7 @@
 import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { PLATFORMS, type Platform } from "./platforms";
+import { PlatformLogo } from "./platform-logo";
 import { SectionHeading } from "./section-heading";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 
@@ -18,7 +19,7 @@ export function Services() {
               <br className="hidden sm:block" /> One control surface.
             </>
           }
-          description="From follower growth to watch-time, NOVSMM orchestrates 240+ services across the platforms your audience actually lives on — with sub-2-second order start times."
+          description="From follower growth to watch-time, NOVSMM orchestrates 6,300+ services across the platforms your audience actually lives on — powered by HuntSMM."
         />
 
         <RevealStagger
@@ -35,12 +36,12 @@ export function Services() {
             <div className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-dashed border-border bg-muted/30 p-5 transition-colors hover:border-primary/40">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  + 30 more
+                  + more
                 </span>
                 <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </div>
               <div>
-                <div className="text-2xl font-semibold tabular-nums">263</div>
+                <div className="text-2xl font-semibold tabular-nums">6,382</div>
                 <div className="text-xs text-muted-foreground">
                   total active services
                 </div>
@@ -78,8 +79,8 @@ function ServiceCard({ platform }: { platform: Platform }) {
         className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
       <div className="relative flex items-start justify-between">
-        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50 text-foreground transition-colors group-hover:border-primary/30 group-hover:text-primary">
-          <platform.Icon className="h-5 w-5" />
+        <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50 transition-colors group-hover:border-primary/30">
+          <PlatformLogo platform={platform.name} size={24} />
         </span>
         <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
           {platform.services} svc

@@ -9,6 +9,7 @@ import { StatusPill } from "./status-pill";
 import { Reveal } from "./reveal";
 import { formatPrice } from "@/lib/currency-utils";
 import { useApp } from "./app-store";
+import { PlatformLogo } from "./platform-logo";
 import { cn } from "@/lib/utils";
 
 const FILTERS: { id: OrderStatus | "all"; label: string }[] = [
@@ -124,7 +125,7 @@ export function DashboardOrders() {
                   >
                     <td className="whitespace-nowrap px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span>{o.flag}</span>
+                        <PlatformLogo platform={o.platform} size={28} />
                         <div>
                           <div className="font-medium text-foreground">#{o.publicId}</div>
                           <div className="text-[10px] text-muted-foreground">

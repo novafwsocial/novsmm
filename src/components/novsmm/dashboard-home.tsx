@@ -27,6 +27,7 @@ import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { useDashboard, useFavorites, useTickets } from "@/hooks/use-api";
 import { useApp } from "./app-store";
 import { StatusPill } from "./status-pill";
+import { PlatformLogo } from "./platform-logo";
 import { cn } from "@/lib/utils";
 
 export function DashboardHome() {
@@ -247,7 +248,7 @@ export function DashboardHome() {
                   transition={{ delay: i * 0.04 }}
                   className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
                 >
-                  <span className="text-base leading-none">{o.flag}</span>
+                  <PlatformLogo platform={o.platform} size={28} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">
                       {o.platform} · {o.serviceName}
@@ -281,9 +282,7 @@ export function DashboardHome() {
             <div className="mt-3 flex flex-col gap-2">
               {favorites.length > 0 ? favorites.map((f: any) => (
                 <div key={f.id} className="group flex items-center gap-3 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/40">
-                  <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted text-foreground">
-                    <Store className="h-4 w-4" />
-                  </span>
+                  <PlatformLogo platform={f.service?.platform ?? "Other"} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">{f.service?.name}</div>
                     <div className="text-[10px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>

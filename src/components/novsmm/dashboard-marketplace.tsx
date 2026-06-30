@@ -43,6 +43,7 @@ import {
 } from "@/hooks/use-api";
 import { formatPrice, loadCurrencyRates } from "@/lib/currency-utils";
 import { useApp } from "./app-store";
+import { PlatformLogo, getPlatformEmoji } from "./platform-logo";
 import { cn } from "@/lib/utils";
 
 const PLATFORM_FILTERS = [
@@ -51,25 +52,6 @@ const PLATFORM_FILTERS = [
   "WhatsApp", "LinkedIn", "Threads", "Snapchat",
   "Discord", "Pinterest", "Other",
 ];
-
-const PLATFORM_ICONS: Record<string, string> = {
-  Instagram: "📷",
-  TikTok: "🎵",
-  YouTube: "▶️",
-  Facebook: "👤",
-  Spotify: "🎧",
-  Telegram: "✈️",
-  X: "🐦",
-  Twitch: "🎮",
-  Discord: "💬",
-  Kick: "🟢",
-  WhatsApp: "💬",
-  LinkedIn: "💼",
-  Threads: "🧵",
-  Snapchat: "👻",
-  Pinterest: "📌",
-  Other: "🌐",
-};
 
 const QUALITY_BADGES: Record<string, { label: string; cls: string }> = {
   standard: { label: "Standard", cls: "bg-blue-500/10 text-blue-700" },
@@ -245,8 +227,8 @@ function BuyTab({
                   : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {p !== "All" && PLATFORM_ICONS[p] && (
-                <span className="mr-1">{PLATFORM_ICONS[p]}</span>
+              {p !== "All" && (
+                <span className="mr-1"><PlatformLogo platform={p} size={16} /></span>
               )}
               {p}
             </button>
@@ -263,7 +245,7 @@ function BuyTab({
         Object.entries(grouped).map(([platform, svcs]) => (
           <div key={platform} className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
-              <span className="text-lg">{PLATFORM_ICONS[platform] ?? "🌍"}</span>
+              <PlatformLogo platform={platform} size={28} />
               <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
                 {platform} · {svcs.length} services
               </h3>
@@ -307,7 +289,7 @@ function ServiceCard({
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-lg">{PLATFORM_ICONS[service.platform] ?? "🌍"}</span>
+            <PlatformLogo platform={service.platform} size={28} />
             <h4 className="truncate text-sm font-semibold text-foreground">{service.name}</h4>
           </div>
           <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground">
@@ -401,7 +383,7 @@ function ServiceDetailModal({
         {/* Header */}
         <div className="flex items-center gap-3">
           <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted text-2xl">
-            {PLATFORM_ICONS[service.platform] ?? "🌍"}
+            <PlatformLogo platform={service.platform} size={32} />
           </span>
           <div>
             <div className="flex items-center gap-2">
@@ -606,7 +588,7 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <span>{PLATFORM_ICONS[o.platform] ?? "🌍"}</span>
+                        <PlatformLogo platform={o.platform} size={20} />
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-foreground">{o.serviceName}</div>
                           <div className="text-[10px] text-muted-foreground">{o.platform}</div>
