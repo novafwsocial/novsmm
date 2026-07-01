@@ -1,6 +1,8 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Wallet,
   ShoppingCart,
@@ -24,14 +26,34 @@ import {
 } from "recharts";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
-import { useDashboard, useFavorites, useTickets } from "@/hooks/use-api";
+import { useFavorites, useTickets } from "@/hooks/use-api";
+import { api } from "@/lib/api-client";
 import { useApp } from "./app-store";
 import { StatusPill } from "./status-pill";
 import { PlatformLogo } from "./platform-logo";
 import { cn } from "@/lib/utils";
 
+type Range = "7d" | "30d" | "90d";
+const RANGE_LABEL: Record<Range, string> = {
+  "7d": "7D",
+  "30d": "30D",
+  "90d": "90D",
+};
+const RANGE_RANGE_LABEL: Record<Range, string> = {
+  "7d": "last 7 days",
+  "30d": "last 30 days",
+  "90d": "last 90 days",
+};
+
 export function DashboardHome() {
-  const { data, isLoading } = useDashboard();
+  const [range, setRange] = useState<Range>("30d");
+  // Range-aware fetch (re-fetches when range changes). Other consumers
+  // (sidebar balance, topbar) continue using useDashboard() without range.
+  const { data, isLoading } = useQuery({
+    queryKey: ["dashboard", range],
+    queryFn: () => api.get<any>(`/api/dashboard?range=${range}`),
+    refetchInterval: 30 * 1000,
+  });
   const { setDashboardTab } = useApp();
   const { data: favData } = useFavorites();
   const { data: ticketsData } = useTickets();
@@ -47,6 +69,7 @@ export function DashboardHome() {
   }
 
   const { user, stats, series, recentOrders, recentNotifications } = data;
+  const rangeRevenue = stats.revenueRange ?? stats.revenueMonth ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -111,24 +134,26 @@ export function DashboardHome() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Revenue · last 30 days
+                  Revenue · {RANGE_RANGE_LABEL[range]}
                 </div>
                 <div className="mt-1 text-3xl font-semibold tabular-nums">
-                  $<Counter to={stats.revenueMonth} duration={2} />
+                  $<Counter to={rangeRevenue} duration={1.5} />
                 </div>
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                {["7D", "30D", "90D"].map((t, i) => (
+              <div className="flex items-center gap-1.5 text-xs">
+                {(["7d", "30d", "90d"] as Range[]).map((r) => (
                   <button
-                    key={t}
+                    key={r}
+                    onClick={() => setRange(r)}
+                    aria-pressed={range === r}
                     className={cn(
                       "rounded-full px-2.5 py-1 font-medium transition-colors",
-                      i === 1
+                      range === r
                         ? "bg-primary text-primary-foreground"
                         : "text-muted-foreground hover:bg-muted"
                     )}
                   >
-                    {t}
+                    {RANGE_LABEL[r]}
                   </button>
                 ))}
               </div>
@@ -159,7 +184,7 @@ export function DashboardHome() {
                     stroke="#0052ff"
                     strokeWidth={2}
                     fill="url(#revArea)"
-                    animationDuration={1000}
+                    animationDuration={800}
                   />
                 </AreaChart>
               </ResponsiveContainer>

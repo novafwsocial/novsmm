@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { apiError, apiOk } from "@/lib/api-utils";
+import { apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { sendEmail } from "@/lib/notify";
 import { sanitizeEmail } from "@/lib/sanitize";
 import crypto from "crypto";
@@ -46,7 +46,8 @@ export async function POST(req: NextRequest) {
     });
 
     // Send the reset email
-    const resetUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/?reset=${token}`;
+    const baseUrl = await getBaseUrl();
+    const resetUrl = `${baseUrl}/?reset=${token}`;
     await sendEmail({
       to: email,
       subject: "NOVSMM — Password Reset",

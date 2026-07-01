@@ -5,7 +5,8 @@ import { requireAdmin, apiOk } from "@/lib/api-utils";
 /**
  * GET /api/admin/search?q=query
  * Global search across users, orders, services, tickets.
- * Returns grouped results.
+ * Returns grouped results. SQLite is already case-insensitive for `contains`
+ * on ASCII strings, so we don't pass `mode: "insensitive"` (which would error).
  */
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -22,20 +23,24 @@ export async function GET(req: NextRequest) {
     db.user.findMany({
       where: {
         OR: [
-          { email: { contains: q, mode: "insensitive" } },
-          { name: { contains: q, mode: "insensitive" } },
-          { username: { contains: q, mode: "insensitive" } },
+          { email: { contains: q } },
+          { name: { contains: q } },
+          { username: { contains: q } },
         ],
       },
       take: 10,
-      select: { id: true, email: true, name: true, username: true, role: true, status: true, balance: true },
+      select: {
+        id: true, email: true, name: true, username: true,
+        role: true, status: true, balance: true, createdAt: true,
+        _count: { select: { orders: true } },
+      },
     }),
     db.order.findMany({
       where: {
         OR: [
-          { publicId: { contains: q, mode: "insensitive" } },
-          { serviceName: { contains: q, mode: "insensitive" } },
-          { platform: { contains: q, mode: "insensitive" } },
+          { publicId: { contains: q } },
+          { serviceName: { contains: q } },
+          { platform: { contains: q } },
         ],
       },
       take: 10,
@@ -44,9 +49,9 @@ export async function GET(req: NextRequest) {
     db.service.findMany({
       where: {
         OR: [
-          { name: { contains: q, mode: "insensitive" } },
-          { platform: { contains: q, mode: "insensitive" } },
-          { description: { contains: q, mode: "insensitive" } },
+          { name: { contains: q } },
+          { platform: { contains: q } },
+          { description: { contains: q } },
         ],
       },
       take: 10,
@@ -55,8 +60,8 @@ export async function GET(req: NextRequest) {
     db.ticket.findMany({
       where: {
         OR: [
-          { publicId: { contains: q, mode: "insensitive" } },
-          { subject: { contains: q, mode: "insensitive" } },
+          { publicId: { contains: q } },
+          { subject: { contains: q } },
         ],
       },
       take: 10,

@@ -78,8 +78,9 @@ export const createNotificationSchema = z.object({
   ]),
   title: z.string().min(2),
   message: z.string().min(2),
-  severity: z.enum(["info", "success", "warning"]).default("info"),
+  severity: z.enum(["info", "success", "warning", "error"]).default("info"),
   broadcast: z.boolean().default(false),
+  audience: z.enum(["all", "users", "admins"]).default("all"),
 });
 
 export const updateUserSchema = z.object({

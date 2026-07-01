@@ -33,6 +33,7 @@ import {
   usePaymentMethods,
 } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
 
 export function DashboardWallet() {
   const { data, isLoading } = useWallet();
@@ -289,15 +290,84 @@ function TypePill({ type }: { type: string }) {
 function TopupModal({ onClose }: { onClose: () => void }) {
   const { data: pmData } = usePaymentMethods();
   const topup = useTopup();
+  const { toast } = useToast();
   const [amount, setAmount] = useState(100);
-  const [method, setMethod] = useState("Stripe");
+  const [method, setMethod] = useState("PayPal");
   const methods = pmData?.methods ?? [];
 
   const presets = [50, 100, 500, 1000, 5000];
 
   const handleSubmit = async () => {
-    await topup.mutateAsync({ amount, method });
-    onClose();
+    try {
+      const result = await topup.mutateAsync({ amount, method });
+      // ── AURPay ──
+      if (result?.provider === "aurpay" && result?.checkoutUrl) {
+        toast({
+          title: "Redirecting to AURPay…",
+          description: "Complete your payment on AURPay. Your balance will update after payment.",
+        });
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      // ── Manual Payment ──
+      // Opens WhatsApp with a pre-filled message so the user can contact
+      // our team. Balance is credited manually by an admin after payment.
+      if (result?.provider === "manual" && result?.whatsappUrl) {
+        toast({
+          title: "Contact us on WhatsApp",
+          description: "We'll credit your balance manually after confirming your payment.",
+        });
+        window.open(result.whatsappUrl, "_blank");
+        onClose();
+        return;
+      }
+      // ── Stripe Checkout Session ──
+      if (result?.provider === "stripe" && result?.checkoutUrl) {
+        toast({
+          title: "Redirecting to Stripe…",
+          description: "Complete your payment on Stripe. Your balance will update after payment.",
+        });
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      // ── PayPal / Mercado Pago ──
+      if (result?.checkoutUrl) {
+        toast({
+          title: `Redirecting to ${method}…`,
+          description: "Complete your payment. Your balance will update after payment.",
+        });
+        window.location.href = result.checkoutUrl;
+        return;
+      }
+      // ── Crypto ──
+      if (result?.provider === "crypto" && result?.address) {
+        toast({
+          title: "Send your USDT",
+          description: `Send $${amount.toFixed(2)} USDT to ${result.address} on ${result.network}. Balance credited after ${result.expectedConfirmations} confirmations.`,
+        });
+        onClose();
+        return;
+      }
+      // ── Sandbox (no real credentials configured) ──
+      if (result?.provider === "sandbox") {
+        toast({
+          title: "Top-up successful (sandbox)",
+          description: `$${amount.toFixed(2)} credited to your wallet via ${method}. Configure real credentials in Admin → Payments for live payments.`,
+        });
+        onClose();
+        return;
+      }
+      // Fallback
+      toast({ title: "Top-up processed", description: result?.message ?? "Done." });
+      onClose();
+    } catch (e: any) {
+      toast({
+        title: "Top-up failed",
+        description: e?.message ?? "Please try again or contact support.",
+        variant: "destructive",
+      });
+      // Don't close modal — let user retry
+    }
   };
 
   return (
@@ -384,15 +454,28 @@ function TopupModal({ onClose }: { onClose: () => void }) {
 function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; balance: number; currency: string }) {
   const withdraw = useWithdraw();
   const { data: pmData } = usePaymentMethods();
+  const { toast } = useToast();
   const [amount, setAmount] = useState(100);
-  const [method, setMethod] = useState("Bank transfer");
+  const [method, setMethod] = useState("PayPal");
   const [destination, setDestination] = useState("");
   const methods = pmData?.methods ?? [];
   const sufficient = balance >= amount;
 
   const handleSubmit = async () => {
-    await withdraw.mutateAsync({ amount, method, destination });
-    onClose();
+    try {
+      await withdraw.mutateAsync({ amount, method, destination });
+      toast({
+        title: "Withdrawal requested",
+        description: `$${amount.toFixed(2)} withdrawal via ${method} is pending admin approval.`,
+      });
+      onClose();
+    } catch (e: any) {
+      toast({
+        title: "Withdrawal failed",
+        description: e?.message ?? "Please try again or contact support.",
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -430,12 +513,15 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             onChange={(e) => setMethod(e.target.value)}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           >
-            <option value="Bank transfer">Bank transfer</option>
-            <option value="Wise">Wise</option>
             <option value="PayPal">PayPal</option>
-            <option value="Crypto">Crypto (USDT)</option>
+            <option value="Mercado Pago">Mercado Pago</option>
+            <option value="AURPay">AURPay</option>
+            <option value="Bank transfer">Bank transfer (legacy)</option>
+            <option value="Wise">Wise</option>
             {methods.map((m: any) => (
-              <option key={m.id} value={m.name}>{m.name}</option>
+              m.name !== "PayPal" && m.name !== "Mercado Pago" && m.name !== "AURPay" && m.name !== "Bank transfer" && (
+                <option key={m.id} value={m.name}>{m.name}</option>
+              )
             ))}
           </select>
         </div>

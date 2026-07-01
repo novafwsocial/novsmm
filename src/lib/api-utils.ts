@@ -4,6 +4,19 @@ import { NextResponse } from "next/server";
 import { headers, cookies } from "next/headers";
 
 /**
+ * Get the base URL of the current request, respecting proxy headers.
+ * Uses x-forwarded-proto + x-forwarded-host when present (gateway/proxy),
+ * otherwise falls back to the Host header. This replaces the need for
+ * NEXTAUTH_URL env var and ensures redirects/links work behind any gateway.
+ */
+export async function getBaseUrl(): Promise<string> {
+  const h = await headers();
+  const proto = h.get("x-forwarded-proto") || "http";
+  const host = h.get("x-forwarded-host") || h.get("host") || "localhost:3000";
+  return `${proto}://${host}`;
+}
+
+/**
  * Get the authenticated session.
  * In Next.js App Router, we need to manually forward headers/cookies
  * to getServerSession so it can read the session cookie.

@@ -23,11 +23,30 @@ import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { useAnalytics } from "@/hooks/use-api";
 import { formatPrice } from "@/lib/currency-utils";
 import { useSession } from "@/hooks/use-api";
+import { useToast } from "@/hooks/use-toast";
 
 export function DashboardAnalytics() {
   const { data, isLoading } = useAnalytics();
   const { data: sessionData } = useSession();
+  const { toast } = useToast();
   const currency = (sessionData?.user as any)?.currency ?? "USD";
+  const user = (sessionData?.user as any) ?? {};
+
+  const handleShareReferral = async () => {
+    const username = user.username ?? user.id;
+    if (!username) return;
+    const url = `${window.location.origin}/?ref=${username}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Referral link copied!", description: url });
+    } catch {
+      toast({
+        title: "Couldn't copy",
+        description: "Your browser blocked clipboard access.",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (isLoading || !data) {
     return (
@@ -210,7 +229,7 @@ export function DashboardAnalytics() {
                 </LineChart>
               </ResponsiveContainer>
             </div>
-            <button className="mt-3 w-full rounded-lg border border-border py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
+            <button onClick={handleShareReferral} className="mt-3 w-full rounded-lg border border-border py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
               Share referral link
             </button>
           </div>

@@ -5,29 +5,148 @@ import { ArrowRight, Globe2 } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { Reveal } from "./reveal";
-import { useApp } from "./app-store";
+import { useApp, type DashboardTab } from "./app-store";
+import { useToast } from "@/hooks/use-toast";
 
-const COLUMNS = [
+type FooterLink = {
+  label: string;
+  /** Anchor on the landing page (e.g. "#services") */
+  anchor?: string;
+  /** Dashboard tab to switch to (when authed) */
+  tab?: DashboardTab;
+  /** Auth view to switch to */
+  view?: "login" | "register";
+  /** Legal/commercial placeholder → toast */
+  placeholder?: boolean;
+};
+
+type FooterColumn = {
+  title: string;
+  links: FooterLink[];
+};
+
+const COLUMNS: FooterColumn[] = [
   {
     title: "Platform",
-    links: ["Dashboard", "Services", "Marketplace", "Payments", "Analytics", "API"],
+    links: [
+      { label: "Dashboard", tab: "home" },
+      { label: "Services", tab: "marketplace" },
+      { label: "Marketplace", anchor: "#marketplace" },
+      { label: "Payments", anchor: "#payments" },
+      { label: "Analytics", tab: "analytics" },
+      { label: "API", placeholder: true },
+    ],
   },
   {
     title: "Solutions",
-    links: ["Resellers", "Agencies", "Enterprises", "Creators", "Wholesale", "Affiliates"],
+    links: [
+      { label: "Resellers", placeholder: true },
+      { label: "Agencies", placeholder: true },
+      { label: "Enterprises", placeholder: true },
+      { label: "Creators", placeholder: true },
+      { label: "Wholesale", placeholder: true },
+      { label: "Affiliates", placeholder: true },
+    ],
   },
   {
     title: "Company",
-    links: ["About", "Careers", "Press", "Partners", "Contact", "Status"],
+    links: [
+      { label: "About", placeholder: true },
+      { label: "Careers", placeholder: true },
+      { label: "Press", placeholder: true },
+      { label: "Partners", placeholder: true },
+      { label: "Contact", tab: "tickets" },
+      { label: "Status", placeholder: true },
+    ],
   },
   {
     title: "Resources",
-    links: ["Docs", "API reference", "Changelog", "Security", "Legal", "Privacy"],
+    links: [
+      { label: "Docs", placeholder: true },
+      { label: "API reference", placeholder: true },
+      { label: "Changelog", placeholder: true },
+      { label: "Security", anchor: "#security" },
+      { label: "Legal", placeholder: true },
+      { label: "Privacy", placeholder: true },
+    ],
   },
 ];
 
 export function Footer() {
-  const { setView } = useApp();
+  const { setView, setDashboardTab, authed } = useApp();
+  const { toast } = useToast();
+
+  const showToast = (label: string) =>
+    toast({
+      title: `${label} — coming soon`,
+      description: "We're still putting the finishing touches on this page.",
+    });
+
+  const handleLink = (link: FooterLink) => {
+    if (link.anchor) {
+      // Scroll to landing section. If we're inside the dashboard (authed),
+      // first bounce back to the landing view so the anchor is in the DOM.
+      if (authed) {
+        setView("landing");
+        // wait for landing to mount before scrolling
+        setTimeout(() => {
+          document
+            .querySelector(link.anchor!)
+            ?.scrollIntoView({ behavior: "smooth", block: "start" });
+        }, 80);
+      } else {
+        document
+          .querySelector(link.anchor)
+          ?.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      return;
+    }
+    if (link.tab) {
+      if (!authed) {
+        setView("login");
+        return;
+      }
+      setView("dashboard");
+      setDashboardTab(link.tab);
+      return;
+    }
+    if (link.view) {
+      setView(link.view);
+      return;
+    }
+    if (link.placeholder) {
+      showToast(link.label);
+      return;
+    }
+  };
+
+  const renderLink = (link: FooterLink) => {
+    // Anchor links render as real <a href="#..."> for SEO + middle-click
+    if (link.anchor) {
+      return (
+        <a
+          href={link.anchor}
+          onClick={(e) => {
+            e.preventDefault();
+            handleLink(link);
+          }}
+          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {link.label}
+        </a>
+      );
+    }
+    return (
+      <button
+        type="button"
+        onClick={() => handleLink(link)}
+        className="text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+      >
+        {link.label}
+      </button>
+    );
+  };
+
   return (
     <footer className="relative mt-auto overflow-hidden border-t border-border bg-background">
       {/* Final CTA band */}
@@ -71,7 +190,28 @@ export function Footer() {
         <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
           <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6">
             <div className="col-span-2 lg:col-span-2">
-              <Logo />
+              <a
+                href="#hero"
+                onClick={(e) => {
+                  e.preventDefault();
+                  if (authed) {
+                    setView("landing");
+                    setTimeout(() => {
+                      document
+                        .querySelector("#hero")
+                        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                    }, 80);
+                  } else {
+                    document
+                      .querySelector("#hero")
+                      ?.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }}
+                className="inline-flex"
+                aria-label="NOVSMM home"
+              >
+                <Logo />
+              </a>
               <p className="mt-4 max-w-xs text-sm leading-relaxed text-muted-foreground">
                 Automation infrastructure for digital marketing teams and
                 resellers — engineered for performance.
@@ -94,14 +234,7 @@ export function Footer() {
                 </div>
                 <ul className="mt-4 flex flex-col gap-2.5">
                   {c.links.map((l) => (
-                    <li key={l}>
-                      <a
-                        href="#"
-                        className="text-sm text-muted-foreground transition-colors hover:text-foreground"
-                      >
-                        {l}
-                      </a>
-                    </li>
+                    <li key={l.label}>{renderLink(l)}</li>
                   ))}
                 </ul>
               </div>
@@ -112,15 +245,27 @@ export function Footer() {
           <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <span>© {new Date().getFullYear()} NOVSMM, Inc.</span>
-              <a href="#" className="hover:text-foreground">
+              <button
+                type="button"
+                onClick={() => showToast("Terms")}
+                className="hover:text-foreground"
+              >
                 Terms
-              </a>
-              <a href="#" className="hover:text-foreground">
+              </button>
+              <button
+                type="button"
+                onClick={() => showToast("Privacy")}
+                className="hover:text-foreground"
+              >
                 Privacy
-              </a>
-              <a href="#" className="hover:text-foreground">
+              </button>
+              <button
+                type="button"
+                onClick={() => showToast("Cookies")}
+                className="hover:text-foreground"
+              >
                 Cookies
-              </a>
+              </button>
             </div>
             <div className="flex items-center gap-3">
               <div className="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">

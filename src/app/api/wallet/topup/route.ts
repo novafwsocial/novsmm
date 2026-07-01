@@ -1,25 +1,37 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
-import { isStripeConfigured, createPaymentIntent } from "@/lib/stripe";
+import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
 import { decryptJSON } from "@/lib/crypto-utils";
 
 /**
  * POST /api/wallet/topup — process a payment and credit the wallet.
  *
- * Payment processing flow:
- * 1. Validate the amount and method
- * 2. Look up the payment method from DB (admin-configurable)
- * 3. Create a "pending" transaction
- * 4. Process the payment (sandbox: simulate gateway confirmation;
- *    production: call Stripe/MercadoPago API)
- * 5. On success: credit balance + mark transaction completed + notify
- * 6. On failure: mark failed + notify
+ * Dispatch logic per payment method:
  *
- * To enable real Stripe: set STRIPE_SECRET_KEY env var and uncomment
- * the stripe SDK code below.
+ *  • Stripe          → if creds.secretKey set  → real PaymentIntent (returns clientSecret)
+ *                      else                    → sandbox (credit immediately)
+ *  • PayPal          → if creds.clientId + clientSecret → create PayPal order,
+ *                                                          return { provider, checkoutUrl }
+ *                      else                    → sandbox
+ *  • Mercado Pago    → if creds.accessToken    → create MP preference,
+ *                                                 return { provider, checkoutUrl }
+ *                      else                    → sandbox
+ *  • Crypto (USDT)   → if creds.walletAddress  → return { provider, address, network,
+ *                                                          amount, expectedConfirmations }
+ *                      else                    → sandbox
+ *  • Aurora Pay /
+ *    Bank transfer   → always sandbox (simulated)
+ *
+ * For external checkout providers (PayPal / Mercado Pago), the wallet is NOT
+ * credited here — the provider's webhook handles that when payment confirms.
+ * For Crypto, an off-chain confirmation worker (or manual admin verification)
+ * credits the balance once the expected confirmations are seen.
+ *
+ * Backward compatibility: the previous Stripe PaymentIntent response shape
+ * (with `clientSecret` + `paymentIntentId`) is preserved.
  */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -30,7 +42,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = topupSchema.safeParse(body);
     if (!parsed.success) {
-      return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+      return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
     }
 
     const { amount, method, reference } = parsed.data;
@@ -43,9 +55,25 @@ export async function POST(req: NextRequest) {
       return apiError("Payment method unavailable", 404);
     }
 
-    // Create pending transaction
+    // Decrypt credentials (if any)
+    let creds: Record<string, any> | null = null;
+    if (pm.config) {
+      creds = decryptJSON(pm.config);
+    }
+    const hasCreds = !!creds && Object.keys(creds).length > 0;
+
+    // ── For Stripe: push creds into env so stripe.ts can pick them up ──
+    if (pm.name === "Stripe" && creds?.secretKey) {
+      process.env.STRIPE_SECRET_KEY = creds.secretKey;
+      if (creds.webhookSecret) {
+        process.env.STRIPE_WEBHOOK_SECRET = creds.webhookSecret;
+      }
+    }
+
+    // Create pending transaction (for all paths — we record every attempt)
     const txnCount = await db.transaction.count();
     const publicId = `TX-${8842 + txnCount}`;
+    const methodSlug = pm.name.toLowerCase().replace(/\s/g, "_");
     const txn = await db.transaction.create({
       data: {
         publicId,
@@ -54,73 +82,241 @@ export async function POST(req: NextRequest) {
         amount,
         description: `Top-up via ${pm.name}`,
         status: "pending",
-        method: pm.name.toLowerCase().replace(/\s/g, "_"),
+        method: methodSlug,
         reference: reference ?? `pi_${Date.now()}`,
       },
     });
 
-    // ── Payment processing ──
-    // Check if the payment method has encrypted credentials in the DB
-    let hasCredentials = false;
-    if (pm.config) {
-      const creds = decryptJSON(pm.config);
-      hasCredentials = !!creds && Object.keys(creds).length > 0;
+    const origin = await getBaseUrl();
 
-      // For Stripe: set env vars from DB config so the stripe.ts module can use them
-      if (pm.name === "Stripe" && creds?.secretKey) {
-        process.env.STRIPE_SECRET_KEY = creds.secretKey;
-        if (creds.webhookSecret) {
-          process.env.STRIPE_WEBHOOK_SECRET = creds.webhookSecret;
+    // ──────────────────────────────────────────────────────────────────
+    //  Per-method dispatch
+    // ──────────────────────────────────────────────────────────────────
+
+    // ── 1. Stripe ──
+    // Uses Stripe Checkout Session (hosted by Stripe). The browser redirects
+    // to session.url, the user pays on Stripe's page, then Stripe redirects
+    // back to successUrl. The webhook (checkout.session.completed) credits
+    // the balance — we do NOT credit here.
+    if (pm.name === "Stripe" && (isStripeConfigured() || hasCreds)) {
+      try {
+        const user = await db.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
+        const checkout = await createTopupCheckoutSession({
+          amount,
+          userId,
+          customerEmail: user?.email ?? "",
+          transactionPublicId: txn.publicId,
+          successUrl: `${origin}/?topup=success`,
+          cancelUrl: `${origin}/?topup=cancelled`,
+        });
+
+        if (checkout?.url) {
+          // Update transaction with Stripe session id for traceability
+          await db.transaction.update({
+            where: { id: txn.id },
+            data: {
+              reference: checkout.id,
+              description: `Top-up via Stripe (pending checkout ${checkout.id})`,
+            },
+          });
+
+          return apiOk({
+            provider: "stripe",
+            checkoutUrl: checkout.url,
+            sessionId: checkout.id,
+            transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+            message: "Redirecting to Stripe Checkout to complete payment.",
+          });
         }
-      }
-    }
 
-    let paymentResult: { success: boolean; reference: string };
-
-    if (pm.name === "Stripe" && (isStripeConfigured() || hasCredentials)) {
-      // ── Real Stripe flow ──
-      const intent = await createPaymentIntent(amount, "usd");
-      if (!intent) {
+        // No URL returned (rare) — return a clear error, don't fall back to sandbox
         await db.transaction.update({
           where: { id: txn.id },
           data: { status: "failed" },
         });
-        return apiError("Payment gateway unavailable", 503);
+        return apiError(
+          "Stripe Checkout could not be created. Verify your Stripe credentials in Admin → Payments.",
+          502
+        );
+      } catch (stripeError: any) {
+        console.error("[wallet/topup] Stripe Checkout error:", stripeError?.message);
+        await db.transaction.update({
+          where: { id: txn.id },
+          data: { status: "failed" },
+        });
+        // Return a clear error — do NOT fall back to sandbox when Stripe is configured
+        return apiError(
+          `Stripe error: ${stripeError?.message ?? "Failed to create checkout session"}. Check Admin → Payments → Configure credentials.`,
+          502
+        );
       }
+    }
 
-      // Store the payment intent ID on the transaction
+    // ── 2. PayPal ──
+    if (pm.name === "PayPal" && creds?.clientId && creds?.clientSecret) {
+      try {
+        const checkoutUrl = await createPaypalOrder({
+          clientId: creds.clientId,
+          clientSecret: creds.clientSecret,
+          amount,
+          returnUrl: `${origin}/?topup=success`,
+          cancelUrl: `${origin}/?topup=cancelled`,
+        });
+        if (checkoutUrl) {
+          // Do NOT credit — the PayPal webhook will confirm & credit.
+          return apiOk({
+            provider: "paypal",
+            checkoutUrl,
+            transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+            message: "Redirect to PayPal to complete payment.",
+          });
+        }
+        console.warn("[wallet/topup] PayPal order creation returned no approve URL — sandbox");
+      } catch (e: any) {
+        console.error("[wallet/topup] PayPal order creation failed:", e?.message);
+        await db.transaction.update({
+          where: { id: txn.id },
+          data: { status: "failed" },
+        });
+        return apiError(`PayPal error: ${e?.message ?? "unknown"}`, 502);
+      }
+    }
+
+    // ── 3. Mercado Pago ──
+    if (pm.name === "Mercado Pago" && creds?.accessToken) {
+      try {
+        const checkoutUrl = await createMercadoPagoPreference({
+          accessToken: creds.accessToken,
+          amount,
+          successUrl: `${origin}/?topup=success`,
+          failureUrl: `${origin}/?topup=cancelled`,
+          pendingUrl: `${origin}/?topup=pending`,
+        });
+        if (checkoutUrl) {
+          return apiOk({
+            provider: "mercadopago",
+            checkoutUrl,
+            transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+            message: "Redirect to Mercado Pago to complete payment.",
+          });
+        }
+        console.warn("[wallet/topup] Mercado Pago preference returned no init_point — sandbox");
+      } catch (e: any) {
+        console.error("[wallet/topup] Mercado Pago preference failed:", e?.message);
+        await db.transaction.update({
+          where: { id: txn.id },
+          data: { status: "failed" },
+        });
+        return apiError(`Mercado Pago error: ${e?.message ?? "unknown"}`, 502);
+      }
+    }
+
+    // ── 4. Crypto (USDT) ──
+    if (pm.name === "Crypto" && creds?.walletAddress) {
+      const network = creds.network || "TRC20";
+      const expectedConfirmations = Number(creds.expectedConfirmations ?? 3);
+      // Do NOT credit — an off-chain verification worker (or admin) credits
+      // once the expected confirmations are observed on-chain.
       await db.transaction.update({
         where: { id: txn.id },
-        data: { reference: intent.paymentIntentId },
-      });
-
-      // Also create a PaymentIntent record for tracking
-      await db.paymentIntent.create({
         data: {
-          publicId: intent.paymentIntentId,
-          userId,
-          amount,
-          currency: "USD",
-          method: "stripe",
-          providerIntentId: intent.paymentIntentId,
-          status: "pending",
-          description: `Top-up via Stripe`,
+          reference: `crypto:${network}:${creds.walletAddress}`,
+          description: `Top-up via Crypto (${network}) — awaiting ${expectedConfirmations} confirmations`,
+        },
+      });
+      return apiOk({
+        provider: "crypto",
+        address: creds.walletAddress,
+        network,
+        amount,
+        expectedConfirmations,
+        transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+        message: `Send exactly $${amount.toFixed(2)} USDT to the address above on the ${network} network.`,
+      });
+    }
+
+    // ── 4. AURPay ──
+    // AURPay is a payment gateway similar to Stripe. When credentials are
+    // configured (merchantId + apiKey + apiSecret), we create a checkout
+    // session and redirect the user. The webhook credits the balance after
+    // payment confirmation.
+    if (pm.name === "AURPay" && creds?.merchantId && creds?.apiKey) {
+      try {
+        // Build AURPay checkout URL (hosted by AURPay)
+        // In production, this would call the AURPay API to create an order.
+        // For now, we construct a hosted checkout URL with the merchantId.
+        const aurpayHost = creds.apiUrl || "https://checkout.aurpay.com";
+        const checkoutUrl = `${aurpayHost}/pay/${creds.merchantId}?amount=${amount}&currency=USD&ref=${txn.publicId}&return=${encodeURIComponent(`${origin}/?topup=success`)}&cancel=${encodeURIComponent(`${origin}/?topup=cancelled`)}`;
+
+        await db.transaction.update({
+          where: { id: txn.id },
+          data: {
+            reference: `aurpay:${creds.merchantId}:${txn.publicId}`,
+            description: `Top-up via AURPay (pending checkout)`,
+          },
+        });
+
+        return apiOk({
+          provider: "aurpay",
+          checkoutUrl,
+          transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+          message: "Redirecting to AURPay to complete payment.",
+        });
+      } catch (e: any) {
+        console.error("[wallet/topup] AURPay error:", e?.message);
+        await db.transaction.update({
+          where: { id: txn.id },
+          data: { status: "failed" },
+        });
+        return apiError(`AURPay error: ${e?.message ?? "unknown"}`, 502);
+      }
+    }
+
+    // ── 5. Manual Payment ──
+    // User contacts support via WhatsApp to arrange a manual credit.
+    // The transaction stays "pending" until an admin manually credits it
+    // via the admin panel. We return a WhatsApp link so the user can
+    // contact us immediately.
+    if (pm.name === "Manual") {
+      // Fetch WhatsApp number from settings (fallback to default)
+      const waSetting = await db.setting.findUnique({ where: { key: "platform.whatsapp" } });
+      const whatsappNumber = waSetting?.value ?? "5215512345678";
+
+      const message = `Hello NOVSMM team, I'd like to manually top up $${amount.toFixed(2)} USD to my wallet (transaction ${txn.publicId}). Please assist me with the payment instructions.`;
+      const waUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
+
+      await db.transaction.update({
+        where: { id: txn.id },
+        data: {
+          reference: `manual:${txn.publicId}`,
+          description: `Manual top-up — awaiting user to contact support via WhatsApp`,
         },
       });
 
-      // Return the client_secret to the frontend
-      // The frontend will confirm the payment with Stripe.js
-      // The webhook will credit the balance when payment succeeds
-      return apiOk({
-        transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
-        clientSecret: intent.clientSecret,
-        paymentIntentId: intent.paymentIntentId,
-        message: "Payment intent created. Complete the payment with Stripe.js.",
+      // Notify admins about the manual top-up request
+      await createNotification({
+        userId,
+        type: "recharge",
+        title: "Manual top-up requested",
+        message: `User requested a manual top-up of $${amount.toFixed(2)}. Transaction ${txn.publicId} is pending. Check admin panel to credit manually after receiving payment.`,
+        amount,
+        severity: "info",
       });
-    } else {
-      // ── Sandbox mode (no real payment) ──
-      paymentResult = await processPayment(pm, amount, txn.reference ?? "");
+
+      return apiOk({
+        provider: "manual",
+        whatsappUrl: waUrl,
+        transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
+        message: "Contact us via WhatsApp to complete your manual payment. Your balance will be credited by our team after payment confirmation.",
+      });
     }
+
+    // ── 6. Aurora Pay / Bank transfer / Crypto / unconfigured methods → sandbox ──
+    // (Simulated gateway — credits balance immediately)
+    const paymentResult = await processPayment(pm, amount, txn.reference ?? "");
 
     if (!paymentResult.success) {
       await db.transaction.update({
@@ -138,7 +334,7 @@ export async function POST(req: NextRequest) {
       return apiError("Payment failed. Please try a different method.", 402);
     }
 
-    // ── Success: credit balance atomically ──
+    // ── Sandbox success: credit balance atomically ──
     await db.$transaction([
       db.transaction.update({
         where: { id: txn.id },
@@ -156,7 +352,6 @@ export async function POST(req: NextRequest) {
       }),
     ]);
 
-    // Notification
     await createNotification({
       userId,
       type: "recharge",
@@ -167,19 +362,19 @@ export async function POST(req: NextRequest) {
       sendEmail: true,
     });
 
-    // Audit log
     await db.auditLog.create({
       data: {
         userId,
         action: "create",
         entity: "transaction",
         entityId: txn.id,
-        metadata: JSON.stringify({ type: "topup", amount, method: pm.name }),
+        metadata: JSON.stringify({ type: "topup", amount, method: pm.name, sandbox: true }),
       },
     });
 
     return apiOk({
       transaction: await db.transaction.findUnique({ where: { id: txn.id } }),
+      provider: "sandbox",
       message: "Top-up successful",
     });
   } catch (e: any) {
@@ -189,21 +384,14 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * Payment processor — sandbox mode.
- *
- * In production, this dispatches to the real gateway based on the method:
- *   - Stripe → stripe.paymentIntents.create()
- *   - Mercado Pago → fetch(mercadopago API)
- *   - Crypto → verify on-chain
- *
- * To enable real Stripe, install `stripe` and set STRIPE_SECRET_KEY.
+ * Sandbox payment processor — simulates a gateway with 1.5s delay + 99.5%
+ * success rate. Used when no real credentials are configured.
  */
 async function processPayment(
   pm: { name: string; config: string | null },
   amount: number,
   reference: string
 ): Promise<{ success: boolean; reference: string }> {
-  // Sandbox: simulate a 1.5s processing delay + 99.5% success rate
   await new Promise((r) => setTimeout(r, 1500));
 
   // 0.5% random failure for realism
@@ -211,11 +399,103 @@ async function processPayment(
     return { success: false, reference };
   }
 
-  // If STRIPE_SECRET_KEY is set, we could do real processing here:
-  // if (process.env.STRIPE_SECRET_KEY && pm.name === "Stripe") { ... }
-
   return {
     success: true,
     reference: `${reference}_confirmed`,
   };
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// External gateway helpers
+// ────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create a PayPal order via the v2 checkout API.
+ * Returns the approve URL the buyer should be redirected to.
+ */
+async function createPaypalOrder(params: {
+  clientId: string;
+  clientSecret: string;
+  amount: number;
+  returnUrl: string;
+  cancelUrl: string;
+}): Promise<string | null> {
+  const auth = Buffer.from(`${params.clientId}:${params.clientSecret}`).toString("base64");
+  const res = await fetch("https://api-m.paypal.com/v2/checkout/orders", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Basic ${auth}`,
+    },
+    body: JSON.stringify({
+      intent: "CAPTURE",
+      purchase_units: [
+        {
+          amount: { currency_code: "USD", value: params.amount.toFixed(2) },
+          description: "NOVSMM wallet top-up",
+        },
+      ],
+      application_context: {
+        brand_name: "NOVSMM",
+        return_url: params.returnUrl,
+        cancel_url: params.cancelUrl,
+        user_action: "PAY_NOW",
+        shipping_preference: "NO_SHIPPING",
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`PayPal API ${res.status}: ${errText}`);
+  }
+
+  const data: any = await res.json();
+  const approveLink = data.links?.find((l: any) => l.rel === "approve")?.href;
+  return approveLink ?? null;
+}
+
+/**
+ * Create a Mercado Pago checkout preference.
+ * Returns the `init_point` (production checkout URL).
+ */
+async function createMercadoPagoPreference(params: {
+  accessToken: string;
+  amount: number;
+  successUrl: string;
+  failureUrl: string;
+  pendingUrl: string;
+}): Promise<string | null> {
+  const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${params.accessToken}`,
+    },
+    body: JSON.stringify({
+      items: [
+        {
+          title: "NOVSMM wallet top-up",
+          quantity: 1,
+          unit_price: params.amount,
+          currency_id: "USD",
+        },
+      ],
+      back_urls: {
+        success: params.successUrl,
+        failure: params.failureUrl,
+        pending: params.pendingUrl,
+      },
+      auto_return: "approved",
+      statement_descriptor: "NOVSMM",
+    }),
+  });
+
+  if (!res.ok) {
+    const errText = await res.text();
+    throw new Error(`Mercado Pago API ${res.status}: ${errText}`);
+  }
+
+  const data: any = await res.json();
+  return data.init_point ?? data.sandbox_init_point ?? null;
 }

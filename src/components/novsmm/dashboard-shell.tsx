@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, type ReactNode } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactNode } from "react";
 import { signOut } from "next-auth/react";
 import {
   LayoutGrid,
@@ -20,12 +20,24 @@ import {
   ChevronDown,
   LogOut,
   Settings,
-  ArrowLeft,
+  Home,
+  Sun,
+  Moon,
+  CornerDownLeft,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { useApp, type DashboardTab } from "./app-store";
 import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
+import { api } from "@/lib/api-client";
 import { Logo } from "./logo";
 import { Counter } from "./counter";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
 const NAV: { id: DashboardTab; label: string; icon: any }[] = [
@@ -40,11 +52,70 @@ const NAV: { id: DashboardTab; label: string; icon: any }[] = [
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {
-  const { dashboardTab, setDashboardTab, signOut: storeSignOut, setView } = useApp();
+  const { dashboardTab, setDashboardTab, signOut: storeSignOut, setView, setBrowsingLanding } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  // Bump this every time the palette transitions from closed → open so the
+  // CommandPalette remounts with fresh state (no setState-in-effect needed).
+  const [paletteNonce, setPaletteNonce] = useState(0);
   const { data: sessionData } = useSession();
   const { data: notifData } = useNotifications();
   const { data: dashData } = useDashboard();
+  const [statusState, setStatusState] = useState<"operational" | "degraded">("operational");
+
+  const openPalette = useCallback(() => {
+    setPaletteNonce((n) => n + 1);
+    setPaletteOpen(true);
+  }, []);
+  const togglePalette = useCallback(() => {
+    setPaletteOpen((v) => {
+      if (!v) setPaletteNonce((n) => n + 1);
+      return !v;
+    });
+  }, []);
+
+  // Poll /api/status every 60s for the topbar status pill
+  useEffect(() => {
+    let cancelled = false;
+    const tick = () => {
+      api
+        .get("/api/status")
+        .then((d: any) => {
+          if (cancelled) return;
+          setStatusState(d?.status === "operational" ? "operational" : "degraded");
+        })
+        .catch(() => {});
+    };
+    tick();
+    const id = setInterval(tick, 60_000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
+
+  // ⌘K / Ctrl+K → open the command palette
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        togglePalette();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [togglePalette]);
+
+  // Apply persisted theme on mount (toggle via the command palette writes to
+  // localStorage under "novsmm-theme").
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem("novsmm-theme");
+      if (stored === "dark" || stored === "light") {
+        document.documentElement.classList.toggle("dark", stored === "dark");
+      }
+    } catch {}
+  }, []);
 
   const user = (sessionData?.user as any) ?? null;
   const unreadCount = notifData?.unreadCount ?? 0;
@@ -64,7 +135,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       {/* Sidebar — desktop */}
       <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-border/60 bg-muted/30 lg:flex">
         <div className="flex h-16 items-center justify-between px-5">
-          <a onClick={() => setView("landing")} className="cursor-pointer">
+          <a
+            onClick={() => setDashboardTab("home")}
+            className="cursor-pointer"
+            aria-label="Go to dashboard home"
+          >
             <Logo />
           </a>
         </div>
@@ -138,6 +213,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               : { name: "", email: "", username: "" }
           }
           onSignOut={handleSignOut}
+          onNavigate={(tab) => setDashboardTab(tab)}
         />
       </aside>
 
@@ -215,6 +291,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     : { name: "", email: "", username: "" }
                 }
                 onSignOut={handleSignOut}
+                onNavigate={(tab) => {
+                  setDashboardTab(tab);
+                  setMobileOpen(false);
+                }}
               />
             </motion.aside>
           </>
@@ -233,41 +313,73 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <Menu className="h-5 w-5" />
           </button>
 
-          {/* search */}
-          <div className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground transition-colors focus-within:border-primary/40 focus-within:bg-background">
+          {/* search — clicking it opens the command palette */}
+          <button
+            type="button"
+            onClick={openPalette}
+            className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-background"
+            aria-label="Open command palette"
+          >
             <Search className="h-3.5 w-3.5" />
-            <input
-              placeholder="Search orders, services, clients…"
-              className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
-            />
+            <span className="w-full text-left text-foreground/80">
+              Search orders, services, clients…
+            </span>
             <kbd className="hidden rounded border border-border bg-background px-1.5 text-[10px] sm:inline">
               ⌘K
             </kbd>
-          </div>
+          </button>
 
           {/* status */}
-          <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1.5 text-[11px] font-medium text-emerald-700 md:flex">
+          <div
+            className={cn(
+              "hidden items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[11px] font-medium md:flex",
+              statusState === "operational"
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
+                : "border-amber-500/30 bg-amber-500/10 text-amber-700"
+            )}
+          >
             <span className="relative flex h-1.5 w-1.5">
-              <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              <span
+                className={cn(
+                  "nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full",
+                  statusState === "operational" ? "bg-emerald-500" : "bg-amber-500"
+                )}
+              />
+              <span
+                className={cn(
+                  "relative inline-flex h-1.5 w-1.5 rounded-full",
+                  statusState === "operational" ? "bg-emerald-500" : "bg-amber-500"
+                )}
+              />
             </span>
-            Operational
+            {statusState === "operational" ? "Operational" : "Degraded"}
           </div>
 
-          <button className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <button
+            onClick={() => setDashboardTab("notifications")}
+            className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            aria-label="Notifications"
+          >
             <Bell className="h-4 w-4" />
-            <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-75" />
-              <span className="relative inline-flex h-2 w-2 rounded-full bg-primary" />
-            </span>
+            {unreadCount > 0 && (
+              <span className="absolute right-1.5 top-1.5 flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+            )}
           </button>
 
           <button
-            onClick={() => setView("landing")}
+            onClick={() => {
+              setBrowsingLanding(true);
+              setView("landing");
+            }}
             className="hidden items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
+            aria-label="View public landing page (session stays active)"
+            title="View landing page — your session stays active"
           >
-            <ArrowLeft className="h-3 w-3" />
-            Exit
+            <Home className="h-3 w-3" />
+            Home
           </button>
 
           <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 text-xs font-semibold text-primary-foreground flex items-center justify-center">
@@ -290,6 +402,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </AnimatePresence>
         </main>
       </div>
+
+      {/* Command palette (⌘K / Ctrl+K) — keyed by paletteNonce so each open
+          remounts with fresh query + selection state. */}
+      <CommandPalette
+        key={paletteNonce}
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        isAdmin={isAdmin}
+        onNavigate={(tab) => setDashboardTab(tab)}
+        onSignOut={handleSignOut}
+      />
     </div>
   );
 }
@@ -347,9 +470,11 @@ function NavButton({
 function UserPill({
   user,
   onSignOut,
+  onNavigate,
 }: {
   user: { name: string; email: string; username: string };
   onSignOut: () => void;
+  onNavigate: (tab: DashboardTab) => void;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -380,8 +505,22 @@ function UserPill({
             transition={{ duration: 0.18 }}
             className="absolute bottom-[60px] left-0 right-0 overflow-hidden rounded-2xl border border-border bg-background p-1 nov-ring-lg"
           >
-            <MenuItem icon={Settings} label="Settings" />
-            <MenuItem icon={ArrowUpRight} label="View profile" />
+            <MenuItem
+              icon={Settings}
+              label="Settings"
+              onClick={() => {
+                setOpen(false);
+                onNavigate("profile");
+              }}
+            />
+            <MenuItem
+              icon={ArrowUpRight}
+              label="View profile"
+              onClick={() => {
+                setOpen(false);
+                onNavigate("profile");
+              }}
+            />
             <div className="my-1 h-px bg-border" />
             <MenuItem icon={LogOut} label="Sign out" danger onClick={onSignOut} />
           </motion.div>
@@ -415,5 +554,281 @@ function MenuItem({
       <Icon className="h-3.5 w-3.5" />
       {label}
     </button>
+  );
+}
+
+// ── Command palette ──────────────────────────────────────────────────────
+//
+// Built from scratch (cmdk is not installed). Uses the shadcn Dialog +
+// Radix primitives + a custom filtered list with full keyboard navigation.
+
+type CommandId =
+  | DashboardTab
+  | "topup"
+  | "withdraw"
+  | "new-order"
+  | "create-ticket"
+  | "sign-out"
+  | "toggle-theme";
+
+type Command = {
+  id: CommandId;
+  label: string;
+  group: "Navigation" | "Actions" | "Theme";
+  icon: any;
+  keywords?: string[];
+  danger?: boolean;
+};
+
+const ALL_COMMANDS: Command[] = [
+  // Navigation
+  { id: "home", label: "Home", group: "Navigation", icon: LayoutGrid, keywords: ["dashboard", "overview"] },
+  { id: "analytics", label: "Analytics", group: "Navigation", icon: BarChart3, keywords: ["stats", "charts", "reports"] },
+  { id: "marketplace", label: "Services", group: "Navigation", icon: Store, keywords: ["marketplace", "buy", "catalog"] },
+  { id: "orders", label: "Orders", group: "Navigation", icon: ShoppingCart, keywords: ["history", "purchases"] },
+  { id: "wallet", label: "Wallet", group: "Navigation", icon: Wallet, keywords: ["balance", "funds", "transactions"] },
+  { id: "tickets", label: "Tickets", group: "Navigation", icon: Ticket, keywords: ["support", "help"] },
+  { id: "notifications", label: "Notifications", group: "Navigation", icon: Bell, keywords: ["alerts", "inbox"] },
+  { id: "profile", label: "Profile", group: "Navigation", icon: Settings, keywords: ["settings", "account"] },
+  { id: "admin", label: "Admin Panel", group: "Navigation", icon: ShieldCheck, keywords: ["admin", "moderation"] },
+  // Actions
+  { id: "topup", label: "Top up wallet", group: "Actions", icon: Plus, keywords: ["deposit", "add funds", "recharge"] },
+  { id: "withdraw", label: "Withdraw funds", group: "Actions", icon: ArrowUpRight, keywords: ["cashout", "payout"] },
+  { id: "new-order", label: "New order", group: "Actions", icon: ShoppingCart, keywords: ["buy", "purchase"] },
+  { id: "create-ticket", label: "Create ticket", group: "Actions", icon: Ticket, keywords: ["support", "contact"] },
+  { id: "sign-out", label: "Sign out", group: "Actions", icon: LogOut, danger: true, keywords: ["logout", "exit"] },
+  // Theme
+  { id: "toggle-theme", label: "Toggle dark / light", group: "Theme", icon: Sun, keywords: ["dark mode", "light mode", "appearance"] },
+];
+
+function CommandPalette({
+  open,
+  onOpenChange,
+  isAdmin,
+  onNavigate,
+  onSignOut,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  isAdmin: boolean;
+  onNavigate: (tab: DashboardTab) => void;
+  onSignOut: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [activeIndex, setActiveIndex] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  // Filter + (optionally) hide admin command for non-admins.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = isAdmin ? ALL_COMMANDS : ALL_COMMANDS.filter((c) => c.id !== "admin");
+    if (!q) return base;
+    return base.filter(
+      (c) =>
+        c.label.toLowerCase().includes(q) ||
+        c.group.toLowerCase().includes(q) ||
+        (c.keywords ?? []).some((k) => k.toLowerCase().includes(q))
+    );
+  }, [query, isAdmin]);
+
+  // Autofocus the input when opening.
+  useEffect(() => {
+    if (open) {
+      const t = setTimeout(() => inputRef.current?.focus(), 30);
+      return () => clearTimeout(t);
+    }
+  }, [open]);
+
+  // Clamp selection against the filtered list (derived, not effect-driven).
+  const safeIndex = filtered.length === 0
+    ? 0
+    : Math.min(activeIndex, filtered.length - 1);
+
+  const run = useCallback(
+    (cmd: Command) => {
+      switch (cmd.id) {
+        case "topup":
+        case "withdraw":
+        case "orders":
+        case "new-order":
+          // New order → marketplace; everything else lands on wallet.
+          onNavigate(cmd.id === "new-order" ? "marketplace" : "wallet");
+          break;
+        case "create-ticket":
+          onNavigate("tickets");
+          break;
+        case "sign-out":
+          onSignOut();
+          break;
+        case "toggle-theme": {
+          const root = document.documentElement;
+          const isDark = root.classList.contains("dark");
+          root.classList.toggle("dark", !isDark);
+          try {
+            localStorage.setItem("novsmm-theme", isDark ? "light" : "dark");
+          } catch {}
+          break;
+        }
+        default:
+          // Navigation commands
+          onNavigate(cmd.id as DashboardTab);
+      }
+      onOpenChange(false);
+    },
+    [onNavigate, onOpenChange, onSignOut]
+  );
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIndex((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const cmd = filtered[safeIndex];
+      if (cmd) run(cmd);
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      onOpenChange(false);
+    }
+  };
+
+  // Group filtered commands for rendering with headings.
+  const groups = useMemo(() => {
+    const map = new Map<Command["group"], Command[]>();
+    for (const c of filtered) {
+      if (!map.has(c.group)) map.set(c.group, []);
+      map.get(c.group)!.push(c);
+    }
+    return map;
+  }, [filtered]);
+
+  // Track the absolute (flat) index for keyboard navigation while rendering
+  // grouped sections.
+  let flatIndex = -1;
+
+  // Reset query + selection when the palette opens, without an effect.
+  // We do this by keying the inner content off the open state, so a fresh
+  // open always shows an empty input.
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        showCloseButton={false}
+        className="max-w-xl gap-0 overflow-hidden p-0 sm:max-w-xl"
+      >
+        <DialogTitle className="sr-only">Command palette</DialogTitle>
+        <DialogDescription className="sr-only">
+          Search commands and navigate the dashboard.
+        </DialogDescription>
+
+        {/* Search input */}
+        <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
+          <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setActiveIndex(0);
+            }}
+            onKeyDown={onKeyDown}
+            placeholder="Type a command or search…"
+            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+            autoComplete="off"
+            spellCheck={false}
+          />
+          <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 text-[10px] text-muted-foreground sm:inline">
+            Esc
+          </kbd>
+        </div>
+
+        {/* Command list */}
+        <div
+          ref={listRef}
+          className="max-h-[60vh] overflow-y-auto p-2 nov-scroll"
+        >
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center text-sm text-muted-foreground">
+              No commands match &ldquo;{query}&rdquo;
+            </div>
+          ) : (
+            Array.from(groups.entries()).map(([group, cmds]) => (
+              <div key={group} className="mb-1.5">
+                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                  {group}
+                </div>
+                {cmds.map((cmd) => {
+                  flatIndex += 1;
+                  const isActive = flatIndex === safeIndex;
+                  const Icon = cmd.icon;
+                  return (
+                    <button
+                      key={`${group}-${cmd.id}`}
+                      type="button"
+                      onMouseMove={() => setActiveIndex(flatIndex)}
+                      onClick={() => run(cmd)}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-2.5 py-2.5 text-left text-sm transition-colors",
+                        isActive
+                          ? "bg-primary/10 text-foreground"
+                          : "text-foreground/90 hover:bg-muted/60",
+                        cmd.danger && "text-destructive"
+                      )}
+                    >
+                      <span
+                        className={cn(
+                          "flex h-7 w-7 items-center justify-center rounded-md",
+                          cmd.danger
+                            ? "bg-destructive/10 text-destructive"
+                            : isActive
+                            ? "bg-primary/15 text-primary"
+                            : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                      </span>
+                      <span className="flex-1">{cmd.label}</span>
+                      {cmd.id === "toggle-theme" && (
+                        <Moon className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                      {isActive && (
+                        <CornerDownLeft className="h-3.5 w-3.5 text-muted-foreground" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Footer / keyboard hints */}
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-2.5 text-[10px] text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              <kbd className="rounded border border-border bg-background px-1.5 py-0.5">↑</kbd>
+              <kbd className="rounded border border-border bg-background px-1.5 py-0.5">↓</kbd>
+              <ArrowUp className="inline h-3 w-3" />
+              <ArrowDown className="inline h-3 w-3" /> navigate
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="rounded border border-border bg-background px-1.5 py-0.5">↵</kbd>
+              select
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <kbd className="rounded border border-border bg-background px-1.5 py-0.5">Esc</kbd>
+              close
+            </span>
+          </div>
+          <span className="inline-flex items-center gap-1">
+            <kbd className="rounded border border-border bg-background px-1.5 py-0.5">⌘K</kbd>
+            toggle
+          </span>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }

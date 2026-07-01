@@ -14,17 +14,17 @@ export function WhatsAppWidget() {
   const [number, setNumber] = useState("5215512345678"); // default
   const [message, setMessage] = useState("");
 
-  // Fetch the WhatsApp number from settings
+  // Fetch the WhatsApp number from public settings (no auth required)
   useEffect(() => {
-    fetch("/api/admin/settings")
+    fetch("/api/public/settings")
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (d?.settings?.["platform.whatsapp"]) {
-          setNumber(d.settings["platform.whatsapp"]);
+        if (d?.whatsappNumber) {
+          setNumber(d.whatsappNumber);
         }
       })
       .catch(() => {
-        // Non-admins can't access settings — use default
+        // Use default number if settings can't be loaded
       });
   }, []);
 
@@ -99,7 +99,7 @@ export function WhatsAppWidget() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-24 right-5 z-[80] w-[340px] overflow-hidden rounded-2xl border border-border bg-background nov-ring-lg"
+            className="fixed bottom-24 right-5 z-[80] w-[min(340px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-background nov-ring-lg"
           >
             {/* Header */}
             <div className="flex items-center gap-3 bg-[#25D366] p-4 text-white">

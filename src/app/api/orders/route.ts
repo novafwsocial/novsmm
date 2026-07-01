@@ -1,9 +1,31 @@
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { createOrderSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { placeHuntSMMOrder, extractProviderServiceId } from "@/lib/huntsmm";
+
+/**
+ * Plan-based monthly order limits.
+ * `null` means unlimited.
+ *
+ * free       → 50 orders / calendar month
+ * starter    → 1,000
+ * growth     → 10,000
+ * enterprise → unlimited
+ */
+const PLAN_ORDER_LIMITS: Record<string, number | null> = {
+  free: 50,
+  starter: 1000,
+  growth: 10000,
+  enterprise: null,
+};
+
+/** Returns the start of the current calendar month (UTC). */
+function startOfMonth(): Date {
+  const now = new Date();
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+}
 
 /**
  * GET /api/orders — list the authenticated user's orders.
@@ -59,7 +81,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const parsed = createOrderSchema.safeParse(body);
     if (!parsed.success) {
-      return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+      return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
     }
 
     const { serviceId, quantity, link } = parsed.data;
@@ -89,11 +111,33 @@ export async function POST(req: NextRequest) {
     // Check balance
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { balance: true, status: true },
+      select: { balance: true, status: true, plan: true },
     });
     if (!user) return apiError("User not found", 404);
     if (user.status !== "active")
       return apiError("Account suspended", 403);
+
+    // ── Plan limit enforcement (BEFORE balance validation) ──
+    const planLimit = PLAN_ORDER_LIMITS[user.plan] ?? PLAN_ORDER_LIMITS.free;
+    if (planLimit !== null) {
+      const monthStart = startOfMonth();
+      const used = await db.order.count({
+        where: { userId, createdAt: { gte: monthStart } },
+      });
+      if (used >= planLimit) {
+        return NextResponse.json(
+          {
+            error: "Plan limit exceeded",
+            limit: planLimit,
+            used,
+            plan: user.plan,
+            upgradeUrl: "/?upgrade=true",
+          },
+          { status: 403 }
+        );
+      }
+    }
+
     if (user.balance < totalPrice) {
       return apiError(
         `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${user.balance.toFixed(2)}`,

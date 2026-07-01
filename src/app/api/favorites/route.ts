@@ -8,17 +8,23 @@ export async function GET() {
   if (error) return error;
   const userId = (session!.user as any).id;
 
-  const favorites = await db.favorite.findMany({
-    where: { userId },
-    include: {
-      service: {
-        select: { id: true, name: true, platform: true, price: true, quality: true, deliveryTime: true, status: true },
+  try {
+    const favorites = await db.favorite.findMany({
+      where: { userId },
+      include: {
+        service: {
+          select: { id: true, name: true, platform: true, price: true, quality: true, deliveryTime: true, status: true },
+        },
       },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+      orderBy: { createdAt: "desc" },
+    });
 
-  return apiOk({ favorites });
+    return apiOk({ favorites });
+  } catch (e: any) {
+    console.error("[favorites] error:", e);
+    // Return empty list instead of 500 to prevent dashboard crash
+    return apiOk({ favorites: [] });
+  }
 }
 
 /** POST /api/favorites — add a favorite */

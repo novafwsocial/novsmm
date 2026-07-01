@@ -66,7 +66,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = createRoleSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
   try {
@@ -100,7 +100,7 @@ export async function PATCH(req: NextRequest) {
   if (body.permissions && body.roleId) {
     const parsed = updatePermissionsSchema.safeParse(body);
     if (!parsed.success) {
-      return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+      return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
     }
 
     const role = await db.role.findUnique({ where: { id: parsed.data.roleId } });

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   ShieldCheck,
   Users,
@@ -32,6 +32,13 @@ import {
   X,
   Loader2,
   ArrowUpRight,
+  Trash2,
+  Send,
+  RotateCcw,
+  ShoppingCart,
+  Megaphone,
+  ChevronDown,
+  MessageCircle,
 } from "lucide-react";
 import {
   AreaChart,
@@ -51,12 +58,21 @@ import {
   useAdminServices,
   useAdminProviders,
   useAdminPaymentMethods,
+  useAdminPromotions,
   useCreateService,
+  useUpdateService,
+  useDeleteService,
   useCreateProvider,
+  useUpdateProvider,
+  useCreatePromotion,
+  useUpdatePromotion,
   useCreatePaymentMethod,
   useUpdatePaymentMethod,
+  useTestPaymentMethod,
   useBroadcastNotification,
   useUpdateUser,
+  useBulkAction,
+  useAdminSearch,
   useAdminCurrencies,
   useCreateCurrency,
   useUpdateCurrency,
@@ -75,18 +91,36 @@ import {
   useAdminSettings,
   useUpdateSettings,
   useAdminRoles,
+  useCreateRole,
+  useUpdateRole,
   useDeleteRole,
+  useCreateManualOrder,
+  useRefund,
+  useServices,
 } from "@/hooks/use-api";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
   { id: "overview", label: "Overview", icon: LayoutGrid },
   { id: "users", label: "Users", icon: Users },
+  { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "services", label: "Services", icon: Store },
   { id: "providers", label: "Providers", icon: Server },
   { id: "payments", label: "Payments", icon: CreditCard },
+  { id: "promotions", label: "Promotions", icon: Megaphone },
   { id: "withdrawals", label: "Withdrawals", icon: ArrowUpRight },
+  { id: "refunds", label: "Refunds", icon: RotateCcw },
   { id: "apiKeys", label: "API Keys", icon: FileKey },
   { id: "licenses", label: "Licenses", icon: KeyRound },
   { id: "currencies", label: "Currencies", icon: DollarSign },
@@ -163,10 +197,13 @@ export function AdminPanel() {
         >
           {adminTab === "overview" && <AdminOverview />}
           {adminTab === "users" && <AdminUsers />}
+          {adminTab === "orders" && <AdminOrders />}
           {adminTab === "services" && <AdminServices />}
           {adminTab === "providers" && <AdminProviders />}
           {adminTab === "payments" && <AdminPayments />}
+          {adminTab === "promotions" && <AdminPromotions />}
           {adminTab === "withdrawals" && <AdminWithdrawals />}
+          {adminTab === "refunds" && <AdminRefunds />}
           {adminTab === "apiKeys" && <AdminApiKeys />}
           {adminTab === "licenses" && <AdminLicenses />}
           {adminTab === "currencies" && <AdminCurrencies />}
@@ -190,6 +227,8 @@ function AdminOverview() {
 
   return (
     <div className="flex flex-col gap-4">
+      <BroadcastComposer />
+
       <RevealStagger stagger={0.05} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <RevealItem><AdminStat icon={<Users className="h-4 w-4" />} label="Total users" value={<Counter to={s?.totalUsers ?? 0} duration={2} />} delta="live" /></RevealItem>
         <RevealItem><AdminStat icon={<Activity className="h-4 w-4" />} label="Orders (24h)" value={<Counter to={s?.orders24h ?? 0} duration={2} />} delta="live" /></RevealItem>
@@ -242,6 +281,118 @@ function AdminOverview() {
   );
 }
 
+/* ─────────── Broadcast Composer (Overview top) ─────────── */
+function BroadcastComposer() {
+  const broadcast = useBroadcastNotification();
+  const [form, setForm] = useState({
+    title: "",
+    message: "",
+    audience: "all" as "all" | "users" | "admins",
+    type: "system" as "order" | "sale" | "marketplace" | "ticket" | "recharge" | "withdrawal" | "referral" | "system",
+    severity: "info" as "info" | "success" | "warning" | "error",
+  });
+  const [expanded, setExpanded] = useState(false);
+
+  const submit = async () => {
+    if (!form.title.trim() || !form.message.trim()) return;
+    try {
+      await broadcast.mutateAsync({
+        ...form,
+        broadcast: true,
+      } as any);
+      setForm({ title: "", message: "", audience: "all", type: "system", severity: "info" });
+      setExpanded(false);
+    } catch {
+      /* toast handled by hook */
+    }
+  };
+
+  return (
+    <Reveal blur>
+      <div className="rounded-2xl border border-primary/20 bg-primary/[0.02] p-5 sm:p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Megaphone className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="text-sm font-semibold">Broadcast notification</div>
+              <div className="text-[11px] text-muted-foreground">Push a real-time message to a chosen audience</div>
+            </div>
+          </div>
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground hover:bg-muted"
+          >
+            {expanded ? "Hide" : "Compose"}
+            <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} />
+          </button>
+        </div>
+
+        {expanded && (
+          <div className="mt-4 flex flex-col gap-3">
+            <Input label="Title" value={form.title} onChange={(v) => setForm({ ...form, title: v })} />
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Message</span>
+              <textarea
+                value={form.message}
+                onChange={(e) => setForm({ ...form, message: e.target.value })}
+                rows={3}
+                placeholder="Type your broadcast…"
+                className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+              />
+            </label>
+            <div className="grid grid-cols-3 gap-3">
+              <SelectField label="Audience" value={form.audience} onChange={(v) => setForm({ ...form, audience: v as any })} options={[{ value: "all", label: "All users" }, { value: "users", label: "Users only" }, { value: "admins", label: "Admins only" }]} />
+              <SelectField label="Type" value={form.type} onChange={(v) => setForm({ ...form, type: v as any })} options={[
+                { value: "system", label: "System" },
+                { value: "order", label: "Order" },
+                { value: "sale", label: "Sale" },
+                { value: "marketplace", label: "Marketplace" },
+                { value: "ticket", label: "Ticket" },
+                { value: "recharge", label: "Recharge" },
+                { value: "withdrawal", label: "Withdrawal" },
+                { value: "referral", label: "Referral" },
+              ]} />
+              <SelectField label="Severity" value={form.severity} onChange={(v) => setForm({ ...form, severity: v as any })} options={[
+                { value: "info", label: "Info" },
+                { value: "success", label: "Success" },
+                { value: "warning", label: "Warning" },
+                { value: "error", label: "Error" },
+              ]} />
+            </div>
+            <button
+              onClick={submit}
+              disabled={broadcast.isPending || !form.title.trim() || !form.message.trim()}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
+            >
+              {broadcast.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              {broadcast.isPending ? "Sending…" : "Broadcast now"}
+            </button>
+          </div>
+        )}
+      </div>
+    </Reveal>
+  );
+}
+
+function SelectField({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-xs font-medium text-muted-foreground">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function AdminStat({ icon, label, value, delta }: { icon: React.ReactNode; label: string; value: React.ReactNode; delta: string }) {
   return (
     <div className="rounded-2xl border border-border/60 bg-background p-4">
@@ -259,20 +410,109 @@ function AdminStat({ icon, label, value, delta }: { icon: React.ReactNode; label
 function AdminUsers() {
   const { data } = useAdminUsers();
   const updateUser = useUpdateUser();
-  const users = data?.users ?? [];
+  const bulkAction = useBulkAction();
+  const [query, setQuery] = useState("");
+  const [debounced, setDebounced] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  // Debounce search input 300ms
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(query.trim()), 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  // Trigger admin search when debounced query is non-empty
+  const search = useAdminSearch(debounced);
+  const searching = debounced.length >= 2;
+  const searchUsers = search.data?.users ?? [];
+  const fallbackUsers = data?.users ?? [];
+  const users = searching ? searchUsers : fallbackUsers;
+
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+  const toggleSelectAll = () => {
+    if (selected.size === users.length) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(users.map((u: any) => u.id)));
+    }
+  };
+
+  const runBulk = (action: "suspend" | "activate" | "promote" | "delete") => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    bulkAction.mutate(
+      { entity: "user", action, ids },
+      { onSuccess: () => setSelected(new Set()) }
+    );
+  };
 
   return (
     <Reveal blur>
       <div className="flex flex-col gap-4">
         <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm">
           <Search className="h-4 w-4 text-muted-foreground" />
-          <input placeholder="Search users by name, email, role…" className="w-full bg-transparent focus:outline-none" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search users by name, email, role…"
+            className="w-full bg-transparent focus:outline-none"
+          />
+          {query && (
+            <button
+              onClick={() => { setQuery(""); setSelected(new Set()); }}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          )}
+          {searching && search.isFetching && (
+            <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
+          )}
         </div>
+
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 bg-primary/[0.04] px-4 py-3">
+            <span className="text-xs font-semibold text-primary">{selected.size} selected</span>
+            <div className="ml-auto flex flex-wrap gap-2">
+              <button onClick={() => runBulk("suspend")} disabled={bulkAction.isPending} className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-500/20 disabled:opacity-60">
+                Suspend {selected.size}
+              </button>
+              <button onClick={() => runBulk("activate")} disabled={bulkAction.isPending} className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-500/20 disabled:opacity-60">
+                Activate {selected.size}
+              </button>
+              <button onClick={() => runBulk("promote")} disabled={bulkAction.isPending} className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-60">
+                Promote {selected.size} to admin
+              </button>
+              <button onClick={() => runBulk("delete")} disabled={bulkAction.isPending} className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 disabled:opacity-60">
+                Delete {selected.size}
+              </button>
+              <button onClick={() => setSelected(new Set())} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
+                Clear
+              </button>
+            </div>
+          </div>
+        )}
+
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
           <div className="overflow-x-auto nov-scroll">
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
+                  <th className="px-4 py-3 text-left font-medium w-10">
+                    <input
+                      type="checkbox"
+                      checked={users.length > 0 && selected.size === users.length}
+                      onChange={toggleSelectAll}
+                      className="h-3.5 w-3.5 rounded border-border"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left font-medium">User</th>
                   <th className="px-4 py-3 text-left font-medium">Role</th>
                   <th className="px-4 py-3 text-right font-medium">Balance</th>
@@ -284,7 +524,15 @@ function AdminUsers() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {users.map((u: any) => (
-                  <tr key={u.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={u.id} className={cn("transition-colors hover:bg-muted/30", selected.has(u.id) && "bg-primary/[0.04]")}>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(u.id)}
+                        onChange={() => toggleSelect(u.id)}
+                        className="h-3.5 w-3.5 rounded border-border"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-[10px] font-semibold text-primary-foreground">
@@ -297,11 +545,11 @@ function AdminUsers() {
                       </div>
                     </td>
                     <td className="px-4 py-3"><RoleBadge role={u.role} /></td>
-                    <td className="px-4 py-3 text-right tabular-nums">${u.balance.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">${(u.balance ?? 0).toLocaleString()}</td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{(u._count?.orders ?? 0).toLocaleString()}</td>
                     <td className="px-4 py-3"><UserStatus status={u.status} /></td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {new Date(u.createdAt).toLocaleDateString()}
+                      {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "—"}
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-end gap-1">
@@ -325,6 +573,13 @@ function AdminUsers() {
                     </td>
                   </tr>
                 ))}
+                {users.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      {searching ? `No users match “${debounced}”` : "No users found"}
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -377,7 +632,11 @@ function IconBtn({ icon: Icon, danger, onClick }: { icon: any; danger?: boolean;
 function AdminServices() {
   const { data } = useAdminServices();
   const createService = useCreateService();
+  const updateService = useUpdateService();
+  const deleteService = useDeleteService();
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState<any | null>(null);
   const services = data?.services ?? [];
 
   return (
@@ -403,6 +662,7 @@ function AdminServices() {
                 <th className="px-4 py-3 text-right font-medium">Min/Max</th>
                 <th className="px-4 py-3 text-left font-medium">Status</th>
                 <th className="px-4 py-3 text-right font-medium">Rate</th>
+                <th className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -423,35 +683,99 @@ function AdminServices() {
                     </span>
                   </td>
                   <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">{s.rate}</td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center justify-end gap-1">
+                      <IconBtn icon={Pencil} onClick={() => setEditing(s)} />
+                      <IconBtn icon={Trash2} danger onClick={() => setDeleting(s)} />
+                    </div>
+                  </td>
                 </tr>
               ))}
+              {services.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No services yet</td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
       </div>
-      {showAdd && <AddServiceModal onClose={() => setShowAdd(false)} onCreate={createService.mutateAsync} />}
+      {showAdd && (
+        <ServiceModal
+          mode="create"
+          onClose={() => setShowAdd(false)}
+          onSubmit={async (d) => { await createService.mutateAsync(d); setShowAdd(false); }}
+          loading={createService.isPending}
+        />
+      )}
+      {editing && (
+        <ServiceModal
+          mode="edit"
+          service={editing}
+          onClose={() => setEditing(null)}
+          onSubmit={async (d) => { await updateService.mutateAsync({ id: editing.id, ...d }); setEditing(null); }}
+          loading={updateService.isPending}
+        />
+      )}
+      {deleting && (
+        <AlertDialog open onOpenChange={(o) => { if (!o) setDeleting(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete service?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will mark <span className="font-semibold text-foreground">{deleting.name}</span> as deleted. Existing orders are unaffected.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => { deleteService.mutate(deleting.id); setDeleting(null); }}
+                className="bg-red-600 text-white hover:bg-red-700"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Reveal>
   );
 }
 
-function AddServiceModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d: any) => Promise<any> }) {
+/** Unified service modal — handles both create and edit modes. */
+function ServiceModal({
+  mode,
+  service,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  mode: "create" | "edit";
+  service?: any;
+  onClose: () => void;
+  onSubmit: (d: any) => Promise<void>;
+  loading?: boolean;
+}) {
   const [form, setForm] = useState({
-    name: "", platform: "Instagram", cost: 1, price: 2, minQty: 50, maxQty: 100000, rate: "0/d",
+    name: service?.name ?? "",
+    platform: service?.platform ?? "Instagram",
+    cost: service?.cost ?? 1,
+    price: service?.price ?? 2,
+    minQty: service?.minQty ?? 50,
+    maxQty: service?.maxQty ?? 100000,
+    rate: service?.rate ?? "0/d",
+    status: service?.status ?? "active",
   });
-  const [loading, setLoading] = useState(false);
 
   const submit = async () => {
-    setLoading(true);
-    try {
-      await onCreate(form);
-      onClose();
-    } catch { setLoading(false); }
+    if (!form.name) return;
+    await onSubmit(form);
   };
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
-        <div className="text-base font-semibold">Add service</div>
+        <div className="text-base font-semibold">{mode === "create" ? "Add service" : "Edit service"}</div>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
           <Input label="Platform" value={form.platform} onChange={(v) => setForm({ ...form, platform: v })} />
@@ -459,10 +783,17 @@ function AddServiceModal({ onClose, onCreate }: { onClose: () => void; onCreate:
           <Input label="Price" type="number" value={String(form.price)} onChange={(v) => setForm({ ...form, price: Number(v) })} />
           <Input label="Min qty" type="number" value={String(form.minQty)} onChange={(v) => setForm({ ...form, minQty: Number(v) })} />
           <Input label="Max qty" type="number" value={String(form.maxQty)} onChange={(v) => setForm({ ...form, maxQty: Number(v) })} />
+          <Input label="Rate (e.g. 100/d)" value={form.rate} onChange={(v) => setForm({ ...form, rate: v })} />
+          <SelectField label="Status" value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={[
+            { value: "active", label: "Active" },
+            { value: "paused", label: "Paused" },
+            { value: "deleted", label: "Deleted" },
+          ]} />
         </div>
         <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
-          {loading ? "Creating…" : "Create service"}
+          {loading ? "Saving…" : mode === "create" ? "Create service" : "Save changes"}
         </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
       </div>
     </div>
   );
@@ -486,7 +817,9 @@ function Input({ label, value, onChange, type = "text" }: { label: string; value
 function AdminProviders() {
   const { data } = useAdminProviders();
   const createProvider = useCreateProvider();
+  const updateProvider = useUpdateProvider();
   const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
   const providers = data?.providers ?? [];
 
   return (
@@ -514,10 +847,13 @@ function AdminProviders() {
                   </div>
                 </div>
               </div>
-              <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", p.status === "healthy" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
-                <span className={cn("h-1.5 w-1.5 rounded-full", p.status === "healthy" ? "bg-emerald-500" : "bg-amber-500")} />
-                {p.status}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", p.status === "healthy" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
+                  <span className={cn("h-1.5 w-1.5 rounded-full", p.status === "healthy" ? "bg-emerald-500" : "bg-amber-500")} />
+                  {p.status}
+                </span>
+                <IconBtn icon={Pencil} onClick={() => setEditing(p)} />
+              </div>
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
               <div>
@@ -531,33 +867,94 @@ function AdminProviders() {
             </div>
           </div>
         ))}
+        {providers.length === 0 && (
+          <div className="col-span-full rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+            No providers yet — click “Add provider” to connect one.
+          </div>
+        )}
       </div>
       {showAdd && (
-        <AddProviderModal onClose={() => setShowAdd(false)} onCreate={createProvider.mutateAsync} />
+        <ProviderModal
+          mode="create"
+          onClose={() => setShowAdd(false)}
+          onSubmit={async (d) => { await createProvider.mutateAsync(d); setShowAdd(false); }}
+          loading={createProvider.isPending}
+        />
+      )}
+      {editing && (
+        <ProviderModal
+          mode="edit"
+          provider={editing}
+          onClose={() => setEditing(null)}
+          onSubmit={async (d) => { await updateProvider.mutateAsync({ id: editing.id, ...d }); setEditing(null); }}
+          loading={updateProvider.isPending}
+        />
       )}
     </Reveal>
   );
 }
 
-function AddProviderModal({ onClose, onCreate }: { onClose: () => void; onCreate: (d: any) => Promise<any> }) {
-  const [form, setForm] = useState({ name: "", apiUrl: "https://", apiKey: "" });
-  const [loading, setLoading] = useState(false);
+/** Unified provider modal — create or edit. Edit mode masks the existing apiKey (blank = keep). */
+function ProviderModal({
+  mode,
+  provider,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  mode: "create" | "edit";
+  provider?: any;
+  onClose: () => void;
+  onSubmit: (d: any) => Promise<void>;
+  loading?: boolean;
+}) {
+  const [form, setForm] = useState({
+    name: provider?.name ?? "",
+    apiUrl: provider?.apiUrl ?? "https://",
+    apiKey: "",
+    status: provider?.status ?? "healthy",
+    latency: provider?.latency ?? 0,
+  });
+
   const submit = async () => {
-    setLoading(true);
-    try { await onCreate(form); onClose(); } catch { setLoading(false); }
+    if (!form.name) return;
+    const payload: any = {
+      name: form.name,
+      apiUrl: form.apiUrl,
+      status: form.status,
+      latency: Number(form.latency) || 0,
+    };
+    // Only send apiKey when set; blank in edit mode = keep existing.
+    if (form.apiKey.trim()) payload.apiKey = form.apiKey.trim();
+    await onSubmit(payload);
   };
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
-        <div className="text-base font-semibold">Add API provider</div>
+        <div className="text-base font-semibold">{mode === "create" ? "Add API provider" : "Edit provider"}</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
-          <Input label="API URL" value={form.apiUrl} onChange={(v) => setForm({ ...form, apiUrl: v })} />
-          <Input label="API key (optional)" value={form.apiKey} onChange={(v) => setForm({ ...form, apiKey: v })} />
+          <Input label="API endpoint" value={form.apiUrl} onChange={(v) => setForm({ ...form, apiUrl: v })} />
+          <Input
+            label={mode === "edit" ? "API key (blank = keep existing)" : "API key (optional)"}
+            value={form.apiKey}
+            onChange={(v) => setForm({ ...form, apiKey: v })}
+            type="password"
+          />
+          <div className="grid grid-cols-2 gap-3">
+            <SelectField label="Status" value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={[
+              { value: "healthy", label: "Healthy" },
+              { value: "degraded", label: "Degraded" },
+              { value: "down", label: "Down" },
+            ]} />
+            <Input label="Latency (ms)" type="number" value={String(form.latency)} onChange={(v) => setForm({ ...form, latency: Number(v) })} />
+          </div>
         </div>
         <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
-          {loading ? "Adding…" : "Add provider"}
+          {loading ? "Saving…" : mode === "create" ? "Add provider" : "Save changes"}
         </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
       </div>
     </div>
   );
@@ -626,15 +1023,11 @@ function AdminPayments() {
 // ─── Configure Credentials Modal ───
 function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: () => void }) {
   const updatePm = useUpdatePaymentMethod();
+  const testPm = useTestPaymentMethod();
   const { toast } = useToast();
 
   // Define credential fields per payment method
   const credentialFields: Record<string, { key: string; label: string; type?: string; placeholder?: string }[]> = {
-    Stripe: [
-      { key: "secretKey", label: "Secret Key", placeholder: "sk_live_..." },
-      { key: "publishableKey", label: "Publishable Key", placeholder: "pk_live_..." },
-      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
-    ],
     PayPal: [
       { key: "clientId", label: "Client ID", placeholder: "AY..." },
       { key: "clientSecret", label: "Client Secret", placeholder: "EL..." },
@@ -645,23 +1038,17 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
       { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
       { key: "webhookUrl", label: "Webhook URL (auto)", placeholder: "https://yourdomain.com/api/webhooks/mercadopago" },
     ],
-    "Aurora Pay": [
-      { key: "merchantId", label: "Merchant ID", placeholder: "MER-..." },
-      { key: "apiKey", label: "API Key", placeholder: "aur_..." },
-      { key: "apiSecret", label: "API Secret", placeholder: "sec_..." },
-    ],
-    Crypto: [
-      { key: "walletAddress", label: "Wallet Address (USDT/USDC)", placeholder: "T..." },
-      { key: "network", label: "Network", placeholder: "TRC20 / ERC20" },
-      { key: "confirmations", label: "Required Confirmations", placeholder: "3" },
-    ],
-    "Bank transfer": [
-      { key: "bankName", label: "Bank Name", placeholder: "Chase Bank" },
-      { key: "accountNumber", label: "Account Number", placeholder: "..." },
-      { key: "routingNumber", label: "Routing / IBAN", placeholder: "..." },
-      { key: "accountHolder", label: "Account Holder", placeholder: "NOVSMM Inc." },
+    AURPay: [
+      { key: "merchantId", label: "Merchant ID", placeholder: "AUR-MER-..." },
+      { key: "apiKey", label: "API Key", placeholder: "aur_pk_..." },
+      { key: "apiSecret", label: "API Secret", placeholder: "aur_sk_..." },
+      { key: "apiUrl", label: "Checkout URL", placeholder: "https://checkout.aurpay.com" },
+      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
     ],
   };
+
+  // Manual payment has no credentials — just a note
+  const isManual = method.name === "Manual";
 
   const fields = credentialFields[method.name] ?? [
     { key: "apiKey", label: "API Key", placeholder: "" },
@@ -670,6 +1057,7 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
 
   const [credentials, setCredentials] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
   // Parse existing config (masked) — show "configured" but don't pre-fill
   const existingConfig = method.config ? (() => { try { return JSON.parse(method.config); } catch { return {}; } })() : {};
@@ -693,6 +1081,25 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
     setLoading(false);
   };
 
+  const handleTest = async () => {
+    setTestResult(null);
+    try {
+      // If the admin typed any new credentials, test those ad-hoc; otherwise test the saved ones.
+      const hasNewCreds = Object.values(credentials).some((v) => v && v.trim());
+      const payload = hasNewCreds
+        ? { method: method.name, credentials }
+        : { methodId: method.id };
+      const res: any = await testPm.mutateAsync(payload as any);
+      if (res?.ok) {
+        setTestResult({ ok: true, message: res.message ?? "Connected" });
+      } else {
+        setTestResult({ ok: false, message: res?.error ?? "Connection failed" });
+      }
+    } catch (e: any) {
+      setTestResult({ ok: false, message: e?.message ?? "Connection failed" });
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
@@ -709,22 +1116,58 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
         </div>
 
         <div className="mt-5 flex flex-col gap-4">
-          {fields.map((field) => (
-            <label key={field.key} className="block">
-              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                {field.label}
-                {existingConfig[field.key] && <span className="ml-2 text-emerald-600">✓ Currently set ({existingConfig[field.key]})</span>}
-              </span>
-              <input
-                type={field.type ?? "text"}
-                value={credentials[field.key] ?? ""}
-                onChange={(e) => setCredentials({ ...credentials, [field.key]: e.target.value })}
-                placeholder={field.placeholder ?? `Enter ${field.label}`}
-                className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
-              />
-            </label>
-          ))}
+          {isManual ? (
+            <div className="rounded-xl border border-emerald-500/30 bg-emerald-500/5 px-4 py-4">
+              <div className="flex items-center gap-2 text-sm font-semibold text-emerald-700">
+                <MessageCircle className="h-4 w-4" />
+                Manual Payment — No credentials needed
+              </div>
+              <p className="mt-2 text-xs text-emerald-700/80">
+                When users select "Manual" as their payment method, they are
+                redirected to WhatsApp to contact our team. The transaction
+                stays <strong>pending</strong> until an admin manually credits
+                the balance via the admin panel after confirming receipt of
+                payment.
+              </p>
+              <p className="mt-2 text-xs text-emerald-700/80">
+                Configure the WhatsApp number in <strong>Admin → Settings → platform.whatsapp</strong>.
+              </p>
+            </div>
+          ) : (
+            <>
+              {fields.map((field) => (
+                <label key={field.key} className="block">
+                  <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                    {field.label}
+                    {existingConfig[field.key] && <span className="ml-2 text-emerald-600">✓ Currently set ({existingConfig[field.key]})</span>}
+                  </span>
+                  <input
+                    type={field.type ?? "text"}
+                    value={credentials[field.key] ?? ""}
+                    onChange={(e) => { setCredentials({ ...credentials, [field.key]: e.target.value }); setTestResult(null); }}
+                    placeholder={field.placeholder ?? `Enter ${field.label}`}
+                    className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+                  />
+                </label>
+              ))}
+            </>
+          )}
         </div>
+
+        {testResult && (
+          <div
+            className={cn(
+              "mt-4 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm",
+              testResult.ok
+                ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-700"
+                : "border-red-500/30 bg-red-500/5 text-red-700"
+            )}
+          >
+            {testResult.ok ? <CheckCircle2 className="h-4 w-4" /> : <AlertTriangle className="h-4 w-4" />}
+            <span className="font-medium">{testResult.ok ? "✓ Connected" : "✗ Failed"}</span>
+            <span className="text-muted-foreground">· {testResult.message}</span>
+          </div>
+        )}
 
         <div className="mt-4 rounded-xl bg-amber-500/5 border border-amber-500/20 px-4 py-3">
           <p className="text-xs text-amber-700">
@@ -733,23 +1176,47 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
           </p>
         </div>
 
-        <button
-          onClick={handleSave}
-          disabled={loading}
-          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Saving…
-            </>
-          ) : (
-            <>
-              <ShieldCheck className="h-4 w-4" />
-              Save credentials
-            </>
-          )}
-        </button>
+        {!isManual && (
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <button
+              onClick={handleTest}
+              disabled={testPm.isPending}
+              className="flex items-center justify-center gap-2 rounded-xl border border-border bg-background py-3 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
+            >
+              {testPm.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Activity className="h-4 w-4" />}
+              {testPm.isPending ? "Testing…" : "Test connection"}
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Saving…
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-4 w-4" />
+                  Save credentials
+                </>
+              )}
+            </button>
+          </div>
+        )}
+
+        {isManual && (
+          <div className="mt-5">
+            <button
+              onClick={onClose}
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Got it
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -821,17 +1288,40 @@ function AdminSecurity() {
 }
 
 /* ─────────── Roles ─────────── */
+// Permission resources grouped by category for the role editor.
+const PERMISSION_GROUPS: { category: string; resources: string[] }[] = [
+  { category: "Users", resources: ["user"] },
+  { category: "Orders", resources: ["order"] },
+  { category: "Services", resources: ["service", "provider"] },
+  { category: "Payments", resources: ["wallet", "payment_method", "refund"] },
+  { category: "Settings", resources: ["setting", "currency", "language"] },
+  { category: "Admin", resources: ["license", "api_key", "notification", "ticket", "webhook", "coupon"] },
+];
+const PERMISSION_ACTIONS = ["read", "create", "update", "delete", "approve"];
+
 function AdminRoles() {
   const { data } = useAdminRoles();
   const deleteRole = useDeleteRole();
+  const createRole = useCreateRole();
+  const updateRole = useUpdateRole();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
   const roles = data?.roles ?? [];
 
   return (
     <Reveal blur>
       <div className="flex flex-col gap-4">
-        <div>
-          <div className="text-base font-semibold">Roles & Permissions · {roles.length}</div>
-          <div className="text-xs text-muted-foreground">Granular access control per resource and action</div>
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold">Roles & Permissions · {roles.length}</div>
+            <div className="text-xs text-muted-foreground">Granular access control per resource and action</div>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" /> Create role
+          </button>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
           {roles.map((r: any) => (
@@ -865,19 +1355,204 @@ function AdminRoles() {
                   <span className="text-[10px] text-muted-foreground">No specific permissions (inherits all)</span>
                 )}
               </div>
-              {!r.isSystem && (
+              <div className="mt-3 flex gap-2">
                 <button
-                  onClick={() => deleteRole.mutate(r.id)}
-                  className="mt-3 w-full rounded-lg border border-red-500/30 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/5"
+                  onClick={() => setEditing(r)}
+                  className="flex-1 rounded-lg border border-border py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
                 >
-                  Delete role
+                  <Pencil className="mr-1 inline h-3 w-3" /> Edit
                 </button>
-              )}
+                {!r.isSystem && (
+                  <button
+                    onClick={() => deleteRole.mutate(r.id)}
+                    className="flex-1 rounded-lg border border-red-500/30 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/5"
+                  >
+                    <Trash2 className="mr-1 inline h-3 w-3" /> Delete
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {roles.length === 0 && (
+            <div className="col-span-full rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+              No roles yet — click “Create role” to define one.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showCreate && (
+        <RoleModal
+          mode="create"
+          onClose={() => setShowCreate(false)}
+          onSubmit={async (d) => {
+            // Create role then update permissions in second call if any were chosen.
+            const res: any = await createRole.mutateAsync({
+              name: d.name,
+              description: d.description,
+              color: d.color,
+            });
+            if (d.permissions.length > 0 && res?.role?.id) {
+              await updateRole.mutateAsync({ roleId: res.role.id, permissions: d.permissions });
+            }
+            setShowCreate(false);
+          }}
+          loading={createRole.isPending || updateRole.isPending}
+        />
+      )}
+
+      {editing && (
+        <RoleModal
+          mode="edit"
+          role={editing}
+          onClose={() => setEditing(null)}
+          onSubmit={async (d) => {
+            await updateRole.mutateAsync({
+              id: editing.id,
+              description: d.description,
+              color: d.color,
+              permissions: d.permissions,
+              roleId: editing.id,
+            } as any);
+            setEditing(null);
+          }}
+          loading={updateRole.isPending}
+        />
+      )}
+    </Reveal>
+  );
+}
+
+/**
+ * Role create/edit modal.
+ * - Create: name + description + color + permission checkboxes
+ * - Edit: description + color + permission checkboxes (name is locked for system roles)
+ * The PATCH /api/admin/roles route accepts both { id, description, color } and
+ * { roleId, permissions[] }; we send both shapes and let the server pick the right branch.
+ */
+function RoleModal({
+  mode,
+  role,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  mode: "create" | "edit";
+  role?: any;
+  onClose: () => void;
+  onSubmit: (d: { name: string; description: string; color: string; permissions: { resource: string; actions: string }[] }) => Promise<void>;
+  loading?: boolean;
+}) {
+  const [name, setName] = useState(role?.name ?? "");
+  const [description, setDescription] = useState(role?.description ?? "");
+  const [color, setColor] = useState(role?.color ?? "#64748b");
+  // Build a flat map of resource -> Set<action> for fast toggling.
+  const initialPerms: Record<string, Set<string>> = {};
+  PERMISSION_GROUPS.forEach((g) => g.resources.forEach((r) => (initialPerms[r] = new Set())));
+  if (role?.permissions) {
+    role.permissions.forEach((p: any) => {
+      if (!initialPerms[p.resource]) initialPerms[p.resource] = new Set();
+      p.actions.split(",").forEach((a: string) => initialPerms[p.resource].add(a.trim()));
+    });
+  }
+  const [perms, setPerms] = useState<Record<string, Set<string>>>(() => {
+    // Deep clone to avoid mutating the source
+    const clone: Record<string, Set<string>> = {};
+    Object.keys(initialPerms).forEach((k) => (clone[k] = new Set(initialPerms[k])));
+    return clone;
+  });
+
+  const toggle = (resource: string, action: string) => {
+    setPerms((prev) => {
+      const next: Record<string, Set<string>> = {};
+      Object.keys(prev).forEach((k) => (next[k] = new Set(prev[k])));
+      if (next[resource].has(action)) next[resource].delete(action);
+      else next[resource].add(action);
+      return next;
+    });
+  };
+
+  const submit = async () => {
+    if (mode === "create" && !name.trim()) return;
+    const permissionList = Object.entries(perms)
+      .filter(([, actions]) => actions.size > 0)
+      .map(([resource, actions]) => ({ resource, actions: Array.from(actions).join(",") }));
+    await onSubmit({ name: name.trim().toLowerCase(), description, color, permissions: permissionList });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
+        <div className="text-base font-semibold">{mode === "create" ? "Create role" : `Edit · ${role?.name}`}</div>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Input label="Name (lowercase)" value={name} onChange={setName} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Color</span>
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-10 w-12 rounded-lg border border-border bg-background p-1"
+              />
+              <input
+                type="text"
+                value={color}
+                onChange={(e) => setColor(e.target.value)}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              />
+            </div>
+          </label>
+        </div>
+        <div className="mt-3">
+          <Input label="Description" value={description} onChange={setDescription} />
+        </div>
+
+        <div className="mt-5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Permissions</div>
+        <div className="mt-2 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {PERMISSION_GROUPS.map((group) => (
+            <div key={group.category} className="rounded-xl border border-border/60 p-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-foreground">{group.category}</div>
+              <div className="flex flex-col gap-2">
+                {group.resources.map((resource) => (
+                  <div key={resource} className="rounded-lg bg-muted/30 px-2 py-1.5">
+                    <div className="mb-1 font-mono text-[10px] text-muted-foreground">{resource}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {PERMISSION_ACTIONS.map((action) => {
+                        const checked = perms[resource]?.has(action) ?? false;
+                        return (
+                          <label
+                            key={action}
+                            className={cn(
+                              "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                              checked ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
+                            )}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggle(resource, action)}
+                              className="h-3 w-3 rounded border-border"
+                            />
+                            {action}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           ))}
         </div>
+
+        <button onClick={submit} disabled={loading || (mode === "create" && !name.trim())} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+          {loading ? "Saving…" : mode === "create" ? "Create role" : "Save changes"}
+        </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
       </div>
-    </Reveal>
+    </div>
   );
 }
 
@@ -1058,7 +1733,7 @@ function AdminApiKeys() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Generate API key</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -1179,7 +1854,7 @@ function AdminLicenses() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Issue new license</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -1271,7 +1946,7 @@ function AdminCurrencies() {
         </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add currency</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -1350,7 +2025,7 @@ function AdminLanguages() {
         </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add language</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -1472,6 +2147,449 @@ function AdminSettingsTab() {
           </button>
         </div>
       </div>
+    </Reveal>
+  );
+}
+
+/* ─────────── Promotions ─────────── */
+function AdminPromotions() {
+  const { data } = useAdminPromotions();
+  const createPromo = useCreatePromotion();
+  const updatePromo = useUpdatePromotion();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
+  const promotions = data?.promotions ?? [];
+
+  return (
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold">Promotions · {promotions.length}</div>
+            <div className="text-xs text-muted-foreground">Discount campaigns across the catalog</div>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" /> New promotion
+          </button>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
+          {promotions.map((p: any) => (
+            <div key={p.id} className="rounded-2xl border border-border/60 bg-background p-5">
+              <div className="flex items-start justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-foreground">{p.name}</div>
+                  <div className="text-[11px] text-muted-foreground">{p.description || "—"}</div>
+                </div>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                  p.status === "active" ? "bg-emerald-500/10 text-emerald-700" :
+                  p.status === "scheduled" ? "bg-amber-500/10 text-amber-700" :
+                  p.status === "ended" ? "bg-muted text-muted-foreground" :
+                  "bg-red-500/10 text-red-700")}>
+                  {p.status}
+                </span>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Discount</div>
+                  <div className="font-semibold tabular-nums text-primary">{p.discount}%</div>
+                </div>
+                <div>
+                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Window</div>
+                  <div className="text-[11px] text-foreground">
+                    {new Date(p.startsAt).toLocaleDateString()} → {new Date(p.endsAt).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <button
+                  onClick={() => setEditing(p)}
+                  className="flex-1 rounded-lg border border-border py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+                >
+                  <Pencil className="mr-1 inline h-3 w-3" /> Edit
+                </button>
+                {p.status !== "cancelled" && (
+                  <button
+                    onClick={() => updatePromo.mutate({ id: p.id, status: "cancelled" })}
+                    className="flex-1 rounded-lg border border-red-500/30 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/5"
+                  >
+                    Cancel
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+          {promotions.length === 0 && (
+            <div className="col-span-full rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
+              No promotions yet — click “New promotion” to start one.
+            </div>
+          )}
+        </div>
+      </div>
+
+      {showCreate && (
+        <PromotionModal
+          mode="create"
+          onClose={() => setShowCreate(false)}
+          onSubmit={async (d) => { await createPromo.mutateAsync(d); setShowCreate(false); }}
+          loading={createPromo.isPending}
+        />
+      )}
+      {editing && (
+        <PromotionModal
+          mode="edit"
+          promotion={editing}
+          onClose={() => setEditing(null)}
+          onSubmit={async (d) => { await updatePromo.mutateAsync({ id: editing.id, ...d }); setEditing(null); }}
+          loading={updatePromo.isPending}
+        />
+      )}
+    </Reveal>
+  );
+}
+
+/** Unified promotion modal — create or edit. */
+function PromotionModal({
+  mode,
+  promotion,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  mode: "create" | "edit";
+  promotion?: any;
+  onClose: () => void;
+  onSubmit: (d: any) => Promise<void>;
+  loading?: boolean;
+}) {
+  // Convert ISO strings to datetime-local input format (yyyy-MM-ddTHH:mm)
+  const toLocal = (iso?: string) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const [form, setForm] = useState({
+    name: promotion?.name ?? "",
+    description: promotion?.description ?? "",
+    discount: promotion?.discount ?? 10,
+    startsAt: toLocal(promotion?.startsAt) ?? toLocal(new Date().toISOString()),
+    endsAt: toLocal(promotion?.endsAt) ?? toLocal(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()),
+    status: promotion?.status ?? "scheduled",
+  });
+
+  const submit = async () => {
+    if (!form.name.trim() || !form.startsAt || !form.endsAt) return;
+    await onSubmit({
+      name: form.name.trim(),
+      description: form.description,
+      discount: Number(form.discount),
+      startsAt: new Date(form.startsAt).toISOString(),
+      endsAt: new Date(form.endsAt).toISOString(),
+      ...(mode === "edit" ? { status: form.status } : {}),
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="text-base font-semibold">{mode === "create" ? "New promotion" : "Edit promotion"}</div>
+        <div className="mt-4 flex flex-col gap-3">
+          <Input label="Title" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Description</span>
+            <textarea
+              value={form.description}
+              onChange={(e) => setForm({ ...form, description: e.target.value })}
+              rows={2}
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+            />
+          </label>
+          <Input label="Discount (%)" type="number" value={String(form.discount)} onChange={(v) => setForm({ ...form, discount: Number(v) })} />
+          <Input label="Starts at" type="datetime-local" value={form.startsAt} onChange={(v) => setForm({ ...form, startsAt: v })} />
+          <Input label="Ends at" type="datetime-local" value={form.endsAt} onChange={(v) => setForm({ ...form, endsAt: v })} />
+          {mode === "edit" && (
+            <SelectField label="Status" value={form.status} onChange={(v) => setForm({ ...form, status: v })} options={[
+              { value: "scheduled", label: "Scheduled" },
+              { value: "active", label: "Active" },
+              { value: "ended", label: "Ended" },
+              { value: "cancelled", label: "Cancelled" },
+            ]} />
+          )}
+        </div>
+        <button onClick={submit} disabled={loading || !form.name.trim()} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+          {loading ? "Saving…" : mode === "create" ? "Create promotion" : "Save changes"}
+        </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── Orders (admin) ─────────── */
+function AdminOrders() {
+  const { data } = useAdminOverview();
+  const createOrder = useCreateManualOrder();
+  const [showCreate, setShowCreate] = useState(false);
+  const orders = data?.recentOrders ?? [];
+
+  return (
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold">Orders · {orders.length} recent</div>
+            <div className="text-xs text-muted-foreground">All platform orders (joined with user)</div>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" /> Create order
+          </button>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+          <div className="overflow-x-auto nov-scroll">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Order</th>
+                  <th className="px-4 py-3 text-left font-medium">User</th>
+                  <th className="px-4 py-3 text-left font-medium">Service</th>
+                  <th className="px-4 py-3 text-right font-medium">Qty</th>
+                  <th className="px-4 py-3 text-right font-medium">Total</th>
+                  <th className="px-4 py-3 text-left font-medium">Status</th>
+                  <th className="px-4 py-3 text-left font-medium">Created</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {orders.map((o: any) => (
+                  <tr key={o.id} className="transition-colors hover:bg-muted/30">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{o.publicId}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{o.user?.name ?? "—"}</div>
+                      <div className="text-[11px] text-muted-foreground">{o.user?.email ?? ""}</div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{o.serviceName}</div>
+                      <div className="text-[11px] text-muted-foreground">{o.platform}</div>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.quantity.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums">${o.totalPrice.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                        o.status === "completed" ? "bg-emerald-500/10 text-emerald-700" :
+                        o.status === "cancelled" ? "bg-red-500/10 text-red-700" :
+                        "bg-amber-500/10 text-amber-700")}>
+                        {o.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {new Date(o.createdAt).toLocaleString()}
+                    </td>
+                  </tr>
+                ))}
+                {orders.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No orders yet</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {showCreate && (
+        <CreateManualOrderModal
+          onClose={() => setShowCreate(false)}
+          onSubmit={async (d) => { await createOrder.mutateAsync(d); setShowCreate(false); }}
+          loading={createOrder.isPending}
+        />
+      )}
+    </Reveal>
+  );
+}
+
+function CreateManualOrderModal({
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  onClose: () => void;
+  onSubmit: (d: any) => Promise<void>;
+  loading?: boolean;
+}) {
+  const { data: servicesData } = useServices({ limit: 100 });
+  const services = servicesData?.services ?? [];
+  const [form, setForm] = useState({
+    userId: "",
+    serviceId: "",
+    quantity: 100,
+    link: "",
+    notes: "",
+  });
+
+  const submit = async () => {
+    if (!form.userId.trim() || !form.serviceId) return;
+    await onSubmit({
+      userId: form.userId.trim(),
+      serviceId: form.serviceId,
+      quantity: Number(form.quantity),
+      link: form.link || undefined,
+      // notes aren't accepted by the API, but kept for UI completeness
+    });
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="text-base font-semibold">Create manual order</div>
+        <div className="text-[11px] text-muted-foreground">Admin-created orders are complimentary (no balance debit).</div>
+        <div className="mt-4 flex flex-col gap-3">
+          <Input label="User ID" value={form.userId} onChange={(v) => setForm({ ...form, userId: v })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Service</span>
+            <select
+              value={form.serviceId}
+              onChange={(e) => setForm({ ...form, serviceId: e.target.value })}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+            >
+              <option value="">Select a service…</option>
+              {services.map((s: any) => (
+                <option key={s.id} value={s.id}>
+                  {s.platform} · {s.name} — ${s.price.toFixed(2)}/1k
+                </option>
+              ))}
+            </select>
+          </label>
+          <Input label="Quantity" type="number" value={String(form.quantity)} onChange={(v) => setForm({ ...form, quantity: Number(v) })} />
+          <Input label="Link (optional)" value={form.link} onChange={(v) => setForm({ ...form, link: v })} />
+          <label className="block">
+            <span className="mb-1 block text-xs font-medium text-muted-foreground">Notes (internal)</span>
+            <textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              rows={2}
+              placeholder="Optional context for this manual order…"
+              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+            />
+          </label>
+        </div>
+        <button onClick={submit} disabled={loading || !form.userId.trim() || !form.serviceId} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+          {loading ? "Creating…" : "Create order"}
+        </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── Refunds ─────────── */
+function AdminRefunds() {
+  const { data } = useAdminOverview();
+  const refund = useRefund();
+  const [confirming, setConfirming] = useState<any | null>(null);
+  const [reason, setReason] = useState("");
+  const transactions = data?.recentTransactions ?? [];
+
+  return (
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div>
+          <div className="text-base font-semibold">Refunds · {transactions.length} recent transactions</div>
+          <div className="text-xs text-muted-foreground">Issue a refund for any completed transaction</div>
+        </div>
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+          <div className="overflow-x-auto nov-scroll">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Txn</th>
+                  <th className="px-4 py-3 text-left font-medium">User</th>
+                  <th className="px-4 py-3 text-left font-medium">Type</th>
+                  <th className="px-4 py-3 text-right font-medium">Amount</th>
+                  <th className="px-4 py-3 text-left font-medium">Method</th>
+                  <th className="px-4 py-3 text-left font-medium">Date</th>
+                  <th className="px-4 py-3 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {transactions.map((t: any) => (
+                  <tr key={t.id} className="transition-colors hover:bg-muted/30">
+                    <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.publicId}</td>
+                    <td className="px-4 py-3">
+                      <div className="font-medium text-foreground">{t.user?.name ?? "—"}</div>
+                      <div className="text-[11px] text-muted-foreground">{t.user?.email ?? ""}</div>
+                    </td>
+                    <td className="px-4 py-3 capitalize text-muted-foreground">{t.type}</td>
+                    <td className={cn("px-4 py-3 text-right font-semibold tabular-nums", t.amount >= 0 ? "text-emerald-600" : "text-foreground")}>
+                      ${Math.abs(t.amount).toFixed(2)}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground capitalize">{t.method ?? "—"}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        onClick={() => { setConfirming(t); setReason(""); }}
+                        className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20"
+                      >
+                        Refund
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {transactions.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No completed transactions</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {confirming && (
+        <AlertDialog open onOpenChange={(o) => { if (!o) setConfirming(null); }}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Refund this transaction?</AlertDialogTitle>
+              <AlertDialogDescription>
+                You are about to refund <span className="font-semibold text-foreground">${Math.abs(confirming.amount).toFixed(2)}</span> for transaction{" "}
+                <span className="font-mono text-foreground">{confirming.publicId}</span> ({confirming.user?.email}).
+                {confirming.method === "stripe" && confirming.reference?.startsWith("pi_") && (
+                  <span className="mt-1 block">A real Stripe refund will be issued.</span>
+                )}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium text-muted-foreground">Reason (optional)</span>
+              <input
+                type="text"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                placeholder="Customer request / duplicate / fraud…"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+              />
+            </label>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  refund.mutate({ transactionId: confirming.id, reason: reason || undefined });
+                  setConfirming(null);
+                }}
+                className="bg-red-600 text-white hover:bg-red-700"
+              >
+                Confirm refund
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Reveal>
   );
 }

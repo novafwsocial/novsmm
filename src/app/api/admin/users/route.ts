@@ -36,7 +36,7 @@ export async function PATCH(req: NextRequest) {
   const body = await req.json();
   const parsed = updateUserSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
   const { id, role, status, balance } = parsed.data;

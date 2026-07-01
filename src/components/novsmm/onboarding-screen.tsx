@@ -38,11 +38,11 @@ const CURRENCIES = [
   { code: "INR", symbol: "₹", name: "Indian Rupee" },
 ];
 const LANGUAGES = [
-  { code: "EN", name: "English", flag: "🇺🇸" },
-  { code: "ES", name: "Español", flag: "🇲🇽" },
-  { code: "PT", name: "Português", flag: "🇧🇷" },
-  { code: "FR", name: "Français", flag: "🇫🇷" },
-  { code: "DE", name: "Deutsch", flag: "🇩🇪" },
+  { code: "en", name: "English", flag: "🇺🇸" },
+  { code: "es", name: "Español", flag: "🇲🇽" },
+  { code: "pt", name: "Português", flag: "🇧🇷" },
+  { code: "fr", name: "Français", flag: "🇫🇷" },
+  { code: "de", name: "Deutsch", flag: "🇩🇪" },
 ];
 
 export function OnboardingScreen() {
@@ -52,7 +52,7 @@ export function OnboardingScreen() {
   const [data, setData] = useState({
     role: "Reseller",
     currency: "USD",
-    language: "English",
+    language: "en",
     notifs: { orders: true, sales: true, tickets: true, system: false },
   });
 
@@ -69,6 +69,8 @@ export function OnboardingScreen() {
           body: JSON.stringify({
             currency: data.currency,
             language: data.language,
+            role: (data.role || "").toLowerCase(),
+            notificationPreferences: data.notifs,
           }),
         });
       } catch (e) {
@@ -398,10 +400,10 @@ function LanguageStep({ data, setData, options }: StepProps & { options: any[] }
             initial={{ opacity: 0, x: -10 }}
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: i * 0.05 }}
-            onClick={() => setData((d: any) => ({ ...d, language: l.name }))}
+            onClick={() => setData((d: any) => ({ ...d, language: l.code }))}
             className={cn(
               "flex items-center justify-between rounded-2xl border p-3.5 text-left transition-all",
-              data.language === l.name
+              data.language === l.code
                 ? "border-primary bg-primary/[0.04] nov-ring"
                 : "border-border bg-background hover:border-foreground/20"
             )}
@@ -413,12 +415,12 @@ function LanguageStep({ data, setData, options }: StepProps & { options: any[] }
             <span
               className={cn(
                 "flex h-5 w-5 items-center justify-center rounded-full border transition-colors",
-                data.language === l.name
+                data.language === l.code
                   ? "border-primary bg-primary"
                   : "border-border"
               )}
             >
-              {data.language === l.name && (
+              {data.language === l.code && (
                 <Check className="h-3 w-3 text-primary-foreground" strokeWidth={3} />
               )}
             </span>

@@ -32,15 +32,18 @@ export type DashboardTab =
 export type AdminTab =
   | "overview"
   | "users"
+  | "orders"
   | "services"
   | "providers"
   | "payments"
+  | "promotions"
   | "apiKeys"
   | "licenses"
   | "currencies"
   | "languages"
   | "webhooks"
   | "withdrawals"
+  | "refunds"
   | "settings"
   | "security"
   | "roles";
@@ -52,6 +55,10 @@ type AppState = {
   authed: boolean;
   authLoading: boolean;
   onboardingStep: number;
+  /** When true, an authenticated user is browsing the public landing page
+   *  without signing out. The session stays active — they can return to the
+   *  dashboard at any time via the "Back to dashboard" floating button. */
+  browsingLanding: boolean;
   user: {
     name: string;
     username: string;
@@ -64,6 +71,7 @@ type AppState = {
   setOnboardingStep: (n: number) => void;
   setAuthed: (a: boolean, user?: AppState["user"]) => void;
   setAuthLoading: (b: boolean) => void;
+  setBrowsingLanding: (b: boolean) => void;
   signIn: () => void;
   signOut: () => void;
 };
@@ -75,6 +83,7 @@ export const useApp = create<AppState>((set) => ({
   authed: false,
   authLoading: true,
   onboardingStep: 0,
+  browsingLanding: false,
   user: null,
 
   setView: (v) => set({ view: v }),
@@ -83,7 +92,8 @@ export const useApp = create<AppState>((set) => ({
   setOnboardingStep: (n) => set({ onboardingStep: n }),
   setAuthed: (a, user) => set({ authed: a, user: user ?? null }),
   setAuthLoading: (b) => set({ authLoading: b }),
-  signIn: () => set({ authed: true, view: "dashboard" }),
+  setBrowsingLanding: (b) => set({ browsingLanding: b }),
+  signIn: () => set({ authed: true, view: "dashboard", browsingLanding: false }),
   signOut: () =>
     set({
       authed: false,
@@ -91,5 +101,6 @@ export const useApp = create<AppState>((set) => ({
       view: "landing",
       dashboardTab: "home",
       onboardingStep: 0,
+      browsingLanding: false,
     }),
 }));

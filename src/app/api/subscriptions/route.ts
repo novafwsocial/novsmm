@@ -1,13 +1,49 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
+import { getStripe, createCheckoutSession } from "@/lib/stripe";
 
 const PLANS: Record<string, { amount: number; name: string; features: string[] }> = {
   starter: { amount: 29, name: "Starter", features: ["1K orders/mo", "5 platforms", "Email support"] },
   growth: { amount: 89, name: "Growth", features: ["25K orders/mo", "Unlimited platforms", "Priority support", "Crypto payouts"] },
   enterprise: { amount: 299, name: "Enterprise", features: ["Unlimited orders", "Dedicated infra", "SSO + audit logs", "Custom SLA"] },
 };
+
+/**
+ * Stripe Price IDs per plan + billing cycle.
+ * Read from env vars (STRIPE_PRICE_STARTER_MONTHLY, STRIPE_PRICE_STARTER_YEARLY, etc.).
+ * If none are set, the API runs in sandbox mode (creates a local subscription immediately).
+ *
+ * Example .env:
+ *   STRIPE_PRICE_STARTER_MONTHLY=price_1OkL...
+ *   STRIPE_PRICE_STARTER_YEARLY=price_1OkL...
+ *   STRIPE_PRICE_GROWTH_MONTHLY=price_1OkL...
+ *   STRIPE_PRICE_GROWTH_YEARLY=price_1OkL...
+ *   STRIPE_PRICE_ENTERPRISE_MONTHLY=price_1OkL...
+ *   STRIPE_PRICE_ENTERPRISE_YEARLY=price_1OkL...
+ */
+const PLAN_PRICES: Record<string, { monthly?: string; yearly?: string }> = {
+  starter: {
+    monthly: process.env.STRIPE_PRICE_STARTER_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_STARTER_YEARLY,
+  },
+  growth: {
+    monthly: process.env.STRIPE_PRICE_GROWTH_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_GROWTH_YEARLY,
+  },
+  enterprise: {
+    monthly: process.env.STRIPE_PRICE_ENTERPRISE_MONTHLY,
+    yearly: process.env.STRIPE_PRICE_ENTERPRISE_YEARLY,
+  },
+};
+
+/** Returns true if any Stripe Price ID env var is configured. */
+function isStripeBillingConfigured(): boolean {
+  return Object.values(PLAN_PRICES).some(
+    (c) => !!c.monthly || !!c.yearly
+  );
+}
 
 /**
  * GET /api/subscriptions — user's current subscription + available plans.
@@ -35,8 +71,16 @@ export async function GET() {
 
 /**
  * POST /api/subscriptions — subscribe to a plan.
- * In production, this creates a Stripe Checkout session for recurring billing.
- * Without Stripe, it creates a local subscription record (sandbox).
+ *
+ * Body: { planId: "starter"|"growth"|"enterprise", billingCycle?: "monthly"|"yearly" }
+ *
+ * Production (Stripe Billing configured via STRIPE_PRICE_* env vars):
+ *   Creates a Stripe Checkout Session in `subscription` mode and returns
+ *   `{ checkoutUrl }`. The browser redirects there; the webhook
+ *   (`checkout.session.completed`) creates the local Subscription record.
+ *
+ * Sandbox (no Stripe Price IDs configured):
+ *   Creates a local subscription record immediately and returns it.
  */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -44,10 +88,14 @@ export async function POST(req: NextRequest) {
   const userId = (session!.user as any).id;
 
   const body = await req.json();
-  const { planId } = body;
+  const { planId, billingCycle = "monthly" } = body;
 
   const plan = PLANS[planId];
   if (!plan) return apiError("Invalid plan", 422);
+
+  if (billingCycle !== "monthly" && billingCycle !== "yearly") {
+    return apiError("billingCycle must be 'monthly' or 'yearly'", 422);
+  }
 
   // Check for existing active subscription
   const existing = await db.subscription.findFirst({
@@ -57,22 +105,53 @@ export async function POST(req: NextRequest) {
     return apiError("You already have an active subscription. Cancel it first.", 409);
   }
 
-  // ── Real Stripe flow (when configured) ──
-  // const stripe = getStripe();
-  // if (stripe) {
-  //   const session = await stripe.checkout.sessions.create({
-  //     mode: "subscription",
-  //     line_items: [{ price: STRIPE_PRICE_ID, quantity: 1 }],
-  //     success_url: `${URL}/?subscription=success`,
-  //     cancel_url: `${URL}/?subscription=cancel`,
-  //     client_reference_id: userId,
-  //   });
-  //   return apiOk({ checkoutUrl: session.url });
-  // }
+  const user = await db.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+
+  // ── Real Stripe Billing flow (when configured) ──
+  const priceId = PLAN_PRICES[planId]?.[billingCycle];
+  const stripe = getStripe();
+  if (stripe && priceId && isStripeBillingConfigured()) {
+    const origin = await getBaseUrl();
+    try {
+      const checkout = await createCheckoutSession({
+        priceId,
+        userId,
+        customerEmail: user?.email ?? "",
+        successUrl: `${origin}/?sub=success`,
+        cancelUrl: `${origin}/?sub=cancelled`,
+      });
+      if (checkout?.url) {
+        return apiOk({
+          checkoutUrl: checkout.url,
+          sessionId: checkout.id,
+          provider: "stripe",
+          mode: "subscription",
+        });
+      }
+      // If checkout creation returned no URL, fall through to sandbox.
+      console.warn("[subscriptions] Stripe checkout returned no URL — falling back to sandbox");
+    } catch (e: any) {
+      console.error("[subscriptions] Stripe checkout failed:", e?.message);
+      return apiError(`Failed to start checkout: ${e?.message ?? "unknown error"}`, 502);
+    }
+  } else if (isStripeBillingConfigured() && !priceId) {
+    return apiError(
+      `No Stripe price configured for plan "${planId}" (${billingCycle}). Set STRIPE_PRICE_${planId.toUpperCase()}_${billingCycle.toUpperCase()}.`,
+      500
+    );
+  } else if (isStripeBillingConfigured() && !stripe) {
+    console.warn("[subscriptions] STRIPE_PRICE_* set but STRIPE_SECRET_KEY missing — sandbox");
+  }
 
   // ── Sandbox: create local subscription ──
   const now = new Date();
-  const periodEnd = new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
+  const periodEnd =
+    billingCycle === "yearly"
+      ? new Date(now.getFullYear() + 1, now.getMonth(), now.getDate())
+      : new Date(now.getFullYear(), now.getMonth() + 1, now.getDate());
 
   const subscription = await db.subscription.create({
     data: {
@@ -83,6 +162,12 @@ export async function POST(req: NextRequest) {
       currentPeriodStart: now,
       currentPeriodEnd: periodEnd,
     },
+  });
+
+  // Upgrade the user's plan
+  await db.user.update({
+    where: { id: userId },
+    data: { plan: planId },
   });
 
   // Create invoice
@@ -97,7 +182,7 @@ export async function POST(req: NextRequest) {
       total: plan.amount,
       currency: "USD",
       status: "paid",
-      items: JSON.stringify([{ description: `${plan.name} plan — monthly`, quantity: 1, unitPrice: plan.amount, total: plan.amount }]),
+      items: JSON.stringify([{ description: `${plan.name} plan — ${billingCycle}`, quantity: 1, unitPrice: plan.amount, total: plan.amount }]),
     },
   });
 

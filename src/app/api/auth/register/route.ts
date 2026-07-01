@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { registerSchema } from "@/lib/validations";
-import { apiError, apiOk } from "@/lib/api-utils";
+import { apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { createNotification, sendEmail } from "@/lib/notify";
 import { sanitizeText } from "@/lib/sanitize";
 
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
     const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
       return apiError(
-        parsed.error.errors[0]?.message ?? "Invalid input",
+        parsed.error.issues[0]?.message ?? "Invalid input",
         422
       );
     }
@@ -83,7 +83,8 @@ export async function POST(req: NextRequest) {
     });
 
     // Send verification email
-    const verifyUrl = `${process.env.NEXTAUTH_URL ?? "http://localhost:3000"}/?verify=${verifyToken}`;
+    const baseUrl = await getBaseUrl();
+    const verifyUrl = `${baseUrl}/?verify=${verifyToken}`;
     await sendEmail({
       to: email.toLowerCase(),
       subject: "Verify your NOVSMM email",

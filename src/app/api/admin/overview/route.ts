@@ -19,6 +19,8 @@ export async function GET() {
     providers,
     paymentMethods,
     openTickets,
+    recentOrders,
+    recentTransactions,
   ] = await Promise.all([
     db.user.count(),
     db.user.count({ where: { status: "active" } }),
@@ -34,6 +36,27 @@ export async function GET() {
     db.provider.count(),
     db.paymentMethod.count({ where: { status: "active" } }),
     db.ticket.count({ where: { status: { in: ["open", "waiting"] } } }),
+    // Recent orders (last 25) joined with the owning user's name/email
+    db.order.findMany({
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    }),
+    // Recent completed transactions (last 25) joined with user
+    db.transaction.findMany({
+      where: { status: "completed" },
+      orderBy: { createdAt: "desc" },
+      take: 25,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true },
+        },
+      },
+    }),
   ]);
 
   // Revenue 30d series
@@ -68,6 +91,8 @@ export async function GET() {
       openTickets,
     },
     series,
+    recentOrders,
+    recentTransactions,
     health: [
       { label: "API gateway", val: "99.99%", ok: true },
       { label: "Order processor", val: "99.98%", ok: true },

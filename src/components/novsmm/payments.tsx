@@ -10,48 +10,40 @@ import { PaymentLogo } from "./payment-logo";
 /* ── Provider data ────────────────────────────────────── */
 const PROVIDERS = [
   {
-    name: "Stripe",
+    name: "PayPal",
+    methods: ["PayPal", "Venmo", "Pay Later", "Cards"],
+    currencies: 25,
+    settlement: "Instant",
+    security: "PCI DSS L1",
+    coverage: "200+ countries",
+    note: "Buyer protection & vaulted wallets. Trusted globally.",
+  },
+  {
+    name: "Mercado Pago",
+    methods: ["Mercado Pago", "Pix", "Boleto", "OXXO"],
+    currencies: 6,
+    settlement: "Instant",
+    security: "PCI DSS L1",
+    coverage: "LATAM region",
+    note: "Leading payment platform in Latin America. Local rails.",
+  },
+  {
+    name: "AURPay",
     methods: ["Cards", "Apple Pay", "Google Pay", "Link"],
     currencies: 135,
     settlement: "T+2",
     security: "PCI DSS L1",
     coverage: "46 countries",
-    note: "Adaptive pricing & 3-D Secure 2 built-in.",
-    glyph: "S",
-    tone: "from-violet-500/15 to-violet-500/5 text-violet-700",
+    note: "Adaptive pricing & 3-D Secure 2 built-in. Ultra-low fees.",
   },
   {
-    name: "PayPal",
-    methods: ["PayPal", "Venmo", "Pay Later"],
-    currencies: 25,
-    settlement: "Instant",
-    security: "PCI DSS L1",
-    coverage: "200+ countries",
-    note: "Buyer protection & vaulted wallets.",
-    glyph: "P",
-    tone: "from-blue-500/15 to-blue-500/5 text-blue-700",
-  },
-  {
-    name: "Crypto",
-    methods: ["BTC", "ETH", "USDT", "USDC", "TRX"],
+    name: "Manual",
+    methods: ["WhatsApp", "Wire", "Zelle", "Custom"],
     currencies: 1,
-    settlement: "~3 min",
-    security: "On-chain",
+    settlement: "1-24h",
+    security: "Verified",
     coverage: "Global",
-    note: "Zero chargebacks. Auto-converted to USD.",
-    glyph: "₿",
-    tone: "from-amber-500/15 to-amber-500/5 text-amber-700",
-  },
-  {
-    name: "Wise",
-    methods: ["Bank transfer", "SWIFT", "Local rails"],
-    currencies: 53,
-    settlement: "Same day",
-    security: "FCA regulated",
-    coverage: "160 countries",
-    note: "Mid-market FX. Ideal for resellers.",
-    glyph: "W",
-    tone: "from-emerald-500/15 to-emerald-500/5 text-emerald-700",
+    note: "Contact our team via WhatsApp for manual credits. Zero fees.",
   },
 ];
 
@@ -84,7 +76,7 @@ export function Payments() {
               <br className="hidden sm:block" /> Settled in minutes.
             </>
           }
-          description="NOVSMM routes every transaction through the optimal rail — cards, wallets, bank transfers, and on-chain — with FX conversion at mid-market rates and zero chargebacks on crypto."
+          description="NOVSMM routes every transaction through PayPal, Mercado Pago, AURPay, or manual settlement — with FX conversion at mid-market rates and support for local Latin American rails."
         />
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
@@ -142,7 +134,7 @@ export function Payments() {
         {/* Footer stat strip */}
         <Reveal delay={0.1}>
           <div className="mt-10 grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4 sm:grid-cols-4 sm:p-6">
-            <Stat value={<><Counter to={12} duration={1.6} />+</>} label="Payment gateways" />
+            <Stat value={<><Counter to={4} duration={1.6} /></>} label="Payment gateways" />
             <Stat value={<><Counter to={135} duration={2} /></>} label="Currencies" />
             <Stat value={<><Counter to={0.4} decimals={1} duration={2} />%</>} label="Failure rate" />
             <Stat value={<><Counter to={3} duration={1.4} /> min</>} label="Avg. settlement" icon={<Zap className="h-3.5 w-3.5 text-primary" />} />

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   User,
   Globe,
@@ -227,10 +227,22 @@ function SecuritySection() {
   const [twofaLoading, setTwofaLoading] = useState(false);
   const [disableToken, setDisableToken] = useState("");
 
-  // Check 2FA status on mount
-  useState(() => {
-    api.get("/api/admin/settings").then(() => {}).catch(() => {});
-  });
+  // Check 2FA status on mount — call /api/me (returns user.twoFactorEnabled)
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get("/api/me")
+      .then((d: any) => {
+        if (cancelled) return;
+        if (d?.user?.twoFactorEnabled) {
+          setTwofaEnabled(true);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleChangePassword = async () => {
     if (!currentPw || !newPw) return;
@@ -383,12 +395,19 @@ function NotificationsSection() {
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
-  useState(() => {
+  useEffect(() => {
+    let cancelled = false;
     api.get("/api/me/notification-preferences").then((d: any) => {
+      if (cancelled) return;
       setPrefs(d.preferences ?? {});
       setLoading(false);
-    }).catch(() => setLoading(false));
-  });
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const toggle = (key: string) => {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
@@ -451,12 +470,19 @@ function SessionsSection() {
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
-  useState(() => {
+  useEffect(() => {
+    let cancelled = false;
     api.get("/api/me/sessions").then((d: any) => {
+      if (cancelled) return;
       setSessions(d.sessions ?? []);
       setLoading(false);
-    }).catch(() => setLoading(false));
-  });
+    }).catch(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleRevokeAll = async () => {
     try {

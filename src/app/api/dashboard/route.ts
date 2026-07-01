@@ -1,11 +1,22 @@
+import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiOk } from "@/lib/api-utils";
 
-/** GET /api/dashboard — aggregate data for the dashboard home tab. */
-export async function GET() {
+/** GET /api/dashboard — aggregate data for the dashboard home tab.
+ *
+ * Query params:
+ *  - range: "7d" | "30d" | "90d" (default "30d") — controls revenue series
+ *           window. Other stats (balance, active/completed counts, recent
+ *           orders) are always all-time / live.
+ */
+export async function GET(req: NextRequest) {
   const { session, error } = await requireAuth();
   if (error) return error;
   const userId = (session!.user as any).id;
+
+  const rangeParam = new URL(req.url).searchParams.get("range") ?? "30d";
+  const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
+  const days = RANGE_DAYS[rangeParam] ?? 30;
 
   const user = await db.user.findUnique({
     where: { id: userId },
@@ -40,15 +51,16 @@ export async function GET() {
       }),
     ]);
 
-  // Revenue series (last 30 days from transactions)
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  // Revenue series (last N days from transactions)
+  const N = days;
+  const NdaysAgo = new Date(Date.now() - N * 24 * 60 * 60 * 1000);
   const txns = await db.transaction.findMany({
-    where: { userId, createdAt: { gte: thirtyDaysAgo } },
+    where: { userId, createdAt: { gte: NdaysAgo } },
     select: { amount: true, type: true, createdAt: true },
   });
 
   const series: { d: number; revenue: number; orders: number }[] = [];
-  for (let i = 29; i >= 0; i--) {
+  for (let i = N - 1; i >= 0; i--) {
     const dayStart = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
     dayStart.setHours(0, 0, 0, 0);
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
@@ -56,7 +68,7 @@ export async function GET() {
       (t) => t.createdAt >= dayStart && t.createdAt < dayEnd
     );
     series.push({
-      d: 29 - i,
+      d: N - 1 - i,
       revenue: dayTxns
         .filter((t) => t.type === "sale" || t.type === "topup")
         .reduce((s, t) => s + Math.abs(t.amount), 0),
@@ -65,7 +77,12 @@ export async function GET() {
   }
 
   const revenueToday = series[series.length - 1]?.revenue ?? 0;
-  const revenueMonth = series.reduce((s, d) => s + d.revenue, 0);
+  // Sum over the selected range — used by the home tab "Revenue · last N days" headline.
+  const revenueRange = series.reduce((s, d) => s + d.revenue, 0);
+  // Backward compat: keep revenueMonth as an alias for revenueRange so any
+  // existing consumers that read stats.revenueMonth (e.g. the sidebar's
+  // useDashboard() call) continue to receive a sensible value.
+  const revenueMonth = revenueRange;
 
   return apiOk({
     user,
@@ -76,6 +93,9 @@ export async function GET() {
       completedOrders,
       revenueToday,
       revenueMonth,
+      revenueRange,
+      range: rangeParam,
+      rangeDays: N,
       lifetimeEarnings: user?.lifetimeEarnings ?? 0,
       openTickets,
     },

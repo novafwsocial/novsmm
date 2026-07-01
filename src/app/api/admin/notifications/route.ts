@@ -7,7 +7,8 @@ import { sanitizeMessage } from "@/lib/sanitize";
 
 /**
  * POST /api/admin/notifications — broadcast a notification to all users.
- * Admin can compose the title, message, type, and severity.
+ * Admin can compose the title, message, type, severity, and audience.
+ * audience: "all" | "users" | "admins" — filters recipients by role.
  */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAdmin();
@@ -17,10 +18,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = createNotificationSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
-  const { broadcast, userId, ...notifData } = parsed.data;
+  const { broadcast, userId, audience, ...notifData } = parsed.data as any;
 
   // Sanitize title and message
   const cleanData = {
@@ -30,9 +31,19 @@ export async function POST(req: NextRequest) {
   };
 
   if (broadcast) {
-    // Broadcast to all users
+    // Build the recipient filter from the audience field
+    // audience: "all" (default) — every active user
+    //          "users" — non-admin active users
+    //          "admins" — admin users only
+    const where: any = { status: "active" };
+    if (audience === "users") {
+      where.role = { not: "admin" };
+    } else if (audience === "admins") {
+      where.role = "admin";
+    }
+
     const users = await db.user.findMany({
-      where: { status: "active" },
+      where,
       select: { id: true, email: true, name: true },
     });
 
@@ -54,11 +65,11 @@ export async function POST(req: NextRequest) {
         userId: adminId,
         action: "create",
         entity: "notification",
-        metadata: JSON.stringify({ broadcast: true, ...notifData }),
+        metadata: JSON.stringify({ broadcast: true, audience: audience ?? "all", ...notifData }),
       },
     });
 
-    return apiOk({ message: `Broadcast sent to ${users.length} users` }, 201);
+    return apiOk({ message: `Broadcast sent to ${users.length} ${audience === "admins" ? "admins" : audience === "users" ? "users" : "users"}` }, 201);
   }
 
   // Single user

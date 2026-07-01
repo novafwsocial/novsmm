@@ -52,7 +52,7 @@ export async function POST(req: NextRequest) {
   const body = await req.json();
   const parsed = createPaymentMethodSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError(parsed.error.errors[0]?.message ?? "Invalid input", 422);
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
   // Extract config fields (credentials) and encrypt before storing

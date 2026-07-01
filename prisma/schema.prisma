@@ -25,6 +25,7 @@ model User {
   currency      String    @default("USD")
   language      String    @default("English")
   status        String    @default("active") // active | suspended | pending
+  plan          String    @default("free") // free | starter | growth | enterprise
   balance       Float     @default(0)
   heldBalance   Float     @default(0)
   lifetimeEarnings Float  @default(0)
@@ -39,6 +40,7 @@ model User {
   tickets       Ticket[]
   auditLogs     AuditLog[]
   apiKeys       ApiKey[]
+  favorites     Favorite[]
 }
 
 model Account {
@@ -107,6 +109,7 @@ model Service {
   providerId   String?
   provider     Provider? @relation(fields: [providerId], references: [id])
   orders       Order[]
+  favorites    Favorite[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -466,6 +469,9 @@ model Favorite {
   userId    String
   serviceId String
   createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
 
   @@unique([userId, serviceId])
   @@index([userId])

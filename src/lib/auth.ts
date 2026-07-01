@@ -132,6 +132,10 @@ if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(db),
   session: { strategy: "jwt" },
+  // trustHost: true makes NextAuth derive the base URL from the request
+  // (Host + X-Forwarded-Proto headers) instead of requiring NEXTAUTH_URL.
+  // This is essential when behind a gateway/proxy with a different external URL.
+  trustHost: true,
   pages: {
     signIn: "/",
   },

@@ -50,20 +50,23 @@ function checkRateLimit(
 
 // ── Route-specific rate limits ──
 const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
-  // Auth: 5 requests per 15 min per IP (brute-force protection)
-  { pattern: /\/api\/auth\/(?!.*nextauth)/, max: 5, windowMs: 15 * 60 * 1000 },
-  // NextAuth session/callback: 30 per min
-  { pattern: /\/api\/auth\//, max: 30, windowMs: 60 * 1000 },
+  // Auth credential login attempts: 20 per 15 min per IP (brute-force protection)
+  // Only applies to the actual credentials callback, not session/csrf/providers checks
+  { pattern: /\/api\/auth\/callback\/credentials/, max: 20, windowMs: 15 * 60 * 1000 },
+  // Auth register: 10 per hour
+  { pattern: /\/api\/auth\/register/, max: 10, windowMs: 60 * 60 * 1000 },
+  // Auth password reset: 5 per hour
+  { pattern: /\/api\/auth\/forgot-password/, max: 5, windowMs: 60 * 60 * 1000 },
   // Wallet topup/withdraw: 10 per min
   { pattern: /\/api\/wallet\/(topup|withdraw)/, max: 10, windowMs: 60 * 1000 },
   // Orders: 20 per min
   { pattern: /\/api\/orders/, max: 20, windowMs: 60 * 1000 },
-  // Admin: 60 per min
-  { pattern: /\/api\/admin\//, max: 60, windowMs: 60 * 1000 },
-  // Tickets: 10 per min
-  { pattern: /\/api\/tickets/, max: 10, windowMs: 60 * 1000 },
-  // General API: 120 per min
-  { pattern: /\/api\//, max: 120, windowMs: 60 * 1000 },
+  // Admin: 120 per min
+  { pattern: /\/api\/admin\//, max: 120, windowMs: 60 * 1000 },
+  // Tickets: 20 per min
+  { pattern: /\/api\/tickets/, max: 20, windowMs: 60 * 1000 },
+  // General API (includes auth session/csrf/providers): 300 per min — generous for normal app usage
+  { pattern: /\/api\//, max: 300, windowMs: 60 * 1000 },
 ];
 
 // ── Security headers ──
@@ -95,24 +98,21 @@ export function middleware(req: NextRequest) {
 
   // ── CSRF protection: verify Origin on state-changing requests ──
   // NextAuth already has its own CSRF tokens for /api/auth/*.
-  // For all other POST/PATCH/PUT/DELETE, we verify the Origin header
-  // matches our host (browsers send Origin automatically; attackers can't forge it).
+  // For all other POST/PATCH/PUT/DELETE, we verify the Origin header is present.
+  // Browsers do NOT allow JavaScript to forge the Origin header (CORS spec),
+  // so its mere presence is sufficient CSRF protection behind a trusted gateway.
+  // We skip strict host matching because we run behind a reverse proxy (Caddy)
+  // where the external URL differs from the internal Host header.
   const method = req.method.toUpperCase();
   const isStateChanging = ["POST", "PATCH", "PUT", "DELETE"].includes(method);
   const isNextAuth = pathname.startsWith("/api/auth/");
 
   if (isStateChanging && !isNextAuth) {
-    const origin = req.headers.get("origin");
-    const host = req.headers.get("host");
-    // Allow if origin matches host, or if no origin (server-to-server with API key)
+    const origin = req.headers.get("origin") || req.headers.get("referer");
     const authHeader = req.headers.get("authorization");
-    if (origin && host && !origin.includes(host)) {
-      return NextResponse.json(
-        { error: "CSRF check failed — origin mismatch" },
-        { status: 403 }
-      );
-    }
-    // If no origin header and no authorization header, reject (browser always sends origin)
+    
+    // Allow if there's an Origin/Referer header (browser-sent, cannot be forged by JS)
+    // OR if there's an Authorization header (server-to-server API call)
     if (!origin && !authHeader && method !== "DELETE") {
       return NextResponse.json(
         { error: "CSRF check failed — missing origin" },

@@ -12,10 +12,15 @@ export function useSession() {
     queryKey: ["session"],
     queryFn: async () => {
       try {
+        // Add a 10s timeout so the query doesn't hang forever behind slow proxies
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10_000);
         const res = await fetch("/api/auth/session", {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
+          signal: controller.signal,
         });
+        clearTimeout(timeoutId);
         if (!res.ok) return { user: null };
         const data = await res.json();
         return data;
@@ -246,6 +251,32 @@ export function useCreateService() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+export function useUpdateService() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/services", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-services"] });
+      qc.invalidateQueries({ queryKey: ["services"] });
+      toast({ title: "Service updated" });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useDeleteService() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) => api.delete(`/api/admin/services?id=${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-services"] });
+      qc.invalidateQueries({ queryKey: ["services"] });
+      toast({ title: "Service deleted" });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
 
 export function useCreateProvider() {
   const qc = useQueryClient();
@@ -255,6 +286,18 @@ export function useCreateProvider() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin-providers"] });
       toast({ title: "Provider added" });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateProvider() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/providers", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-providers"] });
+      toast({ title: "Provider updated" });
     },
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
@@ -281,6 +324,12 @@ export function useUpdatePaymentMethod() {
       qc.invalidateQueries({ queryKey: ["admin-payment-methods"] });
       qc.invalidateQueries({ queryKey: ["payment-methods"] });
     },
+  });
+}
+export function useTestPaymentMethod() {
+  return useMutation({
+    mutationFn: (data: { methodId?: string; method?: string; credentials?: Record<string, string> }) =>
+      api.post<{ ok: boolean; message?: string; error?: string }>("/api/admin/payment-methods/test", data),
   });
 }
 
@@ -581,6 +630,16 @@ export function useCreateRole() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+export function useUpdateRole() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    // Supports both permission updates (roleId + permissions[]) and field updates (id + name/description/color).
+    mutationFn: (data: any) => api.patch("/api/admin/roles", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-roles"] }); toast({ title: "Role updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
 export function useUpdateRolePermissions() {
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -598,6 +657,96 @@ export function useDeleteRole() {
     mutationFn: (id: string) => api.delete(`/api/admin/roles?id=${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-roles"] }); toast({ title: "Role deleted" }); },
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Promotions ──
+export function useAdminPromotions() {
+  return useQuery({
+    queryKey: ["admin-promotions"],
+    queryFn: () => api.get<{ promotions: any[] }>("/api/admin/promotions"),
+  });
+}
+export function useCreatePromotion() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post("/api/admin/promotions", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-promotions"] }); toast({ title: "Promotion created" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdatePromotion() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/promotions", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-promotions"] }); toast({ title: "Promotion updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Search + Bulk ──
+export function useAdminSearch(q: string) {
+  return useQuery({
+    queryKey: ["admin-search", q],
+    queryFn: () => api.get<any>(`/api/admin/search?q=${encodeURIComponent(q)}`),
+    enabled: q.trim().length >= 2,
+    staleTime: 30 * 1000,
+  });
+}
+export function useBulkAction() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { entity: "user" | "order" | "service"; action: "activate" | "suspend" | "delete" | "cancel" | "complete" | "pause" | "promote"; ids: string[] }) => {
+      // "promote" is a UI alias that maps to the bulk route's "activate" + extra server-side logic.
+      // The bulk endpoint doesn't natively support role promotion, so we map "promote" → send to
+      // PATCH /api/admin/users per-id. For other actions, use the bulk endpoint directly.
+      if (data.action === "promote") {
+        // Promote each user to admin role via individual PATCH calls.
+        return Promise.all(
+          data.ids.map((id) => api.patch("/api/admin/users", { id, role: "admin" }))
+        ).then(() => ({ affected: data.ids.length, message: `${data.ids.length} user(s) promoted` }));
+      }
+      return api.post<{ affected: number; message: string }>("/api/admin/bulk", data);
+    },
+    onSuccess: (data: any) => {
+      qc.invalidateQueries({ queryKey: ["admin-users"] });
+      qc.invalidateQueries({ queryKey: ["admin-search"] });
+      toast({ title: "Bulk action complete", description: data?.message ?? "Done" });
+    },
+    onError: (e: Error) => toast({ title: "Bulk action failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── Admin: Manual order + Refund ──
+export function useCreateManualOrder() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { userId: string; serviceId: string; quantity: number; link?: string; customPrice?: number }) =>
+      api.post<{ order: any; message: string }>("/api/admin/orders", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin-overview"] });
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      toast({ title: "Order created", description: data.message });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useRefund() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { transactionId: string; reason?: string }) =>
+      api.post<{ message: string }>("/api/admin/refunds", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["admin-overview"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      toast({ title: "Refund processed", description: data.message });
+    },
+    onError: (e: Error) => toast({ title: "Refund failed", description: e.message, variant: "destructive" }),
   });
 }
 

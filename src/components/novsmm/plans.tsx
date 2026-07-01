@@ -233,7 +233,15 @@ function PlanCard({ plan, yearly }: { plan: Plan; yearly: boolean }) {
         <Magnetic
           as="button"
           strength={0.2}
-          onClick={() => useApp.getState().setView("register")}
+          onClick={() => {
+            const state = useApp.getState();
+            if (state.authed) {
+              state.setView("dashboard");
+              state.setDashboardTab("profile");
+            } else {
+              state.setView("register");
+            }
+          }}
           className="mt-6 block w-full"
         >
           <span
