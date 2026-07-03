@@ -143,10 +143,7 @@ export const ROLES = [
 ];
 
 export const TOPUP_METHODS = [
-  { name: "Stripe", glyph: "S", tone: "from-violet-500/15 to-violet-500/5 text-violet-700", time: "Instant", fee: "2.9% + $0.30", currencies: "USD, EUR, GBP, +135" },
   { name: "PayPal", glyph: "P", tone: "from-blue-500/15 to-blue-500/5 text-blue-700", time: "Instant", fee: "3.49% + $0.49", currencies: "USD, EUR, GBP, +25" },
   { name: "Mercado Pago", glyph: "M", tone: "from-cyan-500/15 to-cyan-500/5 text-cyan-700", time: "Instant", fee: "3.99%", currencies: "BRL, MXN, ARS, +6" },
-  { name: "Aurora Pay", glyph: "A", tone: "from-emerald-500/15 to-emerald-500/5 text-emerald-700", time: "~5 min", fee: "1.5%", currencies: "USD, EUR, INR" },
-  { name: "Crypto", glyph: "₿", tone: "from-amber-500/15 to-amber-500/5 text-amber-700", time: "~3 min", fee: "0% · no chargebacks", currencies: "BTC, ETH, USDT, USDC" },
-  { name: "Bank transfer", glyph: "W", tone: "from-rose-500/15 to-rose-500/5 text-rose-700", time: "T+1", fee: "$0.50 fixed", currencies: "Local rails · 53" },
+  { name: "DePay", glyph: "D", tone: "from-indigo-500/15 to-indigo-500/5 text-indigo-700", time: "~3 min", fee: "1% (crypto)", currencies: "ETH, USDT, USDC, DAI, +1000 ERC-20" },
 ];

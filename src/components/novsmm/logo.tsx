@@ -16,7 +16,7 @@ export function Logo({
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <Image
-        src="/aurpay-logo.png"
+        src="/novsmm-logo.png"
         alt="NOVSMM"
         width={32}
         height={32}

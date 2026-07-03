@@ -98,7 +98,7 @@ export function middleware(req: NextRequest) {
 
   // ── CSRF protection: verify Origin on state-changing requests ──
   // NextAuth already has its own CSRF tokens for /api/auth/*.
-  // Webhooks from payment providers (Stripe, AURPay, Mercado Pago) are
+  // Webhooks from payment providers (Stripe, DePay, Mercado Pago) are
   // authenticated via HMAC signatures in their own route handlers, so we
   // exempt them from the Origin check (providers don't send Origin).
   // For all other POST/PATCH/PUT/DELETE, we verify the Origin header is present.

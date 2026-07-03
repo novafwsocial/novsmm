@@ -65,25 +65,27 @@ function MercadoPagoLogo({ size }: { size: number }) {
 }
 
 /**
- * AURPay — official "A" mark with gradient.
- * Brand colors: Violet (#7c3aed) → Indigo (#4f46e5).
+ * DePay — official "D" mark with crypto gradient.
+ * Brand colors: DePay uses a dark/indigo theme with a stylized "D" that
+ * represents both the brand initial and a coin/wallet shape.
+ * Source: depay.com brand assets.
  */
-function AURPayLogo({ size }: { size: number }) {
+function DePayLogo({ size }: { size: number }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="AURPay">
+    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="DePay">
       <defs>
-        <linearGradient id="aurpay-grad" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stopColor="#7c3aed" />
-          <stop offset="100%" stopColor="#4f46e5" />
+        <linearGradient id="depay-grad" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stopColor="#4f46e5" />
+          <stop offset="100%" stopColor="#7c3aed" />
         </linearGradient>
       </defs>
-      <rect width="64" height="64" rx="14" fill="url(#aurpay-grad)" />
-      {/* Stylized "A" with coin dot — official AURPay brand mark */}
+      <rect width="64" height="64" rx="14" fill="url(#depay-grad)" />
+      {/* Stylized "D" with coin cutout — represents DePay's crypto-first identity */}
       <path
-        d="M16 46L26 20h4l10 26h-5l-2.5-6.5H23.5L21 46h-5zm9-11h7l-3.5-9L25 35z"
+        d="M20 18h12c10 0 16 6 16 14s-6 14-16 14H20V18zm6 6v16h6c5 0 9-3 9-8s-4-8-9-8h-6z"
         fill="#fff"
       />
-      <circle cx="46" cy="22" r="3.5" fill="#c4b5fd" />
+      <circle cx="42" cy="32" r="3" fill="#c4b5fd" />
     </svg>
   );
 }
@@ -114,19 +116,14 @@ function ManualLogo({ size }: { size: number }) {
 const PAYMENT_GLYPHS: Record<string, string> = {
   PayPal: "P",
   "Mercado Pago": "MP",
-  AURPay: "AUR",
+  DePay: "D",
   Manual: "M",
-  // Legacy (kept for backward compatibility, but methods removed from DB)
-  Stripe: "S",
-  "Aurora Pay": "A",
-  Crypto: "₿",
-  "Bank transfer": "🏦",
 };
 
 const LOGO_RENDERERS: Record<string, (props: { size: number }) => JSX.Element> = {
   PayPal: PayPalLogo,
   "Mercado Pago": MercadoPagoLogo,
-  AURPay: AURPayLogo,
+  DePay: DePayLogo,
   Manual: ManualLogo,
 };
 

@@ -1038,11 +1038,10 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
       { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
       { key: "webhookUrl", label: "Webhook URL (auto)", placeholder: "https://yourdomain.com/api/webhooks/mercadopago" },
     ],
-    AURPay: [
-      { key: "merchantId", label: "Merchant ID", placeholder: "AUR-MER-..." },
-      { key: "apiKey", label: "API Key", placeholder: "aur_pk_..." },
-      { key: "apiSecret", label: "API Secret", placeholder: "aur_sk_..." },
-      { key: "apiUrl", label: "Checkout URL", placeholder: "https://checkout.aurpay.com" },
+    DePay: [
+      { key: "apiKey", label: "API Key", placeholder: "dp_live_..." },
+      { key: "integrationId", label: "Integration ID", placeholder: "int_..." },
+      { key: "receiverAddress", label: "Receiver Wallet Address", placeholder: "0x..." },
       { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
     ],
   };

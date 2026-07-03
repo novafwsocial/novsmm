@@ -28,13 +28,13 @@ const PROVIDERS = [
     note: "Leading payment platform in Latin America. Local rails.",
   },
   {
-    name: "AURPay",
-    methods: ["Cards", "Apple Pay", "Google Pay", "Link"],
-    currencies: 135,
-    settlement: "T+2",
-    security: "PCI DSS L1",
-    coverage: "46 countries",
-    note: "Adaptive pricing & 3-D Secure 2 built-in. Ultra-low fees.",
+    name: "DePay",
+    methods: ["ETH", "USDT", "USDC", "DAI", "+1000 ERC-20"],
+    currencies: 1000,
+    settlement: "~3 min (on-chain)",
+    security: "Decentralized",
+    coverage: "Global",
+    note: "Accept any ERC-20 token. Direct to wallet, no intermediaries. Zero chargebacks.",
   },
   {
     name: "Manual",
@@ -76,7 +76,7 @@ export function Payments() {
               <br className="hidden sm:block" /> Settled in minutes.
             </>
           }
-          description="NOVSMM routes every transaction through PayPal, Mercado Pago, AURPay, or manual settlement — with FX conversion at mid-market rates and support for local Latin American rails."
+          description="NOVSMM routes every transaction through PayPal, Mercado Pago, DePay (crypto), or manual settlement — with FX conversion at mid-market rates and direct on-chain crypto payments."
         />
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">

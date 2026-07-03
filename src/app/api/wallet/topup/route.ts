@@ -4,7 +4,7 @@ import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
-import { createAurpayOrder } from "@/lib/aurpay";
+import { createDepayPayment } from "@/lib/depay";
 import { decryptJSON } from "@/lib/crypto-utils";
 
 /**
@@ -23,7 +23,7 @@ import { decryptJSON } from "@/lib/crypto-utils";
  *  • Crypto (USDT)   → if creds.walletAddress  → return { provider, address, network,
  *                                                          amount, expectedConfirmations }
  *                      else                    → sandbox
- *  • Aurora Pay /
+ *  • Legacy methods /
  *    Bank transfer   → always sandbox (simulated)
  *
  * For external checkout providers (PayPal / Mercado Pago), the wallet is NOT
@@ -239,28 +239,28 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 4. AURPay ──
-    // Sends a POST request to the AURPay API with the merchant credentials,
-    // amount, currency, and redirect URLs. AURPay returns a hosted checkout
-    // URL that the browser redirects to. The webhook credits the balance
-    // after payment confirmation.
-    if (pm.name === "AURPay" && creds?.merchantId && creds?.apiKey && creds?.apiSecret) {
+    // ── 4. DePay ──
+    // DePay is a decentralized payment processor that accepts any ERC-20 token
+    // (ETH, USDT, USDC, DAI, etc.) directly to the merchant's wallet.
+    // Sends a POST request to the DePay API with the api key, amount, currency,
+    // and redirect URLs. DePay returns a hosted checkout URL that the browser
+    // redirects to. The webhook credits the balance after payment confirmation.
+    if (pm.name === "DePay" && creds?.apiKey) {
       try {
-        // Fetch the user's email so AURPay can pre-fill the checkout form
+        // Fetch the user's email so DePay can send a receipt
         const user = await db.user.findUnique({
           where: { id: userId },
           select: { email: true },
         });
 
-        // ── Call the AURPay API to create an order ──
+        // ── Call the DePay API to create a payment ──
         // Credentials are read from the encrypted PaymentMethod.config column.
-        // The apiSecret is used to sign the request with HMAC-SHA256.
-        const order = await createAurpayOrder(
+        // The apiKey authenticates the request via Bearer token.
+        const payment = await createDepayPayment(
           {
-            merchantId: creds.merchantId,
             apiKey: creds.apiKey,
-            apiSecret: creds.apiSecret,
-            apiUrl: creds.apiUrl,
+            integrationId: creds.integrationId,
+            receiverAddress: creds.receiverAddress,
             webhookSecret: creds.webhookSecret,
           },
           {
@@ -274,30 +274,30 @@ export async function POST(req: NextRequest) {
           }
         );
 
-        // Persist the AURPay order id for webhook reconciliation
+        // Persist the DePay payment id for webhook reconciliation
         await db.transaction.update({
           where: { id: txn.id },
           data: {
-            reference: `aurpay:${order.orderId}`,
-            description: `Top-up via AURPay (pending checkout ${order.orderId})`,
+            reference: `depay:${payment.paymentId}`,
+            description: `Top-up via DePay (pending checkout ${payment.paymentId})`,
           },
         });
 
         return apiOk({
-          provider: "aurpay",
-          checkoutUrl: order.checkoutUrl,
-          orderId: order.orderId,
+          provider: "depay",
+          checkoutUrl: payment.checkoutUrl,
+          paymentId: payment.paymentId,
           transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
-          message: "Redirecting to AURPay to complete payment.",
+          message: "Redirecting to DePay to complete payment.",
         });
       } catch (e: any) {
-        console.error("[wallet/topup] AURPay error:", e?.message);
+        console.error("[wallet/topup] DePay error:", e?.message);
         await db.transaction.update({
           where: { id: txn.id },
           data: { status: "failed" },
         });
         return apiError(
-          `AURPay error: ${e?.message ?? "Failed to create checkout session"}. Verify credentials in Admin → Payments → Configure credentials.`,
+          `DePay error: ${e?.message ?? "Failed to create checkout session"}. Verify credentials in Admin → Payments → Configure credentials.`,
           502
         );
       }
@@ -342,7 +342,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 6. Aurora Pay / Bank transfer / Crypto / unconfigured methods → sandbox ──
+    // ── 6. Legacy methods / Bank transfer / Crypto / unconfigured methods → sandbox ──
     // (Simulated gateway — credits balance immediately)
     const paymentResult = await processPayment(pm, amount, txn.reference ?? "");
 
