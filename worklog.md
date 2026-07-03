@@ -1432,3 +1432,35 @@ Stage Summary:
 - Webhook: /api/webhooks/depay (configure in DePay dashboard)
 - All 4 active methods: PayPal, Mercado Pago, DePay, Manual
 - NOVSMM brand logo preserved (renamed file but same image)
+
+---
+Task ID: FIX-ENV-RESET-PAYMENTS
+Agent: main (orchestrator)
+Task: Fix empty Payments section — .env was reset again causing JWEDecryptionFailed
+
+Work Log:
+- User reported Payments section empty in admin panel
+- VLM analysis confirmed: "No payment methods are currently displayed on the screen"
+- Investigated: DB had 4 active methods (PayPal, Mercado Pago, DePay, Manual)
+- Public API /api/payment-methods returned methods correctly
+- Admin API /api/admin/payment-methods returned 401 "Authentication required"
+- Dev log showed: JWEDecryptionFailed + 401 on admin/payment-methods + 401 on auth/callback
+- Root cause: .env was reset AGAIN (only DATABASE_URL remained)
+  - NEXTAUTH_SECRET missing → session cookies can't be decrypted → JWEDecryptionFailed
+  - AUTH_TRUST_HOST missing → proxy headers not trusted
+  - All authenticated API calls fail with 401
+- Restored .env with all required vars:
+  - NEXTAUTH_SECRET=novsmm-production-jwt-secret-32-bytes-...
+  - AUTH_TRUST_HOST=1
+  - HUNTSMM_API_KEY=...
+  - LICENSE_ENCRYPTION_KEY=...
+- Restarted dev server
+- Verified with curl: login as admin → /api/admin/payment-methods returns 200 with 4 methods
+- Verified with Agent Browser: Admin → Payments shows all 4 method cards (PayPal, Mercado Pago, DePay, Manual)
+- No errors in dev log
+
+Stage Summary:
+- Payments section now displays all 4 active methods
+- Root cause was .env reset (recurring issue in this sandbox)
+- User needs to clear browser cookies (old session token is invalid) and re-login
+- Solution: restore .env + restart dev server
