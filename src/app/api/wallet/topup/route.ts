@@ -4,6 +4,7 @@ import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
+import { createAurpayOrder } from "@/lib/aurpay";
 import { decryptJSON } from "@/lib/crypto-utils";
 
 /**
@@ -239,29 +240,53 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 4. AURPay ──
-    // AURPay is a payment gateway similar to Stripe. When credentials are
-    // configured (merchantId + apiKey + apiSecret), we create a checkout
-    // session and redirect the user. The webhook credits the balance after
-    // payment confirmation.
-    if (pm.name === "AURPay" && creds?.merchantId && creds?.apiKey) {
+    // Sends a POST request to the AURPay API with the merchant credentials,
+    // amount, currency, and redirect URLs. AURPay returns a hosted checkout
+    // URL that the browser redirects to. The webhook credits the balance
+    // after payment confirmation.
+    if (pm.name === "AURPay" && creds?.merchantId && creds?.apiKey && creds?.apiSecret) {
       try {
-        // Build AURPay checkout URL (hosted by AURPay)
-        // In production, this would call the AURPay API to create an order.
-        // For now, we construct a hosted checkout URL with the merchantId.
-        const aurpayHost = creds.apiUrl || "https://checkout.aurpay.com";
-        const checkoutUrl = `${aurpayHost}/pay/${creds.merchantId}?amount=${amount}&currency=USD&ref=${txn.publicId}&return=${encodeURIComponent(`${origin}/?topup=success`)}&cancel=${encodeURIComponent(`${origin}/?topup=cancelled`)}`;
+        // Fetch the user's email so AURPay can pre-fill the checkout form
+        const user = await db.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        });
 
+        // ── Call the AURPay API to create an order ──
+        // Credentials are read from the encrypted PaymentMethod.config column.
+        // The apiSecret is used to sign the request with HMAC-SHA256.
+        const order = await createAurpayOrder(
+          {
+            merchantId: creds.merchantId,
+            apiKey: creds.apiKey,
+            apiSecret: creds.apiSecret,
+            apiUrl: creds.apiUrl,
+            webhookSecret: creds.webhookSecret,
+          },
+          {
+            amount,
+            currency: "USD",
+            reference: txn.publicId,
+            successUrl: `${origin}/?topup=success`,
+            cancelUrl: `${origin}/?topup=cancelled`,
+            customerEmail: user?.email,
+            description: `NOVSMM Wallet Top-up — $${amount.toFixed(2)}`,
+          }
+        );
+
+        // Persist the AURPay order id for webhook reconciliation
         await db.transaction.update({
           where: { id: txn.id },
           data: {
-            reference: `aurpay:${creds.merchantId}:${txn.publicId}`,
-            description: `Top-up via AURPay (pending checkout)`,
+            reference: `aurpay:${order.orderId}`,
+            description: `Top-up via AURPay (pending checkout ${order.orderId})`,
           },
         });
 
         return apiOk({
           provider: "aurpay",
-          checkoutUrl,
+          checkoutUrl: order.checkoutUrl,
+          orderId: order.orderId,
           transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
           message: "Redirecting to AURPay to complete payment.",
         });
@@ -271,7 +296,10 @@ export async function POST(req: NextRequest) {
           where: { id: txn.id },
           data: { status: "failed" },
         });
-        return apiError(`AURPay error: ${e?.message ?? "unknown"}`, 502);
+        return apiError(
+          `AURPay error: ${e?.message ?? "Failed to create checkout session"}. Verify credentials in Admin → Payments → Configure credentials.`,
+          502
+        );
       }
     }
 

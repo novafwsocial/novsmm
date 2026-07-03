@@ -1314,3 +1314,62 @@ Stage Summary:
 - Logo component uses rounded-full to maintain circular shape
 - Single source of truth: public/aurpay-logo.png → used by Logo component + favicon
 - Consistent branding across navbar, sidebar, footer, login, register, onboarding
+
+---
+Task ID: AURPAY-REAL-API-INTEGRATION
+Agent: main (orchestrator)
+Task: Implement real AURPay POST API integration with credentials, amount, currency, redirect URLs
+
+Work Log:
+- Created src/lib/aurpay.ts — dedicated AURPay client module:
+  - createAurpayOrder(): sends POST request to {apiUrl}/api/v1/orders with:
+    - merchant_id, amount (cents), currency, reference, description
+    - return_url (success redirect), cancel_url (cancel redirect)
+    - customer_email, metadata (for webhook reconciliation)
+  - HMAC-SHA256 request signing: X-AURPay-Signature = HMAC(apiSecret, timestamp + "." + body)
+  - Headers: X-AURPay-Merchant, X-AURPay-Key, X-AURPay-Timestamp, X-AURPay-Signature
+  - 15s timeout via AbortSignal.timeout
+  - Credentials read from encrypted PaymentMethod.config (never logged)
+  - Returns { orderId, checkoutUrl, status }
+  - verifyAurpayWebhook(): HMAC-SHA256 verification + 5-minute replay protection
+- Updated src/app/api/wallet/topup/route.ts AURPay block:
+  - Now calls createAurpayOrder() with real POST to AURPay API
+  - Reads credentials from decryptJSON(pm.config)
+  - Passes amount, currency=USD, reference=txn.publicId, success/cancel URLs
+  - Fetches user email to pre-fill AURPay checkout form
+  - Persists AURPay order id in transaction.reference for webhook reconciliation
+  - Returns { provider: "aurpay", checkoutUrl, orderId, transaction }
+  - Clear error message on failure (no sandbox fallback)
+- Created src/app/api/webhooks/aurpay/route.ts:
+  - POST: receives payment notifications from AURPay
+  - Verifies HMAC-SHA256 signature using apiSecret from DB
+  - Handles 3 event types: payment.succeeded (credit), payment.failed (mark failed), payment.refunded (reverse credit)
+  - Idempotent (skips if transaction already completed)
+  - Logs all webhooks to WebhookLog table for audit
+  - GET: returns webhook URL for admin to configure in AURPay dashboard
+- Created src/app/api/admin/payment-methods/test/route.ts:
+  - AURPay test: creates a $0.01 test order via createAurpayOrder()
+  - Returns "Connected · merchant XXX · order YYY created" on success
+  - Returns clear error message on failure
+- Updated src/middleware.ts:
+  - Exempted /api/webhooks/ from CSRF Origin check (providers don't send Origin)
+  - Webhooks authenticate via HMAC signatures in their own route handlers
+- Verified with curl:
+  - GET /api/webhooks/aurpay → 200 (returns webhook URL)
+  - POST without signature → 401 "Missing AURPay signature headers"
+  - POST with fake signature → 401 "Invalid signature"
+- Verified with Agent Browser:
+  - Admin → Payments → AURPay → Configure credentials modal shows 5 fields + Test connection + Save
+  - Test connection button works (returns "Connection failed" with test creds — expected, real creds needed for live)
+  - AURPay status: Active
+- Lint clean, no errors in dev log
+
+Stage Summary:
+- AURPay integration now sends REAL POST request to AURPay API endpoint
+- Credentials (merchantId, apiKey, apiSecret) read from encrypted DB column
+- Request signed with HMAC-SHA256 for authentication
+- Returns hosted checkout URL for browser redirect
+- Webhook handler credits balance after payment confirmation
+- Test connection button makes real API call to verify credentials
+- Webhook URL: /api/webhooks/aurpay (configure in AURPay merchant dashboard)
+- Full flow: user clicks Top up → backend POSTs to AURPay → returns checkoutUrl → browser redirects → user pays on AURPay → webhook fires → balance credited

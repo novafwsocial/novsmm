@@ -98,6 +98,9 @@ export function middleware(req: NextRequest) {
 
   // ── CSRF protection: verify Origin on state-changing requests ──
   // NextAuth already has its own CSRF tokens for /api/auth/*.
+  // Webhooks from payment providers (Stripe, AURPay, Mercado Pago) are
+  // authenticated via HMAC signatures in their own route handlers, so we
+  // exempt them from the Origin check (providers don't send Origin).
   // For all other POST/PATCH/PUT/DELETE, we verify the Origin header is present.
   // Browsers do NOT allow JavaScript to forge the Origin header (CORS spec),
   // so its mere presence is sufficient CSRF protection behind a trusted gateway.
@@ -106,8 +109,9 @@ export function middleware(req: NextRequest) {
   const method = req.method.toUpperCase();
   const isStateChanging = ["POST", "PATCH", "PUT", "DELETE"].includes(method);
   const isNextAuth = pathname.startsWith("/api/auth/");
+  const isWebhook = pathname.startsWith("/api/webhooks/");
 
-  if (isStateChanging && !isNextAuth) {
+  if (isStateChanging && !isNextAuth && !isWebhook) {
     const origin = req.headers.get("origin") || req.headers.get("referer");
     const authHeader = req.headers.get("authorization");
     
