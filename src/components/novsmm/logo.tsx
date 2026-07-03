@@ -3,8 +3,8 @@ import Image from "next/image";
 
 /**
  * NOVSMM brand logo — uses the official uploaded logo image.
- * The stylized "N" mark replaces the previous SVG monogram across the entire app:
- * navbar, sidebar, footer, login screen, etc.
+ * Circular black badge with a stylized white "N" mark.
+ * Used across the entire app: navbar, sidebar, footer, login screen, etc.
  */
 export function Logo({
   className,
@@ -20,7 +20,7 @@ export function Logo({
         alt="NOVSMM"
         width={32}
         height={32}
-        className="h-7 w-7 shrink-0 rounded-lg object-contain"
+        className="h-7 w-7 shrink-0 rounded-full object-cover"
         priority
       />
       {showWord && (

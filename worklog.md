@@ -1290,3 +1290,27 @@ Stage Summary:
 - Favicon updated (src/app/icon.png)
 - Logo image served from /public/aurpay-logo.png (HTTP 200)
 - Consistent branding across navbar, sidebar, footer, login, register, onboarding
+
+---
+Task ID: REPLACE-LOGO-V2
+Agent: main (orchestrator)
+Task: Replace NOVSMM logo with new circular black badge design
+
+Work Log:
+- User uploaded new logo: "Diseño sin título (2).png" (1080x1350 PNG)
+- VLM analysis: circular black badge with white stylized "N" inside, minimalist monochromatic design
+- Replaced public/aurpay-logo.png with new logo (186KB)
+- Replaced src/app/icon.png (favicon) with new logo
+- Updated Logo component: changed className from "rounded-lg object-contain" to "rounded-full object-cover" to preserve the circular shape
+- Verified with Agent Browser that the new logo appears in:
+  - Landing page navbar (top-left): circular black badge with white N + "NOVSMM" wordmark ✅
+  - Dashboard sidebar (top-left): same circular logo ✅
+  - Footer (first column): same circular logo ✅
+- Favicon updated automatically via src/app/icon.png
+- Lint clean, no errors in dev log
+
+Stage Summary:
+- New circular black badge logo with white "N" replaces previous design across entire app
+- Logo component uses rounded-full to maintain circular shape
+- Single source of truth: public/aurpay-logo.png → used by Logo component + favicon
+- Consistent branding across navbar, sidebar, footer, login, register, onboarding
