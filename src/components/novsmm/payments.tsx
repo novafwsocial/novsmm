@@ -28,13 +28,13 @@ const PROVIDERS = [
     note: "Leading payment platform in Latin America. Local rails.",
   },
   {
-    name: "DePay",
-    methods: ["ETH", "USDT", "USDC", "DAI", "+1000 ERC-20"],
-    currencies: 1000,
-    settlement: "~3 min (on-chain)",
+    name: "NowPayments",
+    methods: ["BTC", "ETH", "USDT", "USDC", "+100 cryptos"],
+    currencies: 100,
+    settlement: "~5 min (on-chain)",
     security: "Decentralized",
     coverage: "Global",
-    note: "Accept any ERC-20 token. Direct to wallet, no intermediaries. Zero chargebacks.",
+    note: "Accept 100+ cryptocurrencies. Auto-conversion to fiat. Zero chargebacks.",
   },
   {
     name: "Manual",
@@ -76,7 +76,7 @@ export function Payments() {
               <br className="hidden sm:block" /> Settled in minutes.
             </>
           }
-          description="NOVSMM routes every transaction through PayPal, Mercado Pago, DePay (crypto), or manual settlement — with FX conversion at mid-market rates and direct on-chain crypto payments."
+          description="NOVSMM routes every transaction through PayPal, Mercado Pago, NowPayments (crypto), or manual settlement — with FX conversion at mid-market rates and 100+ cryptocurrencies accepted."
         />
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">

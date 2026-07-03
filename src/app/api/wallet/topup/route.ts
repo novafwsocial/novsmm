@@ -4,7 +4,7 @@ import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
-import { createDepayPayment } from "@/lib/depay";
+import { createNowPaymentsInvoice } from "@/lib/nowpayments";
 import { decryptJSON } from "@/lib/crypto-utils";
 
 /**
@@ -239,29 +239,30 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 4. DePay ──
-    // DePay is a decentralized payment processor that accepts any ERC-20 token
-    // (ETH, USDT, USDC, DAI, etc.) directly to the merchant's wallet.
-    // Sends a POST request to the DePay API with the api key, amount, currency,
-    // and redirect URLs. DePay returns a hosted checkout URL that the browser
-    // redirects to. The webhook credits the balance after payment confirmation.
-    if (pm.name === "DePay" && creds?.apiKey) {
+    // ── 4. NowPayments ──
+    // NowPayments is a cryptocurrency payment gateway that accepts 100+ cryptos
+    // (BTC, ETH, USDT, USDC, DAI, etc.) with automatic conversion.
+    // Sends a POST request to the NowPayments API with the API key, amount,
+    // currency, and redirect URLs. NowPayments returns a hosted invoice URL
+    // that the browser redirects to. The IPN webhook credits the balance
+    // after payment confirmation.
+    if (pm.name === "NowPayments" && creds?.apiKey) {
       try {
-        // Fetch the user's email so DePay can send a receipt
+        // Fetch the user's email so NowPayments can send a receipt
         const user = await db.user.findUnique({
           where: { id: userId },
           select: { email: true },
         });
 
-        // ── Call the DePay API to create a payment ──
+        // ── Call the NowPayments API to create an invoice ──
         // Credentials are read from the encrypted PaymentMethod.config column.
-        // The apiKey authenticates the request via Bearer token.
-        const payment = await createDepayPayment(
+        // The apiKey authenticates the request via the x-api-key header.
+        const invoice = await createNowPaymentsInvoice(
           {
             apiKey: creds.apiKey,
-            integrationId: creds.integrationId,
-            receiverAddress: creds.receiverAddress,
-            webhookSecret: creds.webhookSecret,
+            ipnSecret: creds.ipnSecret,
+            payCurrency: creds.payCurrency,
+            payoutCurrency: creds.payoutCurrency,
           },
           {
             amount,
@@ -274,30 +275,30 @@ export async function POST(req: NextRequest) {
           }
         );
 
-        // Persist the DePay payment id for webhook reconciliation
+        // Persist the NowPayments invoice id for webhook reconciliation
         await db.transaction.update({
           where: { id: txn.id },
           data: {
-            reference: `depay:${payment.paymentId}`,
-            description: `Top-up via DePay (pending checkout ${payment.paymentId})`,
+            reference: `nowpayments:${invoice.invoiceId}`,
+            description: `Top-up via NowPayments (pending invoice ${invoice.invoiceId})`,
           },
         });
 
         return apiOk({
-          provider: "depay",
-          checkoutUrl: payment.checkoutUrl,
-          paymentId: payment.paymentId,
+          provider: "nowpayments",
+          checkoutUrl: invoice.checkoutUrl,
+          invoiceId: invoice.invoiceId,
           transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
-          message: "Redirecting to DePay to complete payment.",
+          message: "Redirecting to NowPayments to complete payment.",
         });
       } catch (e: any) {
-        console.error("[wallet/topup] DePay error:", e?.message);
+        console.error("[wallet/topup] NowPayments error:", e?.message);
         await db.transaction.update({
           where: { id: txn.id },
           data: { status: "failed" },
         });
         return apiError(
-          `DePay error: ${e?.message ?? "Failed to create checkout session"}. Verify credentials in Admin → Payments → Configure credentials.`,
+          `NowPayments error: ${e?.message ?? "Failed to create invoice"}. Verify credentials in Admin → Payments → Configure credentials.`,
           502
         );
       }

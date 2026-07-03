@@ -1038,11 +1038,11 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
       { key: "publicKey", label: "Public Key", placeholder: "APP_USR-..." },
       { key: "webhookUrl", label: "Webhook URL (auto)", placeholder: "https://yourdomain.com/api/webhooks/mercadopago" },
     ],
-    DePay: [
-      { key: "apiKey", label: "API Key", placeholder: "dp_live_..." },
-      { key: "integrationId", label: "Integration ID", placeholder: "int_..." },
-      { key: "receiverAddress", label: "Receiver Wallet Address", placeholder: "0x..." },
-      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
+    NowPayments: [
+      { key: "apiKey", label: "API Key", placeholder: "NP-XXXX-XXXX-XXXX" },
+      { key: "ipnSecret", label: "IPN Secret", placeholder: "whsec_..." },
+      { key: "payCurrency", label: "Default Pay Currency", placeholder: "usdttrc20" },
+      { key: "payoutCurrency", label: "Payout Currency (optional)", placeholder: "usd" },
     ],
   };
 

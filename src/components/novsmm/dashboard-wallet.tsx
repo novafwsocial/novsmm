@@ -300,11 +300,11 @@ function TopupModal({ onClose }: { onClose: () => void }) {
   const handleSubmit = async () => {
     try {
       const result = await topup.mutateAsync({ amount, method });
-      // ── DePay ──
-      if (result?.provider === "depay" && result?.checkoutUrl) {
+      // ── NowPayments ──
+      if (result?.provider === "nowpayments" && result?.checkoutUrl) {
         toast({
-          title: "Redirecting to DePay…",
-          description: "Complete your crypto payment on DePay. Your balance will update after payment.",
+          title: "Redirecting to NowPayments…",
+          description: "Complete your crypto payment on NowPayments. Your balance will update after confirmation.",
         });
         window.location.href = result.checkoutUrl;
         return;
@@ -515,11 +515,11 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
           >
             <option value="PayPal">PayPal</option>
             <option value="Mercado Pago">Mercado Pago</option>
-            <option value="DePay">DePay (Crypto)</option>
+            <option value="NowPayments">NowPayments (Crypto)</option>
             <option value="Bank transfer">Bank transfer (legacy)</option>
             <option value="Wise">Wise</option>
             {methods.map((m: any) => (
-              m.name !== "PayPal" && m.name !== "Mercado Pago" && m.name !== "DePay" && m.name !== "Bank transfer" && (
+              m.name !== "PayPal" && m.name !== "Mercado Pago" && m.name !== "NowPayments" && m.name !== "Bank transfer" && (
                 <option key={m.id} value={m.name}>{m.name}</option>
               )
             ))}

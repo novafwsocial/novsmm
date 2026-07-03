@@ -145,5 +145,5 @@ export const ROLES = [
 export const TOPUP_METHODS = [
   { name: "PayPal", glyph: "P", tone: "from-blue-500/15 to-blue-500/5 text-blue-700", time: "Instant", fee: "3.49% + $0.49", currencies: "USD, EUR, GBP, +25" },
   { name: "Mercado Pago", glyph: "M", tone: "from-cyan-500/15 to-cyan-500/5 text-cyan-700", time: "Instant", fee: "3.99%", currencies: "BRL, MXN, ARS, +6" },
-  { name: "DePay", glyph: "D", tone: "from-indigo-500/15 to-indigo-500/5 text-indigo-700", time: "~3 min", fee: "1% (crypto)", currencies: "ETH, USDT, USDC, DAI, +1000 ERC-20" },
+  { name: "NowPayments", glyph: "N", tone: "from-emerald-500/15 to-emerald-500/5 text-emerald-700", time: "~5 min", fee: "0.5% - 1% (crypto)", currencies: "BTC, ETH, USDT, USDC, +100 cryptos" },
 ];

@@ -1464,3 +1464,57 @@ Stage Summary:
 - Root cause was .env reset (recurring issue in this sandbox)
 - User needs to clear browser cookies (old session token is invalid) and re-login
 - Solution: restore .env + restart dev server
+
+---
+Task ID: REPLACE-DEPAY-WITH-NOWPAYMENTS
+Agent: main (orchestrator)
+Task: Replace DePay payment method with NowPayments across entire codebase
+
+Work Log:
+- DB: updated PaymentMethod row from "DePay" to "NowPayments" (glyph=N, fee="0.5% - 1% (crypto)", currencies="BTC, ETH, USDT, USDC, +100 cryptos")
+- Deleted src/lib/depay.ts
+- Created src/lib/nowpayments.ts:
+  - createNowPaymentsInvoice(): POST to https://api.nowpayments.io/v1/invoice with x-api-key header
+  - Body: price_amount, price_currency, pay_currency, order_id, ipn_callback_url, success_url, cancel_url, metadata
+  - Returns { invoiceId, checkoutUrl, status }
+  - verifyNowPaymentsWebhook(): HMAC-SHA256 signature verification (x-nowpayments-sig header)
+- Updated src/app/api/wallet/topup/route.ts:
+  - Replaced DePay block with NowPayments block
+  - Calls createNowPaymentsInvoice() with real POST to NowPayments API
+  - Returns { provider: "nowpayments", checkoutUrl, invoiceId, transaction }
+- Deleted src/app/api/webhooks/depay/
+- Created src/app/api/webhooks/nowpayments/route.ts:
+  - Handles confirmed/finished (credit), failed/expired (mark failed), refunded (reverse credit)
+  - Verifies x-nowpayments-sig header with HMAC-SHA256
+  - Idempotent + audit logged to WebhookLog
+- Created src/app/api/admin/payment-methods/test/route.ts:
+  - NowPayments test: creates $0.01 test invoice via createNowPaymentsInvoice()
+- Updated src/components/novsmm/payment-logo.tsx:
+  - Replaced DePayLogo with NowPaymentsLogo (dark navy gradient + white "N" + green accent dot)
+  - Updated PAYMENT_GLYPHS and LOGO_RENDERERS maps
+- Updated src/components/novsmm/payments.tsx (landing):
+  - Replaced DePay card with NowPayments card (BTC, ETH, USDT, USDC, +100 cryptos)
+  - Updated SectionHeading description
+- Updated src/components/novsmm/admin-panel.tsx:
+  - Replaced DePay credentialFields with NowPayments (apiKey, ipnSecret, payCurrency, payoutCurrency)
+- Updated src/components/novsmm/dashboard-wallet.tsx:
+  - TopupModal handleSubmit: replaced "depay" with "nowpayments" provider check
+  - WithdrawModal: replaced DePay option with NowPayments
+- Updated src/components/novsmm/dashboard-data.ts:
+  - Replaced DePay with NowPayments in TOPUP_METHODS
+- Updated src/middleware.ts comment (DePay → NowPayments)
+- Verified with Agent Browser:
+  - Landing → Payments: shows PayPal, Mercado Pago, NowPayments, Manual (NO DePay) ✅
+  - Admin → Payments: shows NowPayments Active (NO DePay) ✅
+  - Wallet → Top up modal: shows PayPal, Mercado Pago, NowPayments, Manual ✅
+  - NowPayments webhook: GET returns URL, POST without signature returns 401 ✅
+  - DePay webhook: 404 (deleted) ✅
+- Lint clean, no errors in dev log
+
+Stage Summary:
+- DePay completely removed from codebase
+- NowPayments (nowpayments.io) implemented as crypto payment gateway
+- NowPayments API: POST https://api.nowpayments.io/v1/invoice with x-api-key header
+- Credentials: apiKey, ipnSecret, payCurrency (default crypto), payoutCurrency (optional auto-convert)
+- Webhook: /api/webhooks/nowpayments (configure in NowPayments dashboard → IPN callback URL)
+- All 4 active methods: PayPal, Mercado Pago, NowPayments, Manual
