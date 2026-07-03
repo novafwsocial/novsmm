@@ -1260,3 +1260,33 @@ Stage Summary:
 - User dashboard: Top up modal shows only 4 active methods
 - Manual Payment left unchanged (green note + WhatsApp flow)
 - All logos are inline SVGs with official brand colors — no external requests, crisp on retina
+
+---
+Task ID: REPLACE-ALL-LOGOS
+Agent: main (orchestrator)
+Task: Replace all NOVSMM logos with the new uploaded stylized "N" brand mark
+
+Work Log:
+- User uploaded new NOVSMM brand logo: "Diseño sin título.png" (1080x1350 PNG, stylized black "N" mark)
+- VLM analysis confirmed: modern, abstract "N" letter mark, black on white, layered curved lines
+- Copied logo to public/aurpay-logo.png (served statically)
+- Rewrote src/components/novsmm/logo.tsx:
+  - Replaced inline SVG monogram with Next.js <Image> component pointing to /aurpay-logo.png
+  - 32x32 size, rounded-lg, object-contain
+  - priority flag for LCP optimization
+  - Still shows "NOVSMM" wordmark next to the icon (showWord prop)
+- Set favicon: copied logo to src/app/icon.png (Next.js App Router auto-detects this as favicon)
+- Verified with Agent Browser that the new logo appears in:
+  - Landing page navbar (top-left)
+  - Login screen (top of form)
+  - Dashboard sidebar (top-left)
+  - Footer (first column, top-left)
+- All locations use the same <Logo /> component, so the new logo is consistent everywhere
+- Lint clean, no errors in dev log
+
+Stage Summary:
+- Single source of truth: src/components/novsmm/logo.tsx uses /aurpay-logo.png
+- New stylized "N" brand mark replaces the old SVG monogram across the entire app
+- Favicon updated (src/app/icon.png)
+- Logo image served from /public/aurpay-logo.png (HTTP 200)
+- Consistent branding across navbar, sidebar, footer, login, register, onboarding
