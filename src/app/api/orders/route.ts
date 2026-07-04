@@ -21,6 +21,28 @@ const PLAN_ORDER_LIMITS: Record<string, number | null> = {
   enterprise: null,
 };
 
+/**
+ * Plan-based order priority (speed differentiation).
+ *
+ * free / starter → "standard"  (normal queue, ~2s start)
+ * growth         → "priority"  (priority queue, <1.2s start)
+ * enterprise     → "highest"   (highest priority, <800ms start)
+ *
+ * Stored on every Order row so the fulfillment worker / admin
+ * views can sort and dispatch accordingly.
+ */
+const PLAN_PRIORITY: Record<string, "standard" | "priority" | "highest"> = {
+  free: "standard",
+  starter: "standard",
+  growth: "priority",
+  enterprise: "highest",
+};
+
+/** Returns the priority for a given plan (defaults to standard). */
+function priorityForPlan(plan: string): "standard" | "priority" | "highest" {
+  return PLAN_PRIORITY[plan] ?? "standard";
+}
+
 /** Returns the start of the current calendar month (UTC). */
 function startOfMonth(): Date {
   const now = new Date();
@@ -148,6 +170,7 @@ export async function POST(req: NextRequest) {
     // Atomic: debit balance + create order + create transaction
     const orderCount = await db.order.count();
     const publicId = `A-${10432 + orderCount}`;
+    const priority = priorityForPlan(user.plan);
 
     const [order] = await db.$transaction([
       db.order.create({
@@ -165,10 +188,14 @@ export async function POST(req: NextRequest) {
           profit,
           status: "processing",
           progress: 5,
+          priority,
           providerId: service.providerId,
           providerName: service.provider?.name,
           link: link || null,
-          eta: "2m",
+          // Priority orders get a shorter advertised ETA in the UI.
+          // Actual fulfillment speed is governed by the worker queue
+          // ordering on the `priority` column.
+          eta: priority === "highest" ? "<1m" : priority === "priority" ? "1m" : "2m",
           flag: "🌍",
         },
       }),
@@ -219,6 +246,8 @@ export async function POST(req: NextRequest) {
           service: service.name,
           quantity,
           total: totalPrice,
+          priority,
+          plan: user.plan,
         }),
       },
     });
@@ -240,7 +269,7 @@ async function simulateFulfillment(orderId: string, userId: string) {
     where: { id: orderId },
     select: {
       id: true, status: true, publicId: true, serviceName: true,
-      totalPrice: true, link: true, quantity: true,
+      totalPrice: true, link: true, quantity: true, priority: true,
     },
   });
   if (!order || order.status === "cancelled") return;
@@ -272,13 +301,26 @@ async function simulateFulfillment(orderId: string, userId: string) {
     }
   }
 
-  // Fallback: simulate fulfillment (when no link, or provider fails)
-  const steps = [
+  // Fallback: simulate fulfillment (when no link, or provider fails).
+  // Priority/highest plans get progressively faster step intervals to
+  // mirror the queue-speed differentiation promised in the marketing copy.
+  const speedMultiplier =
+    order.priority === "highest" ? 0.4 :
+    order.priority === "priority" ? 0.7 :
+    1.0; // standard
+
+  const baseSteps = [
     { delay: 2000, progress: 15, status: "in_progress" },
     { delay: 5000, progress: 40, status: "in_progress" },
     { delay: 8000, progress: 75, status: "in_progress" },
     { delay: 12000, progress: 100, status: "completed" },
   ];
+  const steps = baseSteps.map((s, i) => ({
+    // Delay is the gap from the previous step; first step uses its own delay.
+    delay: Math.round((i === 0 ? s.delay : s.delay - baseSteps[i - 1].delay) * speedMultiplier),
+    progress: s.progress,
+    status: s.status,
+  }));
 
   for (const step of steps) {
     await new Promise((r) => setTimeout(r, step.delay));

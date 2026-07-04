@@ -39,6 +39,7 @@ import {
   Megaphone,
   ChevronDown,
   MessageCircle,
+  Zap,
 } from "lucide-react";
 import {
   AreaChart,
@@ -2357,6 +2358,7 @@ function AdminOrders() {
                   <th className="px-4 py-3 text-left font-medium">Service</th>
                   <th className="px-4 py-3 text-right font-medium">Qty</th>
                   <th className="px-4 py-3 text-right font-medium">Total</th>
+                  <th className="px-4 py-3 text-left font-medium">Priority</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                   <th className="px-4 py-3 text-left font-medium">Created</th>
                 </tr>
@@ -2375,6 +2377,15 @@ function AdminOrders() {
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.quantity.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums">${o.totalPrice.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                        o.priority === "highest" ? "bg-violet-500/10 text-violet-700" :
+                        o.priority === "priority" ? "bg-blue-500/10 text-blue-700" :
+                        "bg-muted text-muted-foreground")}>
+                        {o.priority === "highest" && <Zap className="h-2.5 w-2.5" />}
+                        {o.priority ?? "standard"}
+                      </span>
+                    </td>
                     <td className="px-4 py-3">
                       <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
                         o.status === "completed" ? "bg-emerald-500/10 text-emerald-700" :

@@ -132,6 +132,7 @@ model Order {
   profit          Float
   status          String   @default("processing") // pending | processing | in_progress | partial | completed | cancelled
   progress        Int      @default(0) // 0-100
+  priority        String   @default("standard") // standard | priority | highest (plan-based)
   providerId      String?
   providerName    String?
   link            String?
@@ -343,6 +344,8 @@ model Subscription {
   currentPeriodStart   DateTime?
   currentPeriodEnd     DateTime?
   cancelAtPeriodEnd    Boolean  @default(false)
+  seatsUsed            Int      @default(1) // currently-occupied seats (owner counts as 1)
+  seatsLimit           Int      @default(1) // max seats allowed by the plan
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 

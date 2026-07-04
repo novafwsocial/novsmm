@@ -4,10 +4,30 @@ import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { getStripe, createCheckoutSession } from "@/lib/stripe";
 
-const PLANS: Record<string, { amount: number; name: string; features: string[] }> = {
-  starter: { amount: 29, name: "Starter", features: ["1K orders/mo", "5 platforms", "Email support"] },
-  growth: { amount: 89, name: "Growth", features: ["25K orders/mo", "Unlimited platforms", "Priority support", "Crypto payouts"] },
-  enterprise: { amount: 299, name: "Enterprise", features: ["Unlimited orders", "Dedicated infra", "SSO + audit logs", "Custom SLA"] },
+const PLANS: Record<string, {
+  amount: number;
+  name: string;
+  features: string[];
+  seatsLimit: number;
+}> = {
+  starter: {
+    amount: 29,
+    name: "Starter",
+    features: ["1K orders/mo", "5 platforms", "Email support"],
+    seatsLimit: 1,
+  },
+  growth: {
+    amount: 89,
+    name: "Growth",
+    features: ["25K orders/mo", "Unlimited platforms", "Priority support", "Crypto payouts"],
+    seatsLimit: 10,
+  },
+  enterprise: {
+    amount: 299,
+    name: "Enterprise",
+    features: ["Unlimited orders", "Audit logs + CSV export", "Custom SLA"],
+    seatsLimit: 100,
+  },
 };
 
 /**
@@ -60,11 +80,15 @@ export async function GET() {
 
   return apiOk({
     subscription,
+    seats: subscription
+      ? { used: subscription.seatsUsed, limit: subscription.seatsLimit }
+      : null,
     plans: Object.entries(PLANS).map(([id, p]) => ({
       id,
       name: p.name,
       amount: p.amount,
       features: p.features,
+      seatsLimit: p.seatsLimit,
     })),
   });
 }
@@ -161,6 +185,10 @@ export async function POST(req: NextRequest) {
       amount: plan.amount,
       currentPeriodStart: now,
       currentPeriodEnd: periodEnd,
+      // The subscription owner occupies the first seat. Team-member invites
+      // (not yet implemented) will increment `seatsUsed` up to `seatsLimit`.
+      seatsUsed: 1,
+      seatsLimit: plan.seatsLimit,
     },
   });
 
