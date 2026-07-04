@@ -1518,3 +1518,35 @@ Stage Summary:
 - Credentials: apiKey, ipnSecret, payCurrency (default crypto), payoutCurrency (optional auto-convert)
 - Webhook: /api/webhooks/nowpayments (configure in NowPayments dashboard → IPN callback URL)
 - All 4 active methods: PayPal, Mercado Pago, NowPayments, Manual
+
+---
+Task ID: FIX-INSERTBEFORE-NOWPAYMENTS-METADATA
+Agent: main (orchestrator)
+Task: Fix insertBefore DOM error + NowPayments "metadata is not allowed" error
+
+Work Log:
+- User reported insertBefore DOM error on page.tsx line 19 (ErrorBoundary)
+- Dev log showed: "NowPayments API error: metadata is not allowed"
+- Two issues found and fixed:
+
+ISSUE 1: NowPayments API rejecting "metadata" field
+- NowPayments /v1/invoice endpoint does NOT accept a metadata field
+- Removed metadata from the request body in src/lib/nowpayments.ts
+- Reconciliation now uses order_id (which contains our transaction publicId) + order_description
+- Verified: top-up with NowPayments now creates invoice successfully → redirects to https://nowpayments.io/payment?iid=XXX
+
+ISSUE 2: React DOM "insertBefore" error
+- Root cause: AnimatePresence mode="wait" in app-view.tsx
+- When session state changes rapidly (loading → authed → dashboard), framer-motion tries to
+  reconcile DOM nodes that no longer exist → "insertBefore: node is not a child" error
+- Replaced AnimatePresence mode="wait" with simple conditional rendering + single motion.div with key
+- Removed exit animations (which cause the DOM manipulation race condition)
+- Kept entrance animation (opacity fade-in) for smooth UX
+- Removed unused AnimatePresence import
+- Verified: landing page loads, login works, dashboard loads, no insertBefore errors
+
+Stage Summary:
+- NowPayments top-up now works: creates real invoice → redirects to nowpayments.io
+- insertBefore DOM error eliminated (removed AnimatePresence mode="wait")
+- Full flow verified: login → wallet → top up $100 via NowPayments → redirect to nowpayments.io/payment?iid=4616937428
+- Lint clean, no errors in dev log

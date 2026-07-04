@@ -73,6 +73,9 @@ export async function createNowPaymentsInvoice(
   const endpoint = `${NOWPAYMENTS_API_BASE}/invoice`;
 
   // ── Build the invoice body (NowPayments API spec) ──
+  // Note: NowPayments API does NOT accept a "metadata" field — it uses
+  // order_id + order_description for reconciliation. We embed the
+  // transaction public id in order_id so the webhook can find it.
   const body = JSON.stringify({
     price_amount: params.amount.toFixed(2),
     price_currency: (params.currency || "USD").toLowerCase(),
@@ -83,13 +86,6 @@ export async function createNowPaymentsInvoice(
     ipn_callback_url: params.successUrl.replace(/\/\?topup=success$/, "/api/webhooks/nowpayments"),
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
-    // Metadata helps the webhook reconcile the payment back to our transaction
-    metadata: {
-      source: "novsmm_wallet_topup",
-      transaction_public_id: params.reference,
-      amount_usd: String(params.amount),
-      customer_email: params.customerEmail,
-    },
   });
 
   const headers: Record<string, string> = {

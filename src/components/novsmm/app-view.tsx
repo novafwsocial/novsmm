@@ -1,6 +1,6 @@
 "use client";
 
-import { AnimatePresence, motion } from "framer-motion";
+import { motion } from "framer-motion";
 import { useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { Loader2, X, Lock, CheckCircle2, ArrowRight, AlertCircle, LayoutDashboard } from "lucide-react";
@@ -293,69 +293,68 @@ export function AppView({ landing }: { landing: ReactNode }) {
 
   const isAuthed = !!session?.user;
 
+  // Determine what to render. Use simple conditional rendering instead of
+  // AnimatePresence mode="wait" to avoid DOM "insertBefore" errors that
+  // occur when framer-motion tries to reconcile rapid state changes
+  // (e.g. session loading → authed → dashboard).
+  let content: ReactNode = null;
+  let motionKey = "loading";
+
+  if (isLoading && !isAuthed) {
+    // Loading state — show nothing (landing will appear once loaded)
+    motionKey = "loading";
+    content = landing;
+  } else if (isAuthed && view === "dashboard") {
+    motionKey = "dashboard";
+    content = (
+      <DashboardShell>
+        {dashboardTab === "home" && <DashboardHome />}
+        {dashboardTab === "analytics" && <DashboardAnalytics />}
+        {dashboardTab === "marketplace" && <DashboardMarketplace />}
+        {dashboardTab === "orders" && <DashboardOrders />}
+        {dashboardTab === "wallet" && <DashboardWallet />}
+        {dashboardTab === "tickets" && <DashboardTickets />}
+        {dashboardTab === "notifications" && <DashboardNotifications />}
+        {dashboardTab === "profile" && <DashboardProfile />}
+        {dashboardTab === "admin" && <AdminPanel />}
+      </DashboardShell>
+    );
+  } else if (isAuthed && view === "onboarding") {
+    motionKey = "onboarding";
+    content = <OnboardingScreen />;
+  } else if (isAuthed && view === "landing" && browsingLanding) {
+    motionKey = "landing-authed";
+    content = (
+      <>
+        {landing}
+        <BackToDashboardButton />
+      </>
+    );
+  } else if (!isAuthed) {
+    motionKey = view;
+    content = (
+      <>
+        {view === "login" && <LoginScreen />}
+        {view === "register" && <RegisterScreen />}
+        {(view === "landing" || (!isAuthed && isLoading)) && landing}
+      </>
+    );
+  }
+
   return (
     <>
-      <AnimatePresence mode="wait">
-        {/* Authed → dashboard (unless in onboarding or browsing the landing) */}
-        {isAuthed && view === "dashboard" && (
-          <motion.div
-            key="dashboard"
-            initial={{ opacity: 0, scale: 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.98 }}
-            transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          >
-            <DashboardShell>
-              {dashboardTab === "home" && <DashboardHome />}
-              {dashboardTab === "analytics" && <DashboardAnalytics />}
-              {dashboardTab === "marketplace" && <DashboardMarketplace />}
-              {dashboardTab === "orders" && <DashboardOrders />}
-              {dashboardTab === "wallet" && <DashboardWallet />}
-              {dashboardTab === "tickets" && <DashboardTickets />}
-              {dashboardTab === "notifications" && <DashboardNotifications />}
-              {dashboardTab === "profile" && <DashboardProfile />}
-              {dashboardTab === "admin" && <AdminPanel />}
-            </DashboardShell>
-          </motion.div>
-        )}
+      {/* Use a single motion.div with key to trigger re-mount on view change.
+          No exit animations — prevents "insertBefore" DOM errors. */}
+      <motion.div
+        key={motionKey}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+      >
+        {content}
+      </motion.div>
 
-        {/* Onboarding (authed but in onboarding flow) */}
-        {isAuthed && view === "onboarding" && <OnboardingScreen />}
-
-        {/* Authed user browsing the public landing — session preserved.
-            A floating "Back to dashboard" button lets them return anytime. */}
-        {isAuthed && view === "landing" && browsingLanding && (
-          <motion.div
-            key="landing-authed"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            {landing}
-            <BackToDashboardButton />
-          </motion.div>
-        )}
-
-        {/* Not authed → landing/login/register */}
-        {!isAuthed && (
-          <motion.div
-            key={view}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.4 }}
-          >
-            {view === "login" && <LoginScreen />}
-            {view === "register" && <RegisterScreen />}
-            {(view === "landing" || (!isAuthed && isLoading)) && landing}
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Reset password modal — overlay regardless of session state.
-          Lives OUTSIDE AnimatePresence mode="wait" so it can coexist with
-          any view above. */}
+      {/* Reset password modal — overlay regardless of session state */}
       {resetToken && (
         <ResetPasswordModal
           token={resetToken}
