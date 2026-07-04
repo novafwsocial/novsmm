@@ -19,6 +19,8 @@ import {
   Star,
   Repeat2,
   ChevronRight,
+  Layers,
+  Droplets,
 } from "lucide-react";
 import {
   AreaChart,
@@ -34,6 +36,7 @@ import {
   useServices,
   useAllServices,
   useCreateOrder,
+  useMassOrder,
   useWallet,
   useOrders,
   useRepeatOrder,
@@ -64,6 +67,7 @@ const QUALITY_BADGES: Record<string, { label: string; cls: string }> = {
 export function DashboardMarketplace() {
   const [tab, setTab] = useState<"buy" | "sell" | "history">("buy");
   const [selectedService, setSelectedService] = useState<any | null>(null);
+  const [showMassOrder, setShowMassOrder] = useState(false);
 
   // Load currency rates on mount
   useEffect(() => {
@@ -85,7 +89,16 @@ export function DashboardMarketplace() {
               Browse 6,382 services, place orders, and repeat past purchases.
             </p>
           </div>
-          <WalletDisplay />
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowMassOrder(true)}
+              className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+            >
+              <Layers className="h-3.5 w-3.5" />
+              Mass order
+            </button>
+            <WalletDisplay />
+          </div>
         </div>
       </Reveal>
 
@@ -130,6 +143,10 @@ export function DashboardMarketplace() {
           service={selectedService}
           onClose={() => setSelectedService(null)}
         />
+      )}
+
+      {showMassOrder && (
+        <MassOrderModal onClose={() => setShowMassOrder(false)} />
       )}
     </div>
   );
@@ -425,11 +442,20 @@ function ServiceDetailModal({
   const currency = user?.currency ?? "USD";
   const [quantity, setQuantity] = useState(service.minQty);
   const [link, setLink] = useState("");
+  // Drip-feed state
+  const [dripFeed, setDripFeed] = useState(false);
+  const [dripDays, setDripDays] = useState(7);
+  const [dripDelay, setDripDelay] = useState(1440); // minutes (24h default)
 
   const totalPriceUSD = (service.price * quantity) / 1000;
   const totalPriceLocal = formatPrice(totalPriceUSD, currency);
   const balance = walletData?.balance ?? 0;
   const sufficient = balance >= totalPriceUSD;
+
+  // Drip-feed chunk preview
+  const safeDays = Math.max(1, Math.min(365, dripDays || 1));
+  const perChunk = Math.max(1, Math.floor(quantity / safeDays));
+  const remainder = quantity - perChunk * safeDays;
 
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
 
@@ -438,6 +464,9 @@ function ServiceDetailModal({
       serviceId: service.id,
       quantity,
       link: link || undefined,
+      dripFeed,
+      dripDays: dripFeed ? safeDays : undefined,
+      dripDelay: dripFeed ? dripDelay : undefined,
     });
     onClose();
   };
@@ -550,6 +579,85 @@ function ServiceDetailModal({
           />
         </div>
 
+        {/* Drip-feed toggle */}
+        <div className="mt-4 rounded-xl border border-border/60 p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-2.5">
+              <span className="mt-0.5 flex h-7 w-7 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                <Droplets className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-sm font-semibold text-foreground">Drip-feed delivery</div>
+                <div className="text-[11px] text-muted-foreground">
+                  Split your order into smaller chunks delivered over time for a natural growth pattern.
+                </div>
+              </div>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={dripFeed}
+              onClick={() => setDripFeed((v) => !v)}
+              className={cn(
+                "relative h-6 w-11 shrink-0 rounded-full transition-colors",
+                dripFeed ? "bg-primary" : "bg-muted",
+              )}
+            >
+              <span
+                className={cn(
+                  "absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-transform",
+                  dripFeed ? "translate-x-5" : "translate-x-0",
+                )}
+              />
+            </button>
+          </div>
+
+          {dripFeed && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              className="mt-3 grid grid-cols-2 gap-3"
+            >
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Days (chunks)</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={365}
+                  value={dripDays}
+                  onChange={(e) =>
+                    setDripDays(Math.max(1, Math.min(365, Number(e.target.value) || 1)))
+                  }
+                  className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+                />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Delay (minutes)</span>
+                <input
+                  type="number"
+                  min={0}
+                  max={60 * 24 * 30}
+                  value={dripDelay}
+                  onChange={(e) =>
+                    setDripDelay(Math.max(0, Number(e.target.value) || 0))
+                  }
+                  className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+                />
+              </label>
+              <div className="col-span-2 rounded-lg bg-primary/5 px-3 py-2 text-xs">
+                <span className="text-muted-foreground">Preview: </span>
+                <span className="font-semibold text-foreground">
+                  {perChunk.toLocaleString()}/day for {safeDays} day{safeDays > 1 ? "s" : ""}
+                  {remainder > 0 ? ` + ${remainder} extra on final day` : ""}
+                </span>
+                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                  ≈ {perChunk.toLocaleString()} units every {dripDelay >= 60 ? `${(dripDelay / 60).toFixed(1)}h` : `${dripDelay}m`}
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </div>
+
         {/* Total + submit */}
         <div className="mt-5 flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3">
           <div>
@@ -575,7 +683,7 @@ function ServiceDetailModal({
             "Insufficient balance — top up your wallet"
           ) : (
             <>
-              Place order · {totalPriceLocal}
+              {dripFeed ? "Place drip-feed order" : "Place order"} · {totalPriceLocal}
               <ArrowRight className="h-4 w-4" />
             </>
           )}
@@ -601,6 +709,213 @@ function Spec({
         {label}
       </div>
       <div className="mt-1 text-sm font-semibold text-foreground">{value}</div>
+    </div>
+  );
+}
+
+// ─────────── Mass Order Modal (multi-order batch) ───────────
+type MassOrderRow = {
+  id: string;
+  serviceId: string;
+  link: string;
+  quantity: number;
+};
+
+function makeRow(): MassOrderRow {
+  return {
+    id: `row_${Math.random().toString(36).slice(2, 9)}`,
+    serviceId: "",
+    link: "",
+    quantity: 0,
+  };
+}
+
+function MassOrderModal({ onClose }: { onClose: () => void }) {
+  const { data: servicesData } = useAllServices();
+  const massOrder = useMassOrder();
+  const { data: walletData } = useWallet();
+  const { data: sessionData } = useSession();
+  const currency = (sessionData?.user as any)?.currency ?? "USD";
+
+  const [rows, setRows] = useState<MassOrderRow[]>([makeRow(), makeRow(), makeRow()]);
+
+  const services = servicesData?.services ?? [];
+  const balance = walletData?.balance ?? 0;
+
+  // Compute row prices + grand total
+  const serviceMap = useMemo(() => new Map(services.map((s: any) => [s.id, s])), [services]);
+  const pricedRows = rows.map((r) => {
+    const svc = serviceMap.get(r.serviceId);
+    const qty = Number(r.quantity) || 0;
+    const price = svc ? (svc.price * qty) / 1000 : 0;
+    const valid = !!svc && qty >= svc.minQty && qty <= svc.maxQty;
+    return { ...r, service: svc, price, valid };
+  });
+  const grandTotal = pricedRows.reduce((s, r) => s + r.price, 0);
+  const allValid = pricedRows.length > 0 && pricedRows.every((r) => r.valid);
+  const sufficient = balance >= grandTotal;
+
+  const updateRow = (id: string, patch: Partial<MassOrderRow>) =>
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)));
+  const removeRow = (id: string) =>
+    setRows((prev) => (prev.length > 1 ? prev.filter((r) => r.id !== id) : prev));
+  const addRow = () => setRows((prev) => [...prev, makeRow()]);
+
+  const handleSubmit = async () => {
+    if (!allValid || !sufficient) return;
+    await massOrder.mutateAsync({
+      orders: pricedRows
+        .filter((r) => r.valid && r.service)
+        .map((r) => ({
+          serviceId: r.serviceId,
+          link: r.link || undefined,
+          quantity: Number(r.quantity),
+        })),
+    });
+    onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <motion.div
+        initial={{ opacity: 0, scale: 0.95, y: 10 }}
+        animate={{ opacity: 1, scale: 1, y: 0 }}
+        onClick={(e) => e.stopPropagation()}
+        className="relative max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+      >
+        <button
+          onClick={onClose}
+          className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Layers className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Mass order</h2>
+            <p className="text-xs text-muted-foreground">
+              Place multiple orders at once. All rows are validated and charged atomically.
+            </p>
+          </div>
+        </div>
+
+        {/* Balance + total */}
+        <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+          <div className="rounded-xl border border-border/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance</div>
+            <div className="mt-0.5 text-sm font-semibold tabular-nums">{formatPrice(balance, currency)}</div>
+          </div>
+          <div className="rounded-xl border border-border/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Rows</div>
+            <div className="mt-0.5 text-sm font-semibold tabular-nums">{rows.length}</div>
+          </div>
+          <div className="rounded-xl border border-border/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Grand total</div>
+            <div className={cn("mt-0.5 text-sm font-semibold tabular-nums", sufficient ? "text-emerald-600" : "text-red-600")}>
+              {formatPrice(grandTotal, currency)}
+            </div>
+          </div>
+        </div>
+
+        {/* Rows */}
+        <div className="mt-4 flex flex-col gap-2">
+          {/* Header (desktop) */}
+          <div className="hidden grid-cols-12 gap-2 px-1 text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+            <div className="col-span-5">Service</div>
+            <div className="col-span-5">Link</div>
+            <div className="col-span-1 text-right">Qty</div>
+            <div className="col-span-1 text-right">—</div>
+          </div>
+
+          {pricedRows.map((r) => (
+            <div key={r.id} className="grid grid-cols-1 gap-2 sm:grid-cols-12">
+              <select
+                value={r.serviceId}
+                onChange={(e) => updateRow(r.id, { serviceId: e.target.value })}
+                className="h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
+              >
+                <option value="">Select a service…</option>
+                {services.map((s: any) => (
+                  <option key={s.id} value={s.id}>
+                    {s.platform} · {s.name} (${s.price.toFixed(2)}/1k)
+                  </option>
+                ))}
+              </select>
+              <input
+                type="url"
+                value={r.link}
+                onChange={(e) => updateRow(r.id, { link: e.target.value })}
+                placeholder="https://…"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
+              />
+              <input
+                type="number"
+                value={r.quantity || ""}
+                onChange={(e) => updateRow(r.id, { quantity: Number(e.target.value) || 0 })}
+                placeholder="0"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-right text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-1"
+              />
+              <button
+                onClick={() => removeRow(r.id)}
+                disabled={rows.length <= 1}
+                className="flex h-10 items-center justify-center rounded-lg bg-red-500/10 px-2 text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-40 sm:col-span-1"
+                aria-label="Remove row"
+              >
+                <X className="h-4 w-4" />
+              </button>
+              <div className="flex items-center justify-end gap-2 px-1 text-[10px] sm:col-span-12">
+                {r.service && (
+                  <span className="text-muted-foreground">
+                    min {r.service.minQty.toLocaleString()} · max {r.service.maxQty.toLocaleString()}
+                  </span>
+                )}
+                {r.service && r.quantity > 0 && (
+                  <span className={cn("font-semibold tabular-nums", r.valid ? "text-emerald-600" : "text-red-600")}>
+                    {formatPrice(r.price, currency)}
+                  </span>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Add row */}
+        <button
+          onClick={addRow}
+          className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-4 py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add row
+        </button>
+
+        {/* Submit */}
+        <button
+          onClick={handleSubmit}
+          disabled={massOrder.isPending || !allValid || !sufficient}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+        >
+          {massOrder.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" /> Placing {rows.length} orders…
+            </>
+          ) : !allValid ? (
+            "Please fill all rows with valid quantities"
+          ) : !sufficient ? (
+            `Insufficient balance — need ${formatPrice(grandTotal, currency)}`
+          ) : (
+            <>
+              Place {rows.length} orders · {formatPrice(grandTotal, currency)}
+              <ArrowRight className="h-4 w-4" />
+            </>
+          )}
+        </button>
+      </motion.div>
     </div>
   );
 }

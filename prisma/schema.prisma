@@ -41,6 +41,8 @@ model User {
   auditLogs     AuditLog[]
   apiKeys       ApiKey[]
   favorites     Favorite[]
+  loyaltyPoints LoyaltyPoint[]
+  achievements  Achievement[]
 }
 
 model Account {
@@ -138,6 +140,10 @@ model Order {
   link            String?
   eta             String   @default("—")
   flag            String   @default("🌍")
+  // JSON-encoded drip-feed configuration. Populated when the user opted to
+  // split delivery into chunks (e.g. 1000 followers over 10 days).
+  // Shape: { totalQuantity:number, chunks:number, perChunk:number, delayMinutes:number, startDate:string }
+  dripFeedConfig  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   completedAt     DateTime?
@@ -511,4 +517,31 @@ model PaymentIntent {
   @@index([userId])
   @@index([status])
   @@index([providerIntentId])
+}
+
+// ─────────── Loyalty Points (awarded for orders, referrals, etc.) ───────────
+model LoyaltyPoint {
+  id        String   @id @default(cuid())
+  userId    String
+  points    Int
+  reason    String   // order_completed | referral | daily_login | achievement
+  orderId   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─────────── Achievements (auto-unlocked milestones) ───────────
+model Achievement {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String   // first_order | 10_orders | 100_orders | 100_spent | 1000_spent | first_referral | 10_referrals | early_adopter | loyal_customer | big_spender
+  unlockedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
 }

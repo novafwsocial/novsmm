@@ -21,6 +21,15 @@ import {
   Gift,
   CreditCard,
   Copy,
+  Crown,
+  MessageCircle,
+  Twitter,
+  Send,
+  Trophy,
+  ArrowUpRight,
+  Sparkles,
+  Award,
+  ChevronRight,
 } from "lucide-react";
 import { Reveal } from "./reveal";
 import {
@@ -33,6 +42,7 @@ import {
   useCancelSubscription,
   useInvoices,
   useReferrals,
+  useLoyalty,
 } from "@/hooks/use-api";
 import { formatPrice } from "@/lib/currency-utils";
 import { api } from "@/lib/api-client";
@@ -50,7 +60,7 @@ export function DashboardProfile() {
   const languages = langData?.languages ?? [];
 
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [activeSection, setActiveSection] = useState<"profile" | "security" | "notifications" | "sessions" | "billing" | "referrals">("profile");
+  const [activeSection, setActiveSection] = useState<"profile" | "security" | "notifications" | "sessions" | "billing" | "referrals" | "achievements">("profile");
 
   const form = {
     name: edits.name ?? user.name ?? "",
@@ -117,6 +127,7 @@ export function DashboardProfile() {
             { id: "profile", label: "Profile", icon: User },
             { id: "security", label: "Security", icon: Shield },
             { id: "billing", label: "Billing", icon: DollarSign },
+            { id: "achievements", label: "Achievements", icon: Trophy },
             { id: "referrals", label: "Referrals", icon: Gift },
             { id: "notifications", label: "Notifications", icon: Bell },
             { id: "sessions", label: "Sessions", icon: Monitor },
@@ -186,6 +197,9 @@ export function DashboardProfile() {
 
       {/* Billing section */}
       {activeSection === "billing" && <BillingSection />}
+
+      {/* Achievements section */}
+      {activeSection === "achievements" && <AchievementsSection />}
 
       {/* Referrals section */}
       {activeSection === "referrals" && <ReferralsSection />}
@@ -605,43 +619,558 @@ function ReferralsSection() {
   const { data, isLoading } = useReferrals();
   const { data: sessionData } = useSession();
   const currency = (sessionData?.user as any)?.currency ?? "USD";
+  const currentUserId = (sessionData?.user as any)?.id;
   const { toast } = useToast();
 
   if (isLoading) return <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
 
   const referrals = data?.referrals ?? [];
   const code = data?.code ?? "";
-  const shareUrl = `${typeof window !== "undefined" ? window.location.origin : ""}/?ref=${code}`;
+  const shareUrl = data?.referralLink ?? `${typeof window !== "undefined" ? window.location.origin : ""}/?ref=${code}`;
+  const tier = data?.tier;
+  const current = tier?.current;
+  const next = tier?.next;
+  const progress = tier?.progressToNext ?? 0;
+  const remaining = tier?.remainingToNext ?? 0;
+  const tierTable = data?.tierTable ?? [];
+  const recentPayouts = data?.recentPayouts ?? [];
+  const leaderboard = data?.leaderboard ?? [];
+  const myRank = data?.myRank ?? null;
+  const stats = data?.stats;
+  const commissionRate = current?.commissionRate ?? data?.commissionRate ?? 0.05;
+  const totalReferrals = stats?.totalReferrals ?? data?.totalReferrals ?? 0;
+  const activeReferrals = stats?.activeReferrals ?? 0;
+  const totalEarnings = stats?.totalEarnings ?? data?.totalEarnings ?? 0;
 
-  const copyCode = () => { navigator.clipboard.writeText(shareUrl); toast({ title: "Referral link copied!" }); };
+  const copyCode = () => {
+    navigator.clipboard.writeText(shareUrl);
+    toast({ title: "Referral link copied!", description: shareUrl });
+  };
+
+  const shareText = `Únete a NOVSMM y obtén automatización para redes sociales: ${shareUrl}`;
+  const shareEnc = encodeURIComponent(shareText);
+  const shareUrlEnc = encodeURIComponent(shareUrl);
+  const share = (channel: "whatsapp" | "twitter" | "telegram") => {
+    const urls: Record<string, string> = {
+      whatsapp: `https://wa.me/?text=${shareEnc}`,
+      twitter: `https://twitter.com/intent/tweet?text=${shareEnc}`,
+      telegram: `https://t.me/share/url?url=${shareUrlEnc}&text=${shareEnc}`,
+    };
+    window.open(urls[channel], "_blank", "noopener,noreferrer,width=600,height=600");
+  };
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Referral card */}
-      <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-foreground to-foreground/90 p-6 text-background">
-        <div className="flex items-center gap-2 text-base font-semibold"><Gift className="h-4 w-4" />Refer & earn</div>
-        <p className="mt-1 text-sm opacity-70">Earn 5% lifetime commission on every order from users you refer.</p>
-        <div className="mt-4 flex items-center gap-2">
-          <code className="flex-1 rounded-lg bg-background/10 px-3 py-2.5 font-mono text-sm break-all">{shareUrl}</code>
-          <button onClick={copyCode} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background/10 hover:bg-background/20"><Copy className="h-4 w-4" /></button>
-        </div>
-        <div className="mt-4 grid grid-cols-3 gap-4">
-          <div><div className="text-[10px] uppercase tracking-wider opacity-60">Total referrals</div><div className="text-xl font-semibold">{data?.totalReferrals ?? 0}</div></div>
-          <div><div className="text-[10px] uppercase tracking-wider opacity-60">Total earned</div><div className="text-xl font-semibold">{formatPrice(data?.totalEarnings ?? 0, currency)}</div></div>
-          <div><div className="text-[10px] uppercase tracking-wider opacity-60">Commission</div><div className="text-xl font-semibold">5%</div></div>
+      {/* Hero referral card */}
+      <div className="relative overflow-hidden rounded-2xl border border-border/60 bg-gradient-to-br from-foreground to-foreground/90 p-6 text-background">
+        <div className="pointer-events-none absolute -right-16 -top-16 h-56 w-56 rounded-full bg-primary/20 blur-3xl" />
+        <div className="relative">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2 text-base font-semibold">
+              <Gift className="h-4 w-4" /> Refer &amp; earn
+            </div>
+            {current && (
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold"
+                style={{
+                  background: `${current.color}25`,
+                  border: `1px solid ${current.color}`,
+                  color: "#fff",
+                }}
+              >
+                <Crown className="h-3 w-3" /> {current.emoji} {current.label}
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-sm opacity-70">
+            Earn <span className="font-semibold opacity-100">{(commissionRate * 100).toFixed(0)}%</span> lifetime
+            commission on every order from users you refer. Scale your network to unlock higher tiers.
+          </p>
+
+          <div className="mt-4 flex items-center gap-2">
+            <code className="flex-1 rounded-lg bg-background/10 px-3 py-2.5 font-mono text-sm break-all">{shareUrl}</code>
+            <button onClick={copyCode} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-background/10 hover:bg-background/20" title="Copy referral link">
+              <Copy className="h-4 w-4" />
+            </button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button onClick={() => share("whatsapp")} className="inline-flex items-center gap-1.5 rounded-lg bg-background/10 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-background/20">
+              <MessageCircle className="h-3.5 w-3.5" /> WhatsApp
+            </button>
+            <button onClick={() => share("twitter")} className="inline-flex items-center gap-1.5 rounded-lg bg-background/10 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-background/20">
+              <Twitter className="h-3.5 w-3.5" /> X
+            </button>
+            <button onClick={() => share("telegram")} className="inline-flex items-center gap-1.5 rounded-lg bg-background/10 px-3 py-1.5 text-xs font-medium transition-colors hover:bg-background/20">
+              <Send className="h-3.5 w-3.5" /> Telegram
+            </button>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider opacity-60">Total referrals</div>
+              <div className="text-xl font-semibold">{totalReferrals}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider opacity-60">Active</div>
+              <div className="text-xl font-semibold">{activeReferrals}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider opacity-60">Total earned</div>
+              <div className="text-xl font-semibold">{formatPrice(totalEarnings, currency)}</div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider opacity-60">Commission</div>
+              <div className="text-xl font-semibold">{(commissionRate * 100).toFixed(0)}%</div>
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Referral list */}
+      {/* Tier visualization */}
+      <div className="rounded-2xl border border-border/60 bg-background p-6">
+        <div className="flex items-center justify-between">
+          <div className="text-base font-semibold">Your tier</div>
+          {myRank != null && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-medium text-primary">
+              <Trophy className="h-3 w-3" /> Rank #{myRank}
+            </span>
+          )}
+        </div>
+
+        {/* Current → next tier progress */}
+        <div className="mt-4">
+          {next ? (
+            <>
+              <div className="flex items-center justify-between text-xs">
+                <span className="inline-flex items-center gap-1.5 font-medium">
+                  <span>{current?.emoji}</span> {current?.label} ({(current?.commissionRate ?? 0) * 100}%)
+                </span>
+                <span className="text-muted-foreground">
+                  {next.emoji} {next.label} ({(next.commissionRate ?? 0) * 100}%) in {remaining} more
+                </span>
+              </div>
+              <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                <div
+                  className="h-full rounded-full transition-all duration-700"
+                  style={{
+                    width: `${Math.round(progress * 100)}%`,
+                    background: `linear-gradient(90deg, ${current?.color ?? "#0052ff"}, ${next.color ?? "#0052ff"})`,
+                  }}
+                />
+              </div>
+              <div className="mt-1.5 text-[11px] text-muted-foreground">
+                {totalReferrals} / {next.minReferrals} successful referrals to unlock {next.label}
+              </div>
+            </>
+          ) : (
+            <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+              <span className="font-medium">{current?.emoji} {current?.label} tier unlocked.</span>{" "}
+              You&apos;re earning the maximum {(commissionRate * 100).toFixed(0)}% commission on every referral.
+            </div>
+          )}
+        </div>
+
+        {/* Tier table */}
+        <div className="mt-5 overflow-hidden rounded-xl border border-border/60">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-[11px] uppercase tracking-wider text-muted-foreground">
+              <tr>
+                <th className="px-3 py-2 text-left">Tier</th>
+                <th className="px-3 py-2 text-left">Referrals</th>
+                <th className="px-3 py-2 text-right">Commission</th>
+                <th className="px-3 py-2 text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {tierTable.map((t: any) => {
+                const isCurrent = t.id === current?.id;
+                const isUnlocked = (t.minReferrals ?? 0) <= totalReferrals;
+                const rangeLabel =
+                  t.maxReferrals == null
+                    ? `${t.minReferrals}+`
+                    : `${t.minReferrals}–${t.maxReferrals}`;
+                return (
+                  <tr key={t.id} className={cn("border-t border-border/60", isCurrent && "bg-primary/5")}>
+                    <td className="px-3 py-2.5">
+                      <span className="inline-flex items-center gap-1.5 font-medium">
+                        <span>{t.emoji}</span> {t.label}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2.5 text-muted-foreground tabular-nums">{rangeLabel}</td>
+                    <td className="px-3 py-2.5 text-right font-semibold tabular-nums">
+                      {(t.commissionRate * 100).toFixed(0)}%
+                    </td>
+                    <td className="px-3 py-2.5 text-right">
+                      {isCurrent ? (
+                        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">Current</span>
+                      ) : isUnlocked ? (
+                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Unlocked</span>
+                      ) : (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Locked</span>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {/* Recent payouts */}
+        <div className="rounded-2xl border border-border/60 bg-background p-6">
+          <div className="flex items-center gap-2 text-base font-semibold">
+            <DollarSign className="h-4 w-4 text-emerald-600" /> Recent payouts
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {recentPayouts.length > 0 ? recentPayouts.map((p: any) => (
+              <div key={p.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3">
+                <div>
+                  <div className="text-sm font-medium">{p.description || "Referral commission"}</div>
+                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                    {p.publicId} · {new Date(p.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+                <span className="inline-flex items-center gap-1 text-sm font-semibold tabular-nums text-emerald-600">
+                  <ArrowUpRight className="h-3.5 w-3.5" />
+                  {formatPrice(p.amount, currency)}
+                </span>
+              </div>
+            )) : (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                No payouts yet. Share your link to start earning.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Leaderboard */}
+        <div className="rounded-2xl border border-border/60 bg-background p-6">
+          <div className="flex items-center gap-2 text-base font-semibold">
+            <Trophy className="h-4 w-4 text-amber-500" /> Top referrers
+          </div>
+          <div className="mt-3 flex flex-col gap-2">
+            {leaderboard.length > 0 ? leaderboard.map((l: any) => {
+              const isMe = l.userId === currentUserId;
+              return (
+                <div
+                  key={l.userId}
+                  className={cn(
+                    "flex items-center gap-3 rounded-xl border border-border/60 p-2.5",
+                    isMe && "border-primary/40 bg-primary/5",
+                  )}
+                >
+                  <span className={cn(
+                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold",
+                    l.rank === 1 ? "bg-amber-500/15 text-amber-700" :
+                    l.rank === 2 ? "bg-slate-400/15 text-slate-600" :
+                    l.rank === 3 ? "bg-orange-500/15 text-orange-700" :
+                    "bg-muted text-muted-foreground",
+                  )}>
+                    {l.rank}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-sm font-medium">
+                      {l.name || `@${l.username}`} {isMe && <span className="text-[10px] text-primary">(you)</span>}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground tabular-nums">
+                      {l.referralCount} referrals · {l.tierEmoji} {l.tierLabel}
+                    </div>
+                  </div>
+                  <span className="text-xs font-semibold tabular-nums text-emerald-600">
+                    {formatPrice(l.earnings, currency)}
+                  </span>
+                </div>
+              );
+            }) : (
+              <div className="py-6 text-center text-sm text-muted-foreground">
+                Leaderboard is empty — be the first to refer someone!
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Referred users list */}
       <div className="rounded-2xl border border-border/60 bg-background p-6">
         <div className="text-base font-semibold">Referred users</div>
         <div className="mt-3 flex flex-col gap-2">
-          {referrals.length > 0 ? referrals.map((r: any) => (
+          {referrals.filter((r: any) => r.referredEmail).length > 0 ? referrals.filter((r: any) => r.referredEmail).map((r: any) => (
             <div key={r.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3">
               <div><div className="text-sm font-medium">{r.referredEmail || "Pending signup"}</div><div className="text-[10px] text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</div></div>
               <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", r.status === "rewarded" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{r.status}</span>
             </div>
           )) : <div className="py-6 text-center text-sm text-muted-foreground">No referrals yet. Share your link above!</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Achievements Section (Loyalty Points + Achievements) ─────────────────
+function AchievementsSection() {
+  const { data, isLoading } = useLoyalty();
+  const { data: sessionData } = useSession();
+  const currency = (sessionData?.user as any)?.currency ?? "USD";
+
+  if (isLoading) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  // Defensive: if the API hasn't returned data, render an empty state.
+  if (!data) {
+    return (
+      <Reveal blur>
+        <div className="rounded-2xl border border-border/60 bg-background p-6 text-center text-sm text-muted-foreground">
+          Loyalty data is loading. Place an order to start earning points.
+        </div>
+      </Reveal>
+    );
+  }
+
+  const { totalPoints, tier, achievements, recentPoints, planMultiplier, plan, stats } = data;
+  const current = tier.current;
+  const next = tier.next;
+
+  // Reason → friendly label
+  const reasonLabel = (reason: string): string => {
+    switch (reason) {
+      case "order_completed": return "Order completed";
+      case "referral":        return "Referral bonus";
+      case "daily_login":     return "Daily login";
+      case "achievement":     return "Achievement unlocked";
+      default:                return reason;
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Hero — tier + total points + progress */}
+      <div
+        className="relative overflow-hidden rounded-2xl border p-6"
+        style={{
+          borderColor: `${current.color}40`,
+          background: `linear-gradient(135deg, ${current.color}12, ${current.color}02 60%, transparent)`,
+        }}
+      >
+        <div
+          className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full blur-3xl"
+          style={{ background: `${current.color}25` }}
+        />
+        <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-base font-semibold">
+              <Sparkles className="h-4 w-4" style={{ color: current.color }} />
+              NOVSMM Loyalty Program
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold text-white"
+                style={{ background: current.color }}
+              >
+                <Crown className="h-3 w-3" /> {current.emoji} {current.label}
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">
+                {planMultiplier}× {plan} plan multiplier
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-700">
+                <Trophy className="h-3 w-3" /> {totalPoints.toLocaleString()} pts
+              </span>
+            </div>
+            <p className="max-w-md text-xs text-muted-foreground">{current.benefits}</p>
+          </div>
+
+          <div className="sm:w-[320px]">
+            {next ? (
+              <>
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground">
+                    {current.emoji} {current.label}
+                  </span>
+                  <span className="text-muted-foreground">
+                    {next.emoji} {next.label} in {tier.pointsToNext.toLocaleString()} pts
+                  </span>
+                </div>
+                <div className="mt-2 h-2.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.max(2, Math.round(tier.progress * 100))}%`,
+                      background: `linear-gradient(90deg, ${current.color}, ${next.color})`,
+                    }}
+                  />
+                </div>
+                <div className="mt-1.5 text-[11px] text-muted-foreground">
+                  {totalPoints.toLocaleString()} / {next.minPoints.toLocaleString()} pts
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3 text-sm">
+                <span className="font-medium">{current.emoji} {current.label} tier unlocked.</span>{" "}
+                You&apos;re earning the maximum rewards.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Quick stats */}
+        <div className="relative mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
+          <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Achievements</div>
+            <div className="text-xl font-semibold tabular-nums">{achievements.unlockedCount}/{achievements.total}</div>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total spent</div>
+            <div className="text-xl font-semibold tabular-nums">{formatPrice(stats.totalSpent, currency)}</div>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Completed orders</div>
+            <div className="text-xl font-semibold tabular-nums">{stats.completedOrders}</div>
+          </div>
+          <div className="rounded-xl border border-border/60 bg-background/60 p-3">
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Referrals</div>
+            <div className="text-xl font-semibold tabular-nums">{stats.referralCount}</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Achievements grid */}
+      <div className="rounded-2xl border border-border/60 bg-background p-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 text-base font-semibold">
+            <Award className="h-4 w-4 text-amber-500" /> Achievements
+          </div>
+          <span className="text-xs text-muted-foreground tabular-nums">
+            {achievements.unlockedCount}/{achievements.total} unlocked
+          </span>
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Unlock milestones to earn bonus loyalty points. Each tier-up unlocks bigger rewards.
+        </p>
+
+        <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {/* Unlocked first */}
+          {achievements.unlocked.map((a) => (
+            <div
+              key={a.type}
+              className="relative flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4 transition-shadow hover:shadow-md"
+            >
+              <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-background text-2xl">
+                {a.icon}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate text-sm font-semibold text-foreground">{a.label}</span>
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                </div>
+                <div className="text-xs text-muted-foreground">{a.description}</div>
+                <div className="mt-1.5 flex items-center gap-2 text-[10px]">
+                  <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700">
+                    +{a.bonus} pts
+                  </span>
+                  <span className="text-muted-foreground">
+                    {new Date(a.unlockedAt).toLocaleDateString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {/* Locked */}
+          {achievements.locked.map((a) => (
+            <div
+              key={a.type}
+              className="relative flex items-start gap-3 rounded-xl border border-border/60 bg-muted/20 p-4 opacity-90 grayscale"
+            >
+              <span className="relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-background/60 text-2xl">
+                {a.icon}
+                <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-muted text-muted-foreground nov-ring">
+                  <Lock className="h-2.5 w-2.5" />
+                </span>
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium text-muted-foreground">{a.label}</div>
+                <div className="text-xs text-muted-foreground/80">{a.description}</div>
+                {/* Progress bar (hidden for binary achievements like early_adopter) */}
+                {a.target > 0 && (
+                  <div className="mt-1.5">
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span className="tabular-nums">
+                        {a.type.includes("spent")
+                          ? `${formatPrice(a.current, currency)} / ${formatPrice(a.target, currency)}`
+                          : `${a.current} / ${a.target}`}
+                      </span>
+                      <span className="tabular-nums">{Math.round(a.progress * 100)}%</span>
+                    </div>
+                    <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                      <div
+                        className="h-full rounded-full bg-muted-foreground/50 transition-all duration-700"
+                        style={{ width: `${Math.max(2, Math.round(a.progress * 100))}%` }}
+                      />
+                    </div>
+                  </div>
+                )}
+                {a.target === 0 && (
+                  <div className="mt-1.5 inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    <Lock className="h-2.5 w-2.5" /> Locked
+                  </div>
+                )}
+                <div className="mt-1 text-[10px] font-medium text-muted-foreground">
+                  +{a.bonus} pts on unlock
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Points history */}
+      <div className="rounded-2xl border border-border/60 bg-background p-6">
+        <div className="flex items-center gap-2 text-base font-semibold">
+          <Trophy className="h-4 w-4 text-primary" /> Points history
+        </div>
+        <p className="mt-1 text-xs text-muted-foreground">Last 20 loyalty point entries.</p>
+
+        <div className="mt-4 flex flex-col gap-2">
+          {recentPoints.length > 0 ? recentPoints.map((p) => (
+            <div key={p.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3">
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "flex h-9 w-9 items-center justify-center rounded-lg",
+                    p.points >= 0 ? "bg-emerald-500/10 text-emerald-600" : "bg-red-500/10 text-red-600"
+                  )}
+                >
+                  {p.points >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </span>
+                <div>
+                  <div className="text-sm font-medium text-foreground">{reasonLabel(p.reason)}</div>
+                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                    {new Date(p.createdAt).toLocaleString()}
+                    {p.orderId && " · linked to order"}
+                  </div>
+                </div>
+              </div>
+              <span
+                className={cn(
+                  "text-sm font-semibold tabular-nums",
+                  p.points >= 0 ? "text-emerald-600" : "text-red-600"
+                )}
+              >
+                {p.points >= 0 ? "+" : ""}{p.points.toLocaleString()} pts
+              </span>
+            </div>
+          )) : (
+            <div className="py-8 text-center text-sm text-muted-foreground">
+              No points yet. Place your first order to start earning.
+            </div>
+          )}
         </div>
       </div>
     </div>

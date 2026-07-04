@@ -17,16 +17,17 @@ import {
   YAxis,
   CartesianGrid,
 } from "recharts";
-import { ArrowUpRight, TrendingUp, ShoppingCart, DollarSign, Repeat2, Gift, Loader2 } from "lucide-react";
+import { ArrowUpRight, TrendingUp, ShoppingCart, DollarSign, Repeat2, Gift, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
-import { useAnalytics } from "@/hooks/use-api";
+import { useAnalytics, useRefreshAnalytics } from "@/hooks/use-api";
 import { formatPrice } from "@/lib/currency-utils";
 import { useSession } from "@/hooks/use-api";
 import { useToast } from "@/hooks/use-toast";
 
 export function DashboardAnalytics() {
   const { data, isLoading } = useAnalytics();
+  const refresh = useRefreshAnalytics();
   const { data: sessionData } = useSession();
   const { toast } = useToast();
   const currency = (sessionData?.user as any)?.currency ?? "USD";
@@ -56,7 +57,7 @@ export function DashboardAnalytics() {
     );
   }
 
-  const { kpis, series, hourlyOrders, marketplaceBreakdown, referrals } = data;
+  const { kpis, series, hourlyOrders, marketplaceBreakdown, referrals, aiInsights } = data;
 
   return (
     <div className="flex flex-col gap-6">
@@ -73,6 +74,16 @@ export function DashboardAnalytics() {
           </p>
         </div>
       </Reveal>
+
+      {/* AI Insights */}
+      <AiInsightsCard
+        content={aiInsights?.content}
+        generatedAt={aiInsights?.generatedAt}
+        refreshed={aiInsights?.refreshed}
+        eligible={aiInsights?.eligible}
+        onRefresh={() => refresh.mutate()}
+        isRefreshing={refresh.isPending}
+      />
 
       {/* KPI strip */}
       <RevealStagger stagger={0.05} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
@@ -277,5 +288,102 @@ function Legend() {
         <span className="h-2 w-2 rounded-full bg-emerald-500" /> Orders
       </span>
     </div>
+  );
+}
+
+function AiInsightsCard({
+  content,
+  generatedAt,
+  refreshed,
+  eligible,
+  onRefresh,
+  isRefreshing,
+}: {
+  content?: string;
+  generatedAt?: string | null;
+  refreshed?: boolean;
+  eligible?: boolean;
+  onRefresh: () => void;
+  isRefreshing: boolean;
+}) {
+  // Render insight content with simple line breaks and bullet styling.
+  const rendered = (content ?? "")
+    .split(/\n+/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  return (
+    <Reveal blur>
+      <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-background p-5 sm:p-6">
+        <div className="pointer-events-none absolute -right-12 -top-12 h-40 w-40 rounded-full bg-primary/10 blur-3xl" />
+        <div className="relative flex flex-wrap items-start justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <div>
+              <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                AI Insights
+              </div>
+              <div className="text-base font-semibold">
+                Análisis automático de tu actividad
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={onRefresh}
+            disabled={isRefreshing || !eligible}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
+            title={eligible ? "Regenerate insights" : "Available after 5 orders"}
+          >
+            {isRefreshing ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            {isRefreshing ? "Generating…" : "Refresh"}
+          </button>
+        </div>
+
+        <div className="relative mt-4">
+          {eligible ? (
+            rendered.length > 0 ? (
+              <div className="flex flex-col gap-2 text-sm leading-relaxed text-foreground/90">
+                {rendered.map((line, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    <span className="whitespace-pre-wrap">{line}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="text-sm text-muted-foreground">
+                No insights available yet. Click refresh to generate.
+              </div>
+            )
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              Place at least 6 orders to unlock AI-powered spending insights and
+              growth recommendations.
+            </div>
+          )}
+        </div>
+
+        {(generatedAt || refreshed) && eligible && (
+          <div className="relative mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
+            {refreshed && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Fresh
+              </span>
+            )}
+            {generatedAt && (
+              <span>
+                Generated {new Date(generatedAt).toLocaleString()} · cached 1h
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+    </Reveal>
   );
 }

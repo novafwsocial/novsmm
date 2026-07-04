@@ -59,8 +59,14 @@ export function useCreateOrder() {
   const qc = useQueryClient();
   const { toast } = useToast();
   return useMutation({
-    mutationFn: (data: { serviceId: string; quantity: number; link?: string }) =>
-      api.post<{ order: any; message: string }>("/api/orders", data),
+    mutationFn: (data: {
+      serviceId: string;
+      quantity: number;
+      link?: string;
+      dripFeed?: boolean;
+      dripDays?: number;
+      dripDelay?: number;
+    }) => api.post<{ order: any; message: string }>("/api/orders", data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["orders"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
@@ -70,6 +76,53 @@ export function useCreateOrder() {
     },
     onError: (e: Error) => {
       toast({ title: "Order failed", description: e.message, variant: "destructive" });
+    },
+  });
+}
+
+// ── Mass order (multi-order batch) ──
+export function useMassOrder() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: {
+      orders: { serviceId: string; link?: string; quantity: number }[];
+    }) =>
+      api.post<{ orders: any[]; count: number; total: number; message: string }>(
+        "/api/orders/mass",
+        data,
+      ),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({
+        title: `${data.count} orders placed`,
+        description: `${data.message} — total $${data.total.toFixed(2)}`,
+      });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Mass order failed", description: e.message, variant: "destructive" });
+    },
+  });
+}
+
+// ── Cancel order (within 60s of placement, while pending) ──
+export function useCancelOrder() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { orderId: string }) =>
+      api.patch<{ message: string }>("/api/orders", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      toast({ title: "Order cancelled", description: data.message });
+    },
+    onError: (e: Error) => {
+      toast({ title: "Cancel failed", description: e.message, variant: "destructive" });
     },
   });
 }
@@ -528,6 +581,27 @@ export function useAnalytics() {
   });
 }
 
+// Force-refresh the AI insights attached to /api/analytics. Hits the
+// endpoint with ?refresh=1 to bypass the 1h cache, then invalidates the
+// cached analytics query so subscribed components re-render.
+export function useRefreshAnalytics() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: () => api.get<any>("/api/analytics?refresh=1"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["analytics"] });
+      toast({ title: "AI insights refreshed", description: "Fresh analysis generated." });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Couldn't refresh insights",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+}
+
 // ── Update profile (currency/language) ──
 export function useUpdateProfile() {
   const qc = useQueryClient();
@@ -811,5 +885,76 @@ export function useInvoices() {
   return useQuery({
     queryKey: ["invoices"],
     queryFn: () => api.get<{ invoices: any[] }>("/api/invoices"),
+  });
+}
+
+// ── Loyalty (points + achievements) ──
+export function useLoyalty() {
+  return useQuery({
+    queryKey: ["loyalty"],
+    queryFn: () =>
+      api.get<{
+        totalPoints: number;
+        tier: {
+          current: {
+            id: string;
+            label: string;
+            minPoints: number;
+            maxPoints: number;
+            color: string;
+            emoji: string;
+            benefits: string;
+          };
+          next: {
+            id: string;
+            label: string;
+            minPoints: number;
+            maxPoints: number;
+            color: string;
+            emoji: string;
+            benefits: string;
+          } | null;
+          progress: number;
+          pointsToNext: number;
+        };
+        planMultiplier: number;
+        plan: string;
+        recentPoints: {
+          id: string;
+          points: number;
+          reason: string;
+          orderId: string | null;
+          createdAt: string;
+        }[];
+        achievements: {
+          unlocked: {
+            type: string;
+            label: string;
+            description: string;
+            icon: string;
+            bonus: number;
+            unlockedAt: string;
+          }[];
+          locked: {
+            type: string;
+            label: string;
+            description: string;
+            icon: string;
+            bonus: number;
+            current: number;
+            target: number;
+            progress: number;
+          }[];
+          total: number;
+          unlockedCount: number;
+        };
+        stats: {
+          totalSpent: number;
+          completedOrders: number;
+          referralCount: number;
+          accountAgeDays: number;
+        };
+      }>("/api/me/loyalty"),
+    refetchInterval: 60 * 1000, // 60s — points/achievements update on order completion
   });
 }
