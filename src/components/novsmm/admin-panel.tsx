@@ -187,14 +187,12 @@ export function AdminPanel() {
         </div>
       </Reveal>
 
-      <AnimatePresence mode="wait">
-        <motion.div
-          key={adminTab}
-          initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
-          transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-        >
+      <motion.div
+        key={adminTab}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.25 }}
+      >
           {adminTab === "overview" && <AdminOverview />}
           {adminTab === "users" && <AdminUsers />}
           {adminTab === "orders" && <AdminOrders />}
@@ -213,7 +211,6 @@ export function AdminPanel() {
           {adminTab === "security" && <AdminSecurity />}
           {adminTab === "roles" && <AdminRoles />}
         </motion.div>
-      </AnimatePresence>
     </div>
   );
 }

@@ -7,6 +7,10 @@ import Lenis from "lenis";
  * Lenis-powered premium momentum smooth scroll.
  * Provides the buttery Linear/Vercel-style scroll feel.
  * Respects reduced-motion users.
+ *
+ * IMPORTANT: We only initialize Lenis on the client (after mount) to avoid
+ * hydration mismatches that cause "insertBefore" DOM errors when the server
+ * render and client render differ.
  */
 export function SmoothScroll({ children }: { children: ReactNode }) {
   useEffect(() => {
@@ -32,7 +36,7 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     }
     rafId = requestAnimationFrame(raf);
 
-    // Anchor links → lenis scrollTo
+    // Anchor links → lenis.scrollTo
     const handleAnchorClick = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
       const anchor = target.closest('a[href^="#"]') as HTMLAnchorElement | null;
@@ -54,5 +58,6 @@ export function SmoothScroll({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // Always render children — Lenis only enhances scrolling on client
   return <>{children}</>;
 }

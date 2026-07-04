@@ -133,14 +133,12 @@ export function OnboardingScreen() {
 
         {/* step card */}
         <div className="overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-9">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={STEPS[step].key}
-              initial={{ opacity: 0, x: 30, filter: "blur(8px)" }}
-              animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, x: -30, filter: "blur(8px)" }}
-              transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-            >
+          <motion.div
+            key={STEPS[step].key}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
               {step === 0 && <WelcomeStep data={data} setData={setData} />}
               {step === 1 && <ProfileStep data={data} setData={setData} />}
               {step === 2 && (
@@ -160,7 +158,6 @@ export function OnboardingScreen() {
               {step === 4 && <NotificationsStep data={data} setData={setData} />}
               {step === 5 && <TourStep />}
             </motion.div>
-          </AnimatePresence>
 
           {/* nav */}
           <div className="mt-8 flex items-center justify-between border-t border-border/60 pt-6">

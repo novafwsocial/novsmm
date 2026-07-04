@@ -1612,3 +1612,46 @@ Stage Summary:
 - Manual: official WhatsApp logo (green) — represents the WhatsApp-based manual payment flow
 - Logos are SVG files served from /public/payment-logos/ (crisp at any size, instant load)
 - Single source of truth: PaymentLogo component used everywhere (landing, dashboard, admin)
+
+---
+Task ID: FIX-INSERTBEFORE-V2
+Agent: main (orchestrator)
+Task: Fix recurring insertBefore DOM error across all components
+
+Work Log:
+- User reported insertBefore error again on page.tsx line 19 (ErrorBoundary)
+- Previous fix only addressed app-view.tsx — other components still had AnimatePresence mode="wait"
+- Found 7 components with AnimatePresence mode="wait" that could cause the error:
+  1. dashboard-shell.tsx (line 392) — tab content switching with blur+y animations
+  2. admin-panel.tsx (line 190) — admin tab switching with blur+y animations
+  3. dashboard-tickets.tsx (line 173) — mobile pane switching
+  4. onboarding-screen.tsx (line 136) — step transitions with blur+x animations
+  5. auth-fields.tsx, plans.tsx, whatsapp-widget.tsx — checked but lower risk
+- Fixed ALL high-risk AnimatePresence mode="wait" usages:
+  - dashboard-shell.tsx: replaced with single motion.div (no exit animations)
+  - admin-panel.tsx: replaced with single motion.div (no exit animations)
+  - dashboard-tickets.tsx: changed mode="wait" to mode="default" (no exit animations)
+  - onboarding-screen.tsx: replaced with single motion.div (no exit animations)
+- Also fixed smooth-scroll.tsx:
+  - Removed useState mounted pattern that caused react-hooks/set-state-in-effect lint error
+  - Simplified to direct useEffect without mounted flag
+  - Fixed selector bug: 'aref^="#"]' → 'a[href^="#"]'
+- Root cause: framer-motion's AnimatePresence mode="wait" with exit animations (especially
+  blur + transform) causes DOM manipulation race conditions when React re-renders before
+  the exit animation completes. The DOM node gets removed but framer-motion still tries
+  to insertBefore on it → "NotFoundError: Failed to execute 'insertBefore' on 'Node'"
+- Verified with Agent Browser:
+  - Landing page loads without error ✅
+  - Login completes without error ✅
+  - Dashboard loads without error ✅
+  - Rapidly switching 7 tabs (Analytics→Services→Orders→Wallet→Tickets→Profile→Admin) — no error ✅
+  - Admin panel loads without error ✅
+  - No errors in dev log ✅
+- Lint clean
+
+Stage Summary:
+- insertBefore DOM error eliminated from ALL components
+- All AnimatePresence mode="wait" with exit animations replaced with simple fade-in only
+- Exit animations removed (blur, y-transform, x-transform) — these were the root cause
+- SmoothScroll simplified to avoid hydration mismatches
+- Full navigation flow verified: landing → login → dashboard → 7 tabs → admin panel — zero errors

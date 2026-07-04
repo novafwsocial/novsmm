@@ -389,17 +389,17 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
         {/* Content */}
         <main className="flex-1 overflow-x-hidden p-4 sm:p-6 lg:p-8">
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={dashboardTab}
-              initial={{ opacity: 0, y: 12, filter: "blur(6px)" }}
-              animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-              exit={{ opacity: 0, y: -8, filter: "blur(6px)" }}
-              transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            >
-              {children}
-            </motion.div>
-          </AnimatePresence>
+          {/* Single motion.div with key for re-mount on tab change.
+              No AnimatePresence/exit animations — prevents "insertBefore" DOM errors
+              when switching tabs rapidly. */}
+          <motion.div
+            key={dashboardTab}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ duration: 0.3 }}
+          >
+            {children}
+          </motion.div>
         </main>
       </div>
 
