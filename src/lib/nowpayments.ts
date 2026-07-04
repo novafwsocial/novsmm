@@ -76,17 +76,30 @@ export async function createNowPaymentsInvoice(
   // Note: NowPayments API does NOT accept a "metadata" field — it uses
   // order_id + order_description for reconciliation. We embed the
   // transaction public id in order_id so the webhook can find it.
-  const body = JSON.stringify({
+  //
+  // pay_currency is optional — if not provided, NowPayments lets the user
+  // pick any supported crypto on the checkout page.
+  const body: Record<string, any> = {
     price_amount: params.amount.toFixed(2),
     price_currency: (params.currency || "USD").toLowerCase(),
-    pay_currency: creds.payCurrency || "usdttrc20",  // default to USDT (TRC20)
-    payout_currency: creds.payoutCurrency,             // optional auto-convert
     order_id: params.reference,
     order_description: params.description ?? `NOVSMM Wallet Top-up — $${params.amount.toFixed(2)}`,
     ipn_callback_url: params.successUrl.replace(/\/\?topup=success$/, "/api/webhooks/nowpayments"),
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
-  });
+  };
+
+  // Only include pay_currency if explicitly configured (optional field)
+  if (creds.payCurrency && creds.payCurrency.trim()) {
+    body.pay_currency = creds.payCurrency.trim();
+  }
+
+  // Only include payout_currency if explicitly configured (optional auto-convert)
+  if (creds.payoutCurrency && creds.payoutCurrency.trim()) {
+    body.payout_currency = creds.payoutCurrency.trim();
+  }
+
+  const bodyStr = JSON.stringify(body);
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -99,7 +112,7 @@ export async function createNowPaymentsInvoice(
     res = await fetch(endpoint, {
       method: "POST",
       headers,
-      body,
+      body: bodyStr,
       signal: AbortSignal.timeout(15_000), // 15s timeout — fail fast
     });
   } catch (e: any) {

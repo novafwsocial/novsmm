@@ -1041,7 +1041,7 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
     NowPayments: [
       { key: "apiKey", label: "API Key", placeholder: "NP-XXXX-XXXX-XXXX" },
       { key: "ipnSecret", label: "IPN Secret", placeholder: "whsec_..." },
-      { key: "payCurrency", label: "Default Pay Currency", placeholder: "usdttrc20" },
+      { key: "payCurrency", label: "Default Pay Currency (optional)", placeholder: "usdttrc20" },
       { key: "payoutCurrency", label: "Payout Currency (optional)", placeholder: "usd" },
     ],
   };

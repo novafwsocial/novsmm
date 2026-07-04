@@ -1550,3 +1550,26 @@ Stage Summary:
 - insertBefore DOM error eliminated (removed AnimatePresence mode="wait")
 - Full flow verified: login → wallet → top up $100 via NowPayments → redirect to nowpayments.io/payment?iid=4616937428
 - Lint clean, no errors in dev log
+
+---
+Task ID: MAKE-PAYCURRENCY-OPTIONAL
+Agent: main (orchestrator)
+Task: Make "Default Pay Currency" field optional in NowPayments configuration
+
+Work Log:
+- User requested "Default Pay Currency" field to be optional
+- Updated src/components/novsmm/admin-panel.tsx:
+  - Changed label from "Default Pay Currency" to "Default Pay Currency (optional)"
+- Updated src/lib/nowpayments.ts:
+  - pay_currency is now only included in the API request body if explicitly configured
+  - If empty/blank, NowPayments lets the user pick any supported crypto on the checkout page
+  - Same logic applied to payout_currency (was already optional)
+  - Fixed variable name: body (object) → bodyStr (JSON string) for the fetch call
+- Verified with Agent Browser:
+  - NowPayments credentials modal shows "Default Pay Currency (optional)" ✅
+  - Lint clean, no errors
+
+Stage Summary:
+- "Default Pay Currency" is now optional — if left blank, NowPayments shows a crypto picker on the checkout page
+- "Payout Currency" remains optional (auto-convert to fiat if set)
+- Both optional fields clearly labeled with "(optional)" suffix
