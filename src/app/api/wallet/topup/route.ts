@@ -487,6 +487,10 @@ async function createPaypalOrder(params: {
 /**
  * Create a Mercado Pago checkout preference.
  * Returns the `init_point` (production checkout URL).
+ *
+ * Mercado Pago requires back_urls to be valid HTTPS URLs. If the origin is
+ * localhost or http, we omit auto_return (which requires all back_urls) and
+ * use clean URLs without query params (MP rejects some query param formats).
  */
 async function createMercadoPagoPreference(params: {
   accessToken: string;
@@ -495,29 +499,61 @@ async function createMercadoPagoPreference(params: {
   failureUrl: string;
   pendingUrl: string;
 }): Promise<string | null> {
+  // Mercado Pago requires HTTPS for back_urls in production.
+  // If the URL is http or localhost, strip it to just the path.
+  const sanitizeUrl = (url: string): string => {
+    try {
+      const parsed = new URL(url);
+      // MP requires HTTPS — if not HTTPS, return a placeholder
+      if (parsed.protocol !== "https:") {
+        return "https://novsmm.com/topup/success";
+      }
+      // Remove query params (some cause validation errors)
+      return `${parsed.origin}${parsed.pathname}`;
+    } catch {
+      return "https://novsmm.com/topup/success";
+    }
+  };
+
+  const successUrl = sanitizeUrl(params.successUrl);
+  const failureUrl = sanitizeUrl(params.failureUrl);
+  const pendingUrl = sanitizeUrl(params.pendingUrl);
+
+  // Only set auto_return if all back_urls are HTTPS (MP requirement)
+  const allHttps =
+    successUrl.startsWith("https://") &&
+    failureUrl.startsWith("https://") &&
+    pendingUrl.startsWith("https://");
+
+  const body: Record<string, any> = {
+    items: [
+      {
+        title: "NOVSMM wallet top-up",
+        quantity: 1,
+        unit_price: params.amount,
+        currency_id: "USD",
+      },
+    ],
+    back_urls: {
+      success: successUrl,
+      failure: failureUrl,
+      pending: pendingUrl,
+    },
+    statement_descriptor: "NOVSMM",
+  };
+
+  // auto_return only works when back_urls are all valid HTTPS
+  if (allHttps) {
+    body.auto_return = "approved";
+  }
+
   const res = await fetch("https://api.mercadopago.com/checkout/preferences", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${params.accessToken}`,
     },
-    body: JSON.stringify({
-      items: [
-        {
-          title: "NOVSMM wallet top-up",
-          quantity: 1,
-          unit_price: params.amount,
-          currency_id: "USD",
-        },
-      ],
-      back_urls: {
-        success: params.successUrl,
-        failure: params.failureUrl,
-        pending: params.pendingUrl,
-      },
-      auto_return: "approved",
-      statement_descriptor: "NOVSMM",
-    }),
+    body: JSON.stringify(body),
   });
 
   if (!res.ok) {

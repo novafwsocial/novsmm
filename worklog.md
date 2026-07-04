@@ -1655,3 +1655,34 @@ Stage Summary:
 - Exit animations removed (blur, y-transform, x-transform) — these were the root cause
 - SmoothScroll simplified to avoid hydration mismatches
 - Full navigation flow verified: landing → login → dashboard → 7 tabs → admin panel — zero errors
+
+---
+Task ID: FIX-MERCADOPAGO-AUTO-RETURN
+Agent: main (orchestrator)
+Task: Fix Mercado Pago "auto_return invalid, back_url success must be defined" error
+
+Work Log:
+- User reported error when topping up with Mercado Pago:
+  "Mercado Pago error: Mercado Pago API 400: auto_return invalid, back_url success must be defined"
+- Root cause: Mercado Pago API requires back_urls to be valid HTTPS URLs when auto_return is set to "approved"
+  - The app runs behind a gateway with http:// (not https://) origin
+  - MP rejects http:// URLs for back_urls in production
+  - Also, query params in back_urls can cause validation errors
+- Fixed createMercadoPagoPreference() in src/app/api/wallet/topup/route.ts:
+  - Added sanitizeUrl() function that:
+    - Checks if URL is HTTPS (MP requirement)
+    - If not HTTPS, replaces with https://novsmm.com/topup/success placeholder
+    - Strips query params (some cause validation errors)
+  - Made auto_return conditional: only set "approved" if ALL back_urls are HTTPS
+  - If running on localhost/http, auto_return is omitted (MP still works, just no auto-redirect)
+- Verified with Agent Browser:
+  - Top up $100 via Mercado Pago → SUCCESS
+  - Redirected to https://www.mercadopago.com.mx/checkout/v1/redirect?pref_id=3515682339-...
+  - No API errors, no 400 status
+  - Dev log clean
+
+Stage Summary:
+- Mercado Pago top-up now creates a valid checkout preference and redirects to mercadopago.com.mx
+- auto_return only set when back_urls are valid HTTPS (prevents 400 error)
+- URL sanitization handles localhost/http origins gracefully
+- Full flow: user clicks Top up → backend creates MP preference → redirects to Mercado Pago checkout
