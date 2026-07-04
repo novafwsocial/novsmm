@@ -1686,3 +1686,33 @@ Stage Summary:
 - auto_return only set when back_urls are valid HTTPS (prevents 400 error)
 - URL sanitization handles localhost/http origins gracefully
 - Full flow: user clicks Top up → backend creates MP preference → redirects to Mercado Pago checkout
+
+---
+Task ID: FIX-MERCADOPAGO-403-UNAUTHORIZED
+Agent: main (orchestrator)
+Task: Fix Mercado Pago 403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES error
+
+Work Log:
+- User reported error: "Mercado Pago API 403: PA_UNAUTHORIZED_RESULT_FROM_POLICIES"
+- Checked DB: Mercado Pago has access token (APP_USR-...) configured
+- Root cause: Mercado Pago account does not have Checkout Pro enabled or account not verified
+  - 403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES = account blocked by policy agent
+  - This is an account-level issue on Mercado Pago's side, not a code bug
+- Improved error handling in wallet/topup/route.ts:
+  - Parse Mercado Pago error response and return user-friendly messages:
+    - 403 PA_UNAUTHORIZED: "Mercado Pago account not authorized. The merchant account needs to be verified and have Checkout Pro enabled."
+    - 401: "Mercado Pago access token is invalid or expired. Admin must update credentials."
+    - 400: "Mercado Pago rejected the payment request. Check that the account is verified."
+    - Default: "Mercado Pago error. Please try another payment method."
+  - Users now see a clear message instead of raw API error JSON
+- Verified: lint clean, server running
+- Note: the 403 error is from Mercado Pago's policy agent — the user needs to:
+  1. Verify their Mercado Pago account (identity + business verification)
+  2. Enable "Checkout Pro" in their Mercado Pago dashboard
+  3. Make sure they're using a production access token (not test token)
+
+Stage Summary:
+- Mercado Pago 403 error now returns a clear user-friendly message
+- The actual fix requires account verification on Mercado Pago's side (not a code issue)
+- Users can see exactly what's wrong and what to do (try another method or contact support)
+- Other payment methods (PayPal, NowPayments, Manual) are not affected

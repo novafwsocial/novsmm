@@ -211,7 +211,28 @@ export async function POST(req: NextRequest) {
           where: { id: txn.id },
           data: { status: "failed" },
         });
-        return apiError(`Mercado Pago error: ${e?.message ?? "unknown"}`, 502);
+
+        // Parse Mercado Pago error for a clearer user-facing message
+        const errMsg = e?.message ?? "";
+        let userMessage = "Mercado Pago error. Please try another payment method.";
+
+        // 403 PA_UNAUTHORIZED_RESULT_FROM_POLICIES — account not verified or Checkout Pro not enabled
+        if (errMsg.includes("403") && errMsg.includes("PA_UNAUTHORIZED")) {
+          userMessage =
+            "Mercado Pago account not authorized. The merchant account needs to be verified and have Checkout Pro enabled. Contact support or try another payment method.";
+        }
+        // 401 invalid_token — access token is invalid or expired
+        else if (errMsg.includes("401") || errMsg.includes("invalid_token")) {
+          userMessage =
+            "Mercado Pago access token is invalid or expired. Admin must update credentials in Admin → Payments → Configure credentials.";
+        }
+        // 400 validation errors
+        else if (errMsg.includes("400")) {
+          userMessage =
+            "Mercado Pago rejected the payment request. Check that the account is verified and credentials are correct.";
+        }
+
+        return apiError(userMessage, 502);
       }
     }
 
