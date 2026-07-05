@@ -2000,3 +2000,45 @@ Stage Summary:
 - Platform now has competitive differentiators: AI-powered insights (no competitor has this), gamified loyalty program, tiered referral system
 - Premium users get: 2x-3x loyalty multipliers, priority order processing, higher referral commissions, AI insights
 - All features are plan-aware (free users get less, premium users get more)
+
+---
+Task ID: SOCIAL-GOOGLE-ONLY
+Agent: main (Z.ai Code)
+Task: Remove all social login options except Google. Implement Google login also in the registration tab so users can choose "Sign up with Google".
+
+Work Log:
+- Read /home/z/my-project/worklog.md to understand previous work context
+- Audited current social auth implementation:
+  - src/lib/auth.ts had Google + Discord providers (Telegram/Apple were never real providers, only "coming soon" buttons)
+  - src/components/novsmm/auth-fields.tsx SocialButton supported google/discord/telegram/apple
+  - src/components/novsmm/login-screen.tsx showed a 4-button social grid
+  - src/components/novsmm/register-screen.tsx had NO social signup option
+  - Confirmed other files mentioning discord/telegram (dashboard-profile, analytics, platforms) are SMM-platform references (Instagram/TikTok/etc), NOT auth — left untouched
+- src/lib/auth.ts:
+  - Removed `import DiscordProvider from "next-auth/providers/discord"`
+  - Removed the Discord OAuth provider block (the `if (process.env.DISCORD_CLIENT_ID...)` push)
+  - Updated JSDoc comment to reflect Google is the only social login
+- src/components/novsmm/auth-fields.tsx:
+  - Rewrote SocialButton to Google-only: removed `provider` prop, added `label` and `loading` props
+  - Button now renders full-width with official Google "G" glyph + label text
+  - Removed SocialGlyph switch (discord/telegram/apple cases) — replaced with dedicated GoogleGlyph component
+- src/components/novsmm/login-screen.tsx:
+  - Replaced 4-button grid with single full-width Google button: `<SocialButton onClick={() => handleSocial("google")} loading={loading} label="Continue with Google" />`
+  - Simplified handleSocial — removed the "coming soon" branch for telegram/apple
+- src/components/novsmm/register-screen.tsx:
+  - Imported SocialButton from auth-fields
+  - Added googleLoading state + handleGoogle() that calls signIn("google", { callbackUrl: "/" })
+  - Inserted "Sign up with Google" button at the top of the form, followed by "or sign up with email" divider, then the email form
+- Ran `bun run lint` — clean, no errors
+- Verified with Agent Browser:
+  - Login screen: only "Continue with Google" button visible (no Discord/Telegram/Apple) ✅
+  - Register screen: "Sign up with Google" button at top + email form below ✅
+  - No runtime errors in dev.log (only pre-existing NEXTAUTH_URL/NO_SECRET warnings from sandbox .env resets)
+
+Stage Summary:
+- Social login is now Google-only across the entire platform
+- Both login and registration flows offer the Google option
+- NextAuth config is simplified to: Credentials + Google (only registered when GOOGLE_CLIENT_* env vars are set)
+- SocialButton component is now a clean, full-width Google CTA reusable on any auth screen
+- The PrismaAdapter will auto-create the user account on first Google login (no separate registration step needed)
+- All other Discord/Telegram references in the codebase are SMM-platform service categories (Instagram, TikTok, YouTube, etc.), correctly left untouched

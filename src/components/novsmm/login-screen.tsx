@@ -182,11 +182,6 @@ export function LoginScreen() {
   const handleSocial = async (provider: string) => {
     setLoading(true);
     setError(null);
-    if (provider === "telegram" || provider === "apple") {
-      setError(`${provider.charAt(0).toUpperCase() + provider.slice(1)} login is coming soon. Please use email or Google.`);
-      setLoading(false);
-      return;
-    }
     await signIn(provider, { callbackUrl: "/" });
   };
 
@@ -232,11 +227,12 @@ export function LoginScreen() {
           </div>
 
           {/* Social */}
-          <div className="mt-7 grid grid-cols-4 gap-2">
-            <SocialButton provider="google" onClick={() => handleSocial("google")} />
-            <SocialButton provider="discord" onClick={() => handleSocial("discord")} />
-            <SocialButton provider="telegram" onClick={() => handleSocial("telegram")} />
-            <SocialButton provider="apple" onClick={() => handleSocial("apple")} />
+          <div className="mt-7">
+            <SocialButton
+              onClick={() => handleSocial("google")}
+              loading={loading}
+              label="Continue with Google"
+            />
           </div>
 
           <div className="my-6 flex items-center gap-3">

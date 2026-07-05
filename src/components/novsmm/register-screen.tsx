@@ -15,7 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useApp } from "./app-store";
-import { Field, PasswordStrength } from "./auth-fields";
+import { Field, PasswordStrength, SocialButton } from "./auth-fields";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,7 @@ export function RegisterScreen() {
     language: "English",
   });
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email);
@@ -53,6 +54,14 @@ export function RegisterScreen() {
 
   const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
+
+  const handleGoogle = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    // signIn redirects to Google's consent screen, then back to "/".
+    // NextAuth + PrismaAdapter will create the user account on first login.
+    await signIn("google", { callbackUrl: "/" });
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -132,10 +141,18 @@ export function RegisterScreen() {
             </p>
           </div>
 
-          <div className="my-6 flex items-center gap-3">
+          <div className="my-6">
+            <SocialButton
+              onClick={handleGoogle}
+              loading={googleLoading}
+              label="Sign up with Google"
+            />
+          </div>
+
+          <div className="mb-6 flex items-center gap-3">
             <div className="h-px flex-1 bg-border" />
             <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              sign up with email
+              or sign up with email
             </span>
             <div className="h-px flex-1 bg-border" />
           </div>

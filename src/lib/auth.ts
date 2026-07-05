@@ -1,7 +1,6 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import DiscordProvider from "next-auth/providers/discord";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
@@ -34,9 +33,9 @@ function trackFailedAttempt(key: string) {
  * Providers:
  * - Credentials (email + password, validated against DB with bcrypt)
  * - Google OAuth (requires GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
- * - Discord OAuth (requires DISCORD_CLIENT_ID + DISCORD_CLIENT_SECRET)
  *
- * OAuth providers are only registered when their env vars are set,
+ * Google is the only social login enabled on this platform.
+ * The Google provider is only registered when its env vars are set,
  * so the app works in sandbox mode without them.
  */
 const providers: NextAuthOptions["providers"] = [
@@ -113,17 +112,6 @@ if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
-    })
-  );
-}
-
-// ── Discord OAuth ──
-if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
-  providers.push(
-    DiscordProvider({
-      clientId: process.env.DISCORD_CLIENT_ID,
-      clientSecret: process.env.DISCORD_CLIENT_SECRET,
       allowDangerousEmailAccountLinking: true,
     })
   );
