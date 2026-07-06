@@ -15,6 +15,33 @@ groups:
           summary: "NOVSMM is down"
           description: "NOVSMM has been down for more than 1 minute."
 
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for more than 1 minute."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for more than 1 minute."
+
+      - alert: BackupFailure
+        expr: time() - novsmm_backup_last_success_timestamp > 86400
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup has not succeeded in 24h"
+          description: "Last successful backup was more than 24 hours ago."
+
       - alert: NovsmmHighErrorRate
         expr: rate(novsmm_http_requests_total{status=~"5.."}[5m]) > 0.05
         for: 2m

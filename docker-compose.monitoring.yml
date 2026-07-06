@@ -37,8 +37,14 @@ services:
     image: prom/alertmanager:v0.27.0
     container_name: novsmm-alertmanager
     restart: unless-stopped
+    init: true
     volumes:
       - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    command:
+      - '--config.file=/etc/alertmanager/alertmanager.yml'
+      - '--config.expand-env'
+    environment:
+      SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL:?Set SLACK_WEBHOOK_URL in .env}"
     ports:
       - "127.0.0.1:9093:9093"
     networks:
@@ -76,6 +82,37 @@ services:
       - '--path.rootfs=/rootfs'
     ports:
       - "127.0.0.1:9100:9100"
+    networks:
+      - novsmm-network
+
+  # ── PostgreSQL Exporter ──
+  postgres-exporter:
+    image: prometheuscommunity/postgres-exporter:v0.15.0
+    container_name: novsmm-postgres-exporter
+    restart: unless-stopped
+    init: true
+    environment:
+      DATA_SOURCE_NAME: "postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?sslmode=disable"
+    ports:
+      - "127.0.0.1:9187:9187"
+    depends_on:
+      - prometheus
+    networks:
+      - novsmm-network
+
+  # ── Redis Exporter ──
+  redis-exporter:
+    image: oliver006/redis_exporter:v1.67.0
+    container_name: novsmm-redis-exporter
+    restart: unless-stopped
+    init: true
+    environment:
+      REDIS_ADDR: "redis://redis:6379"
+      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+    ports:
+      - "127.0.0.1:9121:9121"
+    depends_on:
+      - prometheus
     networks:
       - novsmm-network
 

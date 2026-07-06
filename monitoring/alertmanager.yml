@@ -3,13 +3,18 @@
 # ═══════════════════════════════════════════════════════════════════════════
 # Configura el webhook de Slack/Discord para recibir alertas.
 #
+# IMPORTANTE: AlertManager no soporta sustitución de variables de entorno
+# nativamente. Se debe usar el flag --config.expand-env al iniciar
+# AlertManager, o reemplazar manualmente el valor de SLACK_WEBHOOK_URL.
+#
 # SLACK:
 #   1. Crea un webhook en https://api.slack.com/messaging/webhooks
-#   2. Reemplaza SLACK_WEBHOOK_URL abajo
+#   2. Setea la variable de entorno SLACK_WEBHOOK_URL en .env
+#   3. El script monitor-setup.sh reemplaza el placeholder antes de iniciar
 #
 # DISCORD:
 #   1. Server Settings → Integrations → Webhooks → New Webhook
-#   2. Reemplaza la URL en slack_configs.api_url
+#   2. Mismo flujo que Slack (Discord acepta Slack webhooks)
 # ═══════════════════════════════════════════════════════════════════════════
 
 global:
@@ -32,7 +37,7 @@ receivers:
   # Alertas no críticas
   - name: "slack"
     slack_configs:
-      - api_url: "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK"
+      - api_url: "${SLACK_WEBHOOK_URL}"
         channel: "#novsmm-alerts"
         send_resolved: true
         title: "⚠️ {{ .CommonLabels.alertname }}"
@@ -41,7 +46,7 @@ receivers:
   # Alertas críticas (más frecuentes)
   - name: "slack-critical"
     slack_configs:
-      - api_url: "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK"
+      - api_url: "${SLACK_WEBHOOK_URL}"
         channel: "#novsmm-alerts"
         send_resolved: true
         title: "🚨 CRITICAL: {{ .CommonLabels.alertname }}"

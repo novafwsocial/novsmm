@@ -34,15 +34,19 @@ scrape_configs:
         labels:
           service: "node"
 
-  # PostgreSQL exporter (optional — install prometheus-postgres-exporter)
-  # - job_name: "postgres"
-  #   static_configs:
-  #     - targets: ["postgres-exporter:9187"]
+  # PostgreSQL exporter (direct DB monitoring)
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: "postgres"
 
-  # Redis exporter (optional — install prometheus-redis-exporter)
-  # - job_name: "redis"
-  #   static_configs:
-  #     - targets: ["redis-exporter:9121"]
+  # Redis exporter (direct Redis monitoring)
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: "redis"
 
   # Prometheus self-monitoring
   - job_name: "prometheus"
