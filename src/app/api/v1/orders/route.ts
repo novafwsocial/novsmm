@@ -2,6 +2,8 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireApiKey, apiError, apiOk } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
+import { nextPublicId } from "@/lib/ids";
+import { simulateFulfillment } from "@/lib/orders";
 import { z } from "zod";
 
 const createOrderSchema = z.object({
@@ -51,55 +53,89 @@ export async function POST(req: NextRequest) {
     const totalPrice = (service.price * quantity) / 1000;
     const totalCost = (service.cost * quantity) / 1000;
 
-    if (user.balance < totalPrice) {
-      return apiError(
-        `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${user.balance.toFixed(2)}`,
-        402
-      );
+    // Race-safe atomic purchase (same pattern as the internal /api/orders
+    // route). The balance check happens INSIDE the transaction via a
+    // conditional `updateMany` (WHERE balance >= totalPrice). If the
+    // conditional update affects 0 rows, the user's balance was
+    // insufficient at debit time and we throw `INSUFFICIENT_BALANCE` to
+    // abort. On PostgreSQL (MVCC) this prevents two concurrent API orders
+    // from both passing the check and both debiting. The original
+    // `if (user.balance < totalPrice)` check ran outside the transaction
+    // and was vulnerable to this race.
+    //
+    // publicId / txPublicId are pre-computed OUTSIDE this transaction —
+    // nextPublicId() runs its own atomic Prisma transaction internally, and
+    // nesting it inside this $transaction would deadlock / error on some
+    // drivers.
+    const publicId = await nextPublicId("A", 10432);
+    const txPublicId = await nextPublicId("TX", 8842);
+
+    let order: any;
+    try {
+      order = await db.$transaction(async (tx) => {
+        // Conditional update — only succeeds if balance is sufficient.
+        const updated = await tx.user.updateMany({
+          where: { id: userId, balance: { gte: totalPrice } },
+          data: { balance: { decrement: totalPrice } },
+        });
+        if (updated.count === 0) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
+
+        // Create order + sale transaction inside the same transaction so
+        // the debit, order, and ledger entry are atomic.
+        const created = await tx.order.create({
+          data: {
+            publicId,
+            userId,
+            serviceId: service.id,
+            serviceName: service.name,
+            platform: service.platform,
+            quantity,
+            unitCost: service.cost,
+            unitPrice: service.price,
+            totalCost,
+            totalPrice,
+            profit: totalPrice - totalCost,
+            status: "processing",
+            progress: 5,
+            providerId: service.providerId,
+            providerName: service.provider?.name,
+            link: link || null,
+            eta: "2m",
+            flag: "🌍",
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            publicId: txPublicId,
+            userId,
+            type: "sale",
+            amount: -totalPrice,
+            description: `API Order #${publicId} — ${service.name}`,
+            method: "balance",
+            reference: publicId,
+          },
+        });
+
+        return created;
+      });
+    } catch (e: any) {
+      if (e.message === "INSUFFICIENT_BALANCE") {
+        // Re-read the current balance for an accurate error message.
+        const fresh = await db.user.findUnique({
+          where: { id: userId },
+          select: { balance: true },
+        });
+        const currentBalance = fresh?.balance ?? 0;
+        return apiError(
+          `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
+          402,
+        );
+      }
+      throw e;
     }
-
-    const orderCount = await db.order.count();
-    const publicId = `A-${10432 + orderCount}`;
-
-    const [order] = await db.$transaction([
-      db.order.create({
-        data: {
-          publicId,
-          userId,
-          serviceId: service.id,
-          serviceName: service.name,
-          platform: service.platform,
-          quantity,
-          unitCost: service.cost,
-          unitPrice: service.price,
-          totalCost,
-          totalPrice,
-          profit: totalPrice - totalCost,
-          status: "processing",
-          progress: 5,
-          providerId: service.providerId,
-          providerName: service.provider?.name,
-          link: link || null,
-          eta: "2m",
-          flag: "🌍",
-        },
-      }),
-      db.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: totalPrice } },
-      }),
-      db.transaction.create({
-        data: {
-          publicId: `TX-${Date.now().toString().slice(-6)}`,
-          userId,
-          type: "sale",
-          amount: -totalPrice,
-          description: `API Order #${publicId} — ${service.name}`,
-          method: "balance",
-          reference: publicId,
-        },
-      }),
-    ]);
 
     await createNotification({
       userId,
@@ -125,41 +161,5 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("[v1/orders] error:", e);
     return apiError("Failed to create order", 500);
-  }
-}
-
-async function simulateFulfillment(orderId: string, userId: string) {
-  const steps = [
-    { delay: 2000, progress: 15, status: "in_progress" },
-    { delay: 5000, progress: 40, status: "in_progress" },
-    { delay: 8000, progress: 75, status: "in_progress" },
-    { delay: 12000, progress: 100, status: "completed" },
-  ];
-  for (const step of steps) {
-    await new Promise((r) => setTimeout(r, step.delay));
-    const order = await db.order.findUnique({
-      where: { id: orderId },
-      select: { id: true, status: true, publicId: true, serviceName: true, totalPrice: true },
-    });
-    if (!order || order.status === "cancelled") return;
-    await db.order.update({
-      where: { id: orderId },
-      data: {
-        progress: step.progress,
-        status: step.status,
-        eta: step.status === "completed" ? "—" : `${Math.ceil((100 - step.progress) / 20)}m`,
-        completedAt: step.status === "completed" ? new Date() : null,
-      },
-    });
-    if (step.status === "completed") {
-      await createNotification({
-        userId,
-        type: "order",
-        title: `Order #${order.publicId} completed ✅`,
-        message: `${order.serviceName} — delivery complete.`,
-        amount: order.totalPrice,
-        severity: "success",
-      });
-    }
   }
 }

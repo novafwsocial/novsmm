@@ -4,11 +4,8 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createOrderSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
-import { placeHuntSMMOrder, extractProviderServiceId } from "@/lib/huntsmm";
-import {
-  awardOrderPoints,
-  reconcileAchievements,
-} from "@/app/api/me/loyalty/route";
+import { nextPublicId } from "@/lib/ids";
+import { simulateFulfillment } from "@/lib/orders";
 
 /**
  * Extended create-order schema with optional drip-feed configuration.
@@ -133,6 +130,29 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { createdAt: "desc" },
     take: 100,
+    select: {
+      id: true,
+      publicId: true,
+      serviceName: true,
+      platform: true,
+      quantity: true,
+      unitCost: true,
+      unitPrice: true,
+      totalCost: true,
+      totalPrice: true,
+      profit: true,
+      status: true,
+      progress: true,
+      priority: true,
+      providerName: true,
+      link: true,
+      eta: true,
+      flag: true,
+      dripFeedConfig: true,
+      createdAt: true,
+      updatedAt: true,
+      completedAt: true,
+    },
   });
 
   return apiOk({ orders });
@@ -214,16 +234,26 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (user.balance < totalPrice) {
-      return apiError(
-        `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${user.balance.toFixed(2)}`,
-        402
-      );
-    }
-
-    // Atomic: debit balance + create order + create transaction
-    const orderCount = await db.order.count();
-    const publicId = `A-${10432 + orderCount}`;
+    // Race-safe atomic purchase.
+    //
+    // The balance check happens INSIDE the transaction via a conditional
+    // `updateMany` (WHERE balance >= totalPrice). If the conditional update
+    // affects 0 rows, the user's balance was insufficient at debit time and
+    // we throw `INSUFFICIENT_BALANCE` to abort the whole transaction.
+    //
+    // Why: on SQLite the old `if (user.balance < totalPrice)` check outside
+    // the transaction worked because SQLite serializes writes. On PostgreSQL
+    // (MVCC) two concurrent orders can both pass the check and both debit,
+    // driving the balance negative. Doing the check + debit as a single
+    // conditional UPDATE eliminates that race: only one of the two updates
+    // will see a sufficient balance, the other will affect 0 rows and abort.
+    //
+    // publicId / txPublicId are pre-computed OUTSIDE this transaction —
+    // nextPublicId() runs its own atomic Prisma transaction internally, and
+    // nesting it inside this $transaction would deadlock / error on some
+    // drivers. The order.create inside this tx consumes the pre-computed IDs.
+    const publicId = await nextPublicId("A", 10432);
+    const txPublicId = await nextPublicId("TX", 8842);
     const priority = priorityForPlan(user.plan);
 
     // Drip-feed orders start in "pending" so the fulfillment worker / admin
@@ -232,53 +262,84 @@ export async function POST(req: NextRequest) {
     const initialStatus = dripConfig ? "pending" : "processing";
     const initialProgress = dripConfig ? 0 : 5;
 
-    const [order] = await db.$transaction([
-      db.order.create({
-        data: {
-          publicId,
-          userId,
-          serviceId: service.id,
-          serviceName: service.name,
-          platform: service.platform,
-          quantity,
-          unitCost: service.cost,
-          unitPrice: service.price,
-          totalCost,
-          totalPrice,
-          profit,
-          status: initialStatus,
-          progress: initialProgress,
-          priority,
-          providerId: service.providerId,
-          providerName: service.provider?.name,
-          link: link || null,
-          // Priority orders get a shorter advertised ETA in the UI.
-          // Actual fulfillment speed is governed by the worker queue
-          // ordering on the `priority` column.
-          eta: dripConfig
-            ? `${dripDays}d drip`
-            : priority === "highest" ? "<1m" : priority === "priority" ? "1m" : "2m",
-          flag: "🌍",
-          dripFeedConfig: dripConfig,
-        },
-      }),
-      db.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: totalPrice } },
-      }),
-      db.transaction.create({
-        data: {
-          publicId: `TX-${Date.now().toString().slice(-6)}`,
-          userId,
-          type: "sale",
-          amount: -totalPrice,
-          description: `Order #${publicId} — ${service.name}`,
-          method: "balance",
-          reference: publicId,
-          orderId: undefined,
-        },
-      }),
-    ]);
+    let order: any;
+    try {
+      order = await db.$transaction(async (tx) => {
+        // Conditional update — only succeeds if balance is sufficient.
+        // On PostgreSQL this is a single atomic UPDATE ... WHERE balance >=
+        // totalPrice, so two concurrent orders cannot both succeed.
+        const updated = await tx.user.updateMany({
+          where: { id: userId, balance: { gte: totalPrice } },
+          data: { balance: { decrement: totalPrice } },
+        });
+        if (updated.count === 0) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
+
+        // Create order + sale transaction inside the same transaction so
+        // the debit, order, and ledger entry are atomic.
+        const created = await tx.order.create({
+          data: {
+            publicId,
+            userId,
+            serviceId: service.id,
+            serviceName: service.name,
+            platform: service.platform,
+            quantity,
+            unitCost: service.cost,
+            unitPrice: service.price,
+            totalCost,
+            totalPrice,
+            profit,
+            status: initialStatus,
+            progress: initialProgress,
+            priority,
+            providerId: service.providerId,
+            providerName: service.provider?.name,
+            link: link || null,
+            // Priority orders get a shorter advertised ETA in the UI.
+            // Actual fulfillment speed is governed by the worker queue
+            // ordering on the `priority` column.
+            eta: dripConfig
+              ? `${dripDays}d drip`
+              : priority === "highest" ? "<1m" : priority === "priority" ? "1m" : "2m",
+            flag: "🌍",
+            dripFeedConfig: dripConfig,
+          },
+        });
+
+        await tx.transaction.create({
+          data: {
+            publicId: txPublicId,
+            userId,
+            type: "sale",
+            amount: -totalPrice,
+            description: `Order #${publicId} — ${service.name}`,
+            method: "balance",
+            reference: publicId,
+            orderId: undefined,
+          },
+        });
+
+        return created;
+      });
+    } catch (e: any) {
+      if (e.message === "INSUFFICIENT_BALANCE") {
+        // Re-read the current balance for an accurate error message.
+        // The pre-transaction `user.balance` snapshot may be stale by the
+        // time we get here (another concurrent order may have debited first).
+        const fresh = await db.user.findUnique({
+          where: { id: userId },
+          select: { balance: true },
+        });
+        const currentBalance = fresh?.balance ?? 0;
+        return apiError(
+          `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
+          402,
+        );
+      }
+      throw e;
+    }
 
     // Notifications
     await createNotification({
@@ -417,138 +478,5 @@ export async function PATCH(req: NextRequest) {
   } catch (e: any) {
     console.error("[orders/cancel] error:", e);
     return apiError("Failed to cancel order", 500);
-  }
-}
-
-/**
- * Simulates provider fulfillment by updating order progress over time.
- * In production this would be a background job polling the real provider API.
- */
-async function simulateFulfillment(orderId: string, userId: string) {
-  // Fetch the full order to get the link and service name
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    select: {
-      id: true, status: true, publicId: true, serviceName: true,
-      totalPrice: true, link: true, quantity: true, priority: true,
-    },
-  });
-  if (!order || order.status === "cancelled") return;
-
-  // Try to place the order on HuntSMM
-  const providerServiceId = extractProviderServiceId(order.serviceName);
-  if (providerServiceId && order.link) {
-    const result = await placeHuntSMMOrder(
-      providerServiceId,
-      order.link,
-      order.quantity
-    );
-
-    if ("orderId" in result) {
-      // Real order placed — update with provider order ID
-      await db.order.update({
-        where: { id: orderId },
-        data: {
-          status: "in_progress",
-          progress: 10,
-          eta: "Processing on HuntSMM",
-          providerName: `HuntSMM #${result.orderId}`,
-        },
-      });
-      return; // Real fulfillment — status will be updated via webhook/cron
-    } else {
-      console.error("[fulfillment] HuntSMM order failed:", result.error);
-      // Fall through to simulation
-    }
-  }
-
-  // Fallback: simulate fulfillment (when no link, or provider fails).
-  // Priority/highest plans get progressively faster step intervals to
-  // mirror the queue-speed differentiation promised in the marketing copy.
-  const speedMultiplier =
-    order.priority === "highest" ? 0.4 :
-    order.priority === "priority" ? 0.7 :
-    1.0; // standard
-
-  const baseSteps = [
-    { delay: 2000, progress: 15, status: "in_progress" },
-    { delay: 5000, progress: 40, status: "in_progress" },
-    { delay: 8000, progress: 75, status: "in_progress" },
-    { delay: 12000, progress: 100, status: "completed" },
-  ];
-  const steps = baseSteps.map((s, i) => ({
-    // Delay is the gap from the previous step; first step uses its own delay.
-    delay: Math.round((i === 0 ? s.delay : s.delay - baseSteps[i - 1].delay) * speedMultiplier),
-    progress: s.progress,
-    status: s.status,
-  }));
-
-  for (const step of steps) {
-    await new Promise((r) => setTimeout(r, step.delay));
-
-    const currentOrder = await db.order.findUnique({
-      where: { id: orderId },
-      select: { id: true, status: true, publicId: true, serviceName: true, totalPrice: true },
-    });
-    if (!currentOrder || currentOrder.status === "cancelled") return;
-
-    await db.order.update({
-      where: { id: orderId },
-      data: {
-        progress: step.progress,
-        status: step.status,
-        eta: step.status === "completed" ? "—" : `${Math.ceil((100 - step.progress) / 20)}m`,
-        completedAt: step.status === "completed" ? new Date() : null,
-      },
-    });
-
-    if (step.status === "completed") {
-      await createNotification({
-        userId,
-        type: "order",
-        title: `Order #${currentOrder.publicId} completed ✅`,
-        message: `${currentOrder.serviceName} — delivery complete.`,
-        amount: currentOrder.totalPrice,
-        severity: "success",
-        sendEmail: true,
-      });
-
-      // ── Loyalty points + achievement reconciliation ──
-      // Award 1 point per $1 spent × plan multiplier, then run the achievement
-      // reconciler to unlock any newly-eligible milestones (first_order,
-      // 10_orders, 100_orders, 100_spent, 1000_spent, big_spender, etc.).
-      // Each unlocked achievement awards its bonus points as a separate
-      // loyalty entry (handled inside reconcileAchievements).
-      try {
-        const userPlan = await db.user.findUnique({
-          where: { id: userId },
-          select: { plan: true, name: true },
-        });
-        if (userPlan) {
-          const awarded = await awardOrderPoints(
-            userId,
-            currentOrder.id,
-            currentOrder.totalPrice,
-            userPlan.plan,
-          );
-          if (awarded.points > 0) {
-            await createNotification({
-              userId,
-              type: "system",
-              title: `+${awarded.points} loyalty points earned`,
-              message: `Order #${currentOrder.publicId} — ${awarded.points} pts awarded (${awarded.multiplier}× ${userPlan.plan} plan multiplier).`,
-              severity: "success",
-              sendEmail: false,
-            });
-          }
-          // Unlock any newly-eligible achievements. reconcileAchievements
-          // fires its own notifications for each unlock, so nothing else to do.
-          await reconcileAchievements(userId);
-        }
-      } catch (loyaltyErr) {
-        // Loyalty failures must never break order fulfillment.
-        console.error("[loyalty] award/reconcile failed:", loyaltyErr);
-      }
-    }
   }
 }

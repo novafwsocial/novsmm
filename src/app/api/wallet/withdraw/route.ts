@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { withdrawSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
+import { nextPublicId } from "@/lib/ids";
 
 /**
  * POST /api/wallet/withdraw — withdraw funds to an external destination.
@@ -36,8 +37,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const txnCount = await db.transaction.count();
-    const publicId = `TX-${8842 + txnCount}`;
+    const publicId = await nextPublicId("TX", 8842);
 
     await db.$transaction([
       db.user.update({

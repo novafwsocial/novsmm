@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import {
@@ -72,11 +73,18 @@ export async function POST(req: NextRequest) {
   const licenseKey = generateLicenseKey();
   const licenseHash = await hashLicenseKey(licenseKey);
   const encryptedKey = encryptLicenseKey(licenseKey);
+  // SHA-256 of the plaintext key for O(1) lookup at validation time
+  // (bcrypt hashes can't be searched by equality, so lookupHash is the index key)
+  const lookupHash = crypto
+    .createHash("sha256")
+    .update(licenseKey)
+    .digest("hex");
 
   const license = await db.license.create({
     data: {
       licenseKey: encryptedKey,
       licenseHash,
+      lookupHash,
       customerName,
       customerEmail: customerEmail.toLowerCase(),
       customerId: customerId || null,

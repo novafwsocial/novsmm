@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import bcrypt from "bcryptjs";
 import { apiError } from "@/lib/api-utils";
@@ -8,7 +9,15 @@ import { apiError } from "@/lib/api-utils";
  * Returns the user + apiKey record, or null.
  *
  * The API key format is: nvsk_live_xxxxx
- * We store only a bcrypt hash, so we need to check against all active keys.
+ *
+ * Lookup strategy (O(1) when possible):
+ * 1. Compute SHA-256(plaintext key) → lookupHash
+ * 2. findFirst by { lookupHash, status: "active" } — single indexed lookup
+ * 3. bcrypt.compare() against the single result to confirm the key actually matches
+ *    (lookupHash alone isn't a secret, so we still verify with bcrypt)
+ * 4. If no match by lookupHash, fall back to bcrypt-scan over legacy keys
+ *    (rows where lookupHash is null — keys created before this optimization).
+ *    On a legacy hit, backfill lookupHash so future lookups are O(1).
  */
 export async function validateApiKey(req: NextRequest): Promise<{
   user: any;
@@ -20,47 +29,80 @@ export async function validateApiKey(req: NextRequest): Promise<{
   const key = authHeader.slice(7);
   if (!key.startsWith("nvsk_live_")) return null;
 
-  // Get all active API keys (bcrypt hashes can't be searched by equality)
-  const keys = await db.apiKey.findMany({
-    where: { status: "active" },
-    include: {
-      user: {
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          username: true,
-          role: true,
-          balance: true,
-          currency: true,
-          status: true,
-        },
+  // Compute SHA-256 lookup hash (hex) for O(1) index lookup
+  const lookupHash = crypto.createHash("sha256").update(key).digest("hex");
+
+  // Shared user-include shape used by both lookup paths
+  const userInclude = {
+    user: {
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        username: true,
+        role: true,
+        balance: true,
+        currency: true,
+        status: true,
       },
     },
+  } as const;
+
+  // 1. O(1) lookup by lookupHash (new keys)
+  let apiKey: any = await db.apiKey.findFirst({
+    where: { lookupHash, status: "active" },
+    include: userInclude,
   });
 
-  // Check the key against each hash
-  for (const apiKey of keys) {
-    const match = await bcrypt.compare(key, apiKey.keyHash);
-    if (match) {
-      // Check if user is active
-      if (apiKey.user.status !== "active") return null;
-
-      // Update last used
-      const ip = req.headers.get("x-client-ip") ?? "unknown";
-      await db.apiKey.update({
-        where: { id: apiKey.id },
-        data: { lastUsedAt: new Date(), lastUsedIp: ip },
-      });
-
-      // Check permissions
-      const permissions = apiKey.permissions.split(",");
-
-      return { user: apiKey.user, apiKey: { ...apiKey, permissions } };
+  // 2. If not found, fall back to bcrypt-scan over legacy keys (lookupHash: null).
+  //    Backfill lookupHash on the matched legacy key so future lookups are O(1).
+  if (!apiKey) {
+    const legacyKeys = await db.apiKey.findMany({
+      where: { status: "active", lookupHash: null },
+      include: userInclude,
+    });
+    for (const k of legacyKeys) {
+      if (await bcrypt.compare(key, k.keyHash)) {
+        apiKey = k;
+        // Best-effort backfill — never let a backfill failure block auth
+        try {
+          await db.apiKey.update({
+            where: { id: k.id },
+            data: { lookupHash },
+          });
+        } catch (e) {
+          console.error(
+            `[api-key-auth] Failed to backfill lookupHash for ${k.id}:`,
+            e
+          );
+        }
+        break;
+      }
     }
   }
 
-  return null;
+  if (!apiKey) return null;
+
+  // Confirm the lookupHash hit actually matches the bcrypt hash
+  // (defence in depth: lookupHash is derived from the plaintext, but a hash
+  // collision or a corrupted lookupHash should not bypass bcrypt verification)
+  const bcryptMatch = await bcrypt.compare(key, apiKey.keyHash);
+  if (!bcryptMatch) return null;
+
+  // Check if user is active
+  if (apiKey.user.status !== "active") return null;
+
+  // Update last used
+  const ip = req.headers.get("x-client-ip") ?? "unknown";
+  await db.apiKey.update({
+    where: { id: apiKey.id },
+    data: { lastUsedAt: new Date(), lastUsedIp: ip },
+  });
+
+  // Check permissions
+  const permissions = apiKey.permissions.split(",");
+
+  return { user: apiKey.user, apiKey: { ...apiKey, permissions } };
 }
 
 /**

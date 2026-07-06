@@ -16,6 +16,17 @@ export async function GET(req: NextRequest) {
     },
     orderBy: { createdAt: "desc" },
     take: 50,
+    select: {
+      id: true,
+      type: true,
+      title: true,
+      message: true,
+      amount: true,
+      severity: true,
+      read: true,
+      createdAt: true,
+      userId: true,
+    },
   });
 
   const unreadCount = await db.notification.count({

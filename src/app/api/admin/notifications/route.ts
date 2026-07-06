@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotificationSchema } from "@/lib/validations";
-import { createNotification } from "@/lib/notify";
+import { createNotification, sendEmail, broadcastToWs } from "@/lib/notify";
 import { sanitizeMessage } from "@/lib/sanitize";
 
 /**
@@ -47,22 +47,63 @@ export async function POST(req: NextRequest) {
       select: { id: true, email: true, name: true },
     });
 
-    await db.notification.createMany({
+    // ── Create notifications for all recipients in a single batch ──
+    // createMany is O(1) round-trip regardless of user count.
+    // NOTE: We do NOT call createNotification() in a loop here — that would
+    // create DUPLICATE DB rows (createMany already inserted them). The previous
+    // implementation had this bug: it called createMany AND looped createNotification,
+    // resulting in 2× notifications per user + 10K sequential SMTP sends per broadcast.
+    const created = await db.notification.createMany({
       data: users.map((u) => ({ ...cleanData, userId: u.id })),
     });
 
-    // Email all users
-    for (const u of users) {
-      await createNotification({
-        ...notifData,
-        userId: u.id,
-        sendEmail: true,
-      }).catch(() => {});
+    // ── Send emails in parallel (not sequential) ──
+    // We fetch the created notifications to get their IDs for WS broadcast.
+    // Since createMany doesn't return the created rows, we query the latest
+    // batch by userId + createdAt window.
+    const recentNotifs = await db.notification.findMany({
+      where: {
+        userId: { in: users.map((u) => u.id) },
+        title: cleanData.title,
+        message: cleanData.message,
+        createdAt: { gte: new Date(Date.now() - 60_000) }, // last 60s
+      },
+      select: { id: true, userId: true, type: true, title: true, message: true, amount: true, severity: true, createdAt: true },
+    });
+
+    // Send emails in parallel batches of 50 to avoid overwhelming SMTP
+    const EMAIL_BATCH = 50;
+    for (let i = 0; i < users.length; i += EMAIL_BATCH) {
+      const batch = users.slice(i, i + EMAIL_BATCH);
+      await Promise.all(
+        batch.map((u) =>
+          sendEmail({
+            to: u.email,
+            subject: cleanData.title,
+            text: cleanData.message,
+          }).catch(() => {})
+        )
+      );
     }
 
-    await audit(adminId, "create", "notification", null, { broadcast: true, audience: audience ?? "all", ...notifData });
+    // Broadcast to WebSocket mini-service (single broadcast, not per-user)
+    // The WS service will route to each user's room based on the notification list
+    for (const notif of recentNotifs) {
+      broadcastToWs({
+        id: notif.id,
+        type: notif.type,
+        title: notif.title,
+        message: notif.message,
+        amount: notif.amount,
+        severity: notif.severity,
+        timestamp: notif.createdAt.toISOString(),
+        userId: notif.userId,
+      }).catch((e) => console.error("[ws broadcast] failed:", e));
+    }
 
-    return apiOk({ message: `Broadcast sent to ${users.length} ${audience === "admins" ? "admins" : audience === "users" ? "users" : "users"}` }, 201);
+    await audit(adminId, "create", "notification", null, { broadcast: true, audience: audience ?? "all", recipientCount: users.length, ...notifData });
+
+    return apiOk({ message: `Broadcast sent to ${users.length} ${audience === "admins" ? "admins" : "users"} (${created.count} notifications)`, count: created.count }, 201);
   }
 
   // Single user

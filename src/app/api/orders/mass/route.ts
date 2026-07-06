@@ -3,6 +3,8 @@ import { z } from "zod";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
+import { nextPublicId } from "@/lib/ids";
+import { simulateFulfillment } from "@/lib/orders";
 
 /**
  * POST /api/orders/mass — place multiple orders atomically.
@@ -132,19 +134,15 @@ export async function POST(req: NextRequest) {
     }
 
     const grandTotal = prepared.reduce((s, r) => s + r.totalPrice, 0);
-    if (user.balance < grandTotal) {
-      return apiError(
-        `Insufficient balance. Need $${grandTotal.toFixed(2)}, have $${user.balance.toFixed(2)}`,
-        402,
-      );
-    }
 
-    // ── Generate public IDs up-front (one batch lookup) ──
-    const baseCount = await db.order.count();
+    // ── Generate public IDs up-front (atomic, one per order) ──
+    // nextPublicId() runs its own atomic Prisma transaction internally,
+    // so generating IDs in a loop is safe — no race conditions and no
+    // full-table count() scans. They MUST be generated OUTSIDE the outer
+    // $transaction below (nesting Prisma transactions would deadlock/error
+    // on some drivers).
     const priority = PLAN_PRIORITY[user.plan] ?? "standard";
 
-    // Build the transaction operations
-    const txOps: any[] = [];
     const createdOrderMetas: {
       publicId: string;
       serviceName: string;
@@ -152,71 +150,109 @@ export async function POST(req: NextRequest) {
       totalPrice: number;
     }[] = [];
 
-    prepared.forEach((row, idx) => {
-      const publicId = `A-${10432 + baseCount + idx}`;
+    // Pre-compute one publicId per order row + one for the summary ledger entry.
+    for (const row of prepared) {
+      const publicId = await nextPublicId("A", 10432);
       createdOrderMetas.push({
         publicId,
         serviceName: row.service.name,
         quantity: row.quantity,
         totalPrice: row.totalPrice,
       });
-      txOps.push(
-        db.order.create({
+    }
+    const massTxPublicId = await nextPublicId("TX", 8842);
+
+    // Race-safe atomic batch purchase.
+    //
+    // The balance check happens INSIDE the transaction via a conditional
+    // `updateMany` (WHERE balance >= grandTotal). If the conditional update
+    // affects 0 rows, the user's balance was insufficient to cover the
+    // WHOLE batch and we throw `INSUFFICIENT_BALANCE` to abort — no orders
+    // are created, no debit happens. On PostgreSQL (MVCC) this prevents two
+    // concurrent mass-batches from both passing the check and both debiting,
+    // driving the balance negative. The original
+    // `if (user.balance < grandTotal)` check ran outside the transaction and
+    // was vulnerable to this race.
+    let createdOrders: any[];
+    try {
+      createdOrders = await db.$transaction(async (tx) => {
+        // Conditional update — only succeeds if balance covers the WHOLE batch.
+        const updated = await tx.user.updateMany({
+          where: { id: userId, balance: { gte: grandTotal } },
+          data: { balance: { decrement: grandTotal } },
+        });
+        if (updated.count === 0) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
+
+        // Create all orders + the single summary ledger entry inside the
+        // same transaction so the batch is fully atomic (all-or-nothing).
+        const orders: any[] = [];
+        for (let i = 0; i < prepared.length; i++) {
+          const row = prepared[i];
+          const { publicId } = createdOrderMetas[i];
+          const created = await tx.order.create({
+            data: {
+              publicId,
+              userId,
+              serviceId: row.service.id,
+              serviceName: row.service.name,
+              platform: row.service.platform,
+              quantity: row.quantity,
+              unitCost: row.service.cost,
+              unitPrice: row.service.price,
+              totalCost: row.totalCost,
+              totalPrice: row.totalPrice,
+              profit: row.profit,
+              status: "processing",
+              progress: 5,
+              priority,
+              providerId: row.service.providerId,
+              providerName: row.service.provider?.name,
+              link: row.link,
+              eta:
+                priority === "highest"
+                  ? "<1m"
+                  : priority === "priority"
+                    ? "1m"
+                    : "2m",
+              flag: "🌍",
+            },
+          });
+          orders.push(created);
+        }
+
+        await tx.transaction.create({
           data: {
-            publicId,
+            publicId: massTxPublicId,
             userId,
-            serviceId: row.service.id,
-            serviceName: row.service.name,
-            platform: row.service.platform,
-            quantity: row.quantity,
-            unitCost: row.service.cost,
-            unitPrice: row.service.price,
-            totalCost: row.totalCost,
-            totalPrice: row.totalPrice,
-            profit: row.profit,
-            status: "processing",
-            progress: 5,
-            priority,
-            providerId: row.service.providerId,
-            providerName: row.service.provider?.name,
-            link: row.link,
-            eta:
-              priority === "highest"
-                ? "<1m"
-                : priority === "priority"
-                  ? "1m"
-                  : "2m",
-            flag: "🌍",
+            type: "sale",
+            amount: -grandTotal,
+            description: `Mass order — ${prepared.length} orders`,
+            method: "balance",
+            reference: `mass:${createdOrderMetas[0].publicId}-${createdOrderMetas[createdOrderMetas.length - 1].publicId}`,
           },
-        }),
-      );
-    });
+        });
 
-    // Single balance debit + one summary transaction record
-    txOps.push(
-      db.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: grandTotal } },
-      }),
-    );
-
-    txOps.push(
-      db.transaction.create({
-        data: {
-          publicId: `TX-${Date.now().toString().slice(-6)}`,
-          userId,
-          type: "sale",
-          amount: -grandTotal,
-          description: `Mass order — ${prepared.length} orders`,
-          method: "balance",
-          reference: `mass:${createdOrderMetas[0].publicId}-${createdOrderMetas[createdOrderMetas.length - 1].publicId}`,
-        },
-      }),
-    );
-
-    // Execute everything atomically
-    const txResult = await db.$transaction(txOps);
-    const createdOrders = txResult.slice(0, prepared.length);
+        return orders;
+      });
+    } catch (e: any) {
+      if (e.message === "INSUFFICIENT_BALANCE") {
+        // Re-read the current balance for an accurate error message.
+        // The pre-transaction `user.balance` snapshot may be stale by the
+        // time we get here (another concurrent order may have debited first).
+        const fresh = await db.user.findUnique({
+          where: { id: userId },
+          select: { balance: true },
+        });
+        const currentBalance = fresh?.balance ?? 0;
+        return apiError(
+          `Insufficient balance. Need $${grandTotal.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
+          402,
+        );
+      }
+      throw e;
+    }
 
     // Notification (single, summary)
     await createNotification({
@@ -260,88 +296,5 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("[orders/mass] error:", e);
     return apiError("Failed to place mass orders", 500);
-  }
-}
-
-/**
- * Simulates provider fulfillment by updating order progress over time.
- * Mirrors the behavior of the single-order endpoint.
- */
-async function simulateFulfillment(orderId: string, userId: string) {
-  const order = await db.order.findUnique({
-    where: { id: orderId },
-    select: {
-      id: true,
-      status: true,
-      publicId: true,
-      serviceName: true,
-      totalPrice: true,
-      link: true,
-      quantity: true,
-      priority: true,
-    },
-  });
-  if (!order || order.status === "cancelled") return;
-
-  const speedMultiplier =
-    order.priority === "highest"
-      ? 0.4
-      : order.priority === "priority"
-        ? 0.7
-        : 1.0;
-
-  const baseSteps = [
-    { delay: 2000, progress: 15, status: "in_progress" },
-    { delay: 5000, progress: 40, status: "in_progress" },
-    { delay: 8000, progress: 75, status: "in_progress" },
-    { delay: 12000, progress: 100, status: "completed" },
-  ];
-  const steps = baseSteps.map((s, i) => ({
-    delay: Math.round(
-      (i === 0 ? s.delay : s.delay - baseSteps[i - 1].delay) * speedMultiplier,
-    ),
-    progress: s.progress,
-    status: s.status,
-  }));
-
-  for (const step of steps) {
-    await new Promise((r) => setTimeout(r, step.delay));
-
-    const currentOrder = await db.order.findUnique({
-      where: { id: orderId },
-      select: {
-        id: true,
-        status: true,
-        publicId: true,
-        serviceName: true,
-        totalPrice: true,
-      },
-    });
-    if (!currentOrder || currentOrder.status === "cancelled") return;
-
-    await db.order.update({
-      where: { id: orderId },
-      data: {
-        progress: step.progress,
-        status: step.status,
-        eta:
-          step.status === "completed"
-            ? "—"
-            : `${Math.ceil((100 - step.progress) / 20)}m`,
-        completedAt: step.status === "completed" ? new Date() : null,
-      },
-    });
-
-    if (step.status === "completed") {
-      await createNotification({
-        userId,
-        type: "order",
-        title: `Order #${currentOrder.publicId} completed ✅`,
-        message: `${currentOrder.serviceName} — delivery complete.`,
-        amount: currentOrder.totalPrice,
-        severity: "success",
-        sendEmail: true,
-      });
-    }
   }
 }

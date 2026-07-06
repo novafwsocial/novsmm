@@ -6,6 +6,7 @@ import { createNotification } from "@/lib/notify";
 import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
 import { createNowPaymentsInvoice } from "@/lib/nowpayments";
 import { decryptJSON } from "@/lib/crypto-utils";
+import { nextPublicId } from "@/lib/ids";
 
 /**
  * POST /api/wallet/topup — process a payment and credit the wallet.
@@ -72,8 +73,7 @@ export async function POST(req: NextRequest) {
     }
 
     // Create pending transaction (for all paths — we record every attempt)
-    const txnCount = await db.transaction.count();
-    const publicId = `TX-${8842 + txnCount}`;
+    const publicId = await nextPublicId("TX", 8842);
     const methodSlug = pm.name.toLowerCase().replace(/\s/g, "_");
     const txn = await db.transaction.create({
       data: {

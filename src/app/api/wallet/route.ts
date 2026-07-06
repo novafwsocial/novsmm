@@ -25,6 +25,17 @@ export async function GET(req: NextRequest) {
     where: { userId },
     orderBy: { createdAt: "desc" },
     take: 50,
+    select: {
+      id: true,
+      publicId: true,
+      type: true,
+      amount: true,
+      description: true,
+      status: true,
+      method: true,
+      reference: true,
+      createdAt: true,
+    },
   });
 
   // Aggregate for chart (last 30 days, daily net)

@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { createRefund } from "@/lib/stripe";
+import { nextPublicId } from "@/lib/ids";
 
 /**
  * POST /api/admin/refunds — process a refund for a transaction.
@@ -48,6 +49,10 @@ export async function POST(req: NextRequest) {
   // Reverse the transaction in DB
   const refundAmount = Math.abs(txn.amount);
 
+  // Compute the refund TX public ID BEFORE the $transaction([...]) call —
+  // nextPublicId() runs its own atomic Prisma transaction internally.
+  const refundTxPublicId = await nextPublicId("TX-REFUND", 0);
+
   await db.$transaction([
     // Mark original transaction as refunded
     db.transaction.update({
@@ -67,7 +72,7 @@ export async function POST(req: NextRequest) {
     // Create a refund transaction record
     db.transaction.create({
       data: {
-        publicId: `TX-REFUND-${Date.now().toString().slice(-6)}`,
+        publicId: refundTxPublicId,
         userId: txn.userId,
         type: "fee", // using fee type for refunds
         amount: txn.amount > 0 ? -refundAmount : refundAmount,

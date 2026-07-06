@@ -7,6 +7,7 @@ import {
   resolveStripeWebhookSecret,
   getStripe,
 } from "@/lib/stripe";
+import { nextPublicId } from "@/lib/ids";
 
 /**
  * POST /api/webhooks/stripe — Stripe webhook handler.
@@ -523,8 +524,7 @@ async function handleInvoicePaymentSucceeded(invoice: any) {
     invoice.billing_reason === "subscription_create" ||
     !!invoice.subscription;
 
-  const txnCount = await db.transaction.count();
-  const publicId = `TX-${8842 + txnCount}`;
+  const publicId = await nextPublicId("TX", 8842);
   await db.transaction.create({
     data: {
       publicId,

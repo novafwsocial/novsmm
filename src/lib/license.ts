@@ -73,6 +73,13 @@ export function decryptLicenseKey(encryptedInput: string): string {
 /**
  * Validate a license against domain + IP constraints.
  * Returns { valid, reason }.
+ *
+ * Lookup strategy (O(1) when possible):
+ * 1. Compute SHA-256(plaintext key) → lookupHash
+ * 2. findFirst by { lookupHash, status: "active" } — single indexed lookup
+ * 3. validateLicenseKey (bcrypt.compare) against the single result to confirm
+ * 4. Fall back to bcrypt-scan over legacy licenses (lookupHash: null).
+ *    Backfill lookupHash on the matched legacy license for future O(1) lookups.
  */
 export async function validateLicense(
   licenseKey: string,
@@ -80,35 +87,67 @@ export async function validateLicense(
 ): Promise<{ valid: boolean; reason?: string; license?: any }> {
   const { db } = await import("./db");
 
-  // Find all active licenses and check the key against each hash
-  // (bcrypt hash can't be searched by equality)
-  const activeLicenses = await db.license.findMany({
-    where: { status: "active" },
+  // Compute SHA-256 lookup hash (hex) for O(1) index lookup
+  const lookupHash = crypto
+    .createHash("sha256")
+    .update(licenseKey)
+    .digest("hex");
+
+  // 1. O(1) lookup by lookupHash (new licenses)
+  let lic: any = await db.license.findFirst({
+    where: { lookupHash, status: "active" },
   });
 
-  for (const lic of activeLicenses) {
-    const match = await validateLicenseKey(licenseKey, lic.licenseHash);
-    if (match) {
-      // Check domain
-      if (lic.domain && options.domain && !options.domain.includes(lic.domain)) {
-        return { valid: false, reason: "Domain not allowed for this license" };
-      }
-      // Check IP allowlist
-      if (lic.ipAllowlist && options.ip) {
-        const allowed = lic.ipAllowlist.split(",").map((s) => s.trim());
-        if (!allowed.includes(options.ip)) {
-          return { valid: false, reason: "IP not allowed for this license" };
+  // 2. Fall back to bcrypt-scan over legacy licenses (lookupHash: null).
+  //    Backfill lookupHash on the matched legacy license.
+  if (!lic) {
+    const legacyLicenses = await db.license.findMany({
+      where: { status: "active", lookupHash: null },
+    });
+    for (const l of legacyLicenses) {
+      if (await validateLicenseKey(licenseKey, l.licenseHash)) {
+        lic = l;
+        // Best-effort backfill — never let a backfill failure block validation
+        try {
+          await db.license.update({
+            where: { id: l.id },
+            data: { lookupHash },
+          });
+        } catch (e) {
+          console.error(
+            `[license] Failed to backfill lookupHash for ${l.id}:`,
+            e
+          );
         }
+        break;
       }
-      // Check expiry
-      if (lic.expiresAt && new Date(lic.expiresAt) < new Date()) {
-        return { valid: false, reason: "License expired" };
-      }
-      return { valid: true, license: lic };
     }
   }
 
-  return { valid: false, reason: "Invalid license key" };
+  if (!lic) return { valid: false, reason: "Invalid license key" };
+
+  // Confirm the lookupHash hit actually matches the bcrypt hash (defence in depth)
+  const bcryptMatch = await validateLicenseKey(licenseKey, lic.licenseHash);
+  if (!bcryptMatch) {
+    return { valid: false, reason: "Invalid license key" };
+  }
+
+  // Check domain
+  if (lic.domain && options.domain && !options.domain.includes(lic.domain)) {
+    return { valid: false, reason: "Domain not allowed for this license" };
+  }
+  // Check IP allowlist
+  if (lic.ipAllowlist && options.ip) {
+    const allowed = lic.ipAllowlist.split(",").map((s: string) => s.trim());
+    if (!allowed.includes(options.ip)) {
+      return { valid: false, reason: "IP not allowed for this license" };
+    }
+  }
+  // Check expiry
+  if (lic.expiresAt && new Date(lic.expiresAt) < new Date()) {
+    return { valid: false, reason: "License expired" };
+  }
+  return { valid: true, license: lic };
 }
 
 /**

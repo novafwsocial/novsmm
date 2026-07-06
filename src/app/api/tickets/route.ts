@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { sanitizeMessage } from "@/lib/sanitize";
+import { nextPublicId } from "@/lib/ids";
 
 /** GET /api/tickets — list current user's tickets. */
 export async function GET() {
@@ -32,8 +33,7 @@ export async function POST(req: NextRequest) {
     return apiError("Subject and message are required", 422);
   }
 
-  const ticketCount = await db.ticket.count();
-  const publicId = `T-${201 + ticketCount}`;
+  const publicId = await nextPublicId("T", 201);
 
   const ticket = await db.ticket.create({
     data: {

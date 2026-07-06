@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import crypto from "crypto";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { generateApiKey, generateApiPublicId } from "@/lib/license";
@@ -58,11 +59,15 @@ export async function POST(req: NextRequest) {
   const fullKey = generateApiKey();
   const publicId = generateApiPublicId();
   const keyHash = await bcrypt.hash(fullKey, 12);
+  // SHA-256 of the plaintext key for O(1) lookup at validation time
+  // (bcrypt hashes can't be searched by equality, so lookupHash is the index key)
+  const lookupHash = crypto.createHash("sha256").update(fullKey).digest("hex");
 
   const apiKey = await db.apiKey.create({
     data: {
       publicId,
       keyHash,
+      lookupHash,
       name,
       userId,
       permissions: permissions ?? "read,order",

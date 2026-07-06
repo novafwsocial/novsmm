@@ -112,8 +112,10 @@ export async function sendEmail(opts: {
 /**
  * Broadcast a notification to the WebSocket mini-service for real-time push.
  * Server-side fetch uses localhost:3003 directly (XTransformPort is browser-only).
+ *
+ * Exported so admin broadcast can push to WS without creating duplicate DB rows.
  */
-async function broadcastToWs(payload: any): Promise<void> {
+export async function broadcastToWs(payload: any): Promise<void> {
   const WS_SERVICE_URL =
     process.env.WS_SERVICE_URL ?? "http://localhost:3003/broadcast";
   await fetch(WS_SERVICE_URL, {

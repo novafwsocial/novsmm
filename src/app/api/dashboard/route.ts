@@ -40,6 +40,19 @@ export async function GET(req: NextRequest) {
         where: { userId },
         orderBy: { createdAt: "desc" },
         take: 6,
+        select: {
+          id: true,
+          publicId: true,
+          serviceName: true,
+          platform: true,
+          quantity: true,
+          status: true,
+          progress: true,
+          eta: true,
+          flag: true,
+          totalPrice: true,
+          createdAt: true,
+        },
       }),
       db.ticket.count({
         where: { userId, status: { in: ["open", "waiting"] } },
@@ -48,6 +61,16 @@ export async function GET(req: NextRequest) {
         where: { OR: [{ userId }, { userId: null }] },
         orderBy: { createdAt: "desc" },
         take: 5,
+        select: {
+          id: true,
+          type: true,
+          title: true,
+          message: true,
+          amount: true,
+          severity: true,
+          read: true,
+          createdAt: true,
+        },
       }),
     ]);
 

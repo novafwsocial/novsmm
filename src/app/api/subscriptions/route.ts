@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { getStripe, createCheckoutSession } from "@/lib/stripe";
+import { nextPublicId } from "@/lib/ids";
 
 const PLANS: Record<string, {
   amount: number;
@@ -199,10 +200,10 @@ export async function POST(req: NextRequest) {
   });
 
   // Create invoice
-  const invoiceCount = await db.invoice.count();
+  const invoicePublicId = await nextPublicId("INV", 0, 4);
   await db.invoice.create({
     data: {
-      publicId: `INV-${String(invoiceCount + 1).padStart(4, "0")}`,
+      publicId: invoicePublicId,
       userId,
       type: "subscription",
       amount: plan.amount,
