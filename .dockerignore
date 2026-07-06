@@ -1,0 +1,92 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore — excludes from Docker build context
+# Reduces build time + image size by not sending unnecessary files
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Dependencies (reinstalled in Docker)
+node_modules
+**/node_modules
+
+# Build outputs (rebuilt in Docker)
+.next
+**/.next
+out
+dist
+build
+
+# Development files
+*.log
+dev.log
+server.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment files (use env_file in docker-compose instead)
+.env
+.env.*
+!.env.example
+
+# Database files (never ship dev DB to production)
+db/
+*.db
+*.db-journal
+
+# Upload files (mounted as volume in production)
+upload/
+uploads/
+
+# Download/tool-results (dev artifacts)
+download/
+tool-results/
+skills/
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github
+.gitlab-ci.yml
+
+# Documentation (not needed in production image)
+docs/
+*.md
+!README.md
+LICENSE
+
+# Tests
+__tests__
+*.test.ts
+*.test.js
+*.spec.ts
+*.spec.js
+coverage/
+
+# Cache
+.cache
+.eslintcache
+.tsbuildinfo
+
+# Prisma migrations folder (handled separately)
+prisma/migrations/dev
+
+# Temporary files
+tmp/
+temp/
