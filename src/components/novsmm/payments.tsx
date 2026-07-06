@@ -6,6 +6,7 @@ import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { Counter } from "./counter";
 import { PaymentLogo } from "./payment-logo";
+import { useEffect, useState } from "react";
 
 /* ── Provider data ────────────────────────────────────── */
 const PROVIDERS = [
@@ -81,7 +82,10 @@ export function Payments() {
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
           {/* Coin field — gravity + mouse reactive */}
-          <CoinField />
+          {/* Rendered after mount to avoid hydration mismatch with framer-motion useMotionValue */}
+          <ClientOnly>
+            <CoinField />
+          </ClientOnly>
 
           {/* Provider cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -183,6 +187,19 @@ function Stat({
       <div className="mt-1 text-xs text-muted-foreground">{label}</div>
     </div>
   );
+}
+
+/* ── ClientOnly: prevents hydration mismatch for interactive components ── */
+function ClientOnly({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+  if (!mounted) {
+    // Placeholder with same dimensions to prevent layout shift
+    return <div className="relative aspect-square w-full max-w-[460px] mx-auto rounded-3xl border border-border/60 bg-muted/30" />;
+  }
+  return <>{children}</>;
 }
 
 /* ── CoinField: gravity + mouse parallax ──────────────── */
