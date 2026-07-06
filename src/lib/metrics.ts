@@ -93,6 +93,19 @@ export const activeOrdersGauge = new promClient.Gauge({
   registers: [registry],
 });
 
+// ── Backup last success timestamp gauge ──
+// Updated by the internal /api/internal/backup-status endpoint after each
+// successful backup. The BackupFailure alert (alerts.yml) fires when
+// time() - novsmm_backup_last_success_timestamp > 86400 (24h).
+// Initialized to now() so a fresh deployment has a 24h grace period before
+// the alert fires (avoids false positive before the first backup runs).
+export const backupLastSuccessGauge = new promClient.Gauge({
+  name: "novsmm_backup_last_success_timestamp",
+  help: "Unix timestamp of the last successful backup (updated by backup.sh via /api/internal/backup-status)",
+  registers: [registry],
+});
+backupLastSuccessGauge.set(Math.floor(Date.now() / 1000));
+
 // ── Helpers ──
 
 /**

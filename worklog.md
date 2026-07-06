@@ -8704,3 +8704,41 @@ be tracked as tech debt.
 **Next audit:** 30 days after P0 remediation, including a live DR drill test.
 
 — End of AUDIT-D report —
+
+---
+Task ID: MONITORING-BLOCK
+Agent: main (Z.ai Code)
+Task: Bloque Monitoring — habilitar monitoreo real de PostgreSQL/Redis, completar alertas críticas faltantes, y reemplazar el webhook placeholder de AlertManager (P0-018/019/020/021/022 del audit, mapeados a P0-14/15/16 del plan de remediación).
+
+Work Log:
+- Leí el estado actual de los 4 archivos de monitoreo (prometheus.yml, alerts.yml, alertmanager.yml, docker-compose.monitoring.yml) y verifiqué que los cambios principales ya estaban aplicados en el commit f5dc2d4.
+- P0-018 (P0-14) — Exporters habilitados: confirmé que `prometheus.yml` tiene los jobs `postgres` (target postgres-exporter:9187) y `redis` (target redis-exporter:9121) descomentados, y que `docker-compose.monitoring.yml` define los servicios `postgres-exporter` (prometheuscommunity/postgres-exporter:v0.15.0) y `redis-exporter` (oliver006/redis_exporter:v1.67.0).
+- P0-019/020/021 (P0-15) — Alertas críticas agregadas: confirmé que `alerts.yml` contiene `PostgresDown` (expr: pg_up == 0, for: 1m, severity: critical), `RedisDown` (expr: redis_up == 0, for: 1m, severity: critical), y `BackupFailure` (expr: time() - novsmm_backup_last_success_timestamp > 86400, for: 1h, severity: critical).
+- P0-022 (P0-16) — Webhook placeholder reemplazado: confirmé que `alertmanager.yml` usa `${SLACK_WEBHOOK_URL}` (variable de entorno) en ambos receivers (`slack` y `slack-critical`), que el servicio `alertmanager` en docker-compose tiene el flag `--config.expand-env` y la env var `SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL:?Set SLACK_WEBHOOK_URL in .env}"` (fail-fast si no está seteada).
+- GAP DETECTADO — Métrica de backup inexistente: La alerta `BackupFailure` referencia `novsmm_backup_last_success_timestamp`, pero esa métrica NO estaba definida en `src/lib/metrics.ts`. Sin la métrica, la expresión Prometheus evalúa a "no data" y la alerta NUNCA dispara. Esto invalidaba silenciosamente P0-021.
+- FIX GAP — Agregué `backupLastSuccessGauge` (Gauge prom-client, name: "novsmm_backup_last_success_timestamp") a `src/lib/metrics.ts`, inicializada a `Math.floor(Date.now()/1000)` para dar un grace period de 24h en deployments nuevos (evita falsos positivos antes del primer backup).
+- FIX GAP — Creé el endpoint `POST /api/internal/backup-status` (`src/app/api/internal/backup-status/route.ts`) protegido por Bearer token (`INTERNAL_API_TOKEN` env var, fail-closed si no está configurado). Actualiza el gauge al timestamp actual cuando recibe `{"status":"success"}`. Incluye GET health check que reporta si el token está configurado.
+- FIX GAP — Actualicé `scripts/backup.sh` con un nuevo Step 7 "Monitoring Report" que hace `curl -X POST` al endpoint con `Authorization: Bearer $INTERNAL_API_TOKEN` y `--max-time 10` después de un backup exitoso. Si el token no está seteado, hace `warn` (no aborta el backup).
+- FIX GAP — Agregué `INTERNAL_API_TOKEN=` a `.env.example` con instrucciones de generar con `openssl rand -hex 32`.
+- FIX MENOR — Corregí `depends_on` en `docker-compose.monitoring.yml`: postgres-exporter ahora depende de `postgres` (antes `prometheus`), redis-exporter depende de `redis` (antes `prometheus`). Semánticamente correcto: los exporters dependen del servicio que monitorean, no de Prometheus.
+- FIX MENOR — Agregué fallback `${REDIS_PASSWORD:-}` en redis-exporter para que no crashee si Redis no tiene password (dev/test).
+- Validé sintaxis YAML de los 4 archivos con `python3 yaml.safe_load` — todos OK.
+- Validé sintaxis bash de `scripts/backup.sh` con `bash -n` — OK.
+- Ejecuté `bun run lint` — 0 errores (1 warning pre-existente en load-test.js, no relacionado).
+- Verifiqué el dev server (puerto 3000 escuchando, sin errores en dev.log).
+- Verifiqué vía curl que `GET /api/metrics` retorna HTTP 200 y emite la métrica `novsmm_backup_last_success_timestamp` con valor Unix timestamp.
+- Verifiqué vía curl que `GET /api/internal/backup-status` retorna `{"endpoint":"...","method":"POST","configured":false}` (health check sin auth) y que POST sin token es rechazado (middleware CSRF retorna 403 para POSTs sin Bearer; handler retorna 500 "not configured" cuando INTERNAL_API_TOKEN no está seteado — fail-closed).
+- Verifiqué con Agent Browser que la app renderiza correctamente (página / carga con HTTP 200, sin errores de consola, footer presente y sticky).
+
+Stage Summary:
+- **P0-018 (P0-14): RESUELTO** — postgres-exporter y redis-exporter habilitados en prometheus.yml + docker-compose.monitoring.yml. Prometheus ahora scrapea métricas directas de PostgreSQL (pg_up, pg_connections, pg_query_duration, etc.) y Redis (redis_up, redis_memory_used, redis_connected_clients, etc.).
+- **P0-019/020/021 (P0-15): RESUELTO** — Alertas PostgresDown, RedisDown, BackupFailure agregadas a alerts.yml. La alerta BackupFailure ahora es funcional gracias a la métrica + endpoint + reporte desde backup.sh.
+- **P0-022 (P0-16): RESUELTO** — Webhook placeholder `REPLACE_WITH_YOUR_WEBHOOK` reemplazado por `${SLACK_WEBHOOK_URL}` con `--config.expand-env`. Fail-fast: docker-compose falla al iniciar si SLACK_WEBHOOK_URL no está en .env.
+- **Archivos modificados:**
+  - `src/lib/metrics.ts` — agregada gauge `novsmm_backup_last_success_timestamp`
+  - `src/app/api/internal/backup-status/route.ts` — NUEVO endpoint interno
+  - `scripts/backup.sh` — agregado Step 7 (Monitoring Report)
+  - `.env.example` — agregada `INTERNAL_API_TOKEN=`
+  - `docker-compose.monitoring.yml` — corregido `depends_on` de exporters
+- **Flujo completo de backup alerting:** backup.sh (cron 2 AM) → pg_dump → verificación → curl POST /api/internal/backup-status → gauge actualizada → Prometheus scrapea /api/metrics → si timestamp > 24h → BackupFailure alert → AlertManager → Slack webhook. Si backup.sh no corre o falla antes del curl, la gauge no se actualiza y la alerta dispara después de 24h.
+- **Verificación browser:** app renderiza, sin errores, footer sticky. Métrica emitida en /api/metrics. Endpoint interno responde y es fail-closed.

@@ -122,6 +122,28 @@ find "$BACKUP_DIR" -name "novsmm_*" -mtime +$RETENTION_DAYS -delete 2>/dev/null
 REMAINING=$(find "$BACKUP_DIR" -name "novsmm_*" | wc -l)
 info "Backups restantes: $REMAINING"
 
+# ── 7. Report success to monitoring (updates novsmm_backup_last_success_timestamp) ──
+# This makes the BackupFailure alert (alerts.yml) functional.
+# Requires INTERNAL_API_TOKEN env var (same value as the app's .env).
+echo ""
+echo "═══ Monitoring Report ═══"
+BACKUP_STATUS="success"
+if [ -n "${INTERNAL_API_TOKEN:-}" ] && [ -n "${BACKUP_REPORT_URL:-http://localhost:3000/api/internal/backup-status}" ]; then
+  HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" --max-time 10 \
+    -X POST \
+    -H "Authorization: Bearer ${INTERNAL_API_TOKEN}" \
+    -H "Content-Type: application/json" \
+    -d "{\"status\":\"${BACKUP_STATUS}\"}" \
+    "${BACKUP_REPORT_URL}" 2>/dev/null || echo "000")
+  if [ "$HTTP_CODE" = "200" ]; then
+    ok "Backup timestamp reported to monitoring (HTTP 200)"
+  else
+    warn "Failed to report backup timestamp to monitoring (HTTP $HTTP_CODE) — alert may fire falsely"
+  fi
+else
+  warn "INTERNAL_API_TOKEN not set — cannot report backup status. Set it in .env to enable BackupFailure alert."
+fi
+
 # ── Resumen ──
 echo ""
 echo "╔═══════════════════════════════════════════════════════════════╗"

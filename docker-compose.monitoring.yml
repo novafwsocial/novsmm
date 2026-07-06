@@ -96,7 +96,7 @@ services:
     ports:
       - "127.0.0.1:9187:9187"
     depends_on:
-      - prometheus
+      - postgres
     networks:
       - novsmm-network
 
@@ -108,11 +108,11 @@ services:
     init: true
     environment:
       REDIS_ADDR: "redis://redis:6379"
-      REDIS_PASSWORD: "${REDIS_PASSWORD}"
+      REDIS_PASSWORD: "${REDIS_PASSWORD:-}"
     ports:
       - "127.0.0.1:9121:9121"
     depends_on:
-      - prometheus
+      - redis
     networks:
       - novsmm-network
 
