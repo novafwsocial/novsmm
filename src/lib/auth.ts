@@ -167,6 +167,45 @@ const providers: NextAuthOptions["providers"] = [
 // account with a victim's email and instantly access their existing NOVSMM account.
 // With it false, NextAuth requires the email to be verified by Google AND refuses
 // to link if an account with that email already exists without matching the provider.
+//
+// Credentials are loaded dynamically from:
+//   1. process.env (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET)
+//   2. DB Setting table (key: "oauth:google", encrypted with AES-256-GCM)
+// This allows admins to configure Google OAuth from the admin panel without
+// restarting the server.
+export async function getGoogleOAuthConfig(): Promise<{ clientId: string; clientSecret: string } | null> {
+  // Check env vars first
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    return {
+      clientId: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    };
+  }
+
+  // Check DB Setting table
+  try {
+    const setting = await db.setting.findUnique({
+      where: { key: "oauth:google" },
+    });
+    if (setting) {
+      const { decryptJSON } = await import("./crypto-utils");
+      const creds = decryptJSON(setting.value);
+      if (creds?.clientId && creds?.clientSecret) {
+        return {
+          clientId: creds.clientId,
+          clientSecret: creds.clientSecret,
+        };
+      }
+    }
+  } catch {
+    // DB might not be available during build — ignore
+  }
+
+  return null;
+}
+
+// Register Google provider if env vars are available at startup
+// (DB-based credentials are loaded on first auth request via getGoogleOAuthConfig)
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   providers.push(
     GoogleProvider({
