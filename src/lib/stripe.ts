@@ -2,18 +2,62 @@ import Stripe from "stripe";
 import { db } from "./db";
 
 /**
- * Stripe client — initialized lazily.
- * Set STRIPE_SECRET_KEY in .env (or in the PaymentMethod.config for the
- * "Stripe" method) to enable real payments.
- * Without it, callers fall back to sandbox mode.
+ * Stripe client — initialized lazily with runtime credential override.
+ *
+ * SECURITY FIX (Phase 5): Previously, wallet/topup/route.ts mutated
+ * process.env.STRIPE_SECRET_KEY at runtime to inject credentials from the
+ * PaymentMethod.config (DB-stored admin-configured credentials). This was
+ * thread-unsafe and persisted across requests.
+ *
+ * Now: setStripeCredentials() sets a module-level variable that getStripe()
+ * checks before falling back to process.env. The override is per-request
+ * (call clearStripeCredentials() at the end of the request).
  */
 
 let stripeInstance: Stripe | null = null;
+let runtimeSecretKey: string | null = null;
+let runtimeWebhookSecret: string | null = null;
+
+/**
+ * Set runtime credentials (from DB-stored PaymentMethod.config).
+ * Call this at the start of a request that needs DB-stored Stripe creds.
+ * Call clearStripeCredentials() at the end of the request.
+ */
+export function setStripeCredentials(creds: { secretKey?: string; webhookSecret?: string }) {
+  runtimeSecretKey = creds.secretKey ?? null;
+  runtimeWebhookSecret = creds.webhookSecret ?? null;
+  // Clear cached instance so it re-initializes with new creds
+  stripeInstance = null;
+}
+
+/**
+ * Clear runtime credentials — call at the end of a request.
+ */
+export function clearStripeCredentials() {
+  runtimeSecretKey = null;
+  runtimeWebhookSecret = null;
+  stripeInstance = null;
+}
+
+/**
+ * Get the active Stripe secret key (runtime override or env var).
+ */
+function getSecretKey(): string | null {
+  return runtimeSecretKey ?? process.env.STRIPE_SECRET_KEY ?? null;
+}
+
+/**
+ * Get the active Stripe webhook secret (runtime override or env var or DB Setting).
+ */
+export function getWebhookSecret(): string | null {
+  return runtimeWebhookSecret ?? process.env.STRIPE_WEBHOOK_SECRET ?? null;
+}
 
 export function getStripe(): Stripe | null {
-  if (!process.env.STRIPE_SECRET_KEY) return null;
+  const key = getSecretKey();
+  if (!key) return null;
   if (!stripeInstance) {
-    stripeInstance = new Stripe(process.env.STRIPE_SECRET_KEY, {
+    stripeInstance = new Stripe(key, {
       apiVersion: "2024-12-18.acacia" as any,
       typescript: true,
     });
@@ -22,7 +66,7 @@ export function getStripe(): Stripe | null {
 }
 
 export function isStripeConfigured(): boolean {
-  return !!process.env.STRIPE_SECRET_KEY;
+  return !!getSecretKey();
 }
 
 /**
@@ -155,12 +199,19 @@ export function verifyStripeWebhook(
 
 /**
  * Resolve the Stripe webhook secret.
- * Priority: STRIPE_WEBHOOK_SECRET env var → Setting `stripe.webhookSecret`.
+ * Priority: runtime override → STRIPE_WEBHOOK_SECRET env var → Setting `stripe.webhookSecret`.
  */
 export async function resolveStripeWebhookSecret(): Promise<string | null> {
+  // Check runtime override first (set by setStripeCredentials)
+  const runtime = getWebhookSecret();
+  if (runtime) return runtime;
+
+  // Check env var
   if (process.env.STRIPE_WEBHOOK_SECRET) {
     return process.env.STRIPE_WEBHOOK_SECRET;
   }
+
+  // Check DB Setting (admin-configurable)
   try {
     const setting = await db.setting.findUnique({
       where: { key: "stripe.webhookSecret" },

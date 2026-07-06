@@ -4,13 +4,12 @@ import {
   placeHuntSMMOrder,
   extractProviderServiceId,
 } from "@/lib/huntsmm";
-// NOTE: cross-route import of loyalty helpers is a known anti-pattern.
-// Phase 5 (Backend Refactor) will relocate these into a dedicated lib module.
-// Kept as-is here so the order-fulfillment logic has a single source of truth.
+// Phase 5: Import from the loyalty SERVICE module (not the API route).
+// This eliminates the cross-route import anti-pattern.
 import {
   awardOrderPoints,
   reconcileAchievements,
-} from "@/app/api/me/loyalty/route";
+} from "@/lib/services/loyalty.service";
 
 /**
  * Simulates provider fulfillment by updating order progress over time.

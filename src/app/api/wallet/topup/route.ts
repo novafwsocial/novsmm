@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
-import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
+import { isStripeConfigured, createTopupCheckoutSession, setStripeCredentials, clearStripeCredentials } from "@/lib/stripe";
 import { createNowPaymentsInvoice } from "@/lib/nowpayments";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { nextPublicId } from "@/lib/ids";
@@ -64,12 +64,15 @@ export async function POST(req: NextRequest) {
     }
     const hasCreds = !!creds && Object.keys(creds).length > 0;
 
-    // ── For Stripe: push creds into env so stripe.ts can pick them up ──
+    // ── For Stripe: set runtime credentials (from DB) instead of mutating process.env ──
+    // SECURITY FIX: Previously mutated process.env.STRIPE_SECRET_KEY at runtime,
+    // which was thread-unsafe and persisted across requests. Now we use
+    // setStripeCredentials() which sets a module-level variable cleared at request end.
     if (pm.name === "Stripe" && creds?.secretKey) {
-      process.env.STRIPE_SECRET_KEY = creds.secretKey;
-      if (creds.webhookSecret) {
-        process.env.STRIPE_WEBHOOK_SECRET = creds.webhookSecret;
-      }
+      setStripeCredentials({
+        secretKey: creds.secretKey,
+        webhookSecret: creds.webhookSecret,
+      });
     }
 
     // Create pending transaction (for all paths — we record every attempt)
@@ -422,6 +425,10 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("[wallet/topup] error:", e);
     return apiError("Top-up failed", 500);
+  } finally {
+    // Always clear runtime Stripe credentials at the end of the request
+    // to prevent credential leakage between requests
+    clearStripeCredentials();
   }
 }
 

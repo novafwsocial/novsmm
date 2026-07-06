@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
-import { createPaymentMethodSchema } from "@/lib/validations";
+import { createPaymentMethodSchema, updatePaymentMethodSchema } from "@/lib/validations";
 import { encryptJSON, decryptJSON, maskValue } from "@/lib/crypto-utils";
 
 /** GET /api/admin/payment-methods */
@@ -92,8 +92,11 @@ export async function PATCH(req: NextRequest) {
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { id, config, ...data } = body;
-  if (!id) return apiError("ID required", 422);
+  const parsed = updatePaymentMethodSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
+  }
+  const { id, config, ...data } = parsed.data;
 
   const updateData: any = { ...data };
 

@@ -6,6 +6,32 @@ import { db } from "./db";
 import { Prisma } from "@prisma/client";
 
 /**
+ * Typed user object extracted from the session.
+ * Eliminates the 73 `(session!.user as any).id` casts across the codebase.
+ */
+export interface AuthUser {
+  id: string;
+  email: string;
+  name: string | null;
+  username: string;
+  role: string;
+  balance: number;
+  heldBalance: number;
+  status: string;
+  currency?: string;
+  language?: string;
+  country?: string;
+  lifetimeEarnings?: number;
+}
+
+/**
+ * Typed auth result — either { user, session } on success or { error } on failure.
+ */
+export type AuthResult =
+  | { user: AuthUser; session: any; error: null }
+  | { user: null; session: null; error: NextResponse };
+
+/**
  * Get the base URL of the current request, respecting proxy headers.
  * Uses x-forwarded-proto + x-forwarded-host when present (gateway/proxy),
  * otherwise falls back to the Host header. This replaces the need for
@@ -27,11 +53,44 @@ export async function getAuthSession() {
   return getServerSession(authOptions);
 }
 
-/** Require an authenticated user. Returns { session, error }. */
-export async function requireAuth() {
+/**
+ * Extract a typed AuthUser from a NextAuth session.
+ * Returns null if the session or user is missing.
+ */
+function extractUser(session: any): AuthUser | null {
+  if (!session?.user) return null;
+  const u = session.user as any;
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name ?? null,
+    username: u.username,
+    role: u.role,
+    balance: u.balance ?? 0,
+    heldBalance: u.heldBalance ?? 0,
+    status: u.status ?? "active",
+    currency: u.currency,
+    language: u.language,
+    country: u.country,
+    lifetimeEarnings: u.lifetimeEarnings,
+  };
+}
+
+/**
+ * Require an authenticated user.
+ * Returns { user, session, error } — use `user.id` directly (no `as any` cast).
+ *
+ * Usage:
+ *   const { user, error } = await requireAuth();
+ *   if (error) return error;
+ *   // user.id, user.email, user.role, etc. are all typed
+ */
+export async function requireAuth(): Promise<AuthResult> {
   const session = await getServerSession(authOptions);
-  if (!session?.user) {
+  const user = extractUser(session);
+  if (!user) {
     return {
+      user: null,
       session: null,
       error: NextResponse.json(
         { error: "Authentication required" },
@@ -39,24 +98,28 @@ export async function requireAuth() {
       ),
     };
   }
-  return { session, error: null };
+  return { user, session, error: null };
 }
 
-/** Require an admin user. Returns { session, user, error }. */
-export async function requireAdmin() {
-  const { session, error } = await requireAuth();
-  if (error) return { session: null, user: null, error };
-  if ((session!.user as any).role !== "admin") {
+/**
+ * Require an admin user.
+ * Returns { user, session, error } — same shape as requireAuth but
+ * also checks that user.role === "admin".
+ */
+export async function requireAdmin(): Promise<AuthResult> {
+  const { user, session, error } = await requireAuth();
+  if (error) return { user: null, session: null, error };
+  if (user.role !== "admin") {
     return {
-      session: null,
       user: null,
+      session: null,
       error: NextResponse.json(
         { error: "Admin access required" },
         { status: 403 }
       ),
     };
   }
-  return { session, user: null, error: null };
+  return { user, session, error: null };
 }
 
 /** Standard error response. */

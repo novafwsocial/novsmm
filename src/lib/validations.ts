@@ -89,3 +89,51 @@ export const updateUserSchema = z.object({
   status: z.enum(["active", "suspended", "pending"]).optional(),
   balance: z.number().optional(),
 });
+
+// ── Admin PATCH schemas (strict — reject unknown fields) ──
+// All updateable fields are optional (PATCH = partial update);
+// `id` is required because it drives the WHERE clause and is NOT
+// part of the data spread into Prisma's update().
+
+export const updateProviderSchema = z.object({
+  id: z.string().min(1, "Provider ID required"),
+  name: z.string().min(1).max(255).optional(),
+  apiUrl: z.string().url().optional(),
+  apiKey: z.string().optional(),
+  status: z.enum(["healthy", "degraded", "down"]).optional(),
+  latency: z.number().int().min(0).optional(),
+}).strict();
+
+export const updatePaymentMethodSchema = z.object({
+  id: z.string().min(1, "ID required"),
+  name: z.string().min(1).max(255).optional(),
+  glyph: z.string().max(32).optional(),
+  tone: z.string().max(64).optional(),
+  settleTime: z.string().max(64).optional(),
+  fee: z.string().max(64).optional(),
+  currencies: z.string().max(255).optional(),
+  status: z.enum(["active", "maintenance", "disabled"]).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+  // config is the credentials blob — accept any JSON object (or null to clear)
+  config: z.record(z.string(), z.unknown()).nullable().optional(),
+}).strict();
+
+export const updateCurrencySchema = z.object({
+  id: z.string().min(1, "ID required"),
+  code: z.string().min(1).max(16).optional(),
+  name: z.string().min(1).max(255).optional(),
+  symbol: z.string().min(1).max(16).optional(),
+  rate: z.number().nonnegative().optional(),
+  status: z.enum(["active", "disabled"]).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+}).strict();
+
+export const updateLanguageSchema = z.object({
+  id: z.string().min(1, "ID required"),
+  code: z.string().min(1).max(16).optional(),
+  name: z.string().min(1).max(255).optional(),
+  nativeName: z.string().min(1).max(255).optional(),
+  flag: z.string().min(1).max(16).optional(),
+  status: z.enum(["active", "disabled"]).optional(),
+  sortOrder: z.number().int().min(0).optional(),
+}).strict();

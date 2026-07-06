@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
+import { updateCurrencySchema } from "@/lib/validations";
 
 /** GET /api/admin/currencies — list all currencies. */
 export async function GET() {
@@ -47,8 +48,11 @@ export async function PATCH(req: NextRequest) {
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { id, ...data } = body;
-  if (!id) return apiError("ID required", 422);
+  const parsed = updateCurrencySchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
+  }
+  const { id, ...data } = parsed.data;
 
   const currency = await db.currency.update({ where: { id }, data });
   await audit(adminId, "update", "currency", id, data);
