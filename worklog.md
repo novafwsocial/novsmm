@@ -2042,3 +2042,1849 @@ Stage Summary:
 - SocialButton component is now a clean, full-width Google CTA reusable on any auth screen
 - The PrismaAdapter will auto-create the user account on first Google login (no separate registration step needed)
 - All other Discord/Telegram references in the codebase are SMM-platform service categories (Instagram, TikTok, YouTube, etc.), correctly left untouched
+
+---
+Task ID: ENTERPRISE-AUDIT-KICKOFF
+Agent: main (Z.ai Code)
+Task: Iniciar la auditoría técnica completa de NOVSMM para migración a arquitectura Enterprise (PostgreSQL, Redis, Background Jobs, Seguridad, Observabilidad, DevOps). El usuario subió el PDF "NOVSMM Enterprise Architecture Migration.pdf" con 12 áreas a auditar y migrar.
+
+Work Log:
+- Leí el PDF completo (8 páginas) extraído con pdf.py extract.text
+- Documenté los 12 áreas objetivo: DB, Redis, Background Jobs, Seguridad, Backend Arch, APIs, Performance, Observabilidad, Backups, DevOps, Código, Documentación
+- Arquitectura objetivo: Internet → Cloudflare → Nginx → Next.js → PostgreSQL → Redis → Background Jobs → Notification Service → Payment Services → SMM APIs
+- Lanzando 5 agentes de auditoría en paralelo (Task IDs 1-a a 1-e), cada uno con scope enfocado
+- Cada agente debe leer worklog.md primero, auditar su área, y appendear su reporte al worklog
+- Después consolidaré los 5 reportes en un audit final + plan de migración por fases
+
+Stage Summary:
+- Audit kickoff iniciado
+- 5 agentes paralelos: Database, Security, Backend Architecture, Performance/Frontend, DevOps/Observability
+- Próximo paso: consolidar findings y crear migration plan en fases
+
+---
+Task ID: 1-e
+Agent: Explore (DevOps & Observability Audit)
+Task: Audit DevOps, observability, backups, code quality, mini-services, env vars, logging, monitoring, CI/CD, documentation
+
+Work Log:
+- Read /home/z/my-project/worklog.md (lines 1800-2062) — confirmed Enterprise Migration kickoff (5 parallel agents 1-a..1-e), architecture target = Internet → Cloudflare → Nginx → Next.js → PostgreSQL → Redis → Background Jobs → Notification Service → Payment Services → SMM APIs
+- Inventoried root directory: confirmed presence of Caddyfile, package.json, prisma/, mini-services/, examples/, src/, .zscripts/; confirmed ABSENCE of Dockerfile, docker-compose.yml, .dockerignore, nginx config, .github/workflows, ecosystem.config.* / pm2 / systemd / vercel.json / netlify.toml / fly.toml / render.yaml / k8s / Makefile / Procfile / LICENSE / README.md / CHANGELOG / CONTRIBUTING
+- Read .env (1 line only: DATABASE_URL=file:/home/z/my-project/db/custom.db) — confirmed every other env var is missing
+- Read .gitignore (covers .env*, *.log, dev.log, server.log, /skills/, .claude, .z-ai-config)
+- Read Caddyfile (single :81 block, XTransformPort query-param routing, reverse_proxy to localhost:3000 default + localhost:{query.XTransformPort} for ws/etc.) — single-port gateway, NOT a real domain-aware reverse proxy
+- Read package.json (Next 16.1.1, Prisma 6.11, NextAuth 4.24, Stripe 22.3, socket.io 4.8, z-ai-web-dev-sdk 0.0.18, bun runtime; scripts: dev/build/start/lint/db:push/db:generate/db:migrate/db:reset)
+- Read next.config.ts (output: "standalone", reactStrictMode true — but NO outputStandalone tracing, NO experimental.logging, NO headers / rewrites)
+- Read src/middleware.ts — in-memory rate limiter (sliding window), CSRF via Origin/Referer check, security headers (CSP/HSTS/X-Frame/etc.), comments say "for production, replace with Redis" — rate limiter state is lost on every restart and not shared across instances
+- Inventoried mini-services/: ONLY ONE service exists — notifications-service/ (Socket.IO on port 3003, 382 lines). No chat-service or any other service (despite worklog mentions of multiple mini-services)
+- Read mini-services/notifications-service/index.ts — port 3003 HARDCODED, CORS origin "*", ambient broadcast loop (8-15s randomized), POST /broadcast endpoint for DB-pushed notifications, graceful SIGTERM/SIGINT shutdown, console.log-based logging (no levels, no JSON)
+- Read examples/websocket/server.ts + frontend.tsx — DUPLICATE of notifications-service on the SAME port 3003, never imported from src/, only used as a Socket.IO dev demo. Dead code that conflicts at boot if both run.
+- Read .zscripts/{start.sh, dev.sh, build.sh, mini-services-start.sh, mini-services-build.sh, mini-services-install.sh} — Bun-based process supervisor (no PM2, no systemd, no Docker). Build script COPIES the dev SQLite DB (db/custom.db) into the production tarball — dev DB shipped to production!
+- Read prisma/ — confirmed NO migrations/ folder (only seed.ts, seed-settings.ts, seed-roles.ts, seed-services.ts, update-fx-rates.ts, sync-huntsmm.ts). Schema changes via `db:push` only — destructive, no rollback possible. Schema uses SQLite provider.
+- Grep process.env.* across src/ → 22 distinct env vars referenced (DATABASE_URL, NODE_ENV, LICENSE_ENCRYPTION_KEY, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_STARTER_MONTHLY/YEARLY, STRIPE_PRICE_GROWTH_MONTHLY/YEARLY, STRIPE_PRICE_ENTERPRISE_MONTHLY/YEARLY, HUNTSMM_API_KEY, WS_SERVICE_URL, SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, EMAIL_FROM, FX_API_KEY, MP_ACCESS_TOKEN [commented]). Of these, ONLY DATABASE_URL is in .env → 21 env vars silently default to "off" (sandbox mode).
+- Read src/lib/crypto-utils.ts and src/lib/license.ts — found TWO DIFFERENT hardcoded fallback encryption keys:
+    • crypto-utils.ts: "novsmm-default-encryption-key-change!" (32 chars)
+    • license.ts:      "novsmm-license-encryption-key-change-in-production-32b!" (different 56 chars)
+  Both used as AES-256-GCM keys via SHA-256 derivation. If LICENSE_ENCRYPTION_KEY env var is unset, payment credentials encrypted by crypto-utils.ts CANNOT be decrypted by license.ts (and vice versa) → data corruption risk.
+- Read src/lib/notify.ts — sandbox-mode email console.logs include EMAIL_FROM and first 200 chars of email body (could leak PII / sensitive ticket content in logs). SMTP credentials pulled at runtime via destructuring of process.env (good).
+- Read src/lib/stripe.ts + src/lib/huntsmm.ts + src/lib/nowpayments.ts — NowPayments creds stored in DB (PaymentMethod.config, AES-encrypted) — good. Stripe + HuntSMM use env vars only. Stripe webhook secret has env → Setting-table fallback (good).
+- Grep console.* usage → 57 occurrences across 21 files in src/, 9 in mini-services/index.ts, ~10 in prisma/seed.ts, ~7 in examples/websocket/server.ts → ~80+ unstructured console.* calls total. Zero structured logger, zero log levels beyond console.{log,error,warn}, zero JSON output.
+- Grep for Sentry/Bugsnag/Datadog/NewRelic/OpenTelemetry/Prometheus/Grafana → ZERO matches. No error tracking, no APM, no metrics.
+- Grep for /api/(health|status|ready|readiness|live|liveness) → only /api/status exists. Read it: returns HARDCODED status:"operational" + HARDCODED per-service "operational" strings (api/dashboard/payments/websocket), only real DB counts of users/orders/services. NOT a real readiness probe — doesn't actually ping DB/Redis/Stripe/HuntSMM/notifications-service.
+- Grep for winston/pino/bunyan/createLogger → ZERO matches. No central logger module.
+- Inventory of unused shadcn/ui primitives: of 38 ui/*.tsx files, only 4 are imported from app code (dialog, alert-dialog, toast, toaster). All others (accordion, alert, aspect-ratio, avatar, badge, breadcrumb, calendar, card, carousel, chart, checkbox, collapsible, command, context-menu, drawer, dropdown-menu, form, hover-card, input-otp, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, sidebar, slider, sonner, switch, table, tabs, textarea, toggle-group) are scaffolded but never imported by any novsmm component or route — pure dead weight (~5,800 lines of unused code).
+- Confirmed src/app/api/docs/route.ts returns a hand-written OpenAPI-style JSON for the public v1 API (4 endpoints documented: /api/v1/services, /api/v1/orders, /api/status, /api/public/validate-license). No Swagger UI / Redoc rendering, no docs/ folder.
+- Read eslint.config.mjs — disables 18+ rules including @typescript-eslint/no-explicit-any, no-unused-vars, no-console, react-hooks/exhaustive-deps. Lint will pass almost anything.
+- Read tsconfig.json — strict:true (good), target ES2017, path alias @/* → ./src/*. (good)
+- Confirmed no .github/workflows/, no release.config.*, no .changeset/, no semantic-release — pure manual deployment via tar.gz build + scp + run start.sh.
+
+Stage Summary:
+
+## DEVOPS & OBSERVABILITY AUDIT REPORT — NOVSMM (Task 1-e)
+
+### 1. Containerization Status
+- Dockerfile: **NO** (root or anywhere in repo)
+- docker-compose.yml: **NO**
+- .dockerignore: **NO**
+- Multi-stage build: N/A (no Dockerfile)
+- Gaps & recommendations:
+  - **P0**: Create a multi-stage Dockerfile (builder stage with Bun + node_modules, runner stage with `next start` standalone output + only `node_modules/postinstall` runtime deps + prisma client). Build target should be `output: "standalone"` (already set in next.config.ts).
+  - **P0**: Create `docker-compose.yml` with services: web (Next.js), worker (notifications-service), postgres, redis, caddy/nginx. Use `depends_on` + healthchecks.
+  - **P0**: Create `.dockerignore` excluding `node_modules`, `.next`, `db/custom.db`, `download/`, `upload/`, `tool-results/`, `dev.log`, `*.log`, `skills/`, `.git`.
+  - **P1**: Add `HEALTHCHECK` directive hitting `/api/status` (or better, a new `/api/health` — see §12).
+  - **P1**: Use non-root USER in runner stage.
+  - **P2**: Add `.env.docker` example for container env vars.
+
+### 2. Reverse Proxy / Gateway
+- Current setup (Caddyfile, 23 lines, port :81):
+  - Listens on `:81` (non-standard port — likely to avoid clashing with port 80/443 in dev container).
+  - Single `@transform_port_query` matcher: any request with `?XTransformPort=NNNN` query param is reverse-proxied to `localhost:{query.XTransformPort}`.
+  - Default handle: reverse_proxy to `localhost:3000` (Next.js).
+  - Forwards standard `Host`, `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Real-IP` headers.
+  - NO TLS termination (Caddy's automatic HTTPS is not configured because `:81` is an IP:port, not a hostname).
+  - NO domain-based routing, NO rate limiting at gateway, NO basic auth, NO access log.
+- Production target (per PDF): Cloudflare → Nginx → Next.js
+- Migration steps needed:
+  - **P0**: Replace Caddyfile with nginx.conf + TLS cert (or keep Caddy with a real domain like `novsmm.io` for auto-HTTPS — Caddy is a valid production choice; the choice depends on team familiarity).
+  - **P0**: Configure Cloudflare DNS → orange-cloud → origin server. Set Cloudflare SSL mode to "Full (strict)" with origin cert.
+  - **P0**: Add WebSocket upgrade support in nginx (`proxy_http_version 1.1; proxy_set_header Upgrade $http_upgrade; proxy_set_header Connection "upgrade";`) for /socket.io/ paths.
+  - **P1**: Remove the `?XTransformPort=` hack — production should route by path (e.g. `/ws/ → :3003`) or subdomain (e.g. `ws.novsmm.io`), not by client-controlled query param (security: any client can currently proxy to any internal port by setting XTransformPort — a SSRF vector).
+  - **P1**: Add gateway-level rate limiting (`limit_req_zone` in nginx) as defense-in-depth in front of the app-level limiter.
+  - **P1**: Enable nginx access log + error log → forward to log aggregator.
+  - **P2**: Add gzip + brotli compression at the gateway.
+  - **P2**: Add basic cache rules for `/_next/static/` (immutable, 1 year).
+
+### 3. Process Management
+- Next.js startup: `bun run dev` (dev) / `bun .next/standalone/server.js` (prod, per package.json `start` script). Dev script pipes stdout to `dev.log`.
+- PM2 / systemd / supervisord: **NONE**. Process supervision is via shell scripts in `.zscripts/` (start.sh, dev.sh, mini-services-start.sh) — `bun server.js &` with manual PID tracking + SIGTERM cleanup. No restart-on-crash, no log rotation, no resource limits.
+- Mini-services inventory:
+
+  | name | port | entry | purpose |
+  |---|---|---|---|
+  | notifications-service | 3003 (hardcoded) | mini-services/notifications-service/index.ts | Socket.IO real-time push service. Receives POST /broadcast from Next.js API routes, emits to all connected dashboard clients. Ambient loop emits 8 "system" notification templates every 8-15s. |
+
+  (That's the ONLY mini-service. The worklog's references to "chat-service" appear to be historical — the chat demo was migrated into notifications-service.)
+
+### 4. Environment Variables
+- Keys in .env: ONLY `DATABASE_URL` (SQLite path)
+- All env vars referenced in code (22 total):
+  - **Database**: `DATABASE_URL`
+  - **Runtime**: `NODE_ENV`
+  - **Crypto**: `LICENSE_ENCRYPTION_KEY` (used by BOTH lib/license.ts AND lib/crypto-utils.ts with TWO DIFFERENT hardcoded fallbacks — see Hardcoded secrets)
+  - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_URL` (referenced in comments only — trustHost:true is used instead), `NEXTAUTH_SECRET` (WARNING: NextAuth needs this to sign JWTs — currently NOT SET → JWTs are unsigned/insecure; dev.log shows `[next-auth][warn][NO_SECRET]` warnings)
+  - **Stripe** (8): `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_STARTER_MONTHLY`, `STRIPE_PRICE_STARTER_YEARLY`, `STRIPE_PRICE_GROWTH_MONTHLY`, `STRIPE_PRICE_GROWTH_YEARLY`, `STRIPE_PRICE_ENTERPRISE_MONTHLY`, `STRIPE_PRICE_ENTERPRISE_YEARLY`
+  - **HuntSMM provider**: `HUNTSMM_API_KEY`
+  - **WebSocket**: `WS_SERVICE_URL` (defaults to `http://localhost:3003/broadcast`)
+  - **SMTP email** (5): `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM`
+  - **FX rates**: `FX_API_KEY`
+  - **Mercado Pago** (commented out): `MP_ACCESS_TOKEN`
+- Missing from .env (all of them): `NODE_ENV`, `LICENSE_ENCRYPTION_KEY`, `NEXTAUTH_SECRET`, `GOOGLE_CLIENT_*`, `STRIPE_*` (8), `HUNTSMM_API_KEY`, `WS_SERVICE_URL`, `SMTP_*` (5), `EMAIL_FROM`, `FX_API_KEY`
+- Environment separation: **NONE**. No `.env.example`, no `.env.development`, no `.env.test`, no `.env.production`. Only a single `.env` with one line.
+- Hardcoded secrets / insecure defaults (CRITICAL):
+  - **P0** `src/lib/crypto-utils.ts:12` → `"novsmm-default-encryption-key-change!"` — production AES-256-GCM encryption key baked into source. Used to encrypt payment credentials.
+  - **P0** `src/lib/license.ts:18` → `"novsmm-license-encryption-key-change-in-production-32b!"` — DIFFERENT fallback key for the SAME env var. If env is unset, payment-method configs encrypted via crypto-utils.ts cannot be decrypted by license.ts (or vice versa) → irreversible data corruption.
+  - **P0** `NEXTAUTH_SECRET` not in .env → NextAuth JWTs are unsigned → any user can forge a session token. dev.log confirms `[next-auth][warn][NO_SECRET]` warning on every request.
+  - **P0** `prisma/seed.ts` → admin password `admin123` and demo password `novsmm2024` are hardcoded AND printed to stdout via `console.log` (would land in CI logs / Docker build logs).
+  - **P1** Port 3003 hardcoded in mini-services/notifications-service/index.ts (line 60) and in src/lib/notify.ts default — should be `process.env.NOTIFICATIONS_PORT`.
+  - **P1** Caddyfile uses port :81 hardcoded — should be configurable.
+
+### 5. Logging Strategy
+- console.* count: **~80 total** (57 in src/ across 21 files + 9 in mini-services + ~10 in prisma/seed.ts + ~7 in examples/websocket/server.ts)
+- Structured logging: **NO**. All logs are unstructured `console.log("[tag] message", value)` strings. Zero JSON output, no log levels (info/debug/warn/error), no request IDs, no correlation IDs, no user IDs in error logs (except by accident).
+- Sensitive data being logged:
+  - `prisma/seed.ts:25,47` — admin password "admin123" and user password "novsmm2024" printed to stdout.
+  - `src/lib/notify.ts:83-88` — sandbox-mode email logs include `EMAIL_FROM` + first 200 chars of email body (could contain ticket content, password reset tokens, or 2FA codes).
+  - `src/app/api/webhooks/nowpayments/route.ts:210` — logs user IDs + transaction amounts on every successful crypto payment (acceptable for audit, but should be structured + sanitized).
+  - `src/app/api/webhooks/stripe/route.ts` — logs `sessionId`, `client_reference_id`, etc. (acceptable but unstructured).
+- Recommended logging architecture:
+  - **P0**: Create `src/lib/logger.ts` wrapping `pino` (or `winston`) with: JSON output, log levels (trace/debug/info/warn/error/fatal), request ID injection (via AsyncLocalStorage), redaction of `password`, `passwordHash`, `token`, `secret`, `apiKey`, `Authorization` fields.
+  - **P0**: Replace all 80 `console.*` calls with `logger.info/warn/error`.
+  - **P1**: Add a Next.js middleware that assigns `req.id` (UUID) + injects into AsyncLocalStorage so all downstream logs include the request ID.
+  - **P1**: Ship logs to a centralized collector (Loki + Grafana, or Datadog, or CloudWatch).
+  - **P2**: Add structured access logs at the gateway (nginx log_format JSON) feeding into the same collector.
+
+### 6. Error Tracking & Monitoring
+- Sentry / Bugsnag / similar: **NO** (zero matches across entire repo).
+- Health endpoints: **`/api/status` only** — returns HARDCODED `status:"operational"` + `services:{api,dashboard,payments,websocket}` all "operational" regardless of actual state. Only real signal: DB counts (User/Order/Service) — if those queries succeed, the endpoint returns 200. Effectively a liveness probe, NOT a readiness probe.
+- Metrics collected: **NONE**. No `/metrics` Prometheus endpoint, no counters, no histograms, no gauges. The `/api/admin/overview` returns business KPIs (revenue, orders, users) but not infra metrics (CPU, RAM, p50/p95/p99 latency, error rate, queue depth).
+- APM: **NONE**.
+- Recommended monitoring stack:
+  - **P0**: Sentry for frontend + backend error tracking (Next.js has `@sentry/nextjs` with automatic instrumentation).
+  - **P0**: Replace `/api/status` with a real `/api/health` that PINGS all dependencies: `db.$queryRaw\`SELECT 1\``, Redis ping, notifications-service HTTP ping, Stripe reachable, HuntSMM reachable. Return 503 if any critical dep is down.
+  - **P1**: Add Prometheus metrics endpoint at `/api/metrics` (use `prom-client`). Track: HTTP request count + duration histogram per route, DB query duration, WebSocket connection count, background-job queue depth, payment webhook received/processed/failed counters.
+  - **P1**: Grafana dashboards on top of Prometheus for p50/p95/p99 latency, error rate, DB connections, etc.
+  - **P2**: OpenTelemetry tracing → Jaeger/Tempo for distributed traces across Next.js → notifications-service → HuntSMM API.
+
+### 7. Backup Strategy
+- Current backup automation: **NONE**. No scripts in `.zscripts/`, no cron config, no `backup.sh`, no `db/backup/` folder.
+- DB backup: **NONE**. The dev SQLite file `db/custom.db` is shipped as-is into the production tarball by `.zscripts/build.sh` (line 81-93) — a one-time snapshot, NOT a backup. If the production DB is corrupted, the only recovery is to restore the original seed data + lose all real user data.
+- File backup: **NONE**. The `upload/` directory (used for ticket attachments — see `src/app/api/uploads/route.ts`) is on local disk with no backup, no S3 sync, no replication.
+- Disaster recovery readiness: **CRITICALLY UNPREPARED**. RTO/RPO undefined. No documented restore procedure. No off-site backup. No backup verification.
+- Recommended backup strategy:
+  - **P0**: Migrate DB to PostgreSQL (already in migration scope per PDF) so pg_dump + WAL archiving become available.
+  - **P0**: Nightly `pg_dump --format=custom` → upload to S3 (with 30-day retention) + monthly snapshot → Glacier (1-year retention).
+  - **P0**: Daily `pg_basebackup` for PITR (Point-In-Time Recovery) with 7-day WAL retention.
+  - **P0**: Migrate file uploads to S3 (or R2) — local disk should be stateless and disposable.
+  - **P1**: Write `scripts/backup.sh` + add to cron (or systemd timer) + alert on failure.
+  - **P1**: Document restore procedure in `docs/disaster-recovery.md` with step-by-step + test runs.
+  - **P1**: Quarterly restore drills (verify backups are actually restorable).
+  - **P2**: Cross-region replication for Postgres (read replica in different AZ).
+
+### 8. CI/CD
+- Current CI/CD: **NONE**. No `.github/workflows/`, no `.gitlab-ci.yml`, no `Jenkinsfile`, no CircleCI, no Buildkite. Lint and tests are run manually.
+- Deployment scripts: `.zscripts/build.sh` (creates a tar.gz with Next.js standalone + mini-services dist + DB + Caddyfile + start.sh) + manual scp to server + manual `sh start.sh`. Process is fully manual, error-prone, no rollback.
+- Release management: **NONE**. No `release.config.*`, no `.changeset/`, no semantic-release, no git tags, no changelog generation. `package.json` version is `0.2.0` and has never been bumped despite 30+ worklog entries.
+- Recommended CI/CD pipeline:
+  - **P0**: GitHub Actions workflow on PR: `bun install → bun run lint → tsc --noEmit → bun run build → (future) bun test`. Block merge on failure.
+  - **P0**: GitHub Actions workflow on `main` push: build Docker image → tag with git SHA + `:latest` → push to GHCR or Docker Hub.
+  - **P0**: Deploy workflow: SSH to prod server → `docker compose pull && docker compose up -d` (or better, k8s `kubectl rollout restart deployment/novsmm-web`).
+  - **P1**: Add `changesets` or `semantic-release` for automated version bumping + changelog.
+  - **P1**: Add health-check-gated rollout (new container must pass `/api/health` within 60s or auto-rollback).
+  - **P2**: Add preview deployments per PR (Vercel-style).
+
+### 9. Dead Code & Duplication
+- Unused shadcn/ui primitives (~5,800 lines of dead scaffold in `src/components/ui/`):
+  - **35 of 38 files** never imported from app code. Only `dialog`, `alert-dialog`, `toast`, `toaster` are actually used (4 files).
+  - To delete: `accordion.tsx, alert.tsx, aspect-ratio.tsx, avatar.tsx, badge.tsx, breadcrumb.tsx, calendar.tsx, card.tsx, carousel.tsx, chart.tsx, checkbox.tsx, collapsible.tsx, command.tsx, context-menu.tsx, drawer.tsx, dropdown-menu.tsx, form.tsx, hover-card.tsx, input-otp.tsx, menubar.tsx, navigation-menu.tsx, pagination.tsx, popover.tsx, progress.tsx, radio-group.tsx, resizable.tsx, scroll-area.tsx, select.tsx, sidebar.tsx, slider.tsx, sonner.tsx, switch.tsx, table.tsx, tabs.tsx, textarea.tsx, toggle-group.tsx`.
+  - Also `button.tsx`, `input.tsx`, `label.tsx`, `separator.tsx`, `sheet.tsx`, `skeleton.tsx`, `toggle.tsx`, `tooltip.tsx` are only used internally by other ui primitives — once the 35 above are deleted, these become orphaned too.
+- Duplicate components:
+  - **P0** `examples/websocket/server.ts` (138 lines) — full duplicate of `mini-services/notifications-service/index.ts` (382 lines) on the SAME port 3003. Running both crashes with `EADDRINUSE`. Delete `examples/`.
+  - **P1** `examples/websocket/frontend.tsx` (197 lines) — chat demo page never wired into any route in `src/app/`. Delete.
+- Obsolete configs:
+  - `.zscripts/build.sh` ships `db/custom.db` into production tarball — design smell that should be removed once Docker + proper migrations are in place.
+  - Caddyfile should be replaced by nginx.conf (or rewritten for real domain TLS).
+- `download/` folder (88 PNG screenshots, ~30 MB) — development artifacts, should NOT be in the repo. Add to .gitignore + git rm.
+- `upload/` folder (~55 PNG/PDF files including the original master prompt PDFs) — these are user-uploaded test files; should be moved to object storage, not committed to the repo.
+- `tool-results/` folder (~60 cache files from prior tool runs) — pure garbage, should be in .gitignore (it isn't).
+- `skills/` folder (67 subdirs) — ClawHub skills marketplace, correctly gitignored but lives in the project root.
+
+### 10. Mini-Services Assessment
+- Inventory (1 service only):
+
+  | name | port | entry | lines | purpose |
+  |---|---|---|---|---|
+  | notifications-service | 3003 | mini-services/notifications-service/index.ts | 382 | Socket.IO push service (ambient + DB-pushed notifications) |
+
+- Issues found:
+  - **P0** Port 3003 hardcoded (line 60) — must be env-driven (`process.env.NOTIFICATIONS_PORT`).
+  - **P1** CORS `origin: "*"` — any website can connect to the WebSocket. Should be restricted to the NOVSMM origin in production.
+  - **P1** No authentication on the WebSocket — anyone can subscribe to ALL notifications for ALL users (per-user targeting is "future enhancement" per source comment, currently broadcasts to everyone). This leaks every order/sale/referral event platform-wide.
+  - **P1** POST `/broadcast` endpoint has no auth — anyone on the network who can reach port 3003 can inject fake notifications into every dashboard.
+  - **P1** Logging is bare `console.log` (9 calls, no levels, no JSON).
+  - **P2** No health endpoint on the mini-service itself — `/api/health` of the main app can't verify it's actually serving.
+  - **P2** `bun --hot` (dev script) restarts on file change — fine for dev, but the prod `start` script is `bun index.ts` with no restart-on-crash.
+- Recommendations:
+  - **P0** Add a `NOTIFICATIONS_SERVICE_SECRET` env var. POST `/broadcast` must require it in an `Authorization: Bearer ...` header. WebSocket clients must pass a short-lived signed JWT in the connection handshake.
+  - **P0** Make port env-driven; add a `HOST` env var too (currently binds to all interfaces implicitly).
+  - **P1** Filter WebSocket emissions by `userId` (the payload already supports `userId` — wire it to `socket.to(room:userId).emit()` instead of `io.emit()`).
+  - **P1** Add a `GET /healthz` endpoint returning `{ ok: true, uptime, connections }` for the main app's healthcheck.
+  - **P1** Consider whether this service should be merged into Next.js itself (Next 16 supports WebSocket via custom server). For a single-instance deployment, a separate process is overkill. For multi-instance, the service should be horizontally scalable with Redis adapter (`@socket.io/redis-adapter`) — which aligns with the PDF's Redis migration target.
+  - **P2** If more mini-services are planned (per PDF: notification service is named explicitly), define a `mini-services/_template/` scaffold so future services share the same structure, env loading, logging, and health endpoint.
+
+### 11. Database Migrations
+- Current approach: `prisma db:push` only. The `prisma/migrations/` folder DOES NOT EXIST. Schema changes are pushed directly to the DB with no migration history, no down-migration, no rollback. The `db:migrate` script exists in package.json (`prisma migrate dev`) but has never been run.
+- Production readiness: **UNSAFE**. `db:push` on a production DB can drop columns/tables with data loss if the schema diff requires it. There is no audit trail of when each schema change was applied. No way to roll back a bad deploy.
+- DB engine: SQLite (`provider = "sqlite"` in prisma/schema.prisma:10). SQLite is fine for dev but unsuitable for production SaaS (no concurrent writes, no replication, file-based, no PITR).
+- Seed scripts (5): `seed.ts`, `seed-settings.ts`, `seed-roles.ts`, `seed-services.ts`, `update-fx-rates.ts`, `sync-huntsmm.ts`. None of them are wired into package.json scripts — must be invoked manually with `bun prisma/seed.ts`. `seed.ts` creates a default admin with password `admin123` (printed to stdout) — a security hazard if seed is run in production.
+- Recommendations:
+  - **P0**: Migrate to PostgreSQL (already in PDF migration scope). Change `provider = "postgresql"` in schema.prisma, run `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script` to generate the initial migration, then `prisma migrate deploy` for production.
+  - **P0**: Stop using `db:push` for production. Use `prisma migrate deploy` (CI/CD job) for prod, `prisma migrate dev` for local dev.
+  - **P0**: Add a `prisma/seed.ts` script invocation to package.json: `"db:seed": "bun prisma/seed.ts"`. Wire it to run after `prisma migrate deploy` in CI.
+  - **P0**: Remove the `admin123` default password from seed.ts. Generate a random admin password on first seed and write it to a secrets manager, OR require the admin password to be supplied via env var.
+  - **P1**: Add `prisma/migrations/` to git (currently absent — every schema change is a black box).
+  - **P1**: Tag migration files with the worklog Task ID that introduced them (e.g. `20250705_feature_loyalty_add_loyaltypoint`) for traceability.
+
+### 12. Health & Readiness
+- Current health checks: `/api/status` (single endpoint, hardcoded "operational" status, only signals DB reachability via 3 count queries).
+- Readiness probes (Kubernetes-style): **NONE**. No `/api/ready`, no `/api/live`.
+- Dependencies that need health checks (none currently checked):
+  - PostgreSQL (currently SQLite — will need check after migration)
+  - Redis (not yet introduced — will need check after migration)
+  - notifications-service (port 3003 — currently unchecked; the `/api/status` endpoint lies that websocket is "operational" without pinging it)
+  - Stripe API reachability
+  - HuntSMM provider reachability
+  - SMTP server (if email is enabled)
+- Recommended health check architecture:
+  - **P0** `GET /api/health/live` → 200 if the process is alive (no DB check). Used for k8s livenessProbe — never fails except on process death.
+  - **P0** `GET /api/health/ready` → 200 only if ALL critical deps respond: `db.$queryRaw\`SELECT 1\`` < 500ms, Redis `PING` < 100ms, `fetch('http://notifications-service:3003/healthz')` < 500ms. Used for k8s readinessProbe — fails if any dep is down so the pod is removed from the load balancer.
+  - **P0** `GET /api/health` (the user-facing status page) → real per-service status from the readiness check + business KPIs (users, orders, services) + uptime + version. Replace the current `/api/status` hardcoded response.
+  - **P1** Distinguish "critical" deps (DB, Redis — 503 if down) from "non-critical" deps (Stripe, HuntSMM, SMTP — 200 with degraded flag if down, because the platform can still take orders even if email is down).
+  - **P1** Cache the health check result for 5s to avoid DoS'ing dependencies when many probes hit at once.
+
+### 13. Documentation Status
+- Existing docs:
+  - `src/app/api/docs/route.ts` — hand-written OpenAPI-style JSON for the public v1 API (4 endpoints). Returned by `GET /api/docs`. No Swagger UI / Redoc rendering.
+  - `worklog.md` (2062 lines) — chronological build log. Excellent for archaeology, useless for new-developer onboarding.
+  - `audit-report.md` (700 lines) — prior UI→API audit by code-audit sub-agent.
+  - `audit-gaps.md` (640 lines) — feature gap analysis by audit agent.
+  - `download/README.md` — 1-line description of the screenshot bundle.
+  - Inline JSDoc on most lib files (auth.ts, stripe.ts, nowpayments.ts, notify.ts, etc.) — quality is high.
+- Missing docs (P0):
+  - **README.md** at root — ZERO. New developers have no entry point.
+  - **CONTRIBUTING.md**, **SECURITY.md**, **LICENSE** — all missing.
+  - **docs/architecture.md** — no diagram of the system, no service map, no data flow.
+  - **docs/deployment.md** — no step-by-step deploy guide.
+  - **docs/environment.md** — no list of required env vars (22 of them, scattered across the code).
+  - **docs/api/** — no standalone API reference (only the inline `/api/docs` JSON).
+  - **docs/database.md** — no ERD, no schema doc.
+  - **docs/disaster-recovery.md** — no restore procedures.
+- Recommended documentation structure:
+  - **P0** `README.md` — project overview, quick-start (`bun install && bun run db:push && bun run dev`), env var template, links to deeper docs.
+  - **P0** `.env.example` — every env var listed with a description + example value (NO real secrets).
+  - **P0** `docs/architecture.md` — ASCII or Mermaid diagram of Cloudflare → Nginx → Next.js → Postgres + Redis + notifications-service → external APIs.
+  - **P0** `docs/deployment.md` — Docker compose up steps + env var setup + DB migration + initial admin creation.
+  - **P1** `docs/api/` — Swagger UI served at `/api/docs` (use `swagger-ui-react` or `next-swagger-doc`).
+  - **P1** `docs/contributing.md` — branch naming, PR template, commit message convention (worklog Task IDs).
+  - **P1** `docs/security.md` — responsible disclosure, security model (encryption, auth, rate limits, CSP).
+  - **P2** `docs/decisions/` — ADR (Architecture Decision Records) for major choices (SQLite→PG, Caddy→Nginx, etc.).
+
+### 14. Critical Findings (P0/P1/P2)
+
+**P0 — blocking production (must fix before any prod deploy):**
+1. `NEXTAUTH_SECRET` not set → JWTs are unsigned → session forgery possible (dev.log confirms warning on every request).
+2. Two different hardcoded `LICENSE_ENCRYPTION_KEY` fallbacks in `crypto-utils.ts` and `license.ts` → if env unset, payment credentials encrypted by one module can't be decrypted by the other → irreversible data corruption.
+3. No Dockerfile / docker-compose.yml / .dockerignore — cannot deploy reproducibly.
+4. No `prisma/migrations/` folder — `db:push` on production SQLite is destructive and non-rollbackable.
+5. `.zscripts/build.sh` copies the dev `db/custom.db` (with seed admin password `admin123`) into the production tarball — dev DB shipped to prod.
+6. `prisma/seed.ts` creates admin with password `admin123` and PRINTS it to stdout — leaks in CI/build logs.
+7. No backup strategy of any kind — DB loss = total data loss.
+8. No real health check — `/api/status` lies about service status (hardcoded "operational"). Cannot drive k8s readiness probes.
+9. No `NEXTAUTH_SECRET`, no `LICENSE_ENCRYPTION_KEY`, no `STRIPE_SECRET_KEY` etc. in .env — all critical secrets default to off/sandbox.
+10. notifications-service POST `/broadcast` has no auth — anyone reachable can inject fake notifications into every dashboard. WebSocket emits ALL events to ALL connected clients (no per-user filtering) → leaks every order/sale platform-wide.
+11. No CI/CD pipeline — every deploy is manual tar.gz + scp + ssh.
+12. No error tracking (Sentry) — production errors are invisible.
+13. No README.md, no .env.example, no docs/ folder — new-developer onboarding is impossible without reading 2000+ lines of worklog.
+14. Caddyfile `?XTransformPort=` routing is a SSRF vector — any client can proxy to any internal port.
+
+**P1 — should fix before scaling:**
+1. In-memory rate limiter in middleware.ts — lost on every restart, not shared across instances. Must move to Redis when scaling beyond 1 instance.
+2. ~5,800 lines of unused shadcn/ui primitives (35 of 38 files in `src/components/ui/`) — should be deleted to reduce bundle size + maintenance burden.
+3. `examples/websocket/` folder is dead duplicate code that conflicts at boot (port 3003) with the real notifications-service.
+4. ~80 unstructured `console.*` calls with no log levels, no JSON, no request IDs — replace with pino logger.
+5. Sandbox-mode email logging in `notify.ts:83-88` leaks email bodies (could contain password reset tokens, 2FA codes, ticket content).
+6. notifications-service port 3003 hardcoded — should be env-driven.
+7. CORS `origin: "*"` on notifications-service — should be locked to NOVSMM origin in prod.
+8. eslint.config.mjs disables 18+ rules including `no-unused-vars`, `no-console`, `@typescript-eslint/no-explicit-any` — lint is essentially decorative.
+9. No GitHub Actions / CI — PRs can merge with broken builds.
+10. No log rotation, no restart-on-crash for prod processes (shell script supervision only).
+11. No metrics endpoint — no visibility into p50/p95/p99 latency, error rate, queue depth.
+12. `download/` (88 PNG files, ~30 MB) and `upload/` (test files) should not be in the git repo.
+13. No semantic versioning or changelog — `package.json` version stuck at 0.2.0.
+14. Stripe price IDs in env vars (8 STRIPE_PRICE_*) — fragile; consider storing in Setting table (already done for STRIPE_WEBHOOK_SECRET — extend the pattern).
+15. No APM / distributed tracing.
+
+**P2 — nice to have:**
+1. OpenAPI spec generated from Zod schemas (currently hand-written in `/api/docs`).
+2. Quarterly disaster-recovery drills.
+3. Cross-region Postgres replication.
+4. Preview deployments per PR.
+5. ADR (Architecture Decision Records) folder.
+6. Swagger UI rendering at `/api/docs`.
+7. gzip/brotli + cache rules at the gateway for `/_next/static/`.
+8. Migrate file uploads to S3/R2.
+9. Add a `mini-services/_template/` scaffold for future services.
+10. Refactor the 22 env-var reads into a single `src/lib/env.ts` with Zod validation at boot (fail fast on missing critical vars).
+
+---
+Task ID: 1-b
+Agent: Explore (Security Audit)
+Task: Audit security — middleware, auth, authorization, validation, secrets, payments, audit logs, rate limiting, headers, CSRF
+
+Work Log:
+- Read worklog.md last 300 lines (project context: NOVSMM SMM panel, Next.js 16 + NextAuth 4 + Prisma/SQLite + Stripe/NowPayments/Mercado Pago webhooks, JWT sessions, in-memory rate limiter, sandbox/dev mode active)
+- Read complete: src/middleware.ts, src/lib/api-utils.ts, src/lib/auth.ts, src/lib/api-key-auth.ts, src/lib/crypto-utils.ts, src/lib/sanitize.ts, src/lib/validations.ts, src/lib/license.ts, src/lib/two-factor.ts, src/lib/nowpayments.ts, src/lib/stripe.ts, src/lib/notify.ts, src/lib/huntsmm.ts, src/lib/db.ts, src/components/ui/chart.tsx, next.config.ts, package.json, Caddyfile, .env
+- Read all 5 auth routes: register, forgot-password, reset-password, verify-email, [...nextauth]
+- Read all 3 webhook handlers: stripe, nowpayments, mercadopago
+- Read all me/* routes: me (GET+PATCH), me/password, me/sessions, me/language, me/loyalty, me/notification-preferences, me/2fa/setup, me/2fa/verify, me/2fa/disable
+- Read 14 admin routes: overview, users, orders, refunds, bulk, services, providers (+[id]/sync), payment-methods, api-keys, webhooks, licenses, coupons, promotions, notifications, settings, roles, logs, search, languages, currencies, withdrawals
+- Read user routes: orders (+mass+repeat), wallet (+topup+withdraw), tickets, favorites, services (+[id]), invoices, dashboard, analytics, referrals, offers, subscriptions (+seats), notifications, coupons/validate, uploads, export, status, docs, payment-methods
+- Read v1 API: v1/orders, v1/services (requireApiKey)
+- Read public routes: public/settings, public/languages, public/currencies, public/validate-license
+- Grep'd for: dangerouslySetInnerHTML (1 hit — chart.tsx, controlled internal config, low risk), $queryRaw/$executeRaw (0 hits — no raw SQL), process.env.* references (15 hits — all server-side, no NEXT_PUBLIC_ leaks), Math.random in security contexts (1 hit — backup code generation), ip field usage in audit logs
+- Cross-referenced Prisma schema.prisma AuditLog model (has `ip String?` column but only 1 of 34 audit log calls populates it)
+
+Stage Summary:
+
+## SECURITY AUDIT REPORT
+
+### 1. Middleware Analysis
+
+**File:** `src/middleware.ts` (173 lines)
+
+**Current protections:**
+- ✅ In-memory sliding-window rate limiter (per-IP, per-route-prefix) with cleanup every 60s
+- ✅ Route-specific limits: `/api/auth/callback/credentials` 20/15min, `/api/auth/register` 10/hour, `/api/auth/forgot-password` 5/hour, `/api/wallet/(topup|withdraw)` 10/min, `/api/orders` 20/min, `/api/admin/*` 120/min, `/api/tickets` 20/min, general `/api/*` 300/min
+- ✅ Security headers: X-Content-Type-Options=nosniff, X-Frame-Options=DENY, Referrer-Policy=strict-origin-when-cross-origin, X-XSS-Protection=1;mode=block, HSTS (max-age=31536000; includeSubDomains; preload), strict CSP with frame-ancestors='none', base-uri='self', form-action='self'
+- ✅ Origin/Referer CSRF check for state-changing methods (POST/PATCH/PUT/DELETE) on non-NextAuth, non-webhook routes
+- ✅ Forwards client IP downstream via `x-client-ip` header (from `x-forwarded-for`)
+- ✅ Rate limit returns 429 with Retry-After, X-RateLimit-* headers
+
+**Gaps identified:**
+- 🔴 **P0 — In-memory rate limiter doesn't scale**: per-instance state means a multi-instance deployment (PM2 cluster, containers, serverless) sees only a fraction of the actual request rate per instance — an attacker can multiply their budget by the instance count. Must be Redis-backed before production.
+- 🟡 **P1 — CSRF check has bypass for `Authorization` header**: any POST/PATCH/PUT/DELETE with an `Authorization` header skips the Origin check entirely (line 120: `if (!origin && !authHeader && method !== "DELETE")`). While intended for API clients, this means an attacker with a leaked API key can POST without Origin — and more importantly, any browser-based attack that can set Authorization headers (e.g., via a Service Worker or a malicious extension) bypasses CSRF. Mitigation: also check Origin when an Authorization header is present (it's still browser-controlled).
+- 🟡 **P1 — DELETE method skips CSRF check entirely when no Origin AND no Authorization**: `method !== "DELETE"` exception (line 120) means a stateless DELETE without Origin/Referer/Authorization passes through. Cross-site DELETE attacks are harder (browsers don't preflight simple DELETE) but still possible with `fetch(..., {method:"DELETE", credentials:"include"})`.
+- 🟡 **P1 — No Origin host matching**: the comment explicitly says "We skip strict host matching because we run behind a reverse proxy" — meaning ANY Origin header value passes the check, including `Origin: https://evil.com`. The mere presence of an Origin header is treated as proof of legitimacy. This is a weak CSRF defense. An attacker page can always send an Origin header.
+- 🟢 **P2 — CSP allows `'unsafe-inline'` and `'unsafe-eval'` for scripts**: necessary for Next.js + Tailwind but weakens XSS defense. Should use nonces once Next.js 16 supports them seamlessly.
+- 🟢 **P2 — No `Permissions-Policy` header** (camera, microphone, geolocation, etc.)
+- 🟢 **P2 — No `Cross-Origin-Opener-Policy` / `Cross-Origin-Embedder-Policy` / `Cross-Origin-Resource-Policy` headers**
+- 🟢 **P2 — General API limit of 300/min is very generous**: brute-force on overlooked endpoints (e.g. `/api/coupons/validate`) has 300 attempts/min per IP.
+
+### 2. Authentication & Session
+
+**Files:** `src/lib/auth.ts`, `src/app/api/auth/*`, `src/lib/two-factor.ts`
+
+**Strategy assessment:**
+- ✅ JWT session strategy (stateless, no DB lookup per request) — appropriate for the SQLite backend
+- ✅ Credentials provider uses bcrypt with cost factor 12 (strong)
+- ✅ Google OAuth registered only when env vars present (sandbox-safe)
+- ✅ `trustHost: true` correctly enabled for reverse-proxy deployment
+- ✅ In-memory brute-force lockout: 5 failed attempts → 15-min lock per email
+- ✅ Failed login doesn't differentiate "user not found" vs "wrong password" (returns "Invalid credentials" for both)
+- ✅ Account status check (`user.status !== "active"`) before password check
+- ✅ Successful login writes audit log entry
+- ✅ signOut event writes audit log entry
+- ✅ Password reset token: 32-byte crypto.randomBytes hex, 1h expiry, single-use (deleted after use)
+- ✅ Email verification token: 32-byte crypto.randomBytes hex, 24h expiry
+- ✅ Forgot-password endpoint doesn't reveal if email exists (returns same success message)
+- ✅ Password change requires current password verification
+- ✅ Password minimum length 8 chars (could be stronger — 12 recommended)
+
+**Vulnerabilities found:**
+- 🔴 **P0 — No `NEXTAUTH_SECRET` set in `.env`**: only `DATABASE_URL` is in `.env`. NextAuth requires NEXTAUTH_SECRET for JWT signing. Without it, NextAuth auto-generates an ephemeral secret in dev (sessions die on restart) or throws in production. Any attacker who can predict or extract the auto-generated secret can forge JWTs. **CRITICAL**: must set a strong `NEXTAUTH_SECRET` (32+ random bytes) before production.
+- 🔴 **P0 — Google provider uses `allowDangerousEmailAccountLinking: true`**: this allows a Google OAuth login with email `victim@example.com` to silently link to (and take over) an existing password-based account with that email — without verifying that the victim owns that Google account. An attacker who registers a Google account with the victim's email (or who controls a Google Workspace admin) can hijack any NOVSMM account that hasn't yet linked Google. **CRITICAL**: set to `false` (default) or require email verification before linking.
+- 🔴 **P0 — 2FA is decorative, not enforced**: `auth.ts` `authorize()` never calls `verify2FAToken`. The 2FA setup/verify/disable endpoints exist, secrets are stored in the Setting table, but the login flow ignores 2FA entirely. A user with 2FA "enabled" can still log in with just email+password. **CRITICAL** for any compliance claim.
+- 🟡 **P1 — Brute-force lockout is per-email, not per-IP+email**: an attacker rotating passwords against a single account triggers the lockout (good), but an attacker rotating emails against a single password (credential stuffing) does NOT trigger any lockout. The middleware rate-limits `/api/auth/callback/credentials` to 20/15min per IP, which partially mitigates this — but a distributed attack bypasses both. Recommend per-IP lockout on top of per-email.
+- 🟡 **P1 — Brute-force counter is in-memory**: lockout state is lost on restart and not shared across instances. A Redis-backed store is needed for production.
+- 🟡 **P1 — Backup codes use `Math.random()`** (two-factor.ts line 54): `Math.random()` is NOT cryptographically secure. Backup codes must use `crypto.randomBytes()`. An attacker who can predict the PRNG state (e.g., via concurrent observations) could forge backup codes.
+- 🟡 **P1 — 2FA secret stored in plaintext in Setting table**: `2fa:${userId}` Setting.value is `JSON.stringify({secret, backupCodes})` — the TOTP secret is plaintext (the backup codes ARE bcrypt-hashed, but the secret isn't). If the DB leaks, attackers get TOTP secrets and can generate valid codes. Recommend encrypting the secret with AES-256-GCM (the `crypto-utils.ts` helper exists already).
+- 🟡 **P1 — Login audit log doesn't capture IP or User-Agent**: `auth.ts` line 89-96 creates an audit log entry with `userId`, `action`, `entity`, `entityId` — but no `ip` field and no `metadata.userAgent`. The `ip` column exists in the schema but is null for all login/logout events. This means brute-force analysis, geo-blocking, and forensic investigation have no IP trail.
+- 🟢 **P2 — Session fixation**: JWT strategy rotates the token on re-auth (NextAuth default), so classic session fixation is mitigated. But after password change (`/api/me/password`), existing JWTs are NOT invalidated — a stolen token continues to work after the user changes their password. Recommend adding a `passwordChangedAt` check in the JWT callback.
+- 🟢 **P2 — Email verification is not enforced**: `emailVerified` is set on verification but no route checks it. A user can register, never verify, and immediately use all features. This was flagged in prior audits and remains unaddressed.
+- 🟢 **P2 — No password complexity requirements** beyond length 8. Allow common weak passwords (`password`, `12345678`). Recommend a denylist + mixed-character requirement.
+
+### 3. Authorization Matrix
+
+**Total API route handlers audited:** 88 handlers across 60 files
+
+**Routes with proper auth (requireAuth/requireAdmin/requireApiKey):** 79 handlers ✅
+
+**Public routes (intentionally unauthenticated):** 9 handlers
+- `/api/status` GET — health check (no sensitive data)
+- `/api/docs` GET — API documentation
+- `/api/route.ts` GET — root hello-world
+- `/api/public/settings` GET — public site settings (filtered)
+- `/api/public/languages` GET — language list
+- `/api/public/currencies` GET — currency list
+- `/api/public/validate-license` POST+GET — license validation (anti-replication)
+- `/api/payment-methods` GET — public list of active methods
+- `/api/me/language` GET — UI translations (despite `/me/` path, this is public — translations only, no user data)
+- `/api/webhooks/{stripe,nowpayments,mercadopago}` POST — webhook receivers (verified via signatures, exempted from CSRF)
+
+**Routes missing auth (CRITICAL):** 0 — every other route calls `requireAuth` or `requireAdmin` or `requireApiKey` ✅
+
+**IDOR risks (reviewed):**
+- ✅ `/api/orders` GET filters by `userId` — safe
+- ✅ `/api/orders` PATCH cancel: checks `order.userId !== userId` returns 404 — safe
+- ✅ `/api/orders/repeat` POST: checks `original.userId !== userId` — safe
+- ✅ `/api/tickets` PATCH: checks `ticket.userId !== userId` — safe
+- ✅ `/api/offers` PATCH/DELETE: checks `offer.userId !== userId` — safe
+- ✅ `/api/notifications` POST mark-read: filters by `{id IN ids, userId}` — safe
+- ✅ `/api/wallet` GET, `/api/wallet/topup`, `/api/wallet/withdraw`: all use session userId — safe
+- ✅ `/api/favorites` POST/DELETE: filters by `userId` — safe
+- ✅ `/api/uploads` POST: writes to `uploads/{userId}/` per-user directory — safe
+- ✅ `/api/v1/orders` POST: uses `user.id` from API key validation — safe
+- ✅ `/api/export` GET: filters by `userId` — safe
+- ✅ `/api/invoices` GET: filters by `userId` — safe
+- ✅ `/api/dashboard` GET: filters by `userId` — safe
+- ✅ `/api/analytics` GET: filters by `userId` — safe
+- ✅ `/api/me/*`: all use session userId — safe
+- ✅ `/api/subscriptions` GET/POST/DELETE: filters by `userId` — safe
+- ✅ `/api/subscriptions/seats` GET: filters by `userId` — safe
+
+**Admin enforcement gaps:**
+- ✅ All 22 `/api/admin/*` routes call `requireAdmin()` — verified one by one
+- 🔴 **P0 — `/api/me` PATCH allows self-service role change**: `updateProfileSchema` accepts `role: z.enum(["reseller", "agency", "creator", "enterprise"]).optional()`. While "admin" is correctly excluded, a regular user can self-promote to "enterprise" role without payment or admin approval. Although `User.role` is distinct from `User.plan` (so it doesn't grant enterprise plan benefits), the role field affects UI labeling and may affect future permission checks. Recommend removing `role` from self-service PATCH entirely, or restricting to a "account type" field separate from RBAC role.
+- 🟡 **P1 — `/api/admin/providers` PATCH passes unvalidated `data` to Prisma**: `db.provider.update({ where: { id }, data })` — `data` is the raw body minus `id`, with no allowlist. An admin could write arbitrary fields to the Provider record (e.g., overwriting `createdAt`, `apiKey` directly as plaintext bypassing encryption). Admin-only mitigates impact, but defense-in-depth requires field allowlisting (like `admin/services` PATCH does).
+- 🟡 **P1 — `/api/admin/payment-methods` POST spreads unvalidated `body` to Prisma**: `db.paymentMethod.create({ data: { ...methodData, ... } })` where `methodData = body minus config`. Extra fields pass through to Prisma. Prisma will reject unknown fields, but if the schema grows, this becomes a footgun. The `createPaymentMethodSchema` Zod validation only validates declared fields; it doesn't strip extras. Use `.strict()` or pick only validated fields.
+- 🟡 **P1 — `/api/admin/currencies` PATCH and `/api/admin/languages` PATCH**: both pass unvalidated `data` (body minus `id`) to Prisma.update — same issue as providers.
+- 🟡 **P1 — `/api/admin/notifications` POST**: schema doesn't include `userId`, but code does `const { broadcast, userId, audience, ...notifData } = parsed.data as any` and uses `userId` for single-user targeting. The `as any` cast bypasses type safety. A non-broadcast notification to any userId works because there's no schema validation on `userId`. Admin-only mitigates.
+
+### 4. Input Validation
+
+**Routes with Zod validation:** ~28 of 60 files use `safeParse`
+- ✅ register, forgot-password (custom email validator), reset-password, verify-email (token only)
+- ✅ orders POST (createOrderWithDripSchema), orders/mass POST (massOrderSchema), orders/repeat POST (manual check)
+- ✅ wallet/topup POST (topupSchema), wallet/withdraw POST (withdrawSchema)
+- ✅ admin/services POST (createServiceSchema), admin/providers POST (createProviderSchema), admin/payment-methods POST (createPaymentMethodSchema), admin/api-keys POST (manual), admin/bulk POST (bulkSchema), admin/coupons POST (couponSchema), admin/promotions POST+PATCH (promoSchema), admin/roles POST+PATCH (createRoleSchema, updatePermissionsSchema), admin/licenses POST+PATCH (manual)
+- ✅ v1/orders POST (createOrderSchema)
+- ✅ me PATCH (updateProfileSchema), me/password POST (manual), me/2fa/* (manual token check)
+- ✅ tickets POST/PATCH (manual subject/message required check), favorites POST/DELETE (manual)
+- ✅ uploads POST (manual file type + size check)
+- ✅ coupons/validate POST (manual code required)
+
+**Routes WITHOUT Zod validation (relying on manual checks):**
+- 🟡 `/api/me/notification-preferences` PATCH — accepts arbitrary `body` and merges into Setting JSON. No type/shape validation. A user could store arbitrary JSON in their notif_prefs setting (low impact, but could break UI parsing).
+- 🟡 `/api/admin/notifications` POST — `as any` cast on parsed data; `userId` field not validated
+- 🟡 `/api/admin/settings` PATCH — accepts arbitrary `{key: value}` object and upserts each. No key allowlist — admin could write to keys like `2fa:${userId}` (overwriting another user's 2FA secret) or `stripe.webhookSecret` (overriding the webhook secret). Admin-only, but a key allowlist is essential defense-in-depth.
+- 🟡 `/api/admin/users` PATCH — uses `updateUserSchema` but the `balance` field accepts any number (negative, huge). An admin could set a user's balance to 1 billion. Admin-only, but worth a sanity range check.
+- 🟡 `/api/admin/refunds` POST — manual `transactionId` check, no schema. Reason field unbounded.
+- 🟡 `/api/admin/withdrawals` PATCH — manual `id` + `action` check, no schema.
+- 🟡 `/api/admin/orders` POST — uses `manualOrderSchema` (Zod) ✅
+- 🟡 `/api/orders/repeat` POST — manual `orderId` check, no schema for `link` (could be any string, stored as-is)
+- 🟡 `/api/tickets` POST/PATCH — manual `subject`/`message`/`ticketId` checks; `priority` field accepts any value
+- 🟡 `/api/uploads` POST — file MIME type from `file.type` is client-controlled; should re-validate magic bytes server-side
+
+**Injection risks:**
+- ✅ **No SQL injection risk**: 0 raw SQL queries (`$queryRaw`, `$executeRaw`, `queryRawUnsafe`, `executeRawUnsafe` — all absent). Every DB access uses Prisma's parameterized client API.
+- ✅ **No command injection**: 0 uses of `eval()`, `new Function()`, or `child_process` in source.
+- ✅ **XSS risk via dangerouslySetInnerHTML**: 1 hit in `src/components/ui/chart.tsx` (shadcn/ui chart style injector). Input is `ChartConfig` from internal React props (color values), not user input. Low risk.
+- ✅ **sanitize.ts** provides `sanitizeText` (strips HTML + JS URIs + event handlers), `escapeHtml`, `sanitizeMessage`, `sanitizeEmail`, `sanitizeUrl` (http/https only), `sanitizeFilename` (alphanumeric + ._- only). Used in: register (name), tickets (subject/message), admin/notifications (title/message). NOT used in: orders `link` field (stored as-is, but rendered as link not HTML), service names from admin (could contain HTML — render context dependent).
+- 🟡 **P2 — Path traversal in uploads**: mitigated by `sanitizeFilename` + `join(process.cwd(), "public", "uploads", userId)` where `userId` is an opaque cuid from session (not user input). Safe.
+- 🟡 **P2 — Uploaded files are publicly accessible**: `/uploads/{userId}/{filename}` is served by Next.js as a static file from `/public`. Anyone with the URL can download. Ticket attachments may contain sensitive info — should be behind auth.
+
+### 5. Secrets Management
+
+**All env vars used (15 references):**
+| Var | File | Exposure |
+|---|---|---|
+| `DATABASE_URL` | prisma/schema.prisma | server-only ✅ |
+| `GOOGLE_CLIENT_ID` | auth.ts | server-only ✅ |
+| `GOOGLE_CLIENT_SECRET` | auth.ts | server-only ✅ |
+| `STRIPE_SECRET_KEY` | stripe.ts, wallet/topup | server-only ✅ — but topup route WRITES to it at runtime (`process.env.STRIPE_SECRET_KEY = creds.secretKey`), which is a code smell and not thread-safe across concurrent requests
+| `STRIPE_WEBHOOK_SECRET` | stripe.ts, wallet/topup | server-only ✅ — same runtime-write issue |
+| `STRIPE_PRICE_STARTER_MONTHLY` etc. (6) | subscriptions/route.ts | server-only ✅ |
+| `MP_ACCESS_TOKEN` | webhooks/mercadopago (commented) | server-only ✅ |
+| `LICENSE_ENCRYPTION_KEY` | crypto-utils.ts, license.ts | server-only ✅ |
+| `HUNTSMM_API_KEY` | huntsmm.ts | server-only ✅ |
+| `SMTP_HOST/PORT/USER/PASS` | notify.ts | server-only ✅ |
+| `EMAIL_FROM` | notify.ts | server-only ✅ |
+| `WS_SERVICE_URL` | notify.ts | server-only ✅ |
+| `NODE_ENV` | db.ts, next.config.ts | server-only ✅ |
+
+- ✅ **No `NEXT_PUBLIC_*` secrets**: 0 hits — no secrets leak to the client bundle.
+
+**Encryption implementation status:**
+- ✅ `crypto-utils.ts` uses AES-256-GCM with random 16-byte IV + auth tag — correct algorithm
+- ✅ Format `iv:authTag:encrypted` (base64) — standard, reversible
+- ✅ Used to encrypt: PaymentMethod.config (PayPal/MP/NowPayments/Stripe credentials), License.licenseKey
+- 🔴 **P0 — Hardcoded fallback encryption key**: `LICENSE_ENCRYPTION_KEY || "novsmm-default-encryption-key-change!"` (crypto-utils.ts line 12). If the env var is missing (as it currently is in `.env`), all "encrypted" payment credentials and license keys are encrypted with a key that is committed to the public source code. Anyone with DB access can decrypt every payment credential. **CRITICAL**: remove the fallback, throw at startup if env var is missing.
+- 🔴 **P0 — Same hardcoded fallback in license.ts** (line 18): `"novsmm-license-encryption-key-change-in-production-32b!"`. Same critical issue.
+- 🟡 **P1 — `wallet/topup` route writes Stripe creds into `process.env` at runtime** (line 68): `process.env.STRIPE_SECRET_KEY = creds.secretKey`. This is (a) not thread-safe across concurrent requests with different payment methods, (b) persists the secret in env after the request, (c) means the next request that reads `process.env.STRIPE_SECRET_KEY` gets the most recent creds regardless of which user/method is being used. Should pass creds explicitly to a Stripe client factory.
+
+**Hardcoded secrets found:**
+- 🔴 `"novsmm-default-encryption-key-change!"` (crypto-utils.ts:12) — fallback AES key
+- 🔴 `"novsmm-license-encryption-key-change-in-production-32b!"` (license.ts:18) — fallback license AES key
+- 🟡 `"5215512345678"` (wallet/topup:336, public/settings:72) — default WhatsApp number (not a secret per se)
+- 🟡 `"support@novsmm.io"`, `"noreply@novsmm.io"` — default emails (not secrets)
+- 🟡 `"https://huntsmm.com/api/v2"` (huntsmm.ts:8) — provider API URL (not a secret)
+- ✅ No API keys, JWT secrets, or OAuth secrets hardcoded
+
+### 6. Payment Security
+
+**Stripe webhook** (`/api/webhooks/stripe`):
+- 🔴 **P0 — "Log mode" fallback processes events WITHOUT signature verification**: when `STRIPE_WEBHOOK_SECRET` env var is missing AND no `stripe.webhookSecret` Setting exists (the current state in `.env`), the handler does `event = JSON.parse(body)` and processes it as if verified. This means anyone can POST a fake `checkout.session.completed` event with `mode: "payment"` + `source: "novsmm_wallet_topup"` + a known `transactionPublicId` to credit any wallet with any amount. **CRITICAL**: in production, return 401 when no secret is configured — never process unverified events.
+- 🟡 **P1 — Replay attack protection relies on idempotency checks**: each handler checks `txn.status === "pending"` or `existing` lookup before applying. This is correct, but there's no Stripe event-ID deduplication table. A replayed event with the same `payment_intent.id` would be a no-op (because the txn is already completed), so this is effectively safe.
+- 🟡 **P1 — Amount tampering**: Stripe webhook uses `txn.amount` (from our DB) when crediting balance, NOT `pi.amount_received` from the Stripe event. This is the CORRECT pattern (server-side amount) ✅. But in `handleCheckoutSessionCompleted` for top-up mode, it uses `session.amount_total / 100` only for logging — the actual credit uses `txn.amount`. Safe.
+- ✅ Stripe signature verification uses `stripe.webhooks.constructEvent` (the official secure method)
+- ✅ Failed signature verifications are logged to WebhookLog
+- ✅ All state-changing operations use `db.$transaction([...])` for atomicity
+
+**NowPayments webhook** (`/api/webhooks/nowpayments`):
+- ✅ HMAC-SHA256 signature verification using `crypto.timingSafeEqual` (constant-time comparison) — best practice
+- ✅ Signature required — returns 401 if missing
+- ✅ IPN secret loaded from encrypted PaymentMethod.config (not env)
+- ✅ Idempotency: checks `txn.status === "completed"` before crediting
+- ✅ Amount uses `txn.amount` from our DB (server-side), not `payload.pay_amount` — safe against amount tampering
+- ✅ WebhookLog records every webhook for audit
+- ✅ Refund handler reverses the credit atomically
+- 🟢 **P2 — No replay window**: a webhook delivered 10 minutes late is still processed. NowPayments doesn't include a timestamp, so this is hard to enforce, but worth noting.
+
+**Mercado Pago webhook** (`/api/webhooks/mercadopago`):
+- 🔴 **P0 — NO signature verification at all**: the handler parses JSON, logs it, and processes the payment — completely unauthenticated. The comment says "In production: verify the x-signature header" but the code does not. Anyone can POST `{"type":"payment","data":{"id":"<known_txn_reference>"}}` and credit any wallet. The handler fetches the transaction by `reference === paymentId` (which the attacker can guess or know) and credits `txn.amount`. **CRITICAL**: implement `x-signature` HMAC verification using the Mercado Pago webhook secret, or fetch the payment from MP API using `MP_ACCESS_TOKEN` to confirm it's real before crediting.
+- 🔴 **P0 — No payment-status confirmation**: even with signature verification, the handler trusts the webhook payload entirely. It should call `GET /v1/payments/{id}` with `MP_ACCESS_TOKEN` to confirm the payment status is `approved` before crediting (the comment in the code acknowledges this). Currently any webhook payload with `type:"payment"` and a matching transaction reference triggers the credit.
+
+**Replay attack risks (summary):**
+- Stripe: mitigated by idempotency checks ✅
+- NowPayments: mitigated by idempotency checks ✅
+- Mercado Pago: idempotency check exists (`txn.status === "pending"`), but since the webhook is unauthenticated, "replay" isn't even needed — the attacker can just send a fresh payload.
+
+**Amount tampering risks (summary):**
+- All three providers credit `txn.amount` from the DB (set when the top-up was initiated), NOT the amount from the webhook payload ✅. This is the correct pattern and prevents amount tampering at the webhook layer.
+- However, the initial top-up creation in `/api/wallet/topup` accepts `amount` from the client (validated by `topupSchema` with `max(50000)`). The amount is stored in the Transaction row, and the webhook credits that amount. So if an attacker can manipulate the client-side amount before the topup request, they could credit more than they paid. Mitigation: for real Stripe Checkout, the `checkout.session.completed` webhook uses `session.amount_total` from Stripe (the actual paid amount) only for logging — the credit uses `txn.amount`. This means a user who initiates a $1 top-up but somehow pays $100 via Stripe would only be credited $1. The mismatch isn't reconciled — recommend asserting `session.amount_total === txn.amount * 100` and flagging/refunding if not.
+
+### 7. Audit Logging Coverage
+
+**AuditLog model has:** `id, userId?, action, entity, entityId?, metadata?, ip?, createdAt`
+- ✅ 34 files call `db.auditLog.create` — broad coverage
+- ✅ Sensitive actions logged: login, logout, password_change, password_reset, enable_2fa, disable_2fa, create user, create/refund transaction, create/cancel order, upload file, bulk operations, role create/update/delete, license create/update, api_key create/revoke, refund, approve/reject withdrawal, settings update, service create/update/delete, provider create/update/sync, payment_method create/update, coupon create/update, promotion create/update, notification broadcast, validate_license_failed
+
+**Logged actions:** login, logout, password_change, password_reset, enable_2fa, disable_2fa, revoke_sessions, create (user/order/transaction/service/provider/payment_method/license/api_key/coupon/promotion/role/notification), update (user/settings/service/provider/payment_method/license/coupon/promotion/currency/language/role), delete (service/role), cancel (order), refund, bulk_*, sync_provider, approve_withdrawal, reject_withdrawal, upload, validate_failed
+
+**Unlogged sensitive actions:**
+- 🔴 **P0 — Failed login attempts are NOT logged**: `auth.ts` `authorize()` only logs SUCCESSFUL logins. Failed login (wrong password, locked account, suspended user) writes nothing to AuditLog. The in-memory `loginAttempts` map tracks counts but doesn't persist. This means brute-force analysis post-incident is impossible. **CRITICAL for forensics.**
+- 🟡 **P1 — Wallet top-up via sandbox is logged, but Stripe/NowPayments/Mercado Pago webhook credits are only partially logged**: Stripe `checkout.session.completed` top-up logs ✅; NowPayments `handlePaymentConfirmed` logs ✅; Stripe `payment_intent.succeeded` does NOT log; Stripe `invoice.payment_succeeded` does NOT log; Mercado Pago webhook does NOT log. Inconsistent.
+- 🟡 **P1 — Subscription creation (sandbox mode) is NOT logged**: `/api/subscriptions` POST creates a Subscription + Invoice + upgrades user.plan but writes no audit log entry. Same for DELETE (cancel subscription).
+- 🟡 **P1 — Favorites add/remove NOT logged** (low impact)
+- 🟡 **P1 — Notifications mark-as-read NOT logged** (low impact)
+- 🟡 **P1 — Coupon validation (`/api/coupons/validate`) NOT logged**: an attacker brute-forcing coupon codes leaves no trail. Given the 300/min general rate limit, this is exploitable.
+- 🟡 **P1 — Profile self-update (`/api/me` PATCH) IS logged** ✅, but the role-change subset isn't specifically flagged in metadata (the whole `updateData` is logged, so role changes are visible if you parse metadata).
+- 🟡 **P1 — Order creation via v1 API (`/api/v1/orders` POST) NOT logged**: API-key-driven orders leave no audit trail.
+- 🟡 **P1 — Export endpoints (`/api/export` GET, `/api/invoices?format=csv`, `/api/admin/logs?format=csv`) NOT logged**: GDPR-relevant data exports should be logged.
+
+**Audit log data captured:**
+- ✅ `userId` — always (when authenticated)
+- ✅ `action`, `entity`, `entityId` — always
+- ✅ `metadata` — JSON string with relevant context (varies per call)
+- 🔴 `ip` — **POPULATED IN ONLY 1 OF 34 CALLS** (only `public/validate-license` sets `ip`). Every other audit log entry has `ip: null`. The middleware DOES capture the IP and forwards it as `x-client-ip` header, but no route reads it when creating audit logs. **CRITICAL gap for forensic analysis.**
+- 🔴 `userAgent` — **NEVER captured**. Not even in metadata. Login forensic analysis cannot reconstruct the device/browser used.
+
+### 8. Rate Limiting Coverage
+
+**Implementation:** in-memory sliding window in `src/middleware.ts`, per-IP (from `x-forwarded-for[0]`)
+
+**Protected endpoints (with explicit limits):**
+- `/api/auth/callback/credentials` — 20/15min ✅ (brute-force defense)
+- `/api/auth/register` — 10/hour ✅
+- `/api/auth/forgot-password` — 5/hour ✅
+- `/api/wallet/(topup|withdraw)` — 10/min ✅
+- `/api/orders` — 20/min ✅
+- `/api/admin/*` — 120/min ✅
+- `/api/tickets` — 20/min ✅
+- `/api/*` (general) — 300/min ✅
+
+**Unprotected critical endpoints (relying only on general 300/min):**
+- 🔴 **P0 — `/api/auth/reset-password` has no specific limit**: only the general 300/min applies. An attacker with a stolen reset token has 300 attempts/min to brute-force the new password (though tokens are 32 random bytes, so this isn't practical). More concerning: an attacker can spam password resets for known emails.
+- 🔴 **P0 — `/api/auth/verify-email` has no specific limit**: 300/min allows brute-forcing the 32-byte verification token (impractical) but allows email-verification spam.
+- 🔴 **P0 — `/api/v1/orders` and `/api/v1/services` have no specific limit**: API-key-authenticated endpoints fall under general 300/min per IP. A reseller with a valid API key can place 300 orders/min — likely fine for legitimate use, but a leaked key allows rapid balance drain. Recommend per-API-key limits.
+- 🟡 **P1 — `/api/coupons/validate` has no specific limit**: 300/min allows coupon-code brute-forcing. 6-char codes have ~2B combinations, so 300/min = ~13 years to exhaust — but short codes or known-prefix attacks are feasible. Recommend 10/min per IP.
+- 🟡 **P1 — `/api/uploads` has no specific limit**: 300/min × 5MB = 1.5GB/min upload bandwidth abuse. Recommend 10/min per user.
+- 🟡 **P1 — `/api/webhooks/*` are exempted from CSRF but NOT from rate limiting**: a DDoS on the webhook endpoints could fill the WebhookLog table. Recommend a high limit (1000/min) to cap abuse.
+- 🟡 **P1 — `/api/me/2fa/verify` has no specific limit**: 300/min allows brute-forcing 6-digit TOTP codes (1M combinations = ~55 minutes to exhaust at 300/min, but TOTP codes change every 30s, so effective search space is 1M/30s = need ~33k/s to keep up — not feasible at 300/min). Borderline safe but should still be 30/min per user.
+- 🟡 **P1 — Rate limiting is per-IP, not per-user**: an authenticated attacker on a residential connection can rotate IPs to bypass. A distributed attacker fully bypasses per-IP limits. For authenticated endpoints, recommend per-userId limits on top of per-IP.
+- 🟡 **P1 — In-memory store doesn't scale across instances** (same as brute-force lockout): must be Redis-backed for production.
+
+### 9. Security Headers
+
+**Present (set by `addSecurityHeaders` in middleware):**
+- ✅ `X-Content-Type-Options: nosniff`
+- ✅ `X-Frame-Options: DENY`
+- ✅ `Referrer-Policy: strict-origin-when-cross-origin`
+- ✅ `X-XSS-Protection: 1; mode=block` (deprecated but harmless)
+- ✅ `Strict-Transport-Security: max-age=31536000; includeSubDomains; preload`
+- ✅ `Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss: ws: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';`
+- ✅ Headers applied to BOTH API routes and page routes (matcher excludes only static assets)
+
+**Missing:**
+- 🟡 **P1 — No `Permissions-Policy` header**: should restrict camera, microphone, geolocation, payment, etc. e.g. `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=()`
+- 🟡 **P1 — No `Cross-Origin-Opener-Policy: same-origin`**: prevents tab-nabbing and some XS-Leaks
+- 🟡 **P1 — No `Cross-Origin-Embedder-Policy: require-corp`**: enables cross-origin isolation
+- 🟡 **P1 — No `Cross-Origin-Resource-Policy: same-origin`**: prevents cross-origin reads of static assets
+- 🟢 **P2 — CSP allows `ws:` and `wss:` to any origin** (`connect-src 'self' wss: ws: https:`): WebSocket connections to any host are allowed. Should be restricted to known WS endpoints (e.g., `wss://novsmm.com`).
+- 🟢 **P2 — CSP `img-src` allows `https:` (any HTTPS image)**: an attacker can load tracking pixels. Restrict to known image hosts if possible.
+- 🟢 **P2 — `X-XSS-Protection` is deprecated**: modern browsers ignore it. Remove or keep as defense-in-depth.
+- 🟢 **P2 — No `X-DNS-Prefetch-Control: off`**: prevents DNS prefetch information leakage.
+
+**Cookie flags (NextAuth session cookie):**
+- ✅ NextAuth defaults: `httpOnly: true`, `sameSite: "lax"`, `secure: auto` (true in production with HTTPS)
+- 🟡 **P1 — `secure` flag depends on `NODE_ENV=production` AND a HTTPS URL**: in the current sandbox (`NODE_ENV` may be dev), `secure` is likely `false`, meaning the session cookie can be sent over HTTP. Production deployment must ensure `NODE_ENV=production` and HTTPS.
+- 🟡 **P1 — `sameSite: "lax"` is acceptable but `strict` is safer** for an SMM panel (no third-party embeds need the session).
+- 🟢 **P2 — No explicit `cookies` config in `authOptions`**: relying on NextAuth defaults. Consider explicitly setting `cookies: { sessionToken: { options: { secure: true, sameSite: "strict" } } }` for production.
+
+### 10. CSRF Coverage
+
+**Current implementation:**
+- Middleware checks `Origin` OR `Referer` header on POST/PATCH/PUT/DELETE for non-NextAuth, non-webhook routes
+- NextAuth handles its own CSRF tokens for `/api/auth/*` (NextAuth's built-in double-submit cookie)
+- Webhooks exempted (verified via HMAC signatures in route handlers)
+- API-key-authenticated requests (Bearer token) are exempted from Origin check (intentional for server-to-server)
+
+**Protected routes:** ~40 state-changing endpoints covered by the Origin check + NextAuth CSRF for auth routes
+
+**Unprotected state-changing routes:**
+- 🔴 **P0 — Origin check is "presence-only", not "value-matching"**: as noted in §1, ANY `Origin` header value passes — `Origin: https://evil.com` is accepted. This makes the CSRF defense trivially bypassable from any attacker-controlled page (which always sends a valid Origin). **CRITICAL**: must verify `Origin` matches the trusted host (or trusted-host allowlist). The comment "We skip strict host matching because we run behind a reverse proxy" is a false premise — the trusted external host is known and can be matched.
+- 🔴 **P0 — DELETE method is exempted entirely when no Origin/Authorization**: `method !== "DELETE"` (line 120) means a DELETE with no Origin and no Authorization passes the CSRF check. An attacker page using `fetch(url, {method: "DELETE", credentials: "include"})` triggers a preflight (because DELETE is not a "simple" method), so this is mitigated by CORS — but if the CORS preflight is permissive or if the attacker finds a non-preflight way to send DELETE, this is exploitable.
+- 🟡 **P1 — Bearer-token exemption is too broad**: `if (!origin && !authHeader && method !== "DELETE")` — any request with an `Authorization: Bearer ...` header skips the Origin check. An attacker who has a leaked API key can POST from any origin. More importantly, an attacker page that can convince the browser to send an Authorization header (rare but possible with Service Workers or Basic auth prompts) bypasses CSRF.
+- 🟡 **P1 — No CSRF token mechanism for non-NextAuth state-changing routes**: relying solely on Origin/Referer is fragile (some proxies strip Referer; privacy settings may strip Origin). Defense-in-depth: implement a double-submit CSRF token (like NextAuth's) for all state-changing routes, or use the `SameSite=Strict` cookie flag.
+- 🟡 **P1 — Webhooks are exempt from CSRF but rely on signature verification**: Stripe ✅ (when secret configured), NowPayments ✅, Mercado Pago 🔴 (no verification — see §6).
+
+### 11. Critical Findings (P0/P1/P2)
+
+**P0 — Critical security holes (must fix before any production deployment):**
+
+1. **Mercado Pago webhook has NO signature verification** — anyone can POST a fake payment notification and credit any wallet. File: `src/app/api/webhooks/mercadopago/route.ts`. Fix: implement `x-signature` HMAC verification + fetch payment from MP API to confirm.
+
+2. **Stripe webhook "log mode" processes unverified events** — when `STRIPE_WEBHOOK_SECRET` is unset (current state of `.env`), the handler accepts any fake Stripe event and credits wallets / creates subscriptions. File: `src/app/api/webhooks/stripe/route.ts` lines 66-73. Fix: return 401 when no secret is configured; never process unverified events.
+
+3. **`NEXTAUTH_SECRET` is not set in `.env`** — JWT signing relies on NextAuth's auto-generated ephemeral secret, which is either insecure (dev) or fatal (production). File: `.env`. Fix: generate `openssl rand -base64 32` and set `NEXTAUTH_SECRET` in production env.
+
+4. **`allowDangerousEmailAccountLinking: true` on Google provider** — enables account takeover: an attacker who controls a Google account with the victim's email can log in to the victim's NOVSMM account. File: `src/lib/auth.ts` line 115. Fix: set to `false` (default) or require email verification before linking.
+
+5. **2FA is not enforced at login** — the `authorize()` function never calls `verify2FAToken`. Users with 2FA "enabled" can log in with just email+password. File: `src/lib/auth.ts`. Fix: after password verification, check if `2fa:${userId}` Setting exists; if so, require a `totpCode` field in credentials and verify it.
+
+6. **Hardcoded fallback encryption keys** — `LICENSE_ENCRYPTION_KEY || "novsmm-default-encryption-key-change!"` (crypto-utils.ts:12) and `LICENSE_ENCRYPTION_KEY || "novsmm-license-encryption-key-change-in-production-32b!"` (license.ts:18). If the env var is missing (current state), all "encrypted" payment credentials and license keys are encrypted with a public source-code key. Fix: throw at module load if `LICENSE_ENCRYPTION_KEY` is missing; never fall back.
+
+7. **Origin check is "presence-only"** — any `Origin` header value passes the CSRF check, including `Origin: https://evil.com`. File: `src/middleware.ts` lines 114-126. Fix: verify Origin against a trusted-host allowlist (read from env var `ALLOWED_ORIGINS` or derived from `getBaseUrl()`).
+
+8. **Failed login attempts are NOT logged** — brute-force analysis post-incident is impossible. File: `src/lib/auth.ts` `authorize()`. Fix: log every failed attempt with IP + User-Agent + email attempted.
+
+9. **`Caddyfile` SSRF vulnerability** — `:81?XTransformPort=<port>` reverse-proxies to `localhost:<port>`, allowing external attackers to reach any internal service (DB, Redis, WS mini-service, admin tools). File: `Caddyfile`. Fix: remove the `XTransformPort` handler entirely from production config; it's a sandbox/dev convenience that must NOT ship to prod.
+
+**P1 — High priority (fix before/shortly after launch):**
+
+1. In-memory rate limiter and brute-force lockout don't scale across instances → back with Redis.
+2. CSRF check bypassed by `Authorization` header presence — also check Origin for authed API requests.
+3. DELETE method skips CSRF check when no Origin AND no Authorization — remove the `method !== "DELETE"` exception.
+4. Brute-force lockout is per-email only — add per-IP lockout for credential stuffing defense.
+5. Backup codes use `Math.random()` (not CSPRNG) — switch to `crypto.randomBytes()`.
+6. 2FA TOTP secret stored in plaintext in Setting table — encrypt with AES-256-GCM.
+7. Login audit log doesn't capture IP or User-Agent — populate `ip` from `x-client-ip` header and `userAgent` from `user-agent` header in `metadata`.
+8. Audit log `ip` field is populated in only 1 of 34 calls — systematically add IP capture to all audit log calls (especially login/logout/refund/withdrawal/order/payment).
+9. `/api/me` PATCH allows self-service role change — remove `role` from self-service schema.
+10. `/api/admin/providers` PATCH passes unvalidated `data` to Prisma — use field allowlist.
+11. `/api/admin/payment-methods` POST spreads unvalidated `body` to Prisma — use `.strict()` Zod schema or pick validated fields.
+12. `/api/admin/currencies` and `/api/admin/languages` PATCH — same as providers.
+13. `/api/admin/settings` PATCH has no key allowlist — admin could overwrite `2fa:${userId}` or `stripe.webhookSecret` for any user. Add a key allowlist.
+14. `wallet/topup` writes Stripe creds into `process.env` at runtime — pass creds explicitly to a Stripe client factory.
+15. Cookie `secure` flag depends on `NODE_ENV=production` AND HTTPS — ensure production env is set correctly.
+16. Cookie `sameSite: "lax"` — consider `strict` for an SMM panel (no third-party embeds).
+17. Missing `Permissions-Policy`, `Cross-Origin-Opener-Policy`, `Cross-Origin-Embedder-Policy`, `Cross-Origin-Resource-Policy` headers.
+18. Email verification not enforced — users can register and use all features without verifying email.
+19. Subscription create/cancel NOT logged in audit log.
+20. v1 API orders NOT logged in audit log.
+21. Coupon validation NOT logged — brute-force leaves no trail.
+22. `/api/auth/reset-password`, `/api/auth/verify-email`, `/api/uploads`, `/api/coupons/validate`, `/api/me/2fa/verify` lack specific rate limits — add per-route limits.
+23. Rate limiting is per-IP only — add per-userId limits for authenticated endpoints.
+24. CSP `connect-src` allows `ws:` and `wss:` to any origin — restrict to known WS hosts.
+25. WebhookLog table can be DDoS'd (no rate limit on `/api/webhooks/*`).
+26. `/api/admin/notifications` POST uses `as any` cast — `userId` field not validated.
+27. Uploaded files are publicly accessible without auth — ticket attachments may be sensitive.
+28. Session not invalidated after password change — stolen JWT continues to work.
+29. No password complexity beyond length 8 — add denylist + mixed-character requirement.
+30. NowPayments webhook has no replay window (low priority — idempotency checks mitigate).
+
+**P2 — Medium priority (hardening):**
+
+1. CSP allows `'unsafe-inline'` and `'unsafe-eval'` — use nonces when Next.js 16 supports them seamlessly.
+2. `X-XSS-Protection` is deprecated — remove or keep as defense-in-depth.
+3. General API rate limit of 300/min is generous — tighten to 120/min.
+4. No `X-DNS-Prefetch-Control: off` header.
+5. `sanitize.ts` not used consistently (orders `link` field stored as-is, service names from admin not sanitized).
+6. Stripe `invoice.payment_succeeded` and `payment_intent.succeeded` handlers don't write audit logs (inconsistent with `checkout.session.completed`).
+7. Export endpoints (`/api/export`, CSV exports) not logged in audit log (GDPR relevance).
+8. Subscription sandbox mode credits plan + invoice without payment — ensure this is disabled in production.
+9. No CSRF token mechanism for non-NextAuth state-changing routes (defense-in-depth beyond Origin check).
+10. `NEXTAUTH_URL` not set — `trustHost: true` handles this, but explicit URL is safer.
+11. `/api/admin/users` PATCH accepts any `balance` value (negative, huge) — add sanity range check.
+12. `/api/orders/repeat` POST `link` field has no schema validation — accepts any string.
+13. `/api/tickets` POST `priority` field accepts any value — should be enum-validated.
+14. `/api/uploads` POST relies on client-provided MIME type — re-validate magic bytes server-side.
+15. WebSocket broadcast (`notify.ts`) to `WS_SERVICE_URL` has no shared-secret auth — internal service is trusted but should verify.
+16. `notify.ts` `notifyAdmins` queries users with `role: "admin"` — if admin role is ever renamed, notifications break silently.
+
+
+---
+Task ID: 1-a
+Agent: Explore (Database Audit)
+Task: Audit database layer — Prisma schema, indexes, N+1 queries, SQLite→PostgreSQL migration risks
+
+Work Log:
+- Read last 220 lines of worklog.md to ingest project context (NOVSMM enterprise migration kickoff; 5 parallel audit agents; this agent = 1-a Database audit).
+- Read `prisma/schema.prisma` in full (548 lines, 32 models). Cataloged every field, relation, and index.
+- Read `src/lib/db.ts` (Prisma client singleton — basic, no pooling config), `package.json` scripts (only `db:push`, no `migrate dev` flow), `.env` (single line: `DATABASE_URL=file:/home/z/my-project/db/custom.db`).
+- Verified `db/custom.db` is SQLite 3.46, 5.0 MB on disk; confirmed NO `prisma/migrations/` folder exists (schema managed exclusively via `db push` — no migration history).
+- Read `prisma/seed.ts`, `prisma/seed-services.ts`, `prisma/seed-settings.ts`, `prisma/seed-roles.ts`, `prisma/sync-huntsmm.ts`, `prisma/update-fx-rates.ts` — all use Prisma client (no raw SQL, no SQLite-specific PRAGMAs).
+- Searched codebase for raw SQL: `db.$queryRaw|db.$executeRaw|$queryRawUnsafe|$executeRawUnsafe` → **0 hits** (entirely Prisma-client based, no raw SQL anywhere). Searched `PRAGMA|sqlite_|autoincrement|Bytes|Json|Decimal` → 0 schema-level hits (the schema comment at line 1-3 explicitly documents the SQLite-compatible choices: no enums, no Decimal, no Json, no arrays).
+- Read every database-touching route handler in `src/app/api/**` (45 files) and the four library modules that issue Prisma queries (`src/lib/db.ts`, `src/lib/auth.ts`, `src/lib/notify.ts`, `src/lib/api-key-auth.ts`, `src/lib/license.ts`, `src/lib/huntsmm.ts`).
+- Found 12 files using `$transaction` (orders, orders/mass, orders/repeat, v1/orders, me/loyalty, wallet/topup, wallet/withdraw, admin/refunds, admin/withdrawals, webhooks/stripe, webhooks/nowpayments, webhooks/mercadopago).
+- Identified 10 places using `db.<table>.count()` with NO `where` clause to generate sequential public IDs (Order, Transaction, Ticket, Invoice) — full table scan + race condition.
+- Identified the two biggest performance anti-patterns: (a) `validateApiKey` and `validateLicense` load ALL active records and run `bcrypt.compare` in a JS for-loop — bcrypt is intentionally ~100ms, so N=1000 keys = 100s per request; (b) the NextAuth `jwt` callback (src/lib/auth.ts:132-160) hits the DB on EVERY authenticated request to refresh user fields, with no caching.
+- Cataloged 32 models, ~29 explicit relations, 27 existing indexes (single-column + composite + unique), and 18+ missing critical indexes (createdAt, FKs, status, reference).
+- Composed full structured audit report below.
+
+Stage Summary:
+
+## DATABASE AUDIT REPORT
+
+### 1. Current Schema Overview
+
+- **Total models:** 32
+- **Total declared relations:** ~29 (one-directional; back-relations implied)
+- **Database provider:** `sqlite` (`prisma/schema.prisma:10`)
+- **DATABASE_URL:** `file:/home/z/my-project/db/custom.db` (absolute file path — SQLite)
+- **DB file size:** 5.0 MB (1,261 pages × 4 KB)
+- **Migrations folder:** ❌ Does not exist — schema is managed exclusively via `prisma db push` (no migration history, no down-migrations, no production migration path)
+
+**Key models summary (name · field count · index count · notes):**
+
+| Model | Fields | Indexes | Notes |
+|---|---|---|---|
+| User | 18 + 11 relations | 2 unique (email, username) | Has `plan`, `balance`, `heldBalance`, `lifetimeEarnings` as Float — **no audit trail for balance changes**; relies on Transaction ledger |
+| Account | 10 | 1 composite unique | **NO index on userId** — NextAuth PrismaAdapter queries by `userId` on every OAuth login |
+| Session | 4 | 1 unique (sessionToken) | **NO index on userId** — `findMany({ where: { userId } })` in `/api/me/sessions` will full-scan |
+| VerificationToken | 3 | 1 unique (token), 1 composite unique | OK |
+| Provider | 5 + services | 1 unique (name) | No index on status — admin filter scans |
+| Service | 15 + 2 relations | 2 (`platform`, `status`), 1 unique (name) | OK; `providerId` FK has no index (SQLite auto-creates for FK in most cases but PG needs explicit) |
+| **Order** | 20 + 2 relations | 2 (`userId`, `status`), 1 unique (publicId) | **NO `createdAt` index** — used for time-range queries everywhere |
+| **Transaction** | 9 + 1 relation | 2 (`userId`, `type`), 1 unique (publicId) | **NO `createdAt`, NO `reference` index** — webhook lookups by `reference` will full-scan |
+| PaymentMethod | 10 | 1 unique (name) | OK (small table) |
+| **Notification** | 8 + 1 relation | 2 (`userId`, `read`) | **NO `createdAt` index** — `orderBy: createdAt desc` will sort in memory on large tables |
+| Ticket | 7 + 2 relations | 2 (`userId`, `status`), 1 unique (publicId) | OK |
+| **TicketMessage** | 5 + 1 relation | **0** | **NO `ticketId` index** — `include: { messages }` in `/api/tickets` will full-scan |
+| **AuditLog** | 8 + 1 relation | 2 (`userId`, `entity`) | **NO `createdAt`, NO `action` index** — admin/logs filters by both, sorts by createdAt |
+| Setting | 3 | 1 unique (key) | Misused as a generic KV cache (`ai_insights:{userId}`, `2fa:{userId}`, `2fa:pending:{userId}`, `notif_prefs:{userId}`) — will grow proportionally to users |
+| ApiKey | 10 + 1 relation | 2 (`userId`, `status`), 2 unique (publicId, keyHash) | `keyHash` is unique-indexed but **cannot be looked up by bcrypt** — see Critical Finding P0-2 |
+| License | 13 | 2 (`status`, `customerEmail`), 2 unique (licenseKey, licenseHash) | Same bcrypt-lookup flaw as ApiKey |
+| Currency | 8 | 1 unique (code) | No `status` index |
+| Language | 8 | 1 unique (code) | No `status` index |
+| **WebhookLog** | 7 | 2 (`provider`, `status`) | **NO `createdAt` index** — admin/webhooks orders by createdAt |
+| **Subscription** | 10 | 2 (`userId`, `status`) | **NO `stripeSubscriptionId` index** — Stripe webhook `findFirst({ where: { stripeSubscriptionId } })` will full-scan; also **NO relation to User** (uses plain `userId` String — no FK enforced) |
+| Invoice | 10 | 2 (`userId`, `status`), 1 unique (publicId) | **NO `createdAt` index** |
+| Promotion | 8 | 2 (`status`, `serviceId`) | OK |
+| Role | 6 + permissions | 1 unique (name) | OK |
+| Permission | 5 + 1 relation | 1 composite unique, 1 (`roleId`) | OK |
+| Offer | 9 | 2 (`userId`, `status`) | **NO `serviceId` index** — marketplace queries by serviceId |
+| Referral | 8 | 2 (`referrerId`, `code`), 1 unique (code) | OK |
+| Coupon | 8 | 2 (`code`, `status`), 1 unique (code) | OK |
+| Favorite | 5 + 2 relations | 1 composite unique, 1 (`userId`) | **NO `serviceId` index** — admin "who favorited this service" scans |
+| TicketAttachment | 6 + 1 relation | 1 (`messageId`) | OK |
+| PaymentIntent | 10 | 3 (`userId`, `status`, `providerIntentId`), 1 unique (publicId) | OK — best-indexed table |
+| LoyaltyPoint | 6 + 1 relation | 1 (`userId`) | **NO `orderId` index** — future "points from this order" queries scan |
+| Achievement | 4 + 1 relation | 1 composite unique, 1 (`userId`) | OK |
+
+**Schema-wide observations:**
+- **All "enums" are stored as `String`** (e.g. `Order.status`, `User.role`, `User.plan`, `Transaction.type`). The schema comment at line 1-3 explicitly documents this is a SQLite constraint. PostgreSQL migration should convert these to native `enum` types for type safety + storage efficiency.
+- **All monetary values are `Float`** (User.balance, Order.totalPrice, Transaction.amount, etc.). Float is unsafe for money — should be `Decimal` on PostgreSQL.
+- **All JSON-shaped fields are `String`** with manual `JSON.stringify`/`JSON.parse` (Order.dripFeedConfig, Invoice.items, AuditLog.metadata, PaymentMethod.config, Setting.value, WebhookLog.payload). PostgreSQL has native `Json`/`JsonB` with indexable path operators.
+- **No soft-delete column on any table** — Services use `status: "deleted"` but Orders/Transactions/Users have no soft-delete; admin "delete user" actually just suspends (`admin/bulk/route.ts:35-37`).
+- **No `createdBy`/`updatedBy` audit fields** on any model.
+- **Subscription model has NO Prisma relation to User** — `userId` is a plain `String` with no `@relation`. Means no FK enforcement, no cascade delete, no `include: { subscription: true }` on User.
+- **VerificationToken has no `userId`** — only `identifier` (email string). NextAuth pattern, but means we can't query "all tokens for user X" without scanning by email.
+
+---
+
+### 2. Index Analysis
+
+#### Existing indexes (27 total)
+- Unique: 18 (User.email, User.username, Account.[provider,providerAccountId], Session.sessionToken, VerificationToken.token, VerificationToken.[identifier,token], Service.name, Order.publicId, Transaction.publicId, Ticket.publicId, ApiKey.publicId, ApiKey.keyHash, License.licenseKey, License.licenseHash, Currency.code, Language.code, Coupon.code, Referral.code, Favorite.[userId,serviceId], Achievement.[userId,type], Permission.[roleId,resource], Invoice.publicId, PaymentIntent.publicId, PaymentMethod.name, Provider.name, Role.name, Setting.key)
+- Single-column @@index: 23 (Service.platform, Service.status, Order.userId, Order.status, Transaction.userId, Transaction.type, Notification.userId, Notification.read, Ticket.userId, Ticket.status, AuditLog.userId, AuditLog.entity, ApiKey.userId, ApiKey.status, License.status, License.customerEmail, WebhookLog.provider, WebhookLog.status, Subscription.userId, Subscription.status, Invoice.userId, Invoice.status, Promotion.status, Promotion.serviceId, Permission.roleId, Offer.userId, Offer.status, Referral.referrerId, Referral.code, Coupon.code, Coupon.status, Favorite.userId, TicketAttachment.messageId, PaymentIntent.userId, PaymentIntent.status, PaymentIntent.providerIntentId, LoyaltyPoint.userId, Achievement.userId)
+
+#### Missing critical indexes (prioritized)
+
+**P0 — blocking production at scale:**
+
+1. **`Transaction.reference`** — webhook handlers (Stripe, NowPayments, MercadoPago) call `db.transaction.findFirst({ where: { reference: pi.id } })` on EVERY incoming webhook. No index → full table scan. With 1M+ transactions this is multi-second latency per webhook. Webhook handlers run in the request path and Stripe retries on timeout → cascading failures.
+
+2. **`Transaction.createdAt`** (and composite `(userId, createdAt)`) — `/api/dashboard`, `/api/analytics`, `/api/wallet`, `/api/referrals`, `/api/admin/overview` all filter `createdAt: { gte: thirtyDaysAgo }`. No index → full table scan as Transaction grows. Each of these endpoints runs this pattern.
+
+3. **`Order.createdAt`** (and composite `(userId, createdAt)`) — same pattern. Also used by `db.order.count({ where: { userId, createdAt: { gte: monthStart } } })` for plan-limit enforcement on EVERY order placement.
+
+4. **`Subscription.stripeSubscriptionId`** — Stripe webhook handlers (`handleSubscriptionUpdated`, `handleSubscriptionDeleted`, `handleInvoicePaymentSucceeded`) call `findFirst({ where: { stripeSubscriptionId: sub.id } })` on every subscription event. No index → full scan.
+
+5. **`AuditLog.createdAt`** and **`AuditLog.action`** — `/api/admin/logs?entity=X&action=Y` filters by both, sorts by `createdAt desc`. Currently relies on `take: limit` to bound the scan, but with no index the DB still scans from the newest backward.
+
+6. **`TicketMessage.ticketId`** — `/api/tickets` does `include: { messages: { orderBy: { createdAt: "asc" } } }`. Without an index on `ticketId`, every ticket list fetch scans the entire TicketMessage table per ticket (N+1 amplification).
+
+7. **`Session.userId`** and **`Account.userId`** — NextAuth PrismaAdapter performs lookups by `userId` on every OAuth-linked operation. The `/api/me/sessions` endpoint also queries by `userId`. SQLite auto-creates indexes for FK columns referenced in `@relation` blocks in some Prisma versions, but PostgreSQL does NOT — this will silently regress on migration.
+
+**P1 — should fix before scale:**
+
+8. **`Notification.createdAt`** (composite `(userId, createdAt)`) — dashboard/notifications lists sort by createdAt desc, take 50. Without an index, PG sorts in memory.
+9. **`Invoice.createdAt`** — same pattern in `/api/invoices`.
+10. **`WebhookLog.createdAt`** — admin/webhooks sorts by createdAt desc.
+11. **`Order.serviceId`** — `/api/services/[id]` does `db.order.count({ where: { serviceId, status: "completed" } })`.
+12. **`Offer.serviceId`** — marketplace browse queries filter by serviceId.
+13. **`Favorite.serviceId`** — admin "who favorited this" queries (future).
+14. **`LoyaltyPoint.orderId`** — future "points earned from this order" queries.
+15. **`License.customerId`** — admin license lookup by customer.
+16. **`Subscription.userId`** already has @@index but the missing `@relation` to User means Prisma can't optimize `include: { subscription: true }`.
+17. **`PaymentMethod.status`** — `/api/payment-methods` filters by status.
+18. **`Currency.status`** and **`Language.status`** — small tables today but pattern is wrong.
+19. **`Provider.status`** — admin filter.
+20. **`Order.userId + Order.status`** composite — `/api/orders?status=X` and dashboard active/completed counts both filter on (userId, status). Two separate single-column indexes don't help a composite query as well as a composite index does.
+21. **`Transaction.userId + Transaction.type`** composite — `/api/referrals` and `/api/analytics` filter on (userId, type).
+22. **`Notification.userId + Notification.read`** composite — `/api/notifications` counts unread per user.
+23. **`Order.createdAt + Order.userId`** composite — plan-limit enforcement.
+
+**Recommended approach:** Before migration to PostgreSQL, generate one Prisma migration that adds all P0/P1 indexes. Estimated impact: 5-50× speedup on hot paths (webhooks, dashboard, analytics) once tables exceed ~50K rows.
+
+---
+
+### 3. N+1 Query Risks
+
+| # | File:Line | Pattern | Recommended fix |
+|---|---|---|---|
+| 1 | `src/lib/notify.ts:131-138` (`notifyAdmins`) | `for (const admin of admins) await createNotification(...)` — sequential per-admin DB write + email | `db.notification.createMany({ data: admins.map(...) })` in one query; `Promise.all` for emails |
+| 2 | `src/app/api/admin/notifications/route.ts:50-61` (broadcast) | Calls `createMany` then ALSO loops `for (const u of users) await createNotification(...)` — **creates DUPLICATE notifications per user** + 10k sequential awaits | Remove the for-loop entirely; the `createMany` already inserts rows. If emails are needed, batch-send via a background job queue. |
+| 3 | `src/app/api/admin/roles/route.ts:113-118` | `deleteMany` then `for (const perm of perms) await db.permission.create(...)` — sequential N inserts, NOT in a transaction | `db.$transaction([deleteMany, createMany({ data: perms })])` |
+| 4 | `src/app/api/orders/route.ts:502-519` (simulateFulfillment) | `for (const step of steps) { await sleep; await db.order.findUnique; await db.order.update }` — 4 sequential round-trips per order | Move to a background worker (BullMQ/Inngest). The setTimeout-in-request-handler pattern does not survive a serverless restart. |
+| 5 | `src/app/api/orders/mass/route.ts:253-257` | `createdOrders.forEach((order) => simulateFulfillment(order.id, userId).catch(...))` — fires N×4 background DB writes per mass order (up to 100 orders × 4 steps = 400 DB ops) | Same as #4 — hand off to a worker queue |
+| 6 | `src/app/api/admin/orders/route.ts:117` | Same `simulateFulfillment` pattern as #4, duplicated 4× across `orders/route.ts`, `orders/mass/route.ts`, `orders/repeat/route.ts`, `v1/orders/route.ts`, `admin/orders/route.ts` | Extract to a shared `src/lib/fulfillment.ts` and route through a queue |
+| 7 | `src/app/api/admin/settings/route.ts:26-32` | `for (const [k,v] of updates) await db.setting.upsert(...)` — N sequential upserts | `db.$transaction(updates.map(([k,v]) => db.setting.upsert(...)))` |
+| 8 | `src/app/api/me/loyalty/route.ts:179-203` (reconcileAchievements) | `for (const check of checks) await db.$transaction([achievement.create, loyaltyPoint.create])` — up to 10 sequential transactions | Batch into a single `$transaction` with conditional creates, or run reconcile in a background job |
+| 9 | `src/lib/license.ts:107-131` (validateLicense) | `for (const lic of activeLicenses) await bcrypt.compare(...)` — O(N) bcrypt per validation, N=total active licenses | Store a deterministic SHA-256 lookup hash alongside the bcrypt hash; query by SHA-256 first, then bcrypt-verify only the match |
+| 10 | `src/lib/api-key-auth.ts:23-61` (validateApiKey) | Same pattern: `for (const apiKey of keys) await bcrypt.compare(...)` — O(N) bcrypt per API request | Same fix: store SHA-256 of the key for lookup, bcrypt for verification |
+| 11 | `src/lib/auth.ts:132-160` (jwt callback) | DB hit on EVERY authenticated request to refresh user fields — no caching | Cache for 30-60s in-memory with last-refreshed timestamp in the JWT; only re-fetch when stale |
+| 12 | `src/app/api/referrals/route.ts:118-141` | 3 sequential queries (leaderboard groupBy → users findMany → transactions groupBy) that could be one joined query; plus line 177 `having` clause scans full Referral table for user-not-in-top-10 case | Use a single `groupBy` with `_sum` join, or denormalize referral count + earnings onto User |
+| 13 | `src/app/api/services/route.ts:85-96` | Loads ALL user orders (`findMany({ where: { userId } })` no take) just to derive first-N distinct platforms | `db.order.findMany({ where: { userId }, distinct: ['platform'], select: { platform: true }, orderBy: { createdAt: 'asc' }, take: N })` |
+| 14 | `src/app/api/admin/api-keys/route.ts:14-19` | `findMany({ include: { user: ... } })` returns ALL keys with no `take` — will grow unbounded | Add `take: 100` + pagination, or filter by `status: 'active'` |
+| 15 | `src/app/api/admin/services/route.ts:12-15` | `findMany({ include: { provider: true } })` returns ALL services — after HuntSMM sync (5000+ services) this is a 5MB+ response | Add pagination + `select` instead of include |
+| 16 | `src/app/api/admin/licenses/route.ts:20-22` | `findMany` returns ALL licenses, then `.map` decrypts each one in memory | Add pagination; decrypt only on detail view |
+| 17 | `src/app/api/admin/withdrawals/route.ts:16-22` | `findMany({ where: { type, status } })` with no `take` — all pending withdrawals ever | Add `take: 100` |
+| 18 | `src/app/api/admin/webhooks/route.ts:15-22` | `take: limit` (cap 200) is set — OK, but no `select` so each row includes the full raw payload (up to 10KB each → 2MB response) | `select` only the fields the UI needs |
+| 19 | `src/app/api/admin/users/route.ts:11-26` | `take: 100` set — OK, but `_count: { select: { orders: true } }` triggers a correlated subquery per user | For 100 users this is fine; for admin user-list pagination at scale, denormalize order count onto User |
+
+---
+
+### 4. Query Optimization Opportunities
+
+#### Unoptimized queries
+- **`src/app/api/admin/logs/route.ts:38-44`** (CSV export): `findMany({ where, include: { user }, orderBy: { createdAt: "desc" } })` with **NO `take`** — exports ALL matching audit logs. With 10M audit log rows this OOMs the process. Fix: stream the query with `cursor`-based pagination + write CSV in chunks.
+- **`src/app/api/export/route.ts:23-32`**: Same pattern — `findMany({ where: { userId } })` with no `take` exports ALL of a user's orders or transactions. A heavy user with 100k orders crashes the export.
+- **`src/app/api/v1/services/route.ts:16-32`**: `findMany({ where: { status: 'active' } })` returns ALL active services with no pagination. After HuntSMM sync (5000+ services), this is a multi-MB JSON response per API call. Fix: add `?page` + `?limit` like the internal `/api/services` endpoint.
+- **`src/app/api/admin/overview/route.ts:28-34`**: `db.transaction.findMany({ where: { type: 'sale', createdAt: { gte: thirtyDaysAgo } }, select: { amount, createdAt } })` — pulls all sales txns for 30 days into memory then buckets them in JS. With heavy traffic this is 100K+ rows. Fix: `groupBy` by day in SQL with `_sum`.
+- **`src/app/api/dashboard/route.ts:57-77`** and **`src/app/api/analytics/route.ts:83-106`**: Same in-memory bucketing of 30 days of transactions. Fix: SQL `groupBy` with `date_trunc('day', createdAt)` (PostgreSQL) — currently impossible on SQLite without raw SQL.
+- **`src/app/api/analytics/route.ts:76`**: `db.order.count({ where: { userId, status: 'completed' } })` is fetched as `conversionRate` but is identical to `completedOrders` already fetched on line 74 — duplicate query.
+- **`src/app/api/orders/route.ts:225`**: `db.order.count()` (no where) on EVERY order creation to generate `publicId = A-${10432 + count}`. With 1M orders this is a 1M-row scan + race condition (two concurrent orders get the same publicId → unique constraint violation). Fix: use a `Sequence` table or generate publicId from `crypto.randomBytes` + a counter stored in Setting.
+- Same `db.<table>.count()` pattern at: `orders/mass/route.ts:143`, `orders/repeat/route.ts:62`, `v1/orders/route.ts:61`, `admin/orders/route.ts:60`, `wallet/topup/route.ts:75`, `wallet/withdraw/route.ts:39`, `webhooks/stripe/route.ts:519`, `subscriptions/route.ts:202`, `tickets/route.ts:35` — **10 instances** of this anti-pattern.
+
+#### Missing `select()` usage
+- `src/app/api/orders/route.ts:119-136` (GET /api/orders): no `select` — fetches all 20 Order columns × 100 rows when the UI only needs ~8 (publicId, serviceName, platform, status, progress, quantity, totalPrice, createdAt, eta).
+- `src/app/api/wallet/route.ts:24-28` (GET /api/wallet): fetches all 9 Transaction columns × 50 rows; UI needs ~5.
+- `src/app/api/notifications/route.ts:13-19`: no select — fetches all 8 Notification columns × 50 rows.
+- `src/app/api/dashboard/route.ts:39-43`: `db.order.findMany({ where: { userId }, orderBy: { createdAt: 'desc' }, take: 6 })` — no select, fetches full rows for "recent orders" widget that needs ~5 fields.
+- `src/app/api/admin/notifications/route.ts:45-48`: `findMany({ where, select: { id, email, name } })` — good example of correct usage.
+- `src/app/api/me/loyalty/route.ts:293-298`: correct `select` usage — model to follow.
+
+#### Missing pagination
+- **Only `/api/services` has proper `skip`/`take` pagination** (page-based, with `total` count). Everything else uses fixed `take: N` with no `skip`/`cursor`:
+  - `/api/orders` → `take: 100` (no pagination — user can only see most recent 100 orders ever)
+  - `/api/notifications` → `take: 50`
+  - `/api/wallet` → `take: 50`
+  - `/api/invoices` → `take: 100`
+  - `/api/admin/users` → `take: 100`
+  - `/api/admin/overview` → `take: 25`
+  - `/api/admin/logs` → `take: limit` (max 500)
+  - `/api/admin/webhooks` → `take: limit` (max 200)
+  - `/api/admin/services` → NO take (returns all)
+  - `/api/admin/api-keys` → NO take
+  - `/api/admin/licenses` → NO take
+  - `/api/admin/withdrawals` → NO take
+  - `/api/v1/services` → NO take (public API — returns ALL active services)
+- **No cursor-based pagination anywhere** — page-based (`skip`/`take`) becomes slow at high offsets on PostgreSQL (deep pagination problem). For Order/Transaction/AuditLog lists that users scroll through chronologically, cursor-based (`where: { createdAt: { lt: lastSeenCreatedAt } }, take: N, orderBy: { createdAt: 'desc' }`) is the right pattern.
+
+#### Transactions
+- All 12 `$transaction` usages are **batch-array transactions** (`$transaction([op1, op2, op3])`) — correct for atomic multi-write operations.
+- **No interactive transactions** (`$transaction(async (tx) => { ... })`) — these would be needed for read-modify-write flows like "check balance, then debit" to avoid race conditions. Currently the codebase uses the array form for this, which DOES execute atomically in SQLite (single-writer) but is **not truly isolation-safe on PostgreSQL** under concurrent load — the balance check at `orders/route.ts:188-222` happens OUTSIDE the transaction at line 235, so two concurrent orders can both pass the balance check and then both debit, producing a negative balance. **P0 concurrency bug** that SQLite's single-writer nature masks.
+
+#### Raw SQL
+- **Zero raw SQL queries in the entire codebase.** All DB access is via Prisma client. This is good for portability but means several PostgreSQL-native optimizations (like `date_trunc` for time bucketing, `JSONB` path operators, full-text search with `tsvector`, `RETURNING` clauses for bulk updates) are unavailable until raw SQL or Prisma 6 SQL extensions are adopted.
+
+---
+
+### 5. SQLite → PostgreSQL Migration Risks
+
+#### Schema incompatibilities
+
+1. **`Float` for monetary values** — SQLite stores Float as 8-byte IEEE 754. PostgreSQL Float is the same, BUT PostgreSQL also supports `Decimal`/`numeric` which is what should have been used from day 1. The migration forces a decision: keep Float (preserves current behavior, floating-point rounding bugs remain) or migrate to Decimal (requires auditing every place that does arithmetic on money — `orders/route.ts:183-185`, `wallet/topup/route.ts:396-403`, `admin/refunds/route.ts:49-80`, `analytics/route.ts:70-77`, etc.). **Recommended:** migrate to `Decimal @db.Decimal(12,4)` and audit all arithmetic.
+
+2. **String-encoded enums** — 14 columns use `String` for what should be enums (User.role, User.status, User.plan, Order.status, Order.priority, Transaction.type, Transaction.status, Notification.type, Notification.severity, Ticket.status, Ticket.priority, AuditLog.action, AuditLog.entity, Service.status, Service.quality, Provider.status, ApiKey.status, License.status, License.plan, Currency.status, Language.status, WebhookLog.status, Subscription.status, Subscription.plan, Invoice.status, Invoice.type, Promotion.status, Offer.status, Referral.status, Coupon.status, Coupon.type, PaymentMethod.status, PaymentIntent.status, PaymentIntent.method, LoyaltyPoint.reason, Achievement.type). **PostgreSQL native enums are non-trivial to migrate**: Prisma enums are created as PG enum types, but updating them (adding/removing values) requires `ALTER TYPE` which is fiddly. Also, all the inline union-type comments in the schema (`// user | reseller | agency | admin`) are documentation-only — TypeScript doesn't enforce them. **Recommended:** introduce a Prisma `enum` for each, regenerate, and migrate the column type. Risk: any place that does `String` comparison (`if (user.plan === "free")`) keeps working, but any place that constructs the value dynamically needs to be audited.
+
+3. **String-encoded JSON** — 8 columns store JSON as String (Order.dripFeedConfig, Invoice.items, AuditLog.metadata, PaymentMethod.config, Setting.value, WebhookLog.payload, PaymentIntent.metadata, plus the Setting-table KV cache). PostgreSQL `JsonB` would enable: (a) native GIN indexing for fast key lookups, (b) path operators (`->`, `->>`) in queries, (c) schema validation with `CHECK` constraints. The current code does `JSON.parse(row.value)` in JS everywhere — switching to JsonB means the value comes back as a native object. **Migration risk:** Medium — every `JSON.parse` call site needs review; every `JSON.stringify` on write needs to become a plain object.
+
+4. **`String` for IP addresses** — `AuditLog.ip` and `ApiKey.lastUsedIp` are plain Strings. PostgreSQL has a native `inet` type with subnet operators. Migration is optional but recommended.
+
+5. **No `@db.Text` / `@db.VarChar(N)` annotations** — SQLite ignores length on String, so all string columns are unbounded. PostgreSQL defaults to `text` (unbounded) which is fine but means no DB-level length validation. The `sync-huntsmm.ts:128` code does `.slice(0, 5000)` on description — this is application-level truncation that should become a `@db.VarChar(5000)` constraint.
+
+6. **CUID primary keys** — `@default(cuid())` works on both SQLite and PostgreSQL. No issue.
+
+7. **`@updatedAt`** — works on both. No issue.
+
+8. **Case sensitivity** — SQLite `contains` is case-insensitive by default for ASCII. PostgreSQL `contains` (which compiles to `LIKE`) is case-sensitive. The admin search endpoint (`/api/admin/search/route.ts:9` comment) explicitly notes "SQLite is already case-insensitive for contains on ASCII strings, so we don't pass `mode: insensitive`". **This will break on PostgreSQL** — every `contains` query becomes case-sensitive. Fix: add `mode: "insensitive"` to all search queries, OR use PostgreSQL `ILIKE` / `tsvector` for full-text search. Affected files: `admin/search/route.ts`, `services/route.ts` (search), `orders/route.ts` (search), `admin/users/route.ts`, `admin/services/route.ts`.
+
+9. **`onDelete: Cascade` and `SetNull`** — work on both, but PostgreSQL enforces FK constraints strictly. SQLite with Prisma has FK enforcement ON by default since Prisma 4. No issue expected, but worth verifying after migration.
+
+10. **No `Bytes` type used** — good, no migration concern there.
+
+#### Data migration challenges
+
+1. **`db/custom.db` is 5.0 MB** — trivially small. The migration can use `prisma db pull` to introspect, then `prisma migrate diff` to generate the SQL, then a script to copy rows. No multi-GB data transfer concerns.
+
+2. **The Setting table is overloaded** — it holds (a) actual platform settings (`platform.name`, `fees.marketplace`), (b) AI insights cache (`ai_insights:{userId}`), (c) 2FA secrets (`2fa:{userId}`, `2fa:pending:{userId}`), (d) notification preferences (`notif_prefs:{userId}`). On PostgreSQL, these should be split into separate tables: `Setting` (platform config), `UserAiInsights` (cache), `TwoFactorSecret` (with proper schema), `NotificationPreference` (with proper schema). The 2FA secret is currently stored as **plaintext in the Setting.value column** (only the backup codes are bcrypt-hashed) — this is a security finding that should be addressed during migration.
+
+3. **Sequential public IDs (`A-10432`, `TX-8842`, `T-201`, `INV-0001`)** are generated by `db.<table>.count() + offset`. On PostgreSQL these become race-prone under concurrent inserts. Migration plan: either (a) add a `lastOrderSeq` row to Setting and increment atomically in a transaction, or (b) switch to `crypto.randomBytes`-based IDs, or (c) use a PostgreSQL `SEQUENCE` object.
+
+4. **The `dripFeedConfig` JSON column** has no schema validation — any string is accepted. On PostgreSQL with `JsonB`, add a `CHECK` constraint or use `jsonb_schema_validator`.
+
+5. **No migration history exists** — there's no `prisma/migrations/` folder, so the schema has been managed exclusively via `db push`. This means: (a) there's no audit trail of schema changes, (b) the production database schema may have drifted from `schema.prisma` if `db push` was run selectively, (c) the first PostgreSQL migration will be a "baseline" migration that creates everything from scratch. **Recommended:** before migration, run `prisma migrate diff --from-empty --to-schema-datamodel prisma/schema.prisma --script` to generate the baseline SQL, review it, then apply to PostgreSQL.
+
+#### Required Prisma schema changes for PostgreSQL
+
+1. `datasource db { provider = "sqlite" }` → `provider = "postgresql"`.
+2. `DATABASE_URL=file:/home/z/my-project/db/custom.db` → `DATABASE_URL=postgresql://user:pass@host:5432/novsmm?schema=public`.
+3. Convert all 14 enum-like String columns to `enum` types.
+4. Convert all 8 JSON-string columns to `Json` (or `JsonB` for indexed ones).
+5. Convert all monetary `Float` columns to `Decimal @db.Decimal(12,4)`.
+6. Add `mode: "insensitive"` to all `contains` search queries (or switch to full-text search).
+7. Add all P0/P1 missing indexes (see Section 2).
+8. Add `@db.VarChar(N)` length constraints to description/name fields.
+9. Add a `@relation` from `Subscription.userId` to `User.id` (currently missing).
+10. Consider splitting the overloaded `Setting` table into 4 separate tables.
+
+#### Estimated migration complexity: **HIGH**
+
+**Reasoning:**
+- Schema changes are extensive (14 enums, 8 JSON columns, ~30 Float→Decimal conversions, ~20 missing indexes).
+- No migration history means baseline must be hand-verified.
+- Every `JSON.parse`/`JSON.stringify` call site (~30+ locations) must be audited.
+- Every search query (5+ endpoints) needs `mode: "insensitive"` or rewrite to FTS.
+- Every monetary arithmetic operation (~20 locations) must be audited for Decimal compatibility (Decimal in Prisma returns `Prisma.Decimal` objects, not JS numbers — `Math.floor`, `>`, `<` all behave differently).
+- The bcrypt-scan patterns in `validateApiKey` and `validateLicense` must be redesigned BEFORE migration (they'll be just as broken on PostgreSQL, but the migration is the right moment to fix them).
+- The `simulateFulfillment` setTimeout-in-request pattern must be replaced with a real queue (Redis + BullMQ) — this is technically a separate workstream but blocks production readiness.
+- **Mitigating factors:** DB is only 5 MB, so data migration itself is trivial. No raw SQL anywhere means no SQLite-specific SQL to translate. All queries go through Prisma, so the schema migration handles most of the work automatically.
+
+---
+
+### 6. Connection Pooling Assessment
+
+#### Current state
+- **Prisma client setup** (`src/lib/db.ts`, 13 lines): basic singleton with `globalForPrisma` cache to survive Next.js hot-reload in dev. No explicit connection limit, no pool config.
+- **`log: ["query", "error", "warn"]`** in non-production — useful for dev but **should be removed or reduced to `["error"]` in production** (query logging has measurable overhead).
+- **No `connection_limit` URL parameter** — Prisma defaults to `num_cpus * 2 + 1` connections. On a typical 4-core server that's 9 connections, which is fine for SQLite (single connection) but **may exhaust PostgreSQL's default `max_connections=100`** when multiple Next.js workers are running (e.g., 4 workers × 9 connections = 36 connections per pod; with 3 pods = 108 connections → connection refused).
+- **No `pool_timeout` URL parameter** — default is 10s; under load, requests will wait 10s then 500 instead of failing fast.
+- **No PgBouncer / Supavisor / Cloudflare Hyperdrive in front of PostgreSQL** — every Prisma client connection is a direct TCP connection to PostgreSQL. Serverless deployments (Vercel, Cloudflare Workers) need a connection pooler because each serverless function invocation creates a new Prisma client.
+- **No read-replica routing** — all queries hit the primary. Analytics endpoints (`/api/analytics`, `/api/admin/overview`, `/api/admin/logs`) are read-heavy and could route to replicas.
+
+#### Recommended approach for PostgreSQL
+
+1. **Add `connection_limit` and `pool_timeout` to DATABASE_URL:**
+   ```
+   DATABASE_URL=postgresql://user:pass@host:5432/novsmm?schema=public&connection_limit=10&pool_timeout=20
+   ```
+
+2. **Deploy PgBouncer (or Supavisor on Supabase, RDS Proxy on AWS, Hyperdrive on Cloudflare) in front of PostgreSQL.** Configure PgBouncer in `transaction` pooling mode (Prisma is compatible). This is **mandatory** if deploying to serverless (Vercel/Cloudflare).
+
+3. **Use separate Prisma clients for read-heavy endpoints** that route to a read replica:
+   ```ts
+   export const dbRead = new PrismaClient({ datasources: { db: { url: process.env.DATABASE_URL_READ } } })
+   ```
+   Apply to `/api/analytics`, `/api/dashboard`, `/api/admin/overview`, `/api/admin/logs`, `/api/admin/webhooks`.
+
+4. **Reduce production logging:** `log: process.env.NODE_ENV === "production" ? ["error"] : ["query", "error", "warn"]` — already done, but verify in production deploy.
+
+5. **Add a `/health/db` endpoint** that runs `db.$queryRaw\`SELECT 1\`` and reports latency — currently `/api/status` runs 3 `count()` queries which don't actually verify connection health (they could be served from a stale replica).
+
+6. **Add `pg_stat_statements`** to PostgreSQL config and ship a Grafana dashboard for slow-query monitoring post-migration.
+
+---
+
+### 7. Critical Findings (P0/P1/P2)
+
+#### P0 — blocking production
+
+- **P0-1: Sequential-ID race condition + full table scan.** All 10 `db.<table>.count()` calls (orders/route.ts:225, orders/mass/route.ts:143, orders/repeat/route.ts:62, v1/orders/route.ts:61, admin/orders/route.ts:60, wallet/topup/route.ts:75, wallet/withdraw/route.ts:39, webhooks/stripe/route.ts:519, subscriptions/route.ts:202, tickets/route.ts:35) generate `publicId = PREFIX + count + offset`. Under concurrent inserts this (a) triggers `@unique` constraint violations (500 errors) and (b) becomes a multi-second full-table scan once the table exceeds 1M rows. **Fix:** replace with a `Sequence` counter table or `crypto.randomBytes`-based IDs.
+
+- **P0-2: bcrypt-scan for API key + license validation.** `src/lib/api-key-auth.ts:23-61` and `src/lib/license.ts:107-131` load ALL active keys/licenses and run `bcrypt.compare` in a JS for-loop. Bcrypt is intentionally ~100ms. With 100 active API keys, every public API request takes 10+ seconds. With 1000 keys, it's 100+ seconds. **This makes the entire public API (`/api/v1/*`) unusable at scale.** Fix: store a deterministic SHA-256 of the key alongside the bcrypt hash; query by SHA-256 (indexed), then bcrypt-verify only the single match.
+
+- **P0-3: Balance-check-outside-transaction race.** `src/app/api/orders/route.ts:188-281` (and the identical pattern in `orders/mass/route.ts`, `orders/repeat/route.ts`, `v1/orders/route.ts`): the balance sufficiency check at line 217 (`if (user.balance < totalPrice)`) happens BEFORE the `$transaction` at line 235. Two concurrent orders can both pass the check, both enter the transaction, and both debit — producing a negative balance. SQLite's single-writer nature masks this; PostgreSQL's MVCC will expose it immediately. **Fix:** move the balance check inside an interactive `$transaction` with a `SELECT ... FOR UPDATE` lock, or use a conditional `updateMany({ where: { id, balance: { gte: totalPrice } }, data: { balance: { decrement: totalPrice } } })` and check the result count.
+
+- **P0-4: Missing `Transaction.reference` index.** Every Stripe/NowPayments/MercadoPago webhook does `findFirst({ where: { reference: pi.id } })` with no index. Under payment volume this is a full table scan per webhook. Stripe retries on timeout → thundering herd. **Fix:** add `@@index([reference])` to Transaction.
+
+- **P0-5: Missing `Order.createdAt` and `Transaction.createdAt` indexes.** Used by every dashboard, analytics, and plan-limit query. Without these indexes, the entire dashboard degrades to multi-second latency once the tables exceed 50K rows.
+
+- **P0-6: `simulateFulfillment` runs in the request handler via `setTimeout`.** Five endpoints (`orders/route.ts`, `orders/mass/route.ts`, `orders/repeat/route.ts`, `v1/orders/route.ts`, `admin/orders/route.ts`) call `simulateFulfillment(...).catch(...)` fire-and-forget after creating an order. The function uses `await new Promise(r => setTimeout(r, 12000))` to spread progress updates. **On serverless (Vercel), the function is killed when the response is returned** — fulfillment never happens. **On a long-running server, a restart kills in-flight timeouts.** This is the single biggest architecture blocker for production. **Fix:** move to a background worker (BullMQ + Redis, or Inngest, or a cron-based poller).
+
+- **P0-7: Admin broadcast creates duplicate notifications.** `src/app/api/admin/notifications/route.ts:50-61` calls `db.notification.createMany` (correct) then ALSO loops calling `createNotification` per user (creates a SECOND notification row per user + sends email sequentially). With 10K users this is 20K notification rows + 10K sequential SMTP sends in a single request. **Fix:** remove the for-loop; if email is needed, enqueue via a background job.
+
+#### P1 — should fix before scale
+
+- **P1-1: NextAuth `jwt` callback hits DB on every authenticated request.** `src/lib/auth.ts:132-160` — every `requireAuth()` call triggers a `db.user.findUnique` to refresh token fields. With 1000 req/s this is 1000 DB queries/s just for auth. **Fix:** cache user fields in the JWT with a 30-60s TTL; only re-fetch when stale.
+
+- **P1-2: 18+ missing indexes** (see Section 2 P1 list). Add in a single migration before PostgreSQL cutover.
+
+- **P1-3: No pagination on 12 admin/user endpoints** (see Section 4 "Missing pagination"). Most use fixed `take: 100` with no `skip`/`cursor`. Users with >100 orders can never see the rest.
+
+- **P1-4: CSV export endpoints have no row limit.** `/api/admin/logs?format=csv` and `/api/export?format=csv` fetch ALL matching rows into memory. Will OOM under load.
+
+- **P1-5: In-memory time-bucketing.** Dashboard, analytics, wallet, and admin/overview all fetch 30 days of transactions then bucket by day in JS. Should be a SQL `groupBy` with `date_trunc('day', createdAt)`.
+
+- **P1-6: `Subscription` model has no Prisma relation to `User`.** `userId` is a plain String. No FK enforcement, no cascade, no `include`. Add `user User @relation(fields: [userId], references: [id], onDelete: Cascade)` and `subscriptions Subscription[]` on User.
+
+- **P1-7: 2FA secret stored as plaintext in Setting table.** `src/app/api/me/2fa/setup/route.ts:38-53` stores the TOTP secret as a JSON string in `Setting.value` (only backup codes are bcrypt-hashed). If the DB is compromised, all 2FA secrets are exposed. **Fix:** encrypt the secret with the same AES-256-GCM used for PaymentMethod.config, or move to a dedicated `TwoFactorSecret` table with at-rest encryption.
+
+- **P1-8: `Setting` table is overloaded.** Holds platform config, AI cache, 2FA secrets, notif prefs, Stripe webhook secret. Should be 4 separate tables. Also, `db.setting.findMany()` (no where) in `/api/public/settings` and `/api/admin/settings` loads ALL of these into memory.
+
+- **P1-9: Missing `select` on 5+ hot endpoints** (orders, wallet, notifications, dashboard, admin/webhooks). Fetching 9-20 columns when 5-8 are needed. 2-4× unnecessary data transfer.
+
+- **P1-10: Case-insensitive search will break on PostgreSQL.** 5+ endpoints use `contains` without `mode: "insensitive"`. SQLite is case-insensitive by default; PostgreSQL is not. Add `mode: "insensitive"` or switch to FTS.
+
+- **P1-11: `notifyAdmins` and `reconcileAchievements` use sequential awaits in for-loops** without batching. See Section 3 #1 and #8.
+
+- **P1-12: All monetary values are `Float`.** Floating-point rounding errors will compound over millions of transactions. `0.1 + 0.2 = 0.30000000000000004` is already happening silently. Migrate to `Decimal @db.Decimal(12,4)`.
+
+- **P1-13: `db.paymentMethod.findUnique({ where: { name: "NowPayments" } })` on every NowPayments webhook** (`webhooks/nowpayments/route.ts:42-44`). The PaymentMethod table is small today but the query is on `name` (a string) — should be cached in memory or moved to a `Setting`.
+
+#### P2 — nice to have
+
+- **P2-1: No soft-delete on Orders/Transactions/Users.** Admin "delete user" actually suspends. Hard-deletes cascade. Consider adding `deletedAt DateTime?` for audit trails.
+
+- **P2-2: No read-replica routing.** Analytics/admin endpoints could route to replicas.
+
+- **P2-3: No `pg_stat_statements` monitoring.** Add during PostgreSQL setup.
+
+- **P2-4: No connection-pooler.** Add PgBouncer/Supavisor for serverless deploy.
+
+- **P2-5: `AuditLog` has no retention policy.** Will grow forever. Add a 90-day TTL cron or partitioning by month.
+
+- **P2-6: `WebhookLog.payload` is stored as a raw string up to 10KB.** With high payment volume this table grows fast. Add a 30-day TTL.
+
+- **P2-7: `LoyaltyPoint` table has no `orderId` index.** Future "points from this order" queries will scan.
+
+- **P2-8: `Referral.code` has both `@unique` and `@@index`** — redundant. The unique constraint already creates an index.
+
+- **P2-9: `Coupon.code` has both `@unique` and `@@index`** — same redundancy.
+
+- **P2-10: No database-level CHECK constraints** (e.g., `balance >= 0`, `quantity > 0`, `discount BETWEEN 0 AND 100`). All validation is application-level. PostgreSQL supports CHECK constraints natively.
+
+- **P2-11: `PaymentIntent.metadata` is a String column** — should be `JsonB` for queryability.
+
+- **P2-12: The `examples/websocket/server.ts` mini-service** is a separate Node process that polls the DB for new notifications. On PostgreSQL, this should use `LISTEN/NOTIFY` for push-based notification instead of polling.
+
+- **P2-13: `prisma/sync-huntsmm.ts:73-74` does `deleteMany({})` on Service and Provider tables** — destructive full-table wipe on every sync. Should be upsert-based.
+
+- **P2-14: No `@map`/`@@map` for snake_case table names.** All Prisma models compile to PascalCase table names in PostgreSQL. Convention is usually snake_case. Cosmetic but worth fixing during migration.
+
+- **P2-15: `prisma/update-fx-rates.ts` runs `db.currency.update` per currency in a loop** — should be a single `updateMany` or `$transaction` with bulk upserts.
+
+
+---
+Task ID: 1-d
+Agent: Explore (Performance & Frontend Audit)
+Task: Audit performance & frontend — bundle, React patterns, caching, images, render, data fetching, streaming, fonts, PWA, build config
+
+Work Log:
+- Read worklog.md last ~360 lines (Tasks FIX-MERCADOPAGO through ENTERPRISE-AUDIT-KICKOFF) to understand project context: NOVSMM SMM panel, Next.js 16 + Prisma + SQLite, 5 parallel audit agents launched for Enterprise migration.
+- Inspected project root: package.json, next.config.ts, tailwind.config.ts, postcss.config.mjs, components.json, eslint.config.mjs, Caddyfile, middleware.ts.
+- Inspected src/app: layout.tsx, page.tsx, loading.tsx, error.tsx, globals.css.
+- Inspected src/lib: app-providers.tsx, db.ts, auth.ts, api-utils.ts, api-client.ts, currency-utils.ts, notify.ts, i18n.ts.
+- Inspected src/hooks/use-api.ts (961 lines, ~60 hooks — full TanStack Query inventory).
+- Inspected src/components/novsmm: app-view.tsx, app-store.ts, dashboard-shell.tsx, dashboard-home.tsx, dashboard-orders.tsx, dashboard-marketplace.tsx, dashboard-notifications.tsx, dashboard-tickets.tsx, dashboard-analytics.tsx, dashboard-wallet.tsx, dashboard-profile.tsx, admin-panel.tsx, hero.tsx, hero-dashboard.tsx, navbar.tsx, footer.tsx, smooth-scroll.tsx, scroll-progress.tsx, magnetic.tsx, reveal.tsx, counter.tsx, whatsapp-widget.tsx, payment-logo.tsx, platform-logo.tsx, status-pill.tsx, section-heading.tsx, error-boundary.tsx, testimonials.tsx, stats.tsx, dashboard-data.ts.
+- Inspected src/components/ui/* (all 42 shadcn UI components) — searched for actual imports via `@/components/ui/*` patterns across the codebase.
+- Inspected src/app/api: dashboard, analytics, orders, services, me, me/loyalty, wallet, notifications, status, public/settings, public/currencies, payment-methods, admin/overview, admin/users, admin/logs, referrals routes.
+- Inspected mini-services/notifications-service/index.ts (Socket.IO notification relay).
+- Ran targeted greps for: `"use client"` (81 files), `framer-motion` (34 files), `recharts` (8 files), `dynamic(`/`React.lazy` (8 dynamics, 0 lazy), `revalidate`/`unstable_cache` (0 hits), `Cache-Control` (1 hit), `Suspense` (0 hits), `<img` (2 hits), `next/image` (2 files), `useMemo`/`useCallback`/`React.memo` (mostly in ui/*, almost none in novsmm/*), `refetchInterval`/`refetchOnWindowFocus` (8 hooks), `serviceWorker`/`manifest` (0 hits), `date-fns` (0 imports despite being a dep), `@tanstack/react-table` (0 imports despite being a dep), `@hookform/resolvers` + `react-hook-form` (only 1 file: ui/form.tsx which is dead code), `socket.io` (server — 0 imports in main app).
+- Verified node_modules sizes: date-fns 39MB + effect 34MB (transitive) = 73MB dead weight; lucide-react 42MB; prisma 67MB; @prisma 112MB.
+- Verified public/ image sizes: novsmm-logo.png and src/app/icon.png are both 184KB (same file duplicated).
+- Confirmed the dashboard is rendered entirely client-side via AppView conditional switching (no URL routing for dashboard tabs).
+- Confirmed NextAuth jwt callback hits DB on every session resolution.
+
+Stage Summary:
+
+## PERFORMANCE & FRONTEND AUDIT REPORT
+
+### 1. Bundle Analysis
+- **Total deps:** 36 (24 dependencies + 12 devDependencies)
+- **Heavy/unused deps identified:**
+  - `date-fns` (^4.1.0) — **never imported anywhere in src/**. Pure dead weight. Pulls in `effect` (~34MB) transitively. Removing saves ~73MB in node_modules.
+  - `@tanstack/react-table` (^8.21.3) — never imported. App uses plain `<table>` elements.
+  - `@hookform/resolvers` (^5.1.1) — never imported.
+  - `react-hook-form` (^7.60.0) — only imported by `components/ui/form.tsx` which is itself never imported by app code. Dead.
+  - `socket.io` (^4.8.3, server) — listed in main deps but the Next.js app only uses `socket.io-client`. Server is run from `mini-services/notifications-service/` (own package.json). Main package never imports `socket.io` server.
+  - `tw-animate-css` (devDep) — imported via `@import "tw-animate-css"` in globals.css but the actual animation utility classes used by components (`animate-in`, `fade-out-0`, etc.) come from the `tailwindcss-animate` plugin (loaded in tailwind.config.ts). Duplicated functionality — `tw-animate-css` is dead weight.
+- **Tree-shaking concerns:**
+  - **30+ unused shadcn/ui components** ship in `src/components/ui/`. Only 4 are actually imported by NOVSMM app code: `dialog`, `alert-dialog`, `toast`, `toaster`. Dead: accordion, alert, aspect-ratio, avatar, badge, breadcrumb, calendar, carousel, chart, checkbox, collapsible, command, context-menu, drawer, dropdown-menu, form, hover-card, input-otp, menubar, navigation-menu, pagination, popover, progress, radio-group, resizable, scroll-area, select, separator, sheet, sidebar, skeleton, slider, sonner, switch, table, tabs, toggle, toggle-group, tooltip, button, label, input.
+  - Corresponding ~20 `@radix-ui/react-*` packages (4.6MB total) for unused UI components — should be removed.
+  - `recharts` (~5.4MB) used in 7 components, including landing-only ones (`hero-dashboard.tsx`, `stats.tsx`) that aren't lazy-loaded.
+  - `framer-motion` (~5.4MB) imported by 34 files, many for trivial one-off animations.
+  - `lenis` smooth-scroll imported eagerly at top of `page.tsx` — only used for landing page, could be lazy-loaded.
+- **Misplaced devDeps:**
+  - `prisma` (^6.11.1) is in `dependencies` — it's a CLI/codegen tool, should be a `devDependency`. `@prisma/client` is the runtime dep and is correctly in deps.
+- **Misplaced deps (should be removed entirely):**
+  - `date-fns`, `@tanstack/react-table`, `@hookform/resolvers`, `react-hook-form`, `socket.io` (server) — all in deps but unused.
+
+### 2. React Component Patterns
+- **"use client" count:** 81 files (40 NOVSMM components + 41 shadcn UI components + 2 lib files + 1 error.tsx + hooks).
+- **Server component count:** 3 effective (`layout.tsx`, `page.tsx`, `loading.tsx`). The entire NOVSMM dashboard is rendered client-side via conditional `AppView` switching driven by `useSession()`.
+- **Should-be-server components:**
+  - `footer.tsx` — only uses `useApp`/`useToast` for navigation; could be server with small client children for the CTAs.
+  - `section-heading.tsx` — wraps `Reveal` (client); could be server if Reveal was restructured to be a thin client wrapper.
+  - `status-pill.tsx` — already server-compatible (no "use client").
+  - `hero-dashboard.tsx` — purely decorative landing mock dashboard, no interactivity. Could be server-rendered SVG/static.
+  - All landing sections (`hero`, `services`, `marketplace`, `payments`, `stats`, `testimonials`, `plans`, `security`) — currently client because `AppView` conditionally renders them. Could be server-rendered with small client islands for CTAs.
+- **Large client components that should be code-split (further):**
+  - `admin-panel.tsx` (2,602 lines) — already lazy-loaded via `dynamic()` in app-view.tsx, but contains all 17 admin sub-panels (AdminOverview, AdminUsers, AdminOrders, AdminServices, AdminProviders, AdminPayments, AdminPromotions, AdminWithdrawals, AdminRefunds, AdminApiKeys, AdminLicenses, AdminCurrencies, AdminLanguages, AdminWebhooks, AdminSettingsTab, AdminSecurity, AdminRoles) in one file. Switching tabs re-renders the entire 2,602-line component.
+  - `dashboard-marketplace.tsx` (1,208 lines) — already lazy-loaded but has 5+ sub-components inline (ServiceDetailModal, MassOrderModal, SellTab, HistoryTab, etc.).
+  - `dashboard-profile.tsx` (1,178 lines) — already lazy-loaded but has BillingSection, SecuritySection, NotificationsSection, SessionsSection, ReferralsSection, AchievementsSection inline.
+  - `dashboard-shell.tsx` (834 lines) — eagerly loaded (not lazy). Has CommandPalette (~280 lines) + UserPill + NavButton inline.
+- **dynamic() usage:** 8 (DashboardAnalytics, DashboardMarketplace, DashboardOrders, DashboardWallet, DashboardTickets, DashboardNotifications, DashboardProfile, AdminPanel) — good.
+- **React.lazy usage:** 0 (appropriate for Next.js App Router).
+- **Components importing heavy libraries at top-level:**
+  - `recharts` in 7 components: dashboard-home, dashboard-wallet, dashboard-marketplace, admin-panel, hero-dashboard, dashboard-analytics, stats. Landing-only ones (hero-dashboard, stats) aren't lazy-loaded.
+  - `framer-motion` in 34 components — heavily used on landing page.
+  - `lenis` in smooth-scroll — eagerly loaded on landing.
+  - `socket.io-client` in dashboard-notifications — correctly lazy-loaded via dynamic().
+
+### 3. Caching Strategy
+- **Current caching:**
+  - `next/font/google` Inter + JetBrains_Mono — automatic font optimization (good).
+  - AI insights cached in DB `Setting` table for 1h (`/api/analytics` route).
+  - Client-side currency rates cached in module-level `currencyCache` object (`src/lib/currency-utils.ts`).
+  - TanStack Query default staleTime: 15s (`app-providers.tsx`).
+  - Public currencies/languages queries: `staleTime: 5min` (good).
+  - Admin search: `staleTime: 30s` (good).
+  - In-memory rate limiter in middleware (`rateLimitMap`).
+  - In-memory login attempt tracker in `src/lib/auth.ts` (`loginAttempts`).
+  - Prisma client cached via `globalForPrisma` to survive HMR.
+- **Missing cache opportunities (severe):**
+  - **Zero `revalidate`/`unstable_cache`/`cache: "force-cache"` usage anywhere.** No Next.js fetch caching, no segment config, no `export const revalidate`. Confirmed by greps.
+  - **No `Cache-Control` headers on any API route** except `no-store` on the audit-log CSV export. All public endpoints return fresh DB queries on every call.
+  - **No Redis cache layer** — already noted in worklog as migration target.
+  - `/api/public/settings` — fetches ALL settings + currencies + languages on every call. WhatsApp widget calls this on every page mount.
+  - `/api/public/currencies` and `/api/public/languages` — same.
+  - `/api/payment-methods` — same.
+  - `/api/services` (catalog browse) — fully dynamic, no cache.
+  - `/api/status` — polled every 60s, returns 3 COUNT queries each time.
+  - **NextAuth `jwt` callback hits `db.user.findUnique` on every session resolution.** Called on every authenticated API request via `getServerSession`. Major DB hot spot.
+  - `/api/me/loyalty` runs `reconcileAchievements` (multiple COUNT/aggregate queries) on every GET.
+  - `/api/dashboard` runs ~7 DB queries per call, polled every 30s per authed user.
+- **Recommended Redis cache layer points:**
+  1. Session/JWT user data (`user:{id}` — 5s TTL; balance updates invalidate).
+  2. Public settings (`public:settings` — 60s TTL).
+  3. Currency rates (`public:currencies` — 60s TTL).
+  4. Language list (`public:languages` — 300s TTL).
+  5. Payment methods list (`public:payment-methods` — 60s TTL).
+  6. Service catalog by platform+page+search (`services:{hash}` — 30s TTL).
+  7. Status endpoint (`public:status` — 60s TTL).
+  8. Admin overview (`admin:overview` — 30-60s TTL).
+  9. Loyalty tier info per user (`loyalty:{userId}` — 60s TTL, invalidated on order completion).
+  10. AI insights (currently cached in DB Setting — move to Redis for faster reads).
+  11. Rate limiter buckets (currently in-memory → broken in serverless / multi-instance).
+  12. Login attempt tracking (currently in-memory → broken in serverless / multi-instance).
+
+### 4. Image Optimization
+- **`<img>` count:** 2
+  - `platform-logo.tsx:108` — uses `<img>` to load Google favicon service. Could use `next/image` with `remotePatterns` for `https://www.google.com/s2/favicons`. Uses onError to swap to emoji fallback.
+  - `dashboard-profile.tsx:360` — uses `<img src={twofaData.qrCode}>` for a base64 data URL (QR code). Using `<img>` for inline data URLs is fine.
+- **`next/image` count:** 2 files (`payment-logo.tsx`, `logo.tsx`). Both use `unoptimized` prop (payment-logo because SVGs can't be optimized; logo for the same reason).
+- **Unoptimized images:**
+  - `/public/novsmm-logo.png` (184KB) and `src/app/icon.png` (184KB, same file duplicated). Should be optimized to AVIF/WebP at ~10-30KB or replaced with SVG.
+  - `/public/payment-logos/*.png` (4KB each) — dead weight since only `.svg` variants are referenced in `LOGO_FILES`.
+- **next.config image settings:** **NONE** — `images` key not configured. No `remotePatterns` (so Google favicons can't use next/image), no `formats` (defaults), no `minimumCacheTTL`, no `deviceSizes`/`imageSizes` tuning.
+
+### 5. Render Performance
+- **Expensive components:**
+  - `dashboard-marketplace.tsx` — 5 useEffects, IntersectionObserver for infinite scroll, complex state. Uses `useMemo` for grouped service list (good). 1,208 lines.
+  - `admin-panel.tsx` (2,602 lines) — single component tree containing 17 sub-panels. `motion.div key={adminTab}` forces re-mount on tab switch.
+  - `dashboard-orders.tsx` — renders `<motion.tr layout>` for each row. `layout` prop causes re-render of all rows on filter changes. Each row has 10 columns + multiple `motion.div` for progress bars. For 100 orders (max take), that's 300 motion components.
+  - `dashboard-notifications.tsx` — `<AnimatePresence>` rendering list items with `motion.div` per item.
+  - `dashboard-home.tsx` (785 lines) — 5+ inline sub-components, each with its own `useReferrals`/`useLoyalty` query.
+- **Missing memoization:**
+  - **Zero `React.memo` usage** anywhere in the codebase. None of the NOVSMM components wrap children in memo.
+  - `useMemo` is used in: admin-panel (1x), dashboard-shell (2x), dashboard-tickets (1x), dashboard-orders (1x — dripConfig), dashboard-marketplace (2x — grouped, serviceMap). Most NOVSMM components don't use it.
+  - `useCallback` is only used in dashboard-shell (2x). NOVSMM components never use it.
+- **Animation concerns:**
+  - 34 components import `framer-motion` (5.4MB). Many use it for trivial opacity/translate animations that could be CSS transitions.
+  - `<AnimatePresence>` is used in 9 components — known to cause "insertBefore" DOM errors with rapid state changes (worklog confirms exit animations were already removed from `app-view.tsx` and `dashboard-shell.tsx` for this reason).
+  - `<motion.tr layout>` on every orders-table row — known jank with many rows.
+  - `testimonials.tsx` marquee uses framer-motion `animate: { x: ["0%", "-50%"] }` with `repeat: Infinity` — could be pure CSS `@keyframes` (already defined as `.nov-marquee` in globals.css but unused).
+  - `stats.tsx` uptime bars: 60 `motion.div`s with `whileInView` + `Math.random()` for height — re-randomized on every render (should be pre-computed with useMemo or moved to module scope).
+  - PulseDot ping animation runs on every status pill — fine (Tailwind `animate-ping`).
+
+### 6. Data Fetching Patterns
+- **Current patterns:**
+  - **TanStack Query v5** is the only client-side data fetching library, used in `src/hooks/use-api.ts` (961 lines, ~60 hooks).
+  - Custom `apiFetch` wrapper in `src/lib/api-client.ts`.
+  - 4 manual `fetch()` calls outside React Query: `useSession()` (session fetch with 10s timeout), `whatsapp-widget.tsx` (direct `/api/public/settings` on mount), `onboarding-screen.tsx` (direct PATCH `/api/me`), `dashboard-tickets.tsx` (direct POST `/api/uploads` for FormData file upload).
+- **Waterfall risks:**
+  - `/api/referrals` GET — `referral.findFirst` → if null, `user.findUnique` → `referral.create` → then `referral.findMany` (successful) → then `referral.findMany` (legacy). Multiple sequential awaits; the two `findMany` calls at the end are redundant (could be one).
+  - `/api/orders` POST — `service.findUnique` → `user.findUnique` → `db.order.count` → `db.$transaction` → `createNotification` → `db.auditLog.create`. Several sequential awaits; service + user fetches could be parallelized.
+  - `/api/me/loyalty` GET — calls `reconcileAchievements(userId)` (which runs many sequential queries) BEFORE running the Promise.all for the main response. Every loyalty fetch is slow.
+  - `dashboard-home.tsx` fires 4 queries in parallel via React Query (`useDashboard`, `useFavorites`, `useTickets`, `useSession`) — good pattern, replicated across most dashboard tabs.
+- **Client→Server migration opportunities:**
+  - **The whole landing page is rendered as a client component tree.** Non-authed users get server-rendered HTML that immediately re-renders on the client once `useSession()` resolves. Hurts LCP/FCP. Could split: server-render static landing content (text, layout, decorative components); client-render only the parts that need session state (navbar "Sign in" button, CTAs that call `setView`).
+  - `whatsapp-widget.tsx` fetches `/api/public/settings` on mount — could be inlined as server-side props in layout.tsx since the WhatsApp number is a public setting.
+  - `dashboard-marketplace.tsx` calls `loadCurrencyRates()` on mount — could be hoisted to a top-level provider that fetches once.
+  - The /api/public/* endpoints are all public. They could be server-rendered into the HTML/initial JS payload via RSC fetch in layout.
+- **Over-fetching:**
+  - `/api/orders` GET returns up to 100 orders (`take: 100`) every 30s, no pagination.
+  - `/api/admin/users` returns up to 100 users, no pagination.
+  - `/api/admin/webhooks?limit=50` always fetches 50.
+  - `/api/wallet` returns last 50 transactions + 30-day series + balance every 30s.
+  - `/api/notifications` returns last 50 + unread count every 15s.
+  - `/api/dashboard` returns 6 recent orders + 5 notifications + balance + counts every 30s.
+  - `/api/admin/overview` returns 25 recent orders (with user joins) + 25 recent transactions (with user joins) + 30d series every 60s.
+
+### 7. Streaming & Suspense
+- **loading.tsx files:** 1 (only `src/app/loading.tsx` — global loader).
+- **Suspense boundaries:** 0 (`<Suspense>` is not used anywhere).
+- **Streaming opportunities:**
+  - The dashboard tabs are all conditionally rendered inside a single client component (`AppView`). There's no route-level streaming. The whole dashboard is one giant client-side render.
+  - A more idiomatic Next.js App Router setup would be: `/` (landing, server) → `/dashboard` (server, streams via loading.tsx) → `/dashboard/analytics` (route segment with own loading.tsx) → etc.
+  - Currently the URL never changes when navigating within the dashboard — it's all state-driven (`useApp().dashboardTab`). This means: no URL-based code-splitting (everything lives in the initial bundle), no back/forward navigation within the dashboard, no streaming of slow sections, no SEO for dashboard pages (acceptable since auth-required), browser refresh returns to landing page (bad UX).
+
+### 8. Font & CSS
+- **Font loading:** `next/font/google` with `Inter` and `JetBrains_Mono` — both with `display: "swap"` and `subsets: ["latin"]`. Correct setup. CSS variables exposed (`--font-inter`, `--font-mono`).
+- **Tailwind config issues:**
+  - `tailwind.config.ts` uses `content: ["./pages/**", "./components/**", "./app/**"]` — but Tailwind v4 uses `@import "tailwindcss"` in CSS (which `globals.css` does). The `content` array may not be picked up by Tailwind v4's new engine, and `./components/**` points to a non-existent root-level folder (should be `./src/components/**`). Tailwind v4 auto-detection likely compensates, but the config is incorrect.
+  - `tailwindcss-animate` plugin loaded in tailwind.config.ts. `tw-animate-css` imported in globals.css. **Both provide animation utilities — duplicated functionality.** The actual classes used (`animate-in`, `fade-out-0`, `slide-in-from-right`, etc.) come from `tailwindcss-animate`. `tw-animate-css` is dead weight.
+  - `darkMode: "class"` is correct.
+  - Tailwind v4 `@theme inline` block in `globals.css` already maps CSS variables. The `tailwind.config.ts` color definitions are essentially duplicates.
+- **Inline style concerns:** ~30+ `style={{...}}` usages. Most are justified (dynamic colors based on data: tier color, progress widths). A few static-ish ones (payment-logo `style={{ width: size, height: size }}`) could be Tailwind arbitrary-value classes — minor.
+- **CSS duplicates:** globals.css is 260 lines, well-organized. No obvious duplicates. `--font-display` CSS variable referenced in `@theme` block but never defined in layout.tsx (only `--font-inter` and `--font-mono` are).
+
+### 9. PWA Assessment
+- **Manifest status:** **MISSING** — no `manifest.json` or `manifest.webmanifest` anywhere in `/public` or `/src/app`. Next.js metadata API in layout.tsx doesn't define one either. Worklog mentions PWA was discussed but no implementation exists.
+- **Service worker status:** **NONE** — no `serviceWorker`, `service-worker`, or `workbox` references anywhere in src. No `next-pwa` package. No SW registration code.
+- **Issues found:** The app is a regular SPA-like Next.js site with no offline capability. If PWA is desired, would need: (a) manifest, (b) service worker (via workbox or next-pwa), (c) offline fallback page, (d) install prompt. Currently zero PWA infrastructure.
+
+### 10. Build Configuration
+- **Current `next.config.ts`:**
+  ```ts
+  const nextConfig: NextConfig = {
+    output: "standalone",
+    typescript: { ignoreBuildErrors: false },
+    reactStrictMode: true,
+  };
+  ```
+  Only 3 options configured.
+- **Recommended performance options:**
+  - `poweredByHeader: false` — currently leaks "X-Powered-By: Next.js" header.
+  - `images: { remotePatterns: [{ protocol: "https", hostname: "www.google.com", pathname: "/s2/favicons/**" }], formats: ["image/avif", "image/webp"], minimumCacheTTL: 86400 }` — would allow `next/image` for Google favicons in platform-logo.tsx.
+  - `experimental: { optimizePackageImports: ["lucide-react", "recharts", "framer-motion"], optimizeCss: true }` — would help tree-shake barrel imports.
+  - `modularizeImports` (deprecated in Next 16, replaced by `optimizePackageImports`).
+  - `httpAgentOptions: { keepAlive: true, keepAliveMsecs: 1000 }` — enable keep-alive for outbound fetches.
+  - `headers()` async function — could move static security headers out of middleware.ts into config (CSP, HSTS, X-Frame-Options, etc.) — middleware currently runs on every request and adds these headers imperatively.
+  - `compress: true` (default in production — fine).
+  - `cacheHandler` — should point to a Redis-backed cache when Redis is added.
+  - `serverExternalPackages: ["@prisma/client", "bcryptjs", "nodemailer", "qrcode", "otplib"]` — ensure these aren't bundled by webpack.
+
+### 11. Critical Findings (P0/P1/P2)
+
+**P0 (severe perf issues):**
+1. **30+ unused shadcn/ui components + ~20 corresponding `@radix-ui/react-*` packages ship in node_modules.** ~30MB of dead weight in dev install (less to client bundle thanks to tree-shaking, but increases build time and code review burden).
+2. **`date-fns` (~73MB with `effect` transitive dep) is in deps but never imported.** Pure dead weight.
+3. **No `Cache-Control` headers on any public API route.** Every `/api/public/*` call hits the DB. WhatsApp widget calls `/api/public/settings` on every page mount — uncached.
+4. **NextAuth `jwt` callback hits DB (`db.user.findUnique`) on every authenticated request.** With 7 dashboard queries every 30s per active user, this is the #1 DB hot spot.
+5. **No Next.js fetch caching (`revalidate`, `cache:`) anywhere.** All data is fully dynamic. Confirmed by grep returning 0 matches.
+6. **No Redis cache layer** (already noted as migration target).
+7. **In-memory rate limiter + login attempt tracker break in serverless / multi-instance.** Already noted in code comments: "for production, replace with Redis".
+
+**P1 (should optimize):**
+8. **2,602-line `admin-panel.tsx`** loads all 17 admin sub-panels at once. Should be split into 17 files for code-splitting per tab.
+9. **Dashboard is rendered entirely client-side via `AppView`.** No URL-based routing = no streaming, no code-splitting by route, refresh returns to landing. Should migrate to `/dashboard/[tab]` route structure.
+10. **`poweredByHeader` not disabled** — leaks framework info.
+11. **No `images` config in next.config.ts.** No `remotePatterns` for Google favicons (forces use of `<img>` instead of `next/image`).
+12. **`prisma` is in `dependencies` instead of `devDependencies`.**
+13. **`socket.io` (server) is in main `dependencies`** but only used by the standalone mini-service. Should be removed from main package.json.
+14. **`@tanstack/react-table` is in deps but never used.** App uses plain `<table>`.
+15. **Polling intervals are aggressive:** 15s notifications + 30s dashboard + 30s wallet + 30s orders + 60s analytics + 60s admin overview + 60s loyalty per active user. WebSocket-driven refetch is already used for notifications but not for orders/wallet/dashboard.
+16. **Landing page is a client component tree.** Hero, Navbar, Footer, Plans, Services, Marketplace, Payments, Stats, Testimonials, Security are all `"use client"` because `AppView` conditionally renders them. Non-authed users get a client-rendered landing page (bad LCP/FCP).
+17. **`<motion.tr layout>` on every orders table row** — known to cause jank with many rows.
+18. **`simulateFulfillment` runs in the Next.js process** via `setTimeout` chains — dies on serverless cold start, leaks memory on long-running servers. Should be a background job (already noted in code comments + worklog).
+19. **`/api/orders` and `/api/admin/users` over-fetch** (100 rows per call, no pagination).
+20. **No `React.memo` anywhere** — every parent re-render re-renders all children.
+21. **184KB PNG logo** (`/public/novsmm-logo.png` and `src/app/icon.png` — same file). Should be optimized to AVIF/WebP or replaced with SVG.
+22. **`tw-animate-css` + `tailwindcss-animate` are duplicated.** One should be removed.
+
+**P2 (nice to have):**
+23. **`hero-dashboard.tsx`** is purely decorative (no interactivity) but is a client component. Could be server.
+24. **`stats.tsx`** uptime bars use `Math.random()` for height inside render — re-randomized on every render.
+25. **`testimonials.tsx`** marquee uses framer-motion `animate` with `repeat: Infinity` — could be pure CSS `@keyframes` (already defined in globals.css as `.nov-marquee` but not used here).
+26. **Inline styles for dynamic colors** (tier badges) — could be extracted to a CSS custom property pattern.
+27. **`@/lib/i18n.ts`** has 292 lines of translations but only `getTranslations` is called from `/api/me/language`. The dashboard UI doesn't use these translations client-side (everything is hardcoded English/Spanish mix). Either wire up i18n or remove the dead translation file.
+28. **`examples/websocket/`** directory contains a sample chat server unrelated to NOVSMM — dead code in the repo.
+29. **`tailwind.config.ts` `content` globs** don't include `src/components/**` — they only include `./components/**` (root-level, which doesn't exist). Tailwind v4 may auto-detect, but the config is incorrect.
+30. **`--font-display` CSS variable** referenced in globals.css `@theme` but never defined in layout.tsx.
+31. **`/api/referrals` GET** runs two `referral.findMany` calls (one for successful, one for legacy list including placeholder) — could be consolidated into one query.
+
+
+---
+Task ID: 1-c
+Agent: Explore (Backend Architecture Audit)
+Task: Audit backend — API routes, service layering, duplication, error handling, response structure, validation, WebSocket, background processing, SOLID, dependencies
+
+Work Log:
+- Read /home/z/my-project/worklog.md (last 262 lines — full enterprise-migration audit kickoff context + prior drip/mass/AI/referral/loyalty/social-Google work)
+- Inventory: find src/app/api -name route.ts → 71 route files; grep "export async function (GET|POST|PUT|PATCH|DELETE)" → ~95 HTTP method handlers
+- Read every lib file: api-utils.ts (68 lines), auth.ts (205), validations.ts (91), notify.ts (140), db.ts (12), stripe.ts (188), nowpayments.ts (210), huntsmm.ts (143), license.ts (151), ai-insights.ts (143), api-key-auth.ts (93), crypto-utils.ts (71), sanitize.ts (92), two-factor.ts (59), currency-utils.ts (72), api-client.ts (33), i18n.ts (291), utils.ts (6), app-providers.tsx
+- Read every non-trivial API route in full (~60 of 71 files): orders (570), orders/mass (355), orders/repeat (184), admin/orders (155), v1/orders (165), wallet/topup (587), wallet/withdraw (76), wallet (64), me (202), me/loyalty (400), me/sessions (91), me/password (55), me/2fa/setup+verify+disable, me/notification-preferences (70), me/language (21), referrals (241), analytics (232), dashboard (106), subscriptions (258), subscriptions/seats (57), services (209), services/[id] (39), favorites (66), offers (131), tickets (121), notifications (56), invoices (47), uploads (69), export (61), coupons/validate (45), payment-methods (11), auth/register (110), auth/forgot/reset/verify-email, status (33), docs (92), public/settings (78), public/currencies/languages/validate-license, admin/overview (108), admin/users (79), admin/services (132), admin/providers + [id]/sync (62 + 97), admin/payment-methods (114), admin/coupons (66), admin/currencies (66), admin/languages (60), admin/refunds (105), admin/withdrawals (102), admin/bulk (71), admin/roles (168), admin/api-keys (126), admin/licenses (186), admin/notifications (92), admin/promotions (118), admin/logs (101), admin/search (79), admin/webhooks (25), admin/settings (44), webhooks/stripe (638), webhooks/nowpayments (303), webhooks/mercadopago (92), route.ts (4)
+- Read middleware.ts (173), next.config.ts, package.json, mini-services/notifications-service/index.ts (381), mini-services/package.json, examples/websocket/server.ts, prisma/sync-huntsmm.ts (172), prisma/update-fx-rates.ts (76)
+- Grep cross-cutting patterns: requireAuth/requireAdmin (~120 occurrences), safeParse (20 schemas), "(session!.user as any).id" (~73 occurrences), try/catch (e: any) blocks (~95), console.error/warn/log (46 calls in api + 9 in lib), simulateFulfillment (5 copies), db.$transaction (17 uses), balance: { increment|decrement } (14 sites), auditLog.create (47 calls across 33 routes), public-ID generators (8 sites)
+- Grep dependency usage: every @radix-ui/* package (1–5 imports each), shadcn/ui components actually consumed by app code (only ~9 of 33 imported), zod (12 files import directly), socket.io-client (1 file: dashboard-notifications.tsx)
+- No source code modified; only this worklog append
+
+Stage Summary:
+
+## BACKEND ARCHITECTURE AUDIT REPORT
+
+### 1. API Route Inventory
+
+- Total route files: 71
+- Total HTTP method handlers: ~95 (44 GET, ~40 POST, ~18 PATCH, ~6 DELETE, 0 PUT)
+- Total LoC: 8,549 across src/app/api/**/route.ts
+
+By domain:
+
+| Domain | Files | Handlers | Lines |
+|---|---|---|---|
+| Admin (/api/admin/*) | 22 | 47 | ~2,280 |
+| Auth (/api/auth/* incl. NextAuth) | 5 | 6 | ~319 |
+| Orders (/api/orders/**) | 4 | 7 | ~1,404 |
+| Wallet (/api/wallet/**) | 3 | 4 | ~727 |
+| Webhooks (/api/webhooks/*) | 3 | 4 | ~1,033 |
+| Me / Account (/api/me/**) | 9 | 12 | ~870 |
+| Marketplace (/api/services/**, /api/offers, /api/favorites, /api/payment-methods) | 5 | 8 | ~458 |
+| Subscriptions (/api/subscriptions/**) | 2 | 4 | ~315 |
+| Public (/api/public/*, /api/status, /api/docs, /api/) | 7 | 8 | ~335 |
+| Other user-facing (/api/analytics, /api/dashboard, /api/notifications, /api/tickets, /api/invoices, /api/uploads, /api/export, /api/referrals, /api/coupons/validate) | 9 | 11 | ~960 |
+| v1 Public API (/api/v1/*) | 2 | 2 | ~217 |
+
+Highlights / anomalies:
+- POST /api/admin/orders — admin creates orders for users (no balance debit); uses its own 4th duplicate copy of simulateFulfillment.
+- GET /api/webhooks/nowpayments — returns the webhook URL; unusual for a webhook endpoint (normally only POST).
+- DELETE /api/favorites — uses query-string ?serviceId= (REST-correct would be DELETE /api/favorites/[id]).
+- PATCH /api/admin/services, PATCH /api/admin/languages, PATCH /api/admin/currencies, PATCH /api/admin/payment-methods — all use body.id instead of route param PATCH /api/admin/services/[id]. Inconsistent with REST conventions and with /api/admin/providers/[id]/sync (which DOES use route params).
+- /api/v1/orders is the public reseller API; only 2 endpoints (vs. competitors' 12–20). Audit gap documented in audit-gaps.md.
+
+### 2. Service Layer Assessment
+
+Current state — libs (src/lib/, 18 files, 2,068 LoC):
+
+| File | Lines | Purpose | Quality |
+|---|---|---|---|
+| api-utils.ts | 68 | requireAuth, requireAdmin, apiOk, apiError, getBaseUrl, getAuthSession | Thin, correct |
+| auth.ts | 205 | NextAuth config, brute-force map, JWT/session callbacks | OK; brute-force map is in-memory → won't survive multi-instance |
+| validations.ts | 91 | Central Zod schemas (10 schemas) | Centralized for shared schemas only |
+| notify.ts | 140 | createNotification, sendEmail, notifyAdmins, broadcastToWs | OK; coupled to DB + WS + email |
+| db.ts | 12 | Prisma client singleton | Fine |
+| stripe.ts | 188 | Stripe client, checkout sessions, refund, webhook verify | OK |
+| nowpayments.ts | 210 | NowPayments invoice + IPN verify | OK |
+| huntsmm.ts | 143 | HuntSMM provider client | OK; ignores Provider DB row, hard-codes URL+env |
+| license.ts | 151 | License + API-key generation, AES-encrypt, validate | OK; mixes license+apikey+encryption |
+| ai-insights.ts | 143 | z-ai-web-dev-sdk wrapper + REFERRAL_TIERS + resolveTier | OK but mixes two unrelated domains (AI + referral tiers) |
+| crypto-utils.ts | 71 | AES-256-GCM encrypt/decrypt for credentials | OK |
+| sanitize.ts | 92 | XSS sanitizers | OK |
+| two-factor.ts | 59 | TOTP secret/QR/verify + backup codes | OK; backup codes use Math.random (not crypto-safe) |
+| api-key-auth.ts | 93 | validateApiKey, hasPermission, requireApiKey | OK; O(n) bcrypt scan over all keys |
+| api-client.ts | 33 | Client-side fetch wrapper | OK |
+| currency-utils.ts | 72 | Client-side currency cache + formatter | OK |
+| i18n.ts | 291 | Translation dictionaries (en/es/pt/fr/de) | OK |
+| utils.ts | 6 | cn() Tailwind helper | OK |
+
+Anti-patterns found:
+
+- A1 — Business logic inside API routes (severe). Most route handlers contain domain logic inline (validation + DB queries + side effects + notifications + audit). Examples:
+  - POST /api/orders/route.ts (570 lines) implements: validation, plan-limit enforcement, balance check, atomic order creation, transaction record, notification, audit log, drip-feed config builder, plan-priority lookup, simulated fulfillment worker (in-process setTimeout loop), loyalty point awarding, achievement reconciliation.
+  - POST /api/wallet/topup/route.ts (587 lines) implements: 6 payment-method dispatchers each with its own transaction update + error handling + notification, plus createPaypalOrder and createMercadoPagoPreference HTTP clients embedded as private functions (should live in src/lib/paypal.ts and src/lib/mercadopago.ts).
+  - POST /api/webhooks/stripe/route.ts (638 lines) implements: 8 event handlers each with its own DB transactions, notifications, audit logging.
+  - POST /api/me/loyalty/route.ts (400 lines) exports TIERS, ACHIEVEMENTS, PLAN_MULTIPLIERS, resolveTier, reconcileAchievements, awardOrderPoints — all domain logic that should live in src/lib/loyalty.ts.
+
+- A2 — Cross-route import (architectural violation). src/app/api/orders/route.ts:8-11 imports awardOrderPoints and reconcileAchievements from @/app/api/me/loyalty/route — an API route module imported by another API route. This couples the orders route to the me/loyalty route's build artifact and means loyalty domain logic cannot be tested in isolation.
+
+- A3 — requireAuth returns session but no user object. Every caller does (session!.user as any).id to get the userId — this appears 73 times across the API surface. requireAdmin has the same issue plus (session!.user as any).role. The as any cast bypasses TypeScript safety; the AppSession type defined in auth.ts is never actually used by requireAuth.
+
+- A4 — No controller/service/repository separation. Routes are fat: they query Prisma directly, build audit logs, send notifications, and orchestrate multi-step transactions. There is no intermediate service layer to extract. Even simple reads (GET /api/wallet) hand-roll 30-day series bucketing.
+
+- A5 — Two-factor secret + backup codes stored as JSON in Setting table. src/app/api/me/2fa/setup/route.ts stores the TOTP secret as plaintext JSON in Setting.value keyed 2fa:pending:{userId} and 2fa:{userId}. Backup codes are bcrypt-hashed (good) but the secret is not encrypted (bad — anyone with DB read can bypass 2FA). Should be in a dedicated TwoFactorSecret table or encrypted via crypto-utils.ts.
+
+- A6 — notify.ts is a fat module (140 lines, 4 concerns): DB persistence, SMTP email, WS broadcast HTTP call, and admin fan-out. Should be split: notifications/repo.ts, notifications/email.ts, notifications/realtime.ts, notifications/service.ts.
+
+- A7 — HuntSMM provider is hard-coded to a single URL + env-var key (HUNTSMM_API_URL, HUNTSMM_API_KEY). The Provider table exists with apiUrl/apiKey fields, but huntsmm.ts ignores them entirely. Multi-provider support requires refactoring huntsmm.ts into a generic providerClient(provider) that reads credentials from the DB row.
+
+Recommended service extraction:
+
+1. src/lib/loyalty.ts — move TIERS, ACHIEVEMENTS, PLAN_MULTIPLIERS, resolveTier, reconcileAchievements, awardOrderPoints out of api/me/loyalty/route.ts. Route becomes a 20-line handler.
+2. src/lib/orders.ts — move createOrder, cancelOrder, simulateFulfillment, PLAN_ORDER_LIMITS, PLAN_PRIORITY, priorityForPlan, buildDripFeedConfig, startOfMonth out of api/orders/route.ts. Single simulateFulfillment reused by orders, orders/repeat, orders/mass, admin/orders, v1/orders.
+3. src/lib/wallet.ts — move creditBalance, debitBalance, processTopup with proper concurrency guard (SELECT FOR UPDATE pattern via Prisma interactive transactions) so all 14 balance-mutation sites go through one function.
+4. src/lib/payments/stripe.ts, src/lib/payments/nowpayments.ts (move nowpayments.ts here), src/lib/payments/paypal.ts (new — extract createPaypalOrder from wallet/topup/route.ts), src/lib/payments/mercadopago.ts (new — extract createMercadoPagoPreference), src/lib/payments/crypto.ts.
+5. src/lib/webhooks/stripe.ts, src/lib/webhooks/nowpayments.ts, src/lib/webhooks/mercadopago.ts — extract event handlers from webhook routes so they're testable.
+6. src/lib/subscriptions.ts — extract PLANS, PLAN_PRICES, isStripeBillingConfigured, createSubscription, cancelSubscription, extendSubscriptionPeriod.
+7. src/lib/referrals.ts — extract REFERRAL_TIERS, resolveTier, getOrCreateReferralCode, recordReferral (currently scattered across ai-insights.ts + referrals/route.ts).
+8. src/lib/plans.ts — centralize PLAN_ORDER_LIMITS + PLAN_PRIORITY + PLAN_PLATFORM_LIMITS + PLAN_MULTIPLIERS + PLANS + PLAN_PRICES (currently duplicated across 4 files).
+9. src/lib/ids.ts — centralize generateOrderPublicId(), generateTxnPublicId(), generateTicketPublicId(), generateInvoicePublicId() (currently 8 sites hand-roll "A-${10432 + count}" etc. — race-condition-prone).
+
+No circular dependencies detected in src/lib/ (verified by grep of all "import ... from @/lib/..."). The ONLY lib→api dependency is the A2 violation above (api/orders/route.ts → api/me/loyalty/route.ts).
+
+### 3. Code Duplication Hotspots
+
+Top 10 duplication hotspots (ranked by severity × occurrences):
+
+| # | Pattern | Locations | Recommendation |
+|---|---|---|---|
+| 1 | simulateFulfillment(orderId, userId) function — full copy of the setTimeout-loop fulfillment simulator with the same 4 steps (15%→40%→75%→100%) | api/orders/route.ts:443, api/orders/mass/route.ts:278, api/orders/repeat/route.ts:145, api/admin/orders/route.ts:122, api/v1/orders/route.ts:131 — 5 copies, ~140 LoC each | Extract to src/lib/orders.ts as a single function with priority and dripConfig options |
+| 2 | PLAN_ORDER_LIMITS + PLAN_PRIORITY constants + priorityForPlan() + startOfMonth() | api/orders/route.ts:71-103, api/orders/mass/route.ts:23-53 — 2 copies | Move to src/lib/plans.ts |
+| 3 | publicId generator pattern db.X.count() → "A-${10432 + count}" / "TX-${8842 + count}" / "T-${201 + count}" / "INV-${String(invoiceCount+1).padStart(4,"0")}" | orders/route.ts:226, orders/repeat/route.ts:62, orders/mass/route.ts:156, admin/orders/route.ts:60, v1/orders/route.ts:61, wallet/topup/route.ts:75, wallet/withdraw/route.ts:39, tickets/route.ts:35, webhooks/stripe/route.ts:519, subscriptions/route.ts:202 — 10 sites | Centralize in src/lib/ids.ts; also fix race condition (concurrent calls produce same ID — use Prisma interactive transactions or DB sequences) |
+| 4 | requireAuth + "(session!.user as any).id" boilerplate | 73 call sites | Type requireAuth() to return { session, user: AppSession["user"], error } so callers write "const { user, error } = await requireAuth(); if (error) return error; const userId = user.id;" — eliminates every as any |
+| 5 | Zod-validation boilerplate "const parsed = X.safeParse(body); if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);" | 20 sites | Extract parseBody<T>(schema, body): T | NextResponse helper in api-utils.ts |
+| 6 | Credit balance + create notification + audit log triplet for topups | wallet/topup/route.ts:388-423, webhooks/stripe/route.ts:127-160 (payment_intent.succeeded), webhooks/stripe/route.ts:228-299 (checkout.session.completed), webhooks/nowpayments/route.ts:131-211 (confirmed), webhooks/mercadopago/route.ts:49-77 — 5 copies | Extract creditWallet(userId, amount, { method, reference, description, notify, audit }) in src/lib/wallet.ts |
+| 7 | Refund balance + create refund transaction + audit log triplet | orders/route.ts:382-407 (cancel), webhooks/nowpayments/route.ts:248-290 (refunded), webhooks/stripe/route.ts:189-216 (charge.refunded), admin/refunds/route.ts:51-80, admin/withdrawals/route.ts:69-78 (reject) — 5 copies | Extract debitWallet(userId, amount, ...) + refundTransaction(txnId, reason) in src/lib/wallet.ts |
+| 8 | Audit log db.auditLog.create({ data: { userId, action, entity, entityId, metadata } }) | 47 call sites across 33 routes | Extract audit(userId, action, entity, entityId, metadata?) helper in src/lib/audit.ts |
+| 9 | createOrderSchema inline duplication — the same Zod schema { serviceId, quantity, link } is defined inline in v1/orders/route.ts:7-11 instead of imported from validations.ts (which already exports createOrderSchema) | api/v1/orders/route.ts:7 vs src/lib/validations.ts:27 | Delete the inline copy, import from validations |
+| 10 | "(session!.user as any).role" admin check in requireAdmin (api-utils.ts:47) AND inline in api/services/route.ts:57 (isAdmin = (session?.user as any)?.role === "admin") — two different admin-check idioms | 2 sites + 73 as any casts | Fix requireAdmin return type + add requireAdminOrSelf(userId) helper for owner-scoped routes |
+
+### 4. Error Handling Assessment
+
+Current pattern: every route wraps its body in a manual "try { ... } catch (e: any) { console.error("[scope] error:", e); return apiError("Failed to X", 500); }". There is no central error handler (Next.js App Router supports error.tsx for pages but not for route handlers). Prisma P2002 (unique-constraint) errors are caught ad-hoc in 5 routes with the pattern "if (e.code === "P2002") return apiError("… already exists", 409)".
+
+Inconsistencies:
+
+- I1 — Many routes have NO try/catch wrapper at all, so any thrown error bubbles up to Next.js's default 500 page (which leaks the stack trace in dev mode). ~35 of 95 handlers have no error boundary. Examples include GET /api/admin/overview, GET /api/admin/users, GET /api/admin/services, GET /api/dashboard, GET /api/wallet, GET /api/analytics, GET /api/me, GET /api/me/sessions, GET /api/services, POST /api/me/2fa/setup/verify/disable, POST /api/me/password, POST /api/admin/api-keys, POST /api/admin/bulk, POST /api/admin/orders, POST /api/admin/refunds, POST /api/coupons/validate, PATCH /api/admin/services/languages/currencies/payment-methods/providers/coupons/users, PATCH /api/me/notification-preferences, PATCH /api/me, DELETE /api/favorites/subscriptions/me/sessions/admin/services/admin/roles/offers.
+
+- I2 — Inconsistent error response shape. Three idioms co-exist:
+  1. apiError(message, status) → { error: "message" } (most common, ~180 uses)
+  2. NextResponse.json({ error: "...", limit, used, plan, upgradeUrl }, { status: 403 }) (orders/route.ts:204 — plan-limit error has extra fields)
+  3. NextResponse.json({ error: "Failed to load loyalty data" }, { status: 500 }) (me/loyalty/route.ts:395 — bypasses apiError for no reason)
+
+- I3 — Several routes "throw e;" after catching P2002, which propagates to Next.js's default 500:
+  api/admin/providers/route.ts:43, api/admin/payment-methods/route.ts:82, api/admin/services/route.ts:66, api/me/loyalty/route.ts:201 (re-throws non-P2002). These should be "return apiError("...", 500)" instead of throw.
+
+- I4 — Error messages leak internal context. Examples:
+  - wallet/topup/route.ts:153 returns "Stripe error: ${stripeError?.message}. Check Admin → Payments → Configure credentials." — leaks Stripe error text + admin URL to the client.
+  - wallet/topup/route.ts:185 returns "PayPal error: ${e?.message}" — leaks PayPal API error.
+  - admin/providers/[id]/sync/route.ts:95 returns "Sync failed: ${e.message}" — leaks internal exception.
+  - webhooks/stripe/route.ts:64 returns "Webhook signature verification failed: ${e.message}" — leaks Stripe SDK error.
+  These should log full error server-side, return generic message client-side.
+
+- I5 — console.error is the only logger. 32 console.error + 12 console.warn + 2 console.log calls in API routes; 9 in lib. No structured logging (no JSON, no request-id, no log levels, no Sentry/Logtail integration). In production behind "bun .next/standalone/server.js | tee server.log" (per package.json), logs are unstructured stdout — impossible to search/filter by user/request/severity.
+
+- I6 — No global error.tsx for API routes (Next.js App Router only auto-wraps page components, not route handlers). Each route must implement its own try/catch — which ~35 don't (see I1).
+
+Recommended unified approach:
+
+1. Add a withErrorHandler(handler) higher-order wrapper in api-utils.ts that catches all exceptions, maps Prisma P2002/P2025 to 409/404, logs the error with a request-id, and returns a generic 500.
+2. Replace every try/catch wrapper + every uncaught route with "export const POST = withErrorHandler(async (req) => { ... })".
+3. Replace console.* with a src/lib/logger.ts wrapper (Pino or structured JSON to stdout with level, reqId, userId, route, err).
+4. Never return raw exception text to clients — sanitize in the wrapper.
+
+### 5. Response Structure Analysis
+
+Current formats (4 distinct shapes co-exist):
+
+| Shape | Example route | Notes |
+|---|---|---|
+| { data: T, message?: string } (via apiOk({ ... }, status)) | 95% of routes — apiOk({ orders }), apiOk({ user, message: "..." }, 201) | apiOk is just NextResponse.json(data, { status }) — does NOT wrap in { data }, just spreads the object |
+| { error: "message" } (via apiError(msg, status)) | 95% of errors | Single-key envelope |
+| { error, limit, used, plan, upgradeUrl } (custom NextResponse) | orders/route.ts:204 (plan-limit) | Adds extra fields |
+| { status: "success", order, service, quantity, price, status, message } (v1 API) | v1/orders/route.ts:116-124 | BUG: object literal has status: "success" AND status: order.status — duplicate keys; the second silently overwrites the first. Effectively returns { status: order.status }. Also v1/services returns { status: "success", services, count } — different v1 envelope than expected. |
+| Raw CSV / new Response(csv, ...) | export/route.ts:55, invoices/route.ts:38, admin/logs/route.ts:61 | Correct for CSV downloads |
+| Raw { message: "Hello, world!" } | api/route.ts:4 | Default Next.js scaffold, should be deleted or replaced with API manifest |
+
+Inconsistencies:
+
+- C1 — apiOk is a pass-through, not an envelope. apiOk({ orders }) produces { orders: [...] }, not { success: true, data: { orders: [...] } }. This is fine but means there's no consistent success indicator — clients must rely on HTTP status.
+- C2 — Some success responses include message, others don't. POST/PATCH usually include { ..., message: "X created" }; GET usually doesn't. Inconsistent.
+- C3 — v1 API envelope contradicts itself. v1/services returns { status: "success", services, count } but v1/orders returns { status: "success", order, service, quantity, price, status, message } (with the duplicate-key bug). And docs/route.ts:53-60 documents the response as { status: "success", order: "A-10432", ... }. The actual response is { ..., status: order.status } (overwritten).
+- C4 — Status code usage is mostly correct but inconsistent for the same logical outcome:
+  - "Resource not found": 404 in most routes; 422 in wallet/topup (payment-method not found); 422 in tickets (subject+message missing).
+  - "Validation error": 422 most places; 400 in auth/verify-email, auth/forgot-password (token missing); 422 in me/2fa/disable (token missing).
+  - "Already exists": 409 most places. Consistent.
+  - "Auth required": 401 (requireAuth); "Admin required": 403 (requireAdmin). Consistent.
+  - "Insufficient balance": 402 (5 sites). Consistent (uses 402 Payment Required — good).
+  - "Plan limit exceeded": 403 with custom body (orders/route.ts:204).
+  - "Cancel window expired": 422 (orders/route.ts:374).
+  - "Conflict (active subscription)": 409 (subscriptions/route.ts:129). Consistent.
+  - 201 Created usage: 18 sites — mostly correct.
+- C5 — me/loyalty/route.ts:395 bypasses apiError and uses NextResponse.json({ error: "..." }, { status: 500 }) directly — inconsistent with the rest of the file which uses apiError.
+
+Recommended uniform envelope:
+
+Success: 200 / 201 → { "data": T, "message"?: string }
+Error: 4xx / 5xx → { "error": { "code": "VALIDATION_ERROR" | "NOT_FOUND" | "CONFLICT" | "UNAUTHORIZED" | "FORBIDDEN" | "RATE_LIMITED" | "INTERNAL", "message": "human-readable", "details"?: any, "requestId": "uuid" } }
+
+Trade-offs: this is a breaking change for the client apiFetch (src/lib/api-client.ts:20 reads data.error — would need to become data.error.message). Worth doing once during the Enterprise migration since the client already throws on !res.ok. Roll out with ?envelope=v2 flag for one release, then deprecate v1.
+
+### 6. Validation Patterns
+
+- Centralized Zod schemas in src/lib/validations.ts (91 lines): 10 schemas — registerSchema, loginSchema, createOrderSchema, topupSchema, withdrawSchema, createServiceSchema, createProviderSchema, createPaymentMethodSchema, createNotificationSchema, updateUserSchema. Imported by 9 routes.
+- Inline Zod schemas in 11 route files (import { z } from "zod" + z.object({...}) defined locally):
+  - api/me/route.ts:79 — updateProfileSchema
+  - api/orders/route.ts:23 — createOrderWithDripSchema (extends createOrderSchema with drip fields)
+  - api/orders/mass/route.ts:37 — massOrderSchema + massOrderRowSchema
+  - api/offers/route.ts:6 — offerSchema
+  - api/admin/bulk/route.ts:6 — bulkSchema
+  - api/admin/coupons/route.ts:6 — couponSchema
+  - api/admin/orders/route.ts:7 — manualOrderSchema
+  - api/admin/promotions/route.ts:6 — promoSchema
+  - api/admin/roles/route.ts:13,19 — createRoleSchema, updatePermissionsSchema
+  - api/auth/reset-password/route.ts:7 — resetSchema
+  - api/v1/orders/route.ts:7 — createOrderSchema (DUPLICATE of validations.ts:27 — should import instead)
+- Manual validation (no Zod) in ~20 routes: me/password, me/2fa/*, tickets, coupons/validate, favorites, offers, admin/services PATCH/DELETE, admin/languages, admin/currencies, admin/withdrawals, admin/refunds, admin/licenses, admin/api-keys, admin/settings, auth/forgot-password, auth/verify-email, me/notification-preferences, orders/repeat, orders cancel PATCH.
+
+- Type-safety gaps:
+  - (session!.user as any).id / .role / .email — 73+ casts (see A3).
+  - body: any / parsed.data as any in several routes (e.g. admin/notifications/route.ts:24 casts parsed.data as any).
+  - Webhook payloads are any (e.g. event.data?.object in webhooks/stripe/route.ts:90).
+  - apiOk(data: any, status) — any return type; client-side hooks can't infer the shape.
+  - updateData: any = {} pattern in 6+ routes.
+  - db.$transaction([...]) returns any[] — Prisma's $transaction array form loses type info; the interactive form db.$transaction(async (tx) => { ... }) preserves it but is unused.
+
+Recommendations:
+
+1. Move all inline Zod schemas into src/lib/validations.ts (or split into validations/orders.ts, validations/admin.ts, etc.).
+2. Replace all manual "if (!field) return apiError(...)" checks with Zod schemas.
+3. Add a parseBody<T>(schema, body): T | NextResponse helper and use it everywhere.
+4. Fix requireAuth/requireAdmin return types to eliminate (session!.user as any) casts.
+5. Replace db.$transaction([...]) with the interactive db.$transaction(async (tx) => { ... }) form where type safety matters.
+6. Define Zod schemas for webhook payloads (Stripe/NowPayments/MercadoPago) and use safeParse before accessing fields.
+7. Add a Zod schema for PATCH /api/admin/payment-methods, PATCH /api/admin/settings, PATCH /api/me/notification-preferences — currently allow arbitrary field injection.
+
+### 7. Server Actions vs API Routes
+
+- Zero server actions. grep -r "use server" in src/ returns no matches. The codebase is 100% API-route-first.
+- The client (src/lib/api-client.ts) wraps fetch() with api.get/post/patch/delete helpers; the React Query hooks in src/hooks/use-api.ts call these. This is a clean API-first architecture — consistent.
+- No mixed patterns (no server-action mutations called from client components). Consistent.
+- Recommendation: Keep API-first. Server actions would be appropriate only for form submissions that don't need to be exposed as REST endpoints (e.g. onboarding form, ticket reply). Current approach is fine.
+
+### 8. WebSocket Architecture
+
+Current state:
+
+- Mini-service: mini-services/notifications-service/index.ts (381 lines, Bun + Socket.IO 4.8.3) running on port 3003 (hardcoded).
+- Transport: Socket.IO with path: "/", CORS "*", ping 25s/timeout 60s.
+- Two notification sources:
+  1. Ambient loop — emits a system notification every 8–15s from a hardcoded pool of 8 templates. Lives only to make the dashboard "feel alive" — questionable product decision; clutters the notification feed with fake content.
+  2. HTTP POST /broadcast — called by src/lib/notify.ts:broadcastToWs() whenever createNotification() writes to the DB. The mini-service io.emit('notification', payload) to all connected clients.
+- Routing trick: Socket.IO with path: "/" would intercept every HTTP request, so the service installs its own request listener first, intercepts POST /broadcast, and delegates everything else to the captured Socket.IO listener.
+- Frontend: Single consumer — src/components/novsmm/dashboard-notifications.tsx:47 calls io("/?XTransformPort=3003", { transports: ["websocket", "polling"], reconnection: true, reconnectionAttempts: 10 }). The XTransformPort=3003 query param is used by the gateway to route to port 3003. On receiving a notification event, the client invalidates the notifications, dashboard, wallet, and orders React Query queries (forces a refetch from DB).
+- Single client. Only the notifications panel subscribes; no order-status push, no presence, no chat. The examples/websocket/server.ts is an unused scaffold (chat-room demo) — dead code.
+
+Scalability concerns:
+
+- S1 — Single instance. The mini-service runs as a single Bun process on port 3003. There is no Redis adapter configured for Socket.IO (@socket.io/redis-adapter), so horizontal scaling to 2+ Next.js instances breaks real-time delivery (clients connected to instance A won't receive notifications emitted via instance B's POST /broadcast). Must add Redis adapter before going multi-instance.
+- S2 — POST /broadcast is unauthenticated. Anyone who can reach port 3003 can push arbitrary notifications to every connected client. The endpoint validates only that type/title/message/severity are strings. Should require a shared secret (HMAC) or restrict to localhost + verify the X-Forwarded-For matches the Next.js instance.
+- S3 — io.emit broadcasts to ALL connected clients. Every user receives every other user's order/payment notifications. This is a data-leak bug — currently mitigated only by the fact that the client's React Query refetch is scoped to the user's own DB rows, but the WS payload itself (with userId, amount, message) is visible to anyone who opens the browser console. Should use io.to(userId).emit(...) with per-user rooms.
+- S4 — broadcastToWs is fire-and-forget with a 3s timeout (notify.ts:123). If the mini-service is down, notifications are silently dropped (only a console.error log). No retry queue, no DLQ.
+- S5 — Ambient loop spams every 8–15s. With 1,000 connected clients, that's 1,000 fake notifications every 12s = 5,000/min of pointless traffic. Should be removed or made opt-in.
+- S6 — No graceful drain on disconnect. When the Bun process restarts, all clients drop and must reconnect (Socket.IO handles this, but during the gap, the POST /broadcast calls from Next.js will fail with ECONNREFUSED — silently swallowed).
+- S7 — Hardcoded port + path. Port 3003 is hardcoded in 4 places: mini-services/notifications-service/index.ts:60, src/lib/notify.ts:118 (via WS_SERVICE_URL env default), src/components/novsmm/dashboard-notifications.tsx:47 (XTransformPort=3003), and the gateway config. Should be a single env var WS_SERVICE_URL.
+- S8 — No heartbeat/health endpoint. No GET /health on port 3003; the gateway can't health-check the upstream.
+- S9 — The frontend has no reconnect UX. When connected=false, the notifications panel shows a small "Reconnecting…" pill but does not refetch missed notifications on reconnect (relies on the next notification event to trigger a refetch — misses any notifications emitted during the gap). Should call qc.invalidateQueries(["notifications"]) on connect.
+
+Recommended architecture (PostgreSQL + Redis migration):
+
+1. Replace Socket.IO with Redis pub/sub + sticky-session WebSocket on the Next.js instance (using socket.io with @socket.io/redis-adapter and ioredis).
+2. Or migrate to Server-Sent Events (SSE) on /api/me/events — simpler, no port 3003, no separate process, no gateway routing tricks. SSE supports auto-reconnect natively. With HTTP/2, supports many concurrent streams per client. Trade-off: one-way only (server→client), but that's all we need.
+3. Remove the ambient loop (S5). Real notifications only.
+4. Add per-user rooms (S3): io.to("user:${userId}").emit(...).
+5. Authenticate the WebSocket connection with the NextAuth JWT (passed as auth: { token } in io({ auth })) — reject unauthenticated connections.
+6. Authenticate POST /broadcast with an HMAC signature (S2).
+7. Add GET /health on the WS service (S8).
+
+### 9. Background Processing Gaps
+
+Current state:
+
+- In-process setTimeout loops for order fulfillment — simulateFulfillment() in 5 route files uses "await new Promise((r) => setTimeout(r, step.delay))" with steps at 2s, 5s, 8s, 12s (relative). Each call holds a serverless function alive for ~12s — will exceed the 10s timeout on Vercel Hobby plan and consume worker capacity on self-hosted. The function is fire-and-forget (simulateFulfillment(...).catch(...)), so if the process restarts mid-loop, the order is stuck in processing forever.
+- In-process setTimeout for ticket auto-reply — api/tickets/route.ts:95 schedules a 2s setTimeout to insert a fake support reply. Same problem: if the process dies in those 2s, the reply is lost.
+- In-process setTimeout for payment sandbox simulation — api/wallet/topup/route.ts:445 waits 1.5s to simulate a gateway delay.
+- In-process setTimeout for provider sync — api/admin/providers/[id]/sync/route.ts:47 waits 50–300ms to simulate provider latency.
+- Fire-and-forget broadcastToWs() call in notify.ts:33 — if WS service is down, notification is lost.
+- Fire-and-forget sendEmail() call in notify.ts:51 — if SMTP is down, email is lost.
+- Fire-and-forget notifyAdmins() call — iterates all admins sequentially.
+- reconcileAchievements() is called synchronously inside the orders POST handler (line 562) AND inside the loyalty GET handler (line 282). For the GET path, this means every page load runs 5+ DB queries + potentially creates multiple rows + sends multiple notifications — slow (could add 200–500ms to dashboard load).
+- prisma/sync-huntsmm.ts — one-off CLI script (172 lines) that deletes ALL services and re-imports from HuntSMM. Run manually. No scheduling. No incremental sync. No provider-agnostic abstraction. The POST /api/admin/providers/[id]/sync endpoint is supposed to trigger syncs but currently just fakes latency.
+- prisma/update-fx-rates.ts — one-off CLI script (76 lines) to refresh currency rates. Comment says "Run daily via cron" but there's no cron configured in the repo.
+
+Synchronous work that should be async (queueable):
+
+| # | Operation | Current | Should be |
+|---|---|---|---|
+| 1 | Order fulfillment (status progression 0→100%) | setTimeout loop in API route, 12s | BullMQ job with 4 stages, retried on failure, idempotent via orderId+stage |
+| 2 | HuntSMM order placement | Inline in simulateFulfillment | BullMQ job — fail → retry → fall back to simulation |
+| 3 | HuntSMM order status polling | Not implemented (status stuck after placement) | BullMQ cron job every 60s polls provider, updates local Order.status |
+| 4 | Provider service catalog sync (prisma/sync-huntsmm.ts) | Manual CLI script | BullMQ cron job every 1h, per-provider, incremental (not destructive) |
+| 5 | FX rate refresh (prisma/update-fx-rates.ts) | Manual CLI script | BullMQ cron job every 6h |
+| 6 | Notification email sending | Fire-and-forget in notify.ts | BullMQ job — retry 3× with exponential backoff |
+| 7 | Notification WS broadcast | Fire-and-forget in notify.ts | Already async but should retry on failure (Redis-backed) |
+| 8 | Admin broadcast to N users | Sequential loop in admin/notifications/route.ts:55-61 | BullMQ batch job — 100 recipients/batch |
+| 9 | Loyalty achievement reconciliation | Called synchronously in orders/route.ts (on completion) AND in me/loyalty/route.ts (on GET) | Trigger as BullMQ job on order completion; remove from GET path |
+| 10 | AI insights generation | Called synchronously in analytics/route.ts:202 (1h cache) | BullMQ job — refresh on schedule, not on-demand |
+| 11 | Invoice PDF generation (when implemented) | Not yet built | BullMQ job |
+| 12 | Refund processing (Stripe API call) | Inline in admin/refunds/route.ts:42 | BullMQ job — Stripe call can take 5–30s |
+| 13 | Subscription cancellation cleanup | Inline in webhooks/stripe/route.ts:440 | BullMQ job — should also revoke seats, send email, audit log |
+
+Recommended queue architecture:
+
+- Queue engine: BullMQ Pro (or self-hosted BullMQ) on Redis 7.
+- Worker process: separate bun process (workers/worker.ts) consuming from Redis, deployed as a separate systemd service / Docker container.
+- Job types: order.fulfill, order.poll-provider, provider.sync, fx.refresh, email.send, ws.broadcast, notification.bulk, loyalty.reconcile, ai.insights, refund.process.
+- DLQ: BullMQ's built-in dead-letter queue for jobs that exhaust retries.
+- Observability: BullMQ Pro UI (or self-hosted bull-board) for queue monitoring.
+- Scheduler: BullMQ's Queue.scheduler for cron jobs (replaces the manual cron comment in prisma/update-fx-rates.ts).
+
+### 10. SOLID Violations
+
+Single Responsibility Principle (SRP):
+
+- V1 — api/orders/route.ts (570 lines) does: validation, plan-limit enforcement, balance check, atomic order creation, transaction recording, drip-feed config building, plan-priority lookup, notification, audit log, fulfillment simulation, loyalty point awarding, achievement reconciliation. Should be 6 separate functions in src/lib/orders.ts.
+- V2 — api/wallet/topup/route.ts (587 lines) does: validation, payment-method dispatch (6 providers), sandbox fallback, PayPal/MercadoPago HTTP clients, transaction recording, balance credit, notification, audit log. Should be split into payments/stripe.ts, payments/paypal.ts, payments/mercadopago.ts, payments/nowpayments.ts, payments/crypto.ts, payments/manual.ts, payments/sandbox.ts + a thin wallet/topup/route.ts dispatcher.
+- V3 — api/webhooks/stripe/route.ts (638 lines) does: signature verification, 8 event handlers. Should be split into webhooks/stripe/{paymentIntent,charge,checkoutSession,subscription,invoice}.ts + a thin route that dispatches by event.type.
+- V4 — api/me/loyalty/route.ts (400 lines) does: tier definitions, achievement definitions, plan multipliers, tier resolution, achievement reconciliation, point awarding, GET response assembly. Should be split into lib/loyalty.ts (domain) + a thin GET route.
+- V5 — src/lib/notify.ts (140 lines) does: DB persistence, SMTP email, WS broadcast, admin fan-out. Should be 4 modules.
+- V6 — src/lib/ai-insights.ts (143 lines) mixes two unrelated domains: AI insight generation and referral tiers. Should be lib/ai-insights.ts + lib/referrals.ts.
+- V7 — src/lib/license.ts (151 lines) mixes license keys, API keys, and AES encryption. Should be lib/license.ts + lib/api-keys.ts + (reuse lib/crypto-utils.ts).
+- V8 — src/middleware.ts (173 lines) does: rate limiting, CSRF check, security headers, IP forwarding. Could be split into middleware/rate-limit.ts, middleware/csrf.ts, middleware/security-headers.ts + a thin middleware.ts that composes them.
+
+Open/Closed Principle (OCP):
+
+- V9 — Adding a new payment provider requires editing api/wallet/topup/route.ts. The dispatch is a chain of "if (pm.name === "Stripe") ... else if (pm.name === "PayPal") ...". Should be a registry: PAYMENT_PROVIDERS: Record<string, PaymentProvider> where each provider implements createCheckout(opts): Promise<{ checkoutUrl }>. Adding a provider = adding a file, not editing the route.
+- V10 — Adding a new webhook event type requires editing api/webhooks/stripe/route.ts. The dispatch is a chain of "if (eventType === "...") await handleX(...)". Should be a StripeEventHandlers: Record<string, (obj) => Promise<void>> registry.
+- V11 — Adding a new loyalty achievement requires editing me/loyalty/route.ts in 3 places: the ACHIEVEMENTS array, the checks array in reconcileAchievements, and achievementProgress. Should be a single ACHIEVEMENTS array where each entry includes its check(ctx): boolean and progress(ctx): { current, target } functions.
+- V12 — Adding a new admin entity requires duplicating the full CRUD pattern (GET, POST, PATCH, DELETE, audit log, Zod schema) — see the near-identical admin/currencies, admin/languages, admin/coupons. Could be a generic createCrudRouter({ model, schema, auditEntity }) factory.
+
+Liskov Substitution Principle (LSP):
+
+- No clear LSP violations — the codebase has no class hierarchies. The PaymentProvider and StripeEventHandler implicit interfaces (V9, V10) would benefit from formal interfaces once extracted.
+
+Interface Segregation Principle (ISP):
+
+- V13 — requireAuth() returns { session, error } where session is the full NextAuth Session object. Most callers only need userId (and sometimes role). Should be split into requireUserId(): { userId, error }, requireUser(): { user: SessionUser, error }, requireAdmin(): { admin, error }.
+- V14 — apiOk(data: any, status?: number) accepts any. Should be apiOk<T>(data: T, status?: number): NextResponse<Envelope<T>> for type inference on the client.
+- V15 — The AppSession type in auth.ts:194 is never used. The actual session type is NextAuth's default Session & { user: { id, role, ... } } accessed via as any. The interface exists but is segregated from the implementation.
+
+Dependency Inversion Principle (DIP):
+
+- V16 — Routes import db directly from @/lib/db (Prisma client concrete class). Should inject a Repository interface (e.g. UserRepository, OrderRepository) so routes can be tested with a mock. Currently there are zero tests in the repo (no *.test.ts files).
+- V17 — lib/notify.ts imports db directly — same issue.
+- V18 — lib/license.ts:103 does "const { db } = await import("./db")" inside validateLicense() — lazy import to avoid circular deps, but still a concrete dependency. Should inject a LicenseStore interface.
+- V19 — lib/stripe.ts reads process.env.STRIPE_SECRET_KEY directly. Should accept a StripeConfig interface so tests can pass a test key.
+- V20 — lib/huntsmm.ts reads process.env.HUNTSMM_API_KEY directly and uses a hardcoded HUNTSMM_API_URL. Should accept a Provider config object (with credentials decrypted from the DB).
+- V21 — api/wallet/topup/route.ts:68 mutates process.env.STRIPE_SECRET_KEY at runtime to push creds from the DB into the env so stripe.ts can read them. This is a thread-unsafe side effect — concurrent requests with different Stripe credentials would race. Should pass creds explicitly to getStripe(creds).
+- V22 — lib/auth.ts:11 uses an in-memory Map for brute-force tracking. On multi-instance deployment, each instance has its own map → attacker can retry 5× per instance. Should use Redis (INCR + EXPIRE).
+
+### 10. Dependency Analysis
+
+Total dependencies: 38 runtime + 12 dev = 50 declared in package.json.
+
+Runtime dependencies (38):
+
+| Package | Used by | Status |
+|---|---|---|
+| next ^16.1.1 | core | OK |
+| react ^19, react-dom ^19 | core | OK |
+| next-auth ^4.24.11 | auth | OK (v4 — v5 is current; migration recommended) |
+| @auth/core ^0.34.3, @auth/prisma-adapter ^2.11.2 | auth | OK |
+| bcryptjs ^3.0.3 | auth, license, api-keys | OK |
+| @prisma/client ^6.11.1, prisma ^6.11.1 | DB | OK |
+| zod ^4.0.2 | validation | OK (v4 — recent major; check breaking changes) |
+| stripe ^22.3.0 | payments | OK |
+| socket.io ^4.8.3, socket.io-client ^4.8.3 | realtime | OK |
+| nodemailer ^9.0.1 | email | OK (only dynamically imported in notify.ts) |
+| otplib ^13.4.1, qrcode ^1.5.4 | 2FA | OK |
+| z-ai-web-dev-sdk ^0.0.18 | AI insights | OK (server-only) |
+| @tanstack/react-query ^5.82.0 | client state | OK |
+| @tanstack/react-table ^8.21.3 | tables | UNUSED — 0 imports anywhere in src/ |
+| zustand ^5.0.6 | client state | OK (1 file: app-store.ts) |
+| react-hook-form ^7.60.0 | forms | OK (1 file: ui/form.tsx scaffold — but ui/form is itself unused) |
+| @hookform/resolvers ^5.1.1 | forms (zod resolver) | UNUSED — 0 imports |
+| recharts ^2.15.4 | charts | OK (1 file: dashboard-analytics.tsx) |
+| framer-motion ^12.23.2 | animation | OK (35 files) |
+| lenis ^1.3.25 | smooth scroll | OK (1 file: smooth-scroll.tsx) |
+| lucide-react ^0.525.0 | icons | OK |
+| sonner ^2.0.6 | toasts | OK (1 file: components/ui/sonner.tsx) |
+| date-fns ^4.1.0 | date utils | UNUSED — 0 imports (dates are formatted with toLocaleDateString and toISOString) |
+| sharp ^0.34.3 | image processing | UNUSED — 0 imports (Next.js uses it internally for next/image, but it's auto-installed; explicit dep is redundant unless custom image processing is added) |
+| class-variance-authority ^0.7.1, clsx ^2.1.1, tailwind-merge ^3.3.1, tailwindcss-animate ^1.0.7 | styling | OK |
+| 22x @radix-ui/react-* | shadcn primitives | Mixed — see below |
+
+Potentially unused / under-used Radix UI primitives (package.json declares but app code never imports the corresponding @/components/ui/*):
+
+~20 of 32 Radix packages are installed but never imported by app code — they were scaffolded by shadcn/ui add but the corresponding components were never used. Removing them would shave ~5MB from node_modules and simplify the dependency tree.
+
+Unused: @radix-ui/react-accordion, react-avatar, react-checkbox, react-collapsible, react-context-menu, react-hover-card, react-menubar, react-navigation-menu, react-popover, react-progress, react-radio-group, react-resizable, react-scroll-area, react-select, react-sidebar, react-toggle-group, react-dropdown-menu, react-tabs, react-switch, react-aspect-ratio, react-breadcrumb, react-command, react-input-otp, react-carousel (sheet).
+
+Used: react-dialog (2), react-alert-dialog (1), react-tooltip (1), react-label (1), react-separator (1), react-slot (5), react-toggle (1), react-toast (2 — but sonner is also installed and used; pick one).
+
+Dev dependencies (12): all standard (eslint, typescript, tailwindcss, bun-types, @types/*). bun-types is used since the project runs on Bun. No concerns.
+
+Duplicate functionality:
+
+- D1 — Toast libraries: sonner + @radix-ui/react-toast (via components/ui/toast.tsx + toaster.tsx). Pick one — sonner is the modern choice; remove the Radix toast scaffolds.
+- D2 — Date utilities: date-fns is installed but never used. All date formatting is done with native Date methods (toLocaleDateString, toISOString, new Date(Date.now() + ...)). Remove date-fns OR adopt it consistently.
+- D3 — State management: @tanstack/react-query (server state) + zustand (client UI state). Not a duplicate — they serve different purposes. OK.
+- D4 — Form libraries: react-hook-form + @hookform/resolvers + zod. Correct stack, but react-hook-form is only imported by components/ui/form.tsx which is itself never imported by app code. Either adopt react-hook-form in the auth screens (which currently use manual useState) or remove it.
+- D5 — Image processing: sharp is auto-used by Next.js for <Image> optimization — the explicit dep is redundant. Verify Next.js auto-installs it; if so, remove from package.json.
+
+Outdated / risky:
+
+- O1 — next-auth v4 is on v5 (Auth.js) now. v4 is in maintenance only. Migration to v5 recommended during the Enterprise migration (v5 has better App Router support, edge compatibility, and removes the getServerSession(authOptions) boilerplate).
+- O2 — zod v4 is a recent major. Check the v3→v4 migration guide (mostly compatible, but z.string().url() semantics changed slightly and some error formatting differences).
+- O3 — prisma v6 is current. OK.
+- O4 — next v16 is current. OK.
+- O5 — bcryptjs v3 is pure-JS (slower than bcrypt native but no native build step). Acceptable for the current scale; if password hashing becomes a bottleneck, switch to argon2 (more secure, native).
+- O6 — socket.io v4 is current but the WS mini-service uses raw http.createServer + manual request-listener swapping — fragile (see S2). Consider migrating to socket.io's built-in engine.io HTTP endpoint or to SSE.
+- O7 — No package-lock.json / bun.lock audit — the project uses bun.lock (verified). Run bun audit regularly.
+- O8 — No engines field in package.json — no Node/Bun version pinning. CI/production could drift.
+
+### 11. Critical Findings (P0 / P1 / P2)
+
+P0 — Architectural blockers (must fix before scaling):
+
+1. P0-1 — simulateFulfillment runs as setTimeout loops inside API routes (5 copies, 12s per order). On serverless (Vercel) this exceeds the 10s function timeout; on self-hosted it ties up workers and dies on process restart, leaving orders stuck in processing. Fix: move to BullMQ + Redis (see §9).
+2. P0-2 — POST /broadcast on port 3003 is unauthenticated and io.emit broadcasts every notification to every connected client (S2 + S3). Any user can read any other user's order/payment/refund notifications by inspecting WebSocket frames. Fix: HMAC-sign the broadcast + use io.to("user:${userId}").emit(...).
+3. P0-3 — Public-ID generation via "db.X.count() + magic_offset" is race-condition-prone. Two concurrent POST /api/orders calls can compute the same "publicId = A-10433", then the second db.order.create fails with P2002 (or worse, succeeds if the unique constraint is missing). Fix: use a DB sequence, a nanoid(), or crypto.randomUUID() for public IDs. Verify unique constraints exist on Order.publicId, Transaction.publicId, Ticket.publicId, Invoice.publicId in schema.prisma.
+4. P0-4 — Cross-route import: api/orders/route.ts imports from api/me/loyalty/route.ts. This couples two unrelated API surfaces and prevents me/loyalty from being refactored without breaking orders. Fix: extract loyalty domain logic to src/lib/loyalty.ts (A2 + V4).
+5. P0-5 — 14 sites mutate user.balance directly with db.user.update({ data: { balance: { increment|decrement } } }) inside db.$transaction([...]) arrays. There is no row-level lock (SELECT FOR UPDATE), so concurrent requests can race: e.g. user places 2 orders simultaneously, both pass the balance < totalPrice check, both decrement — balance goes negative. Fix: use Prisma's interactive db.$transaction(async (tx) => { const u = await tx.user.findUnique({ where: { id }, select: { balance: true } }); if (u.balance < amount) throw ...; await tx.user.update({ where: { id }, data: { balance: { decrement: amount } } }); }) — Prisma interactive transactions hold a row lock for the duration. Centralize in src/lib/wallet.ts.
+6. P0-6 — process.env.STRIPE_SECRET_KEY is mutated at runtime in wallet/topup/route.ts:68 to push DB-stored credentials into the env. Concurrent requests with different Stripe credentials will race. Fix: pass creds explicitly to getStripe(creds) (V21).
+7. P0-7 — In-memory brute-force map in auth.ts:11 doesn't survive restarts and doesn't work across instances. A 5-attempt lock on instance A is invisible to instance B. Fix: Redis-backed INCR + EXPIRE (V22).
+8. P0-8 — WebSocket mini-service is single-instance with no Redis adapter. Adding a 2nd Next.js instance breaks real-time delivery. Fix: @socket.io/redis-adapter or migrate to SSE (S1).
+
+P1 — Should refactor (within 60–90 days):
+
+1. P1-1 — Extract simulateFulfillment to a single src/lib/orders.ts (5 copies today — duplication hotspot #1).
+2. P1-2 — Extract creditWallet / debitWallet / refundTransaction to src/lib/wallet.ts (duplication hotspots #6 + #7).
+3. P1-3 — Extract audit(userId, action, entity, entityId, metadata?) helper (47 call sites).
+4. P1-4 — Extract parseBody<T>(schema, body) helper + move all inline Zod schemas to src/lib/validations/ (20 sites).
+5. P1-5 — Fix requireAuth/requireAdmin return types to eliminate 73 (session!.user as any).id casts.
+6. P1-6 — Add withErrorHandler(handler) wrapper + apply to all 35 uncaught handlers (I1).
+7. P1-7 — Add structured logger (src/lib/logger.ts — Pino or JSON to stdout with level, reqId, userId, route, err) and replace 46 console.* calls.
+8. P1-8 — Sanitize error messages returned to clients (I4 — Stripe/PayPal/MercadoPago/NowPayments errors leak internal context).
+9. P1-9 — Extract PayPal + MercadoPago HTTP clients from wallet/topup/route.ts into src/lib/payments/ (V2).
+10. P1-10 — Extract Stripe webhook event handlers into src/lib/webhooks/stripe/{paymentIntent,charge,checkoutSession,subscription,invoice}.ts (V3).
+11. P1-11 — Split notify.ts into 4 modules (DB / email / WS / fan-out) (V5).
+12. P1-12 — Split ai-insights.ts — move REFERRAL_TIERS to src/lib/referrals.ts (V6).
+13. P1-13 — Migrate next-auth v4 → v5 (Auth.js) for better App Router + edge support (O1).
+14. P1-14 — Replace ad-hoc db.$transaction([...]) arrays with interactive transactions for type safety + row locking (P0-5).
+15. P1-15 — Add Zod validation to PATCH /api/admin/payment-methods, PATCH /api/admin/settings, PATCH /api/me/notification-preferences — currently allow arbitrary field injection (security risk).
+16. P1-16 — Add tests. Zero test files exist. Add Vitest + Supertest for the API routes; require >=70% coverage on orders, wallet, webhooks/*.
+17. P1-17 — Remove the ambient notification loop in the WS mini-service (S5) — it spams every client every 8–15s with fake "All systems operational" messages.
+18. P1-18 — Add GET /health endpoint to WS mini-service + configure gateway health checks (S8).
+19. P1-19 — Provider abstraction: refactor huntsmm.ts to read credentials from the Provider DB row (A7 + V20) so multi-provider support is possible.
+20. P1-20 — HuntSMM order status polling — implement a background job that polls checkHuntSMMOrderStatus for all in_progress orders every 60s; currently orders are stuck after placement.
+
+P2 — Nice to have (continuous improvement):
+
+1. P2-1 — Unify the API response envelope to { data, message? } / { error: { code, message, details, requestId } } (C1–C6).
+2. P2-2 — Standardize on RESTful route params — convert PATCH /api/admin/services (body.id) → PATCH /api/admin/services/[id] for consistency with /api/admin/providers/[id]/sync.
+3. P2-3 — Move examples/websocket/server.ts out of the repo (dead code) or delete.
+4. P2-4 — Remove src/app/api/route.ts (the "Hello, world!" scaffold — replace with an API manifest or delete).
+5. P2-5 — Remove unused deps: @tanstack/react-table, @hookform/resolvers, date-fns, sharp (verify Next.js auto-uses it), react-hook-form (if not adopting), sonner (if standardizing on Radix toast) OR Radix toast (if standardizing on sonner). Saves ~5–10MB.
+6. P2-6 — Remove ~20 unused Radix UI packages + their components/ui/* scaffolds (accordion, avatar, checkbox, collapsible, context-menu, hover-card, menubar, navigation-menu, popover, progress, radio-group, resizable, scroll-area, select, sidebar, toggle-group, dropdown-menu, tabs, switch, aspect-ratio, breadcrumb, command, input-otp, carousel).
+7. P2-7 — Move PLAN_ORDER_LIMITS, PLAN_PRIORITY, PLAN_PLATFORM_LIMITS, PLAN_MULTIPLIERS, PLANS, PLAN_PRICES to a single src/lib/plans.ts (duplication hotspot #2).
+8. P2-8 — Move public-ID generators to src/lib/ids.ts (duplication hotspot #3) and use crypto.randomUUID() or nanoid instead of count() + offset.
+9. P2-9 — Encrypt 2FA secrets at rest (A5) — currently stored as plaintext JSON in Setting.value.
+10. P2-10 — Use crypto.randomBytes for backup codes instead of Math.random in two-factor.ts:54.
+11. P2-11 — Add an OpenAPI spec generated from the Zod schemas (via zod-to-openapi) — replace the hand-written /api/docs JSON.
+12. P2-12 — Add engines field to package.json pinning Bun >=1.1, Node >=20 (O8).
+13. P2-13 — Add bun audit to CI (O7).
+14. P2-14 — Fix the duplicate-key bug in v1/orders/route.ts:116-124 — the response object has status: "success" and status: order.status (second silently overwrites the first).
+15. P2-15 — Add rate-limit headers (X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset) on every response, not just on 429 (currently only set on 429 in middleware.ts:151-153).
+16. P2-16 — Add request-id propagation — generate x-request-id in middleware, log it, return it in responses for traceability.
+17. P2-17 — Replace Math.random() in wallet/topup/route.ts:448 (sandbox payment failure simulation) with a deterministic seed for testing.
+18. P2-18 — Centralize the Setting table key namespace — currently ad-hoc prefixes 2fa:, 2fa:pending:, notif_prefs:, ai_insights:, stripe.webhookSecret, platform.*. Should be a typed SettingKey enum.
+
+---
+Task ID: ENTERPRISE-AUDIT-CONSOLIDATED
+Agent: main (Z.ai Code)
+Task: Consolidar los 5 reportes de auditoría (1-a a 1-e) en un reporte único y crear el plan de migración por fases
+
+Work Log:
+- Leí los 5 reportes de auditoría completos de los agentes paralelos (Database, Security, Backend, Performance, DevOps)
+- Identifiqué ~40 hallazgos P0 (críticos) y ~80 P1 (alta prioridad) duplicados/cruzados entre auditorías
+- Consolidé hallazgos por severidad, eliminando duplicados (ej: NEXTAUTH_SECRET aparecía en Security S3 + DevOps O1; simulateFulfillment en Database D6 + Backend B1 + Performance)
+- Creé /home/z/my-project/ENTERPRISE_AUDIT.md con:
+  - Executive Summary
+  - P0 findings table por área (Security, Database, Backend, Performance, DevOps)
+  - P1 highlights (~80 findings)
+  - P2 summary (~50 findings)
+  - Architecture target diagram
+  - Migration complexity assessment por área
+- Creé /home/z/my-project/ENTERPRISE_MIGRATION_PLAN.md con 10 fases:
+  - Fase 1: Critical Security & Stability (13 P0s, 1-2 días, LOW risk)
+  - Fase 2: Database Hardening on SQLite (7 P0s + 13 P1s, 2-3 días, MEDIUM risk)
+  - Fase 3: Redis + Background Jobs (5 P0s + 8 P1s, 3-4 días, MEDIUM risk)
+  - Fase 4: PostgreSQL Migration (1 P0 + 5 P1s, 2-3 días, HIGH risk)
+  - Fase 5: Backend Architecture Refactor (8 P0s + 20 P1s, 4-5 días, MEDIUM risk)
+  - Fase 6: Performance Optimization (7 P0s + 15 P1s, 2-3 días, LOW risk)
+  - Fase 7: Observability & Monitoring (4 P0s + 5 P1s, 1-2 días, LOW risk)
+  - Fase 8: DevOps & Containerization (14 P0s + 15 P1s, 2-3 días, MEDIUM risk)
+  - Fase 9: Documentation (2 P0s + 5 P1s, 2 días, NONE risk)
+  - Fase 10: Production Readiness Review (1 día, NONE risk)
+- Cada fase incluye: Objetivo, Riesgos, Cambios detallados, Compatibilidad, Pruebas, Resultado esperado
+- Definí validation gates obligatorios por fase: lint clean, dev server, dev.log clean, Agent Browser verification, worklog update, no regresiones
+- Total estimado: ~3-4 semanas para un ingeniero senior trabajando secuencialmente
+
+Stage Summary:
+- Auditoría técnica completa consolidada en ENTERPRISE_AUDIT.md
+- Plan de migración por fases creado en ENTERPRISE_MIGRATION_PLAN.md
+- 10 fases definidas, cada una con objetivos/riesgos/cambios/compatibilidad/pruebas/resultado esperado
+- ~40 P0s y ~80 P1s mapeados a fases específicas
+- Próximo paso: presentar al usuario y esperar confirmación para iniciar Fase 1
