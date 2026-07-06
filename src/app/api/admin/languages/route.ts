@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 
 /** GET /api/admin/languages — list all languages. */
 export async function GET() {
@@ -32,9 +32,7 @@ export async function POST(req: NextRequest) {
         sortOrder: body.sortOrder ?? 99,
       },
     });
-    await db.auditLog.create({
-      data: { userId: adminId, action: "create", entity: "language", entityId: language.id, metadata: JSON.stringify({ code: language.code }) },
-    });
+    await audit(adminId, "create", "language", language.id, { code: language.code });
     return apiOk({ language, message: "Language added" }, 201);
   } catch (e: any) {
     if (e.code === "P2002") return apiError("Language code already exists", 409);
@@ -53,8 +51,6 @@ export async function PATCH(req: NextRequest) {
   if (!id) return apiError("ID required", 422);
 
   const language = await db.language.update({ where: { id }, data });
-  await db.auditLog.create({
-    data: { userId: adminId, action: "update", entity: "language", entityId: id, metadata: JSON.stringify(data) },
-  });
+  await audit(adminId, "update", "language", id, data);
   return apiOk({ language });
 }

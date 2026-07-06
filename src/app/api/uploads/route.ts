@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { sanitizeFilename } from "@/lib/sanitize";
 import { writeFile, mkdir } from "fs/promises";
 import { join } from "path";
@@ -50,14 +49,7 @@ export async function POST(req: NextRequest) {
   const url = `/uploads/${userId}/${filename}`;
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId,
-      action: "upload",
-      entity: "file",
-      metadata: JSON.stringify({ filename: safeName, size: file.size, mime: file.type }),
-    },
-  });
+  await audit(userId, "upload", "file", null, { filename: safeName, size: file.size, mime: file.type });
 
   return apiOk({
     url,

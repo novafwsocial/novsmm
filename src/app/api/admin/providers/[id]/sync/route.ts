@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 
 /**
  * POST /api/admin/providers/[id]/sync
@@ -58,19 +58,11 @@ export async function POST(
     });
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId: adminId,
-        action: "sync_provider",
-        entity: "provider",
-        entityId: provider.id,
-        metadata: JSON.stringify({
-          provider: provider.name,
-          latency,
-          status,
-          servicesSynced: provider._count.services,
-        }),
-      },
+    await audit(adminId, "sync_provider", "provider", provider.id, {
+      provider: provider.name,
+      latency,
+      status,
+      servicesSynced: provider._count.services,
     });
 
     return apiOk({

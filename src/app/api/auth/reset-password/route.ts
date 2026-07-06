@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { apiError, apiOk } from "@/lib/api-utils";
+import { apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
 
 const resetSchema = z.object({
@@ -59,14 +59,7 @@ export async function POST(req: NextRequest) {
     await db.verificationToken.delete({ where: { token } });
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId: user.id,
-        action: "password_reset",
-        entity: "user",
-        entityId: user.id,
-      },
-    });
+    await audit(user.id, "password_reset", "user", user.id);
 
     return apiOk({ message: "Password reset successfully. You can now sign in." });
   } catch (e: any) {

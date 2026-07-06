@@ -1,6 +1,5 @@
 import { NextRequest } from "next/server";
-import { db } from "@/lib/db";
-import { apiError, apiOk } from "@/lib/api-utils";
+import { apiError, apiOk, audit } from "@/lib/api-utils";
 import { validateLicense } from "@/lib/license";
 
 /**
@@ -36,14 +35,7 @@ export async function POST(req: NextRequest) {
 
     if (!result.valid) {
       // Log failed validation attempt
-      await db.auditLog.create({
-        data: {
-          action: "validate_failed",
-          entity: "license",
-          metadata: JSON.stringify({ ip, domain: requestDomain, reason: result.reason }),
-          ip,
-        },
-      });
+      await audit(null, "validate_failed", "license", null, { ip, domain: requestDomain, reason: result.reason });
       return apiError(result.reason ?? "Invalid license", 403);
     }
 

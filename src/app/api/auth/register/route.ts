@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { registerSchema } from "@/lib/validations";
-import { apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
+import { apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { createNotification, sendEmail } from "@/lib/notify";
 import { sanitizeText } from "@/lib/sanitize";
 
@@ -92,15 +92,7 @@ export async function POST(req: NextRequest) {
     }).catch((e) => console.error("[register] verification email error:", e));
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId: user.id,
-        action: "create",
-        entity: "user",
-        entityId: user.id,
-        metadata: JSON.stringify({ email, username, role: "reseller" }),
-      },
-    });
+    await audit(user.id, "create", "user", user.id, { email, username, role: "reseller" });
 
     return apiOk({ user, message: "Account created successfully" }, 201);
   } catch (e: any) {

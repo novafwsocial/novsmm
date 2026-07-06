@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 
 /**
@@ -233,20 +233,12 @@ export async function POST(req: NextRequest) {
     });
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "create",
-        entity: "order",
-        entityId: createdOrderMetas[0]?.publicId,
-        metadata: JSON.stringify({
-          massOrder: true,
-          count: prepared.length,
-          total: grandTotal,
-          publicIds: createdOrderMetas.map((m) => m.publicId),
-          plan: user.plan,
-        }),
-      },
+    await audit(userId, "create", "order", createdOrderMetas[0]?.publicId, {
+      massOrder: true,
+      count: prepared.length,
+      total: grandTotal,
+      publicIds: createdOrderMetas.map((m) => m.publicId),
+      plan: user.plan,
     });
 
     // Kick off fulfillment simulation for each order (fire-and-forget)

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
 
 const couponSchema = z.object({
@@ -38,9 +38,7 @@ export async function POST(req: NextRequest) {
         expiresAt: parsed.data.expiresAt ? new Date(parsed.data.expiresAt) : null,
       },
     });
-    await db.auditLog.create({
-      data: { userId: adminId, action: "create", entity: "coupon", entityId: coupon.id, metadata: JSON.stringify({ code: coupon.code }) },
-    });
+    await audit(adminId, "create", "coupon", coupon.id, { code: coupon.code });
     return apiOk({ coupon, message: "Coupon created" }, 201);
   } catch (e: any) {
     if (e.code === "P2002") return apiError("Coupon code already exists", 409);
@@ -59,8 +57,6 @@ export async function PATCH(req: NextRequest) {
   if (!id) return apiError("ID required", 422);
 
   const coupon = await db.coupon.update({ where: { id }, data: { status } });
-  await db.auditLog.create({
-    data: { userId: adminId, action: "update", entity: "coupon", entityId: id, metadata: JSON.stringify({ status }) },
-  });
+  await audit(adminId, "update", "coupon", id, { status });
   return apiOk({ coupon });
 }

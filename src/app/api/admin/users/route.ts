@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { updateUserSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 
@@ -65,15 +65,7 @@ export async function PATCH(req: NextRequest) {
 
   const updated = await db.user.update({ where: { id }, data: updateData });
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "update",
-      entity: "user",
-      entityId: id,
-      metadata: JSON.stringify({ role, status, balance }),
-    },
-  });
+  await audit(adminId, "update", "user", id, { role, status, balance });
 
   return apiOk({ user: updated });
 }

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createPaymentMethodSchema } from "@/lib/validations";
 import { encryptJSON, decryptJSON, maskValue } from "@/lib/crypto-utils";
 
@@ -66,15 +66,7 @@ export async function POST(req: NextRequest) {
         ...(configStr ? { config: configStr } : {}),
       },
     });
-    await db.auditLog.create({
-      data: {
-        userId: adminId,
-        action: "create",
-        entity: "payment_method",
-        entityId: method.id,
-        metadata: JSON.stringify({ name: method.name, hasConfig: !!configStr }),
-      },
-    });
+    await audit(adminId, "create", "payment_method", method.id, { name: method.name, hasConfig: !!configStr });
     return apiOk({ method: { ...method, config: configStr ? maskConfig(configStr) : null }, message: "Payment method added" }, 201);
   } catch (e: any) {
     if (e.code === "P2002")
@@ -101,14 +93,6 @@ export async function PATCH(req: NextRequest) {
   }
 
   const method = await db.paymentMethod.update({ where: { id }, data: updateData });
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "update",
-      entity: "payment_method",
-      entityId: id,
-      metadata: JSON.stringify({ fields: Object.keys(updateData), hasConfig: !!config }),
-    },
-  });
+  await audit(adminId, "update", "payment_method", id, { fields: Object.keys(updateData), hasConfig: !!config });
   return apiOk({ method: { ...method, config: method.config ? maskConfig(method.config) : null } });
 }

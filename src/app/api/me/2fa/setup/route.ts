@@ -1,14 +1,15 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
-import { generate2FASecret, generateOTPUri, generateQRCode, generateBackupCodes } from "@/lib/two-factor";
+import { generate2FASecret, generateOTPUri, generateQRCode, generateBackupCodes, encrypt2FASecret } from "@/lib/two-factor";
 import bcrypt from "bcryptjs";
 
 /**
  * POST /api/me/2fa/setup
  * Generates a new TOTP secret + QR code.
- * The secret is stored TEMPORARILY in the Setting table (encrypted via bcrypt for backup codes)
+ * The secret is stored TEMPORARILY in the Setting table (encrypted with AES-256-GCM)
  * until the user verifies with a token (then it's confirmed).
+ * Backup codes are hashed with bcrypt.
  */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -28,9 +29,10 @@ export async function POST(req: NextRequest) {
   const secret = generate2FASecret();
   const backupCodes = generateBackupCodes();
 
-  // Store in a temporary setting (pending verification)
-  // The secret is stored as-is (it's a TOTP secret, not a password)
-  // Backup codes are hashed with bcrypt
+  // Store in a temporary setting (pending verification).
+  // The TOTP secret is encrypted at rest with AES-256-GCM (crypto-utils).
+  // Backup codes are hashed with bcrypt (one-way).
+  const encryptedSecret = encrypt2FASecret(secret);
   const hashedBackupCodes = await Promise.all(
     backupCodes.map((c) => bcrypt.hash(c, 10))
   );
@@ -39,21 +41,21 @@ export async function POST(req: NextRequest) {
     where: { key: `2fa:pending:${userId}` },
     update: {
       value: JSON.stringify({
-        secret,
+        secret: encryptedSecret,
         backupCodes: hashedBackupCodes,
       }),
     },
     create: {
       key: `2fa:pending:${userId}`,
       value: JSON.stringify({
-        secret,
+        secret: encryptedSecret,
         backupCodes: hashedBackupCodes,
       }),
     },
   });
 
   // Generate QR code
-  const uri = generateOTPUri(email, secret);
+  const uri = await generateOTPUri(email, secret);
   const qrCode = await generateQRCode(uri);
 
   return apiOk({

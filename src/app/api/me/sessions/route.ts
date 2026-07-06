@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 
 /**
  * GET /api/me/sessions — list active sessions for the current user.
@@ -78,14 +78,7 @@ export async function DELETE() {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId,
-      action: "revoke_sessions",
-      entity: "session",
-      entityId: userId,
-    },
-  });
+  await audit(userId, "revoke_sessions", "session", userId);
 
   return apiOk({ message: "All other sessions revoked" });
 }

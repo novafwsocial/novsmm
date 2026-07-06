@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
+import { apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { verifyNowPaymentsWebhook } from "@/lib/nowpayments";
 import { createNotification } from "@/lib/notify";
@@ -190,21 +190,13 @@ async function handlePaymentConfirmed(
   });
 
   // ── Audit log ──
-  await db.auditLog.create({
-    data: {
-      userId: txn.userId,
-      action: "create",
-      entity: "transaction",
-      entityId: txn.id,
-      metadata: JSON.stringify({
-        type: "topup",
-        amount: txn.amount,
-        method: "nowpayments",
-        paymentId: paymentId ?? txn.publicId,
-        payCurrency: payload?.pay_currency,
-        payAmount: payload?.pay_amount,
-      }),
-    },
+  await audit(txn.userId, "create", "transaction", txn.id, {
+    type: "topup",
+    amount: txn.amount,
+    method: "nowpayments",
+    paymentId: paymentId ?? txn.publicId,
+    payCurrency: payload?.pay_currency,
+    payAmount: payload?.pay_amount,
   });
 
   console.log(`[webhooks/nowpayments] Credited $${txn.amount} to user ${txn.userId} (txn ${txn.publicId})`);

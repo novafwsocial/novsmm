@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
-import { verify2FAToken } from "@/lib/two-factor";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
+import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
 
 /**
  * POST /api/me/2fa/verify
@@ -29,10 +29,14 @@ export async function POST(req: NextRequest) {
     return apiError("No pending 2FA setup. Call /api/me/2fa/setup first.", 400);
   }
 
-  const { secret, backupCodes } = JSON.parse(pending.value);
+  const { secret: encryptedSecret, backupCodes } = JSON.parse(pending.value);
+  const secret = decrypt2FASecret(encryptedSecret);
+  if (!secret) {
+    return apiError("2FA secret could not be decrypted. Please restart setup.", 500);
+  }
 
   // Verify the token
-  if (!verify2FAToken(token, secret)) {
+  if (!(await verify2FAToken(token, secret))) {
     return apiError("Invalid verification code. Please try again.", 400);
   }
 
@@ -49,14 +53,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId,
-      action: "enable_2fa",
-      entity: "user",
-      entityId: userId,
-    },
-  });
+  await audit(userId, "enable_2fa", "user", userId);
 
   return apiOk({ message: "2FA enabled successfully! Keep your backup codes safe." });
 }

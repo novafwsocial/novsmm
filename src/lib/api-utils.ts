@@ -2,6 +2,7 @@ import { getServerSession } from "next-auth/next";
 import { authOptions } from "./auth";
 import { NextResponse } from "next/server";
 import { headers, cookies } from "next/headers";
+import { db } from "./db";
 
 /**
  * Get the base URL of the current request, respecting proxy headers.
@@ -65,4 +66,51 @@ export function apiError(message: string, status = 400) {
 /** Standard success response. */
 export function apiOk(data: any, status = 200) {
   return NextResponse.json(data, { status });
+}
+
+/**
+ * Audit log helper — captures IP + User-Agent from request headers.
+ *
+ * This replaces the previous pattern of `db.auditLog.create({ data: {...} })`
+ * scattered across 34 routes, most of which never populated `ip` and none of
+ * which captured `userAgent`. Now every audit entry has full forensic context.
+ *
+ * Usage:
+ *   await audit(userId, "login", "user", userId);
+ *   await audit(userId, "create", "order", order.id, { total: 42.50 });
+ *   await audit(userId, "refund", "transaction", txn.id, { amount: 100 });
+ */
+export async function audit(
+  userId: string | null,
+  action: string,
+  entity: string,
+  entityId?: string | null,
+  metadata?: Record<string, any>
+): Promise<void> {
+  try {
+    const h = await headers();
+    // Middleware forwards client IP via x-client-ip header.
+    // Fall back to x-forwarded-for (standard proxy header) or "unknown".
+    const ip =
+      h.get("x-client-ip") ||
+      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+    const userAgent = h.get("user-agent") || "unknown";
+
+    await db.auditLog.create({
+      data: {
+        userId,
+        action,
+        entity,
+        entityId: entityId ?? null,
+        metadata: metadata ? JSON.stringify(metadata) : null,
+        ip,
+        userAgent,
+      },
+    });
+  } catch (e) {
+    // Audit logging must NEVER break the main request flow.
+    // Log to stderr for observability, but don't throw.
+    console.error("[audit] Failed to write audit log:", e);
+  }
 }

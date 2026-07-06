@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { sanitizeMessage } from "@/lib/sanitize";
 
 /**
@@ -47,9 +47,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: { userId, action: "password_change", entity: "user", entityId: userId },
-  });
+  await audit(userId, "password_change", "user", userId);
 
   return apiOk({ message: "Password changed successfully" });
 }

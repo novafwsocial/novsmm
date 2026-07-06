@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { generateApiKey, generateApiPublicId } from "@/lib/license";
 import bcrypt from "bcryptjs";
 
@@ -70,15 +70,7 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "create",
-      entity: "api_key",
-      entityId: apiKey.id,
-      metadata: JSON.stringify({ publicId, forUser: user.email, name }),
-    },
-  });
+  await audit(adminId, "create", "api_key", apiKey.id, { publicId, forUser: user.email, name });
 
   // Return the full key ONCE — the admin must copy and share it now
   return apiOk(
@@ -118,9 +110,7 @@ export async function PATCH(req: NextRequest) {
     data: { status: "revoked", revokedAt: new Date() },
   });
 
-  await db.auditLog.create({
-    data: { userId: adminId, action: "revoke", entity: "api_key", entityId: id, metadata: JSON.stringify({ publicId: apiKey.publicId }) },
-  });
+  await audit(adminId, "revoke", "api_key", id, { publicId: apiKey.publicId });
 
   return apiOk({ message: "API key revoked" });
 }

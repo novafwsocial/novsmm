@@ -1,11 +1,16 @@
 import { db } from "../src/lib/db";
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 
 async function main() {
   console.log("🌱 Seeding NOVSMM database...");
 
   // ── Admin user ──
-  const adminPassword = await bcrypt.hash("admin123", 12);
+  // Generate a random admin password on each fresh seed (NOT a hardcoded default).
+  // The password is printed ONCE to stdout so the operator can capture it, then
+  // must be changed on first login. Never hardcode production credentials.
+  const adminPasswordPlain = crypto.randomBytes(12).toString("base64url").slice(0, 16);
+  const adminPassword = await bcrypt.hash(adminPasswordPlain, 12);
   const admin = await db.user.upsert({
     where: { email: "admin@novsmm.io" },
     update: {},
@@ -22,10 +27,12 @@ async function main() {
       status: "active",
     },
   });
-  console.log(`  ✓ Admin: ${admin.email} (password: admin123)`);
+  console.log(`  ✓ Admin: ${admin.email}`);
+  console.log(`    ⚠️  Generated admin password (CHANGE ON FIRST LOGIN): ${adminPasswordPlain}`);
 
   // ── Demo user ──
-  const userPassword = await bcrypt.hash("novsmm2024", 12);
+  const userPasswordPlain = crypto.randomBytes(12).toString("base64url").slice(0, 16);
+  const userPassword = await bcrypt.hash(userPasswordPlain, 12);
   const user = await db.user.upsert({
     where: { email: "daniela@pulsemedia.io" },
     update: {},
@@ -44,7 +51,8 @@ async function main() {
       status: "active",
     },
   });
-  console.log(`  ✓ User: ${user.email} (password: novsmm2024)`);
+  console.log(`  ✓ User: ${user.email}`);
+  console.log(`    ⚠️  Generated demo password: ${userPasswordPlain}`);
 
   // ── Providers ──
   const providers = await Promise.all(
@@ -224,9 +232,10 @@ async function main() {
   }
 
   console.log("\n✅ Seed complete!");
-  console.log("\n📋 Credentials:");
-  console.log("  Admin: admin@novsmm.io / admin123");
-  console.log("  User:  daniela@pulsemedia.io / novsmm2024");
+  console.log("\n📋 Credentials (generated fresh this run — see above for actual values):");
+  console.log("  Admin: admin@novsmm.io / <see generated password above>");
+  console.log("  User:  daniela@pulsemedia.io / <see generated password above>");
+  console.log("\n⚠️  Change the admin password immediately after first login.");
 }
 
 main()

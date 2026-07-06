@@ -3888,3 +3888,131 @@ Stage Summary:
 - 10 fases definidas, cada una con objetivos/riesgos/cambios/compatibilidad/pruebas/resultado esperado
 - ~40 P0s y ~80 P1s mapeados a fases específicas
 - Próximo paso: presentar al usuario y esperar confirmación para iniciar Fase 1
+
+---
+Task ID: F1-9
+Agent: general-purpose (Audit Helper Migration)
+Task: Migrate all 34 db.auditLog.create calls to use the audit() helper with IP + User-Agent capture
+
+Work Log:
+- Read worklog.md (Tasks 1-WS-2, PROD-1, ENTERPRISE-AUDIT-CONSOLIDATED) for Phase 1 context — confirmed P1-3 in the audit plan called for an `audit(userId, action, entity, entityId, metadata?)` helper at 47 call sites
+- Read src/lib/api-utils.ts to confirm the `audit()` helper signature: `audit(userId: string | null, action, entity, entityId?: string | null, metadata?: Record<string, any>)`. Helper auto-reads IP (x-client-ip → x-forwarded-for → "unknown") + User-Agent from request headers, wraps the db.auditLog.create in try/catch (never throws), stringifies metadata internally
+- Migrated all 34 files (kept other logic untouched, only replaced db.auditLog.create + added `audit` to existing `@/lib/api-utils` imports):
+
+  1.  src/lib/auth.ts                                       — login + logout audit logs (kept `db` import — jwt callback uses db.user.findUnique). NOTE: this introduces a circular import (auth.ts ↔ api-utils.ts) but both modules reference each other only at runtime inside function bodies (authorize()/signOut event in auth.ts, getAuthSession()/requireAuth() in api-utils.ts), so the cycle is safe under ESM/CJS lazy-binding semantics. Verified by tsc.
+  2.  src/app/api/uploads/route.ts                          — REMOVED `db` import entirely (only used db.auditLog.create before)
+  3.  src/app/api/me/2fa/verify/route.ts                    — enable_2fa
+  4.  src/app/api/me/2fa/disable/route.ts                   — disable_2fa
+  5.  src/app/api/me/password/route.ts                      — password_change
+  6.  src/app/api/me/route.ts                                — profile update (with metadata: updateData)
+  7.  src/app/api/me/sessions/route.ts                      — revoke_sessions (kept `db` for db.session.findMany + db.auditLog.findMany read path)
+  8.  src/app/api/orders/repeat/route.ts                    — create (repeated order)
+  9.  src/app/api/orders/mass/route.ts                      — create (mass order)
+  10. src/app/api/orders/route.ts                            — create + cancel
+  11. src/app/api/auth/reset-password/route.ts              — password_reset
+  12. src/app/api/auth/register/route.ts                    — user create
+  13. src/app/api/public/validate-license/route.ts          — validate_failed (public, no userId → passed `null`; REMOVED `db` import entirely)
+  14. src/app/api/admin/refunds/route.ts                    — refund (with metadata {amount, reason, user})
+  15. src/app/api/admin/bulk/route.ts                       — `bulk_${action}` (entityId null)
+  16. src/app/api/admin/promotions/route.ts                 — create + update
+  17. src/app/api/admin/settings/route.ts                   — update (entityId null, body as metadata)
+  18. src/app/api/admin/orders/route.ts                     — create (manual/admin order)
+  19. src/app/api/admin/services/route.ts                   — create + update + delete
+  20. src/app/api/admin/payment-methods/route.ts            — create + update
+  21. src/app/api/admin/providers/route.ts                  — create + update
+  22. src/app/api/admin/providers/[id]/sync/route.ts        — sync_provider (with metadata {provider, latency, status, servicesSynced})
+  23. src/app/api/admin/users/route.ts                      — update (role/status/balance)
+  24. src/app/api/admin/licenses/route.ts                   — create + update (action || "update")
+  25. src/app/api/admin/api-keys/route.ts                   — create + revoke
+  26. src/app/api/admin/coupons/route.ts                    — create + update
+  27. src/app/api/admin/languages/route.ts                  — create + update
+  28. src/app/api/admin/currencies/route.ts                 — create + update
+  29. src/app/api/admin/withdrawals/route.ts                — approve_withdrawal / reject_withdrawal
+  30. src/app/api/admin/roles/route.ts                      — create + update (permissions) + delete
+  31. src/app/api/admin/notifications/route.ts              — create (broadcast → entityId null) + create (single user)
+  32. src/app/api/wallet/topup/route.ts                     — create (sandbox topup, metadata {type, amount, method, sandbox})
+  33. src/app/api/webhooks/nowpayments/route.ts             — create (topup confirmed, metadata includes payCurrency/payAmount)
+  34. src/app/api/webhooks/stripe/route.ts                  — create (Stripe Checkout topup, metadata {type, amount, method, sessionId})
+
+- Migration pattern applied uniformly:
+  - Where the original metadata field was `JSON.stringify({...})`, the literal object was extracted (un-stringified) and passed as the metadata arg — the helper does the JSON.stringify itself
+  - Where no metadata existed, the 5th arg was omitted
+  - Where entityId was originally omitted or null, `null` was passed explicitly to keep the audit() signature clear (entityId?: string | null)
+  - For the public validate-license endpoint with no authenticated user, `null` was passed as userId (helper accepts string | null)
+
+- Validation:
+  - `bun run lint` → EXIT 0, 0 errors (clean). Verified.
+  - `bunx tsc --noEmit` → only pre-existing errors (verified via `git stash` round-trip): the webhook route files (nowpayments/stripe) have an existing `let txn = null; txn = await db.transaction.findFirst(...)` pattern that TypeScript infers as `txn: never`, producing errors on every `txn.X` access — this PRE-EXISTS my migration (the original `db.auditLog.create({ data: { userId: txn.userId, ... } })` calls hit the exact same narrowing issue). My migration did NOT introduce any new TS errors. None of the migration-related changes broke compilation.
+
+Stage Summary:
+- 34 files migrated from `db.auditLog.create({ data: {...} })` to `audit(userId, action, entity, entityId?, metadata?)`
+- All audit log entries now capture IP (x-client-ip → x-forwarded-for → "unknown") + User-Agent automatically — previously NONE of the 34 call sites captured userAgent, and most didn't even populate ip
+- 2 files had their `db` import removed entirely (uploads/route.ts, public/validate-license/route.ts) — verified by grep that no `db.` references remain
+- The other 32 files kept their `db` import (still used for non-audit queries)
+- `src/lib/auth.ts` introduces a safe circular import with `@/lib/api-utils` (both modules only call each other's exports inside runtime function bodies, never at module-load time)
+- `bun run lint` → 0 errors. Pre-existing TypeScript errors in webhook files (unrelated `let txn = null` narrowing issue) unchanged by this migration
+- Audit logging now never throws (helper has internal try/catch + console.error) — previously a failed db.auditLog.create would crash the surrounding API handler
+- Implements P1-3 from the ENTERPRISE_MIGRATION_PLAN.md Phase 1 backlog
+
+---
+Task ID: PHASE-1-CRITICAL-SECURITY
+Agent: main (Z.ai Code) + 1 subagent (F1-9 audit migration)
+Task: Phase 1 — Critical Security & Stability Fixes (14 changes from ENTERPRISE_MIGRATION_PLAN.md)
+
+Work Log:
+- F1.1: Generated secure NEXTAUTH_SECRET (32-byte hex) + LICENSE_ENCRYPTION_KEY (random) in .env, chmod 444
+- F1.2: Removed hardcoded fallback keys in crypto-utils.ts (now throws if LICENSE_ENCRYPTION_KEY missing) + license.ts (now delegates to crypto-utils.encrypt/decrypt — single source of truth, eliminated the second divergent hardcoded key)
+- F1.3: Removed allowDangerousEmailAccountLinking: true from Google provider in auth.ts (was enabling account takeover)
+- F1.4: Enforced 2FA in authorize() — added totp credential field, verify2FAToken called when user has 2FA enabled, throws "2FA_REQUIRED" signal for frontend to show TOTP input; updated login-screen.tsx with 2FA input flow (Shield icon, 6-digit code, "Verify & sign in" button)
+- F1.5: Rewrote mercadopago/route.ts with HMAC-SHA256 signature verification (x-signature header, ts+v1 parsing, timingSafeEqual) + payment-status confirmation fetch from MP API (never trusts webhook payload alone); fail-closed if MP_WEBHOOK_SECRET or MP_ACCESS_TOKEN missing
+- F1.6: Made stripe/route.ts fail-closed — returns 401 if STRIPE_WEBHOOK_SECRET not configured or signature missing; removed "log mode" that processed unverified events; removed unused isStripeConfigured import + verified variable
+- F1.7: Fixed Origin check in middleware.ts — added getTrustedHost() that reads NEXTAUTH_URL, value-matches Origin host against trusted host (was presence-only bypass); Bearer token requests exempt (server-to-server); DELETE no longer skips CSRF
+- F1.8: Rewrote Caddyfile — removed SSRF vector (XTransformPort wildcard query-param routing); now explicit path-based routing: /socket.io/* → port 3003, everything else → port 3000
+- F1.9: Created audit() helper in api-utils.ts (captures IP via x-client-ip/x-forwarded-for + User-Agent automatically, try/catch never throws); DELEGATED to subagent to migrate all 34 db.auditLog.create calls across 34 files; subagent completed successfully (lint clean, 0 new TS errors)
+- F1.10: Migrated generateBackupCodes() from Math.random() to crypto.randomBytes (CSPRNG); removed ambiguous chars (I, O, 0, 1)
+- F1.11: Added encrypt2FASecret()/decrypt2FASecret() to two-factor.ts; updated 2fa/setup to encrypt secret at rest (AES-256-GCM); updated 2fa/verify + 2fa/disable to decrypt before verification
+- F1.12: Removed hardcoded "admin123" from seed.ts — now generates random 16-char password via crypto.randomBytes, prints once to stdout with "CHANGE ON FIRST LOGIN" warning; same for demo user password
+- F1.13: Modified .zscripts/build.sh to NOT ship db/custom.db in production tarball (was leaking admin123 + demo data); now only copies prisma/schema.prisma + migrations; production DB must be provisioned separately via db:push or migrate deploy
+- BONUS FIX: Discovered otplib v13 breaking change — authenticator export removed; rewrote two-factor.ts to use new API (generate/verify/generateURI/generateSecret); all 2FA functions now async; updated all callers to await
+
+Validation:
+- bun run lint: CLEAN (0 errors)
+- bunx tsc --noEmit: 0 new errors in Phase 1 files (pre-existing errors in unused shadcn/ui components + trustHost type issue remain, documented)
+- bun run db:push: SUCCESS (added userAgent column + action/createdAt indexes to AuditLog)
+- API security tests (6/6 passed):
+  1. GET /api/auth/session → 200 (empty) — NextAuth working with new secret
+  2. POST /api/orders without Origin → 403 "CSRF check failed — missing origin"
+  3. POST /api/orders with evil Origin → 403 "CSRF check failed — origin mismatch" (THE FIX!)
+  4. POST /api/webhooks/stripe without secret → 401 "Webhook secret not configured"
+  5. POST /api/webhooks/mercadopago without secret → 401 "Webhook secret not configured"
+  6. GET /api/public/settings → 200
+- Login flow test (curl): SUCCESS
+  - CSRF token fetched
+  - POST /api/auth/callback/credentials → 200 with redirect URL
+  - GET /api/auth/session → 200 with full user object (admin@novsmm.io, role: admin, balance: 50310)
+- Audit log verification: NEW login entries now capture ip + userAgent (old entries had null/null)
+
+Stage Summary:
+- 14/14 Phase 1 changes completed
+- 13 P0 security issues resolved:
+  * S1 (Mercado Pago webhook) — HMAC verification + API confirmation
+  * S2 (Stripe webhook log mode) — fail-closed
+  * S3 (NEXTAUTH_SECRET unset) — set in .env
+  * S4 (allowDangerousEmailAccountLinking) — removed
+  * S5 (2FA decorative) — enforced in authorize()
+  * S6 (hardcoded encryption keys) — fail-closed, single source of truth
+  * S7 (Origin presence-only) — value-matched against trusted host
+  * S8 (failed logins not logged) — audit() helper captures IP + UA
+  * S9 (Caddyfile SSRF) — explicit path routing
+  * O1 (NEXTAUTH_SECRET) — same as S3
+  * O2 (LICENSE_ENCRYPTION_KEY) — same as S6
+  * O5 (dev DB shipped to prod) — build.sh fixed
+  * O6 (admin123 in seed) — random password
+- 4 P1 issues also resolved:
+  * Backup codes CSPRNG (F1.10)
+  * 2FA secret encryption at rest (F1.11)
+  * Audit log IP/UA capture (F1.9)
+  * Bearer token CSRF exemption documented
+- BONUS: otplib v13 compatibility fix (was broken, would have crashed 2FA setup)
+- Platform remains fully functional — login, APIs, all working
+- Ready for Phase 2: Database Hardening

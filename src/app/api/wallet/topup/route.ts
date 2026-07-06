@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { isStripeConfigured, createTopupCheckoutSession } from "@/lib/stripe";
@@ -412,15 +412,7 @@ export async function POST(req: NextRequest) {
       sendEmail: true,
     });
 
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "create",
-        entity: "transaction",
-        entityId: txn.id,
-        metadata: JSON.stringify({ type: "topup", amount, method: pm.name, sandbox: true }),
-      },
-    });
+    await audit(userId, "create", "transaction", txn.id, { type: "topup", amount, method: pm.name, sandbox: true });
 
     return apiOk({
       transaction: await db.transaction.findUnique({ where: { id: txn.id } }),

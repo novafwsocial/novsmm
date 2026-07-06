@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { createRefund } from "@/lib/stripe";
 
@@ -91,15 +91,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "refund",
-      entity: "transaction",
-      entityId: transactionId,
-      metadata: JSON.stringify({ amount: refundAmount, reason, user: txn.user.email }),
-    },
-  });
+  await audit(adminId, "refund", "transaction", transactionId, { amount: refundAmount, reason, user: txn.user.email });
 
   return apiOk({ message: "Refund processed successfully" });
 }

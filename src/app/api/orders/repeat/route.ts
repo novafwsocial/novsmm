@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 
 /**
@@ -119,20 +119,12 @@ export async function POST(req: NextRequest) {
     );
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "create",
-        entity: "order",
-        entityId: order.id,
-        metadata: JSON.stringify({
-          publicId,
-          repeatedFrom: original.publicId,
-          service: service.name,
-          quantity: original.quantity,
-          total: totalPrice,
-        }),
-      },
+    await audit(userId, "create", "order", order.id, {
+      publicId,
+      repeatedFrom: original.publicId,
+      service: service.name,
+      quantity: original.quantity,
+      total: totalPrice,
     });
 
     return apiOk({ order, message: "Order repeated successfully" }, 201);

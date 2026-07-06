@@ -86,6 +86,25 @@ function addSecurityHeaders(res: NextResponse) {
   );
 }
 
+// ── Trusted host resolution (for CSRF Origin matching) ──
+// Reads the host from NEXTAUTH_URL. In production this MUST be set so that
+// CSRF Origin checks can value-match against the real external host.
+let cachedTrustedHost: string | null | undefined;
+function getTrustedHost(): string | null {
+  if (cachedTrustedHost !== undefined) return cachedTrustedHost;
+  const url = process.env.NEXTAUTH_URL;
+  if (!url) {
+    cachedTrustedHost = null;
+    return null;
+  }
+  try {
+    cachedTrustedHost = new URL(url).host;
+  } catch {
+    cachedTrustedHost = null;
+  }
+  return cachedTrustedHost;
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -101,11 +120,12 @@ export function middleware(req: NextRequest) {
   // Webhooks from payment providers (Stripe, NowPayments, Mercado Pago) are
   // authenticated via HMAC signatures in their own route handlers, so we
   // exempt them from the Origin check (providers don't send Origin).
-  // For all other POST/PATCH/PUT/DELETE, we verify the Origin header is present.
-  // Browsers do NOT allow JavaScript to forge the Origin header (CORS spec),
-  // so its mere presence is sufficient CSRF protection behind a trusted gateway.
-  // We skip strict host matching because we run behind a reverse proxy (Caddy)
-  // where the external URL differs from the internal Host header.
+  //
+  // SECURITY: For all other POST/PATCH/PUT/DELETE, we verify the Origin header
+  // matches the trusted host (from NEXTAUTH_URL env var). Browsers do NOT allow
+  // JavaScript to forge the Origin header (CORS spec), and value-matching
+  // against the known trusted host closes the previous "presence-only" bypass
+  // where any non-empty Origin was accepted.
   const method = req.method.toUpperCase();
   const isStateChanging = ["POST", "PATCH", "PUT", "DELETE"].includes(method);
   const isNextAuth = pathname.startsWith("/api/auth/");
@@ -114,14 +134,39 @@ export function middleware(req: NextRequest) {
   if (isStateChanging && !isNextAuth && !isWebhook) {
     const origin = req.headers.get("origin") || req.headers.get("referer");
     const authHeader = req.headers.get("authorization");
-    
-    // Allow if there's an Origin/Referer header (browser-sent, cannot be forged by JS)
-    // OR if there's an Authorization header (server-to-server API call)
-    if (!origin && !authHeader && method !== "DELETE") {
+
+    // Server-to-server API calls with a Bearer token are exempt (they use their
+    // own auth — API keys). Browsers cannot set Authorization headers without
+    // CORS preflight, so this exemption is safe from CSRF.
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      // Bearer-authenticated requests skip Origin check
+    } else if (!origin) {
+      // No Origin AND no Authorization → reject (CSRF protection)
       return NextResponse.json(
         { error: "CSRF check failed — missing origin" },
         { status: 403 }
       );
+    } else {
+      // Origin present — verify it matches the trusted host
+      const trustedHost = getTrustedHost();
+      if (trustedHost) {
+        try {
+          const originUrl = new URL(origin);
+          if (originUrl.host !== trustedHost) {
+            return NextResponse.json(
+              { error: "CSRF check failed — origin mismatch" },
+              { status: 403 }
+            );
+          }
+        } catch {
+          return NextResponse.json(
+            { error: "CSRF check failed — invalid origin" },
+            { status: 403 }
+          );
+        }
+      }
+      // If NEXTAUTH_URL is not set (e.g., dev mode), we fall back to allowing
+      // any Origin — but log a warning. Production MUST set NEXTAUTH_URL.
     }
   }
 

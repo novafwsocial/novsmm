@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 
 /** GET /api/admin/settings — all platform settings. */
 export async function GET() {
@@ -31,14 +31,7 @@ export async function PATCH(req: NextRequest) {
     });
   }
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "update",
-      entity: "settings",
-      metadata: JSON.stringify(body),
-    },
-  });
+  await audit(adminId, "update", "settings", null, body);
 
   return apiOk({ message: `${updates.length} settings updated` });
 }

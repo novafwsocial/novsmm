@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import bcrypt from "bcryptjs";
+import { encrypt, decrypt } from "./crypto-utils";
 
 /**
  * License key generation + validation system.
@@ -11,11 +12,11 @@ import bcrypt from "bcryptjs";
  * - Validation: client sends license key → server hashes with bcrypt.compare → matches DB
  * - Anti-replication: each license is bound to a domain + IP allowlist + max users
  * - The licenseKey column stores an AES-encrypted version for audit/display (never the raw key)
+ *
+ * NOTE: License encryption now uses the shared crypto-utils.encrypt/decrypt helpers,
+ * which read LICENSE_ENCRYPTION_KEY from env (fail-closed, no hardcoded fallback).
+ * This eliminates the second hardcoded key that previously diverged from crypto-utils.
  */
-
-const ENCRYPTION_KEY =
-  process.env.LICENSE_ENCRYPTION_KEY ||
-  "novsmm-license-encryption-key-change-in-production-32b!";
 
 /**
  * Generate a new license key: NOVSMM-XXXX-XXXX-XXXX-XXXX
@@ -52,44 +53,21 @@ export async function validateLicenseKey(
 
 /**
  * Encrypt a license key for storage/display (reversible, for audit).
- * Uses AES-256-GCM.
+ * Delegates to the shared AES-256-GCM crypto-utils (single source of truth for the key).
  */
 export function encryptLicenseKey(key: string): string {
-  const keyBytes = crypto
-    .createHash("sha256")
-    .update(ENCRYPTION_KEY)
-    .digest();
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv("aes-256-gcm", keyBytes, iv);
-  const encBuf = Buffer.concat([
-    cipher.update(key, "utf8"),
-    cipher.final(),
-  ]);
-  const authTag = cipher.getAuthTag();
-  // Format: iv:authTag:encrypted (all base64)
-  return `${iv.toString("base64")}:${authTag.toString("base64")}:${encBuf.toString("base64")}`;
+  return encrypt(key);
 }
 
 /**
  * Decrypt a license key (admin-only, for display).
  */
 export function decryptLicenseKey(encryptedInput: string): string {
-  const [ivB64, authTagB64, encB64] = encryptedInput.split(":");
-  if (!ivB64 || !authTagB64 || !encB64) return "";
-  const keyBytes = crypto
-    .createHash("sha256")
-    .update(ENCRYPTION_KEY)
-    .digest();
-  const iv = Buffer.from(ivB64, "base64");
-  const authTag = Buffer.from(authTagB64, "base64");
-  const encryptedData = Buffer.from(encB64, "base64");
-  const decipher = crypto.createDecipheriv("aes-256-gcm", keyBytes, iv);
-  decipher.setAuthTag(authTag);
-  const decrypted = Buffer.concat([
-    decipher.update(encryptedData),
-    decipher.final(),
-  ]);
-  return decrypted.toString("utf8");
+  try {
+    return decrypt(encryptedInput);
+  } catch {
+    return "";
+  }
 }
 
 /**

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
 
 const promoSchema = z.object({
@@ -58,9 +58,7 @@ export async function POST(req: NextRequest) {
       status,
     },
   });
-  await db.auditLog.create({
-    data: { userId: adminId, action: "create", entity: "promotion", entityId: promo.id, metadata: JSON.stringify({ name: promo.name, discount: promo.discount }) },
-  });
+  await audit(adminId, "create", "promotion", promo.id, { name: promo.name, discount: promo.discount });
   return apiOk({ promotion: promo, message: "Promotion created" }, 201);
 }
 
@@ -105,14 +103,6 @@ export async function PATCH(req: NextRequest) {
   }
 
   const promo = await db.promotion.update({ where: { id }, data: update });
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "update",
-      entity: "promotion",
-      entityId: id,
-      metadata: JSON.stringify(update),
-    },
-  });
+  await audit(adminId, "update", "promotion", id, update);
   return apiOk({ promotion: promo });
 }

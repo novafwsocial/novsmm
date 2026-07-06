@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
 
 /**
@@ -184,15 +184,7 @@ export async function PATCH(req: NextRequest) {
     });
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "update",
-        entity: "user",
-        entityId: userId,
-        metadata: JSON.stringify(updateData),
-      },
-    });
+    await audit(userId, "update", "user", userId, updateData);
 
     return apiOk({ user, message: "Profile updated successfully" });
   } catch (e: any) {

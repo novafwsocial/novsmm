@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createProviderSchema } from "@/lib/validations";
 
 /** GET /api/admin/providers */
@@ -28,14 +28,7 @@ export async function POST(req: NextRequest) {
 
   try {
     const provider = await db.provider.create({ data: parsed.data });
-    await db.auditLog.create({
-      data: {
-        userId: adminId,
-        action: "create",
-        entity: "provider",
-        entityId: provider.id,
-      },
-    });
+    await audit(adminId, "create", "provider", provider.id);
     return apiOk({ provider, message: "Provider added" }, 201);
   } catch (e: any) {
     if (e.code === "P2002")
@@ -55,8 +48,6 @@ export async function PATCH(req: NextRequest) {
   if (!id) return apiError("Provider ID required", 422);
 
   const provider = await db.provider.update({ where: { id }, data });
-  await db.auditLog.create({
-    data: { userId: adminId, action: "update", entity: "provider", entityId: id },
-  });
+  await audit(adminId, "update", "provider", id);
   return apiOk({ provider });
 }

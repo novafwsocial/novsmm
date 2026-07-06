@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createServiceSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 
@@ -40,15 +40,7 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    await db.auditLog.create({
-      data: {
-        userId: adminId,
-        action: "create",
-        entity: "service",
-        entityId: service.id,
-        metadata: JSON.stringify({ name: service.name }),
-      },
-    });
+    await audit(adminId, "create", "service", service.id, { name: service.name });
 
     // Notify all users about the new service
     await createNotification({
@@ -91,15 +83,7 @@ export async function PATCH(req: NextRequest) {
     },
   });
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "update",
-      entity: "service",
-      entityId: id,
-      metadata: JSON.stringify(data),
-    },
-  });
+  await audit(adminId, "update", "service", id, data);
 
   return apiOk({ service });
 }
@@ -119,14 +103,7 @@ export async function DELETE(req: NextRequest) {
     data: { status: "deleted" },
   });
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "delete",
-      entity: "service",
-      entityId: id,
-    },
-  });
+  await audit(adminId, "delete", "service", id);
 
   return apiOk({ message: "Service deleted" });
 }

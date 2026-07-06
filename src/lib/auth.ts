@@ -4,6 +4,8 @@ import GoogleProvider from "next-auth/providers/google";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
+import { audit } from "@/lib/api-utils";
+import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
 
 // ── Brute-force protection: in-memory failed attempt tracking ──
 const MAX_FAILED_ATTEMPTS = 5;
@@ -44,6 +46,7 @@ const providers: NextAuthOptions["providers"] = [
     credentials: {
       email: { label: "Email", type: "email" },
       password: { label: "Password", type: "password" },
+      totp: { label: "2FA Code", type: "text" },
     },
     async authorize(credentials) {
       if (!credentials?.email || !credentials?.password) {
@@ -82,18 +85,41 @@ const providers: NextAuthOptions["providers"] = [
         throw new Error("Invalid credentials");
       }
 
+      // ── 2FA enforcement ──
+      // If the user has 2FA enabled, the TOTP code MUST be provided and valid.
+      // The frontend sends a special error message so it can show the 2FA input.
+      const twoFactorSetting = await db.setting.findUnique({
+        where: { key: `2fa:${user.id}` },
+      });
+
+      if (twoFactorSetting) {
+        // 2FA is enabled — require a valid TOTP token
+        if (!credentials.totp) {
+          // Signal to the frontend that 2FA is required
+          throw new Error("2FA_REQUIRED");
+        }
+
+        try {
+          const { secret: encryptedSecret } = JSON.parse(twoFactorSetting.value);
+          const secret = decrypt2FASecret(encryptedSecret);
+          if (!secret || !(await verify2FAToken(credentials.totp, secret))) {
+            trackFailedAttempt(lockKey);
+            throw new Error("Invalid 2FA code");
+          }
+        } catch (e: any) {
+          if (e.message === "2FA_REQUIRED") throw e;
+          if (e.message === "Invalid 2FA code") throw e;
+          // Decryption/parsing failure — treat as 2FA failure
+          trackFailedAttempt(lockKey);
+          throw new Error("2FA verification failed. Contact support.");
+        }
+      }
+
       // Reset failed attempts on successful login
       loginAttempts.delete(lockKey);
 
       // Audit log
-      await db.auditLog.create({
-        data: {
-          userId: user.id,
-          action: "login",
-          entity: "user",
-          entityId: user.id,
-        },
-      });
+      await audit(user.id, "login", "user", user.id);
 
       return {
         id: user.id,
@@ -107,12 +133,16 @@ const providers: NextAuthOptions["providers"] = [
 ];
 
 // ── Google OAuth ──
+// allowDangerousEmailAccountLinking is INTENTIONALLY omitted (defaults to false).
+// Setting it to true enabled account takeover: an attacker could register a Google
+// account with a victim's email and instantly access their existing NOVSMM account.
+// With it false, NextAuth requires the email to be verified by Google AND refuses
+// to link if an account with that email already exists without matching the provider.
 if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
   providers.push(
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      allowDangerousEmailAccountLinking: true,
     })
   );
 }
@@ -178,14 +208,7 @@ export const authOptions: NextAuthOptions = {
   events: {
     async signOut({ token }) {
       if (token?.id) {
-        await db.auditLog.create({
-          data: {
-            userId: token.id as string,
-            action: "logout",
-            entity: "user",
-            entityId: token.id as string,
-          },
-        });
+        await audit(token.id as string, "logout", "user", token.id as string);
       }
     },
   },

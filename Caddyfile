@@ -1,10 +1,24 @@
-:81 {
-	@transform_port_query {
-		query XTransformPort=*
-	}
+# NOVSMM Gateway — Caddyfile (Production-locked)
+#
+# SECURITY: The previous version used a wildcard ?XTransformPort=<port> query
+# parameter that allowed anyone to reverse-proxy to ANY localhost port (SSRF).
+# This version uses explicit path-based routing only — no wildcard port forwarding.
+#
+# In production, replace the :81 listener with your real domain + TLS config:
+#   novsmm.com {
+#     ... (same handlers)
+#   }
+#
+# Required env vars (set in Caddy's environment or via systemd):
+#   - none (Caddy reads no secrets; it just proxies)
 
-	handle @transform_port_query {
-		reverse_proxy localhost:{query.XTransformPort} {
+:81 {
+	# ── Notification service (Socket.IO) — explicit path, no wildcard ──
+	# Only /socket.io/ paths are forwarded to the notifications mini-service.
+	# This is the ONLY path that reaches port 3003.
+	@socketio path /socket.io/*
+	handle @socketio {
+		reverse_proxy localhost:3003 {
 			header_up Host {host}
 			header_up X-Forwarded-For {remote_host}
 			header_up X-Forwarded-Proto {scheme}
@@ -12,6 +26,9 @@
 		}
 	}
 
+	# ── Default: Next.js app on port 3000 ──
+	# All other requests (including /api/*) go to the Next.js app.
+	# The app's own middleware handles rate limiting, CSRF, and security headers.
 	handle {
 		reverse_proxy localhost:3000 {
 			header_up Host {host}

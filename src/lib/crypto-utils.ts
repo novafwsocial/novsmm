@@ -7,12 +7,24 @@ import crypto from "crypto";
  * The encrypted format is: iv:authTag:encrypted (all base64)
  */
 
-const ENCRYPTION_KEY =
-  process.env.LICENSE_ENCRYPTION_KEY ||
-  "novsmm-default-encryption-key-change!";
+/**
+ * Resolve the encryption key from env. Fail-closed: throw if missing.
+ * NEVER fall back to a hardcoded default — that would silently encrypt
+ * production secrets with a publicly-known key.
+ */
+function resolveEncryptionKey(): string {
+  const key = process.env.LICENSE_ENCRYPTION_KEY;
+  if (!key || key.length < 16) {
+    throw new Error(
+      "LICENSE_ENCRYPTION_KEY environment variable is not set or is too short (min 16 chars). " +
+        "Set it in .env before running the app. Generate one with: openssl rand -hex 24"
+    );
+  }
+  return key;
+}
 
 function getKey(): Buffer {
-  return crypto.createHash("sha256").update(ENCRYPTION_KEY).digest();
+  return crypto.createHash("sha256").update(resolveEncryptionKey()).digest();
 }
 
 /**

@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
-import { verify2FAToken } from "@/lib/two-factor";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
+import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
 
 /**
  * POST /api/me/2fa/disable
@@ -28,10 +28,14 @@ export async function POST(req: NextRequest) {
     return apiError("2FA is not enabled", 400);
   }
 
-  const { secret } = JSON.parse(active.value);
+  const { secret: encryptedSecret } = JSON.parse(active.value);
+  const secret = decrypt2FASecret(encryptedSecret);
+  if (!secret) {
+    return apiError("2FA secret could not be decrypted. Contact support.", 500);
+  }
 
   // Verify the token before disabling
-  if (!verify2FAToken(token, secret)) {
+  if (!(await verify2FAToken(token, secret))) {
     return apiError("Invalid verification code.", 400);
   }
 
@@ -46,14 +50,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId,
-      action: "disable_2fa",
-      entity: "user",
-      entityId: userId,
-    },
-  });
+  await audit(userId, "disable_2fa", "user", userId);
 
   return apiOk({ message: "2FA disabled successfully." });
 }

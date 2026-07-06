@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
+import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createOrderSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { placeHuntSMMOrder, extractProviderServiceId } from "@/lib/huntsmm";
@@ -302,23 +302,15 @@ export async function POST(req: NextRequest) {
     }
 
     // Audit log
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "create",
-        entity: "order",
-        entityId: order.id,
-        metadata: JSON.stringify({
-          publicId,
-          service: service.name,
-          quantity,
-          total: totalPrice,
-          priority,
-          plan: user.plan,
-          dripFeed: !!dripConfig,
-          dripDays: dripConfig ? dripDays : undefined,
-        }),
-      },
+    await audit(userId, "create", "order", order.id, {
+      publicId,
+      service: service.name,
+      quantity,
+      total: totalPrice,
+      priority,
+      plan: user.plan,
+      dripFeed: !!dripConfig,
+      dripDays: dripConfig ? dripDays : undefined,
     });
 
     return apiOk({ order, message: "Order placed successfully" }, 201);
@@ -416,17 +408,9 @@ export async function PATCH(req: NextRequest) {
       sendEmail: true,
     });
 
-    await db.auditLog.create({
-      data: {
-        userId,
-        action: "cancel",
-        entity: "order",
-        entityId: order.id,
-        metadata: JSON.stringify({
-          publicId: order.publicId,
-          refunded: order.totalPrice,
-        }),
-      },
+    await audit(userId, "cancel", "order", order.id, {
+      publicId: order.publicId,
+      refunded: order.totalPrice,
     });
 
     return apiOk({ message: "Order cancelled — refund issued" });

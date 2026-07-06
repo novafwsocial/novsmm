@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { z } from "zod";
 
@@ -96,21 +96,13 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "create",
-      entity: "order",
-      entityId: order.id,
-      metadata: JSON.stringify({
-        publicId,
-        forUser: user.email,
-        service: service.name,
-        quantity,
-        customPrice: customPrice ?? null,
-        total: totalPrice,
-      }),
-    },
+  await audit(adminId, "create", "order", order.id, {
+    publicId,
+    forUser: user.email,
+    service: service.name,
+    quantity,
+    customPrice: customPrice ?? null,
+    total: totalPrice,
   });
 
   // Simulate fulfillment

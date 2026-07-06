@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
 
 const RESOURCES = [
@@ -78,9 +78,7 @@ export async function POST(req: NextRequest) {
         isSystem: false,
       },
     });
-    await db.auditLog.create({
-      data: { userId: adminId, action: "create", entity: "role", entityId: role.id, metadata: JSON.stringify({ name: role.name }) },
-    });
+    await audit(adminId, "create", "role", role.id, { name: role.name });
     return apiOk({ role, message: "Role created" }, 201);
   } catch (e: any) {
     if (e.code === "P2002") return apiError("Role name already exists", 409);
@@ -117,9 +115,7 @@ export async function PATCH(req: NextRequest) {
       });
     }
 
-    await db.auditLog.create({
-      data: { userId: adminId, action: "update", entity: "role", entityId: parsed.data.roleId, metadata: JSON.stringify({ permissions: parsed.data.permissions }) },
-    });
+    await audit(adminId, "update", "role", parsed.data.roleId, { permissions: parsed.data.permissions });
 
     return apiOk({ message: "Permissions updated" });
   }
@@ -160,9 +156,7 @@ export async function DELETE(req: NextRequest) {
   if (role.isSystem) return apiError("Cannot delete system role", 403);
 
   await db.role.delete({ where: { id } });
-  await db.auditLog.create({
-    data: { userId: adminId, action: "delete", entity: "role", entityId: id },
-  });
+  await audit(adminId, "delete", "role", id);
 
   return apiOk({ message: "Role deleted" });
 }

@@ -3,7 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import { signIn } from "next-auth/react";
-import { Mail, Lock, ArrowRight, ArrowLeft, Sparkles, Loader2, X, CheckCircle2 } from "lucide-react";
+import { Mail, Lock, ArrowRight, ArrowLeft, Sparkles, Loader2, X, CheckCircle2, Shield } from "lucide-react";
 import { useApp } from "./app-store";
 import { Field, SocialButton } from "./auth-fields";
 import { Logo } from "./logo";
@@ -127,6 +127,8 @@ export function LoginScreen() {
   const { setView } = useApp();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const [needs2FA, setNeeds2FA] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -134,6 +136,7 @@ export function LoginScreen() {
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
   const pwValid = password.length >= 1;
+  const totpValid = /^\d{6}$/.test(totp);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -148,19 +151,29 @@ export function LoginScreen() {
     }, 15_000);
 
     try {
-      // Use redirect: false so we get the result and can handle errors.
-      // With redirect: true, signIn() never returns — if the redirect is
-      // slow or fails (common behind reverse proxies), the button stays
-      // on "Signing in..." forever.
+      // Use redirect: false so we get the result and can handle errors + 2FA flow.
       const result = await signIn("credentials", {
         email,
         password,
+        totp: totp || undefined,
         redirect: false,
       });
 
       clearTimeout(safetyTimeout);
 
       if (result?.error) {
+        if (result.error === "2FA_REQUIRED") {
+          // Password was correct but 2FA is required — show the TOTP input
+          setNeeds2FA(true);
+          setError(null);
+          setLoading(false);
+          return;
+        }
+        if (result.error === "Invalid 2FA code") {
+          setError("Invalid 2FA code. Please try again.");
+          setLoading(false);
+          return;
+        }
         // NextAuth returns error: "CredentialsSignin" for wrong credentials
         setError("Invalid email or password. Please try again.");
         setLoading(false);
@@ -169,8 +182,6 @@ export function LoginScreen() {
 
       // Success — session cookie is now set. Do a full page reload so the
       // app-view picks up the new session and shows the dashboard.
-      // Using reload() instead of redirect avoids URL construction issues
-      // behind reverse proxies.
       window.location.reload();
     } catch (err: any) {
       clearTimeout(safetyTimeout);
@@ -275,6 +286,34 @@ export function LoginScreen() {
               valid={pwValid && password.length > 0}
             />
 
+            {needs2FA && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                className="rounded-xl border border-primary/30 bg-primary/5 p-4"
+              >
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
+                  <Shield className="h-4 w-4 text-primary" />
+                  Two-factor authentication required
+                </div>
+                <p className="mb-3 text-xs text-muted-foreground">
+                  Enter the 6-digit code from your authenticator app.
+                </p>
+                <Field
+                  label="2FA code"
+                  icon={<Shield className="h-4 w-4" />}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  placeholder="123456"
+                  value={totp}
+                  onChange={(e) => setTotp(e.target.value.replace(/\D/g, ""))}
+                  valid={totpValid && totp.length > 0}
+                />
+              </motion.div>
+            )}
+
             <div className="flex items-center justify-between">
               <button
                 type="button"
@@ -319,13 +358,18 @@ export function LoginScreen() {
             <Magnetic as="div" strength={0.15} className="mt-1 block w-full">
               <button
                 type="submit"
-                disabled={loading}
+                disabled={loading || (needs2FA && !totpValid)}
                 className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
               >
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
                     Signing in…
+                  </>
+                ) : needs2FA ? (
+                  <>
+                    Verify &amp; sign in
+                    <ArrowRight className="h-4 w-4" />
                   </>
                 ) : (
                   <>

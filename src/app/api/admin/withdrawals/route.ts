@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 
 /**
@@ -88,15 +88,7 @@ export async function PATCH(req: NextRequest) {
     });
   }
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: action === "approve" ? "approve_withdrawal" : "reject_withdrawal",
-      entity: "transaction",
-      entityId: id,
-      metadata: JSON.stringify({ amount: txn.amount, user: txn.userId }),
-    },
-  });
+  await audit(adminId, action === "approve" ? "approve_withdrawal" : "reject_withdrawal", "transaction", id, { amount: txn.amount, user: txn.userId });
 
   return apiOk({ message: `Withdrawal ${action}d` });
 }

@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotificationSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { sanitizeMessage } from "@/lib/sanitize";
@@ -60,14 +60,7 @@ export async function POST(req: NextRequest) {
       }).catch(() => {});
     }
 
-    await db.auditLog.create({
-      data: {
-        userId: adminId,
-        action: "create",
-        entity: "notification",
-        metadata: JSON.stringify({ broadcast: true, audience: audience ?? "all", ...notifData }),
-      },
-    });
+    await audit(adminId, "create", "notification", null, { broadcast: true, audience: audience ?? "all", ...notifData });
 
     return apiOk({ message: `Broadcast sent to ${users.length} ${audience === "admins" ? "admins" : audience === "users" ? "users" : "users"}` }, 201);
   }
@@ -79,14 +72,7 @@ export async function POST(req: NextRequest) {
     sendEmail: true,
   });
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "create",
-      entity: "notification",
-      entityId: notif.id,
-    },
-  });
+  await audit(adminId, "create", "notification", notif.id);
 
   return apiOk({ notification: notif, message: "Notification sent" }, 201);
 }

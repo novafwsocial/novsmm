@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import {
   generateLicenseKey,
   hashLicenseKey,
@@ -91,15 +91,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: "create",
-      entity: "license",
-      entityId: license.id,
-      metadata: JSON.stringify({ customerEmail, plan, domain }),
-    },
-  });
+  await audit(adminId, "create", "license", license.id, { customerEmail, plan, domain });
 
   // Notify admins
   await notifyAdmins({
@@ -166,9 +158,7 @@ export async function PATCH(req: NextRequest) {
 
   const license = await db.license.update({ where: { id }, data: updateData });
 
-  await db.auditLog.create({
-    data: { userId: adminId, action: action || "update", entity: "license", entityId: id, metadata: JSON.stringify(updateData) },
-  });
+  await audit(adminId, action || "update", "license", id, updateData);
 
   // Notify customer of status change
   if (license.customerId && (action === "suspend" || action === "revoke")) {

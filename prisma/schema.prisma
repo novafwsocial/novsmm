@@ -241,12 +241,15 @@ model AuditLog {
   entityId  String?
   metadata  String?  // JSON string
   ip        String?
+  userAgent String?
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([userId])
   @@index([entity])
+  @@index([action])
+  @@index([createdAt])
 }
 
 model Setting {

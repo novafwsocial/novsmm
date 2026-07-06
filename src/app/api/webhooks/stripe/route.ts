@@ -1,10 +1,9 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { apiOk, apiError } from "@/lib/api-utils";
+import { apiOk, apiError, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import {
   verifyStripeWebhook,
-  isStripeConfigured,
   resolveStripeWebhookSecret,
   getStripe,
 } from "@/lib/stripe";
@@ -28,51 +27,67 @@ import {
  *   1. STRIPE_WEBHOOK_SECRET env var
  *   2. Setting `stripe.webhookSecret` (DB, admin-configurable)
  *
- * Without a configured secret, the handler runs in "log mode" — records all
- * webhook events for audit but does not process them.
+ * SECURITY: The handler is fail-closed. Without a configured secret AND a signature,
+ * the webhook is REJECTED with 401 — it is NOT processed in "log mode" anymore.
+ * The previous "log mode" allowed anyone to POST fake Stripe events and get free
+ * wallet top-ups / subscription activations.
  */
 export async function POST(req: NextRequest) {
   const body = await req.text();
   const signature = req.headers.get("stripe-signature");
 
   let event: any;
-  let verified = false;
 
   // Resolve the webhook secret (env var → Setting table)
   const webhookSecret = await resolveStripeWebhookSecret();
 
-  if (isStripeConfigured() && webhookSecret && signature) {
-    // ── Real signature verification ──
-    try {
-      event = verifyStripeWebhook(body, signature, webhookSecret);
-      if (!event) {
-        return apiError("Webhook signature verification failed", 400);
-      }
-      verified = true;
-    } catch (e: any) {
-      // Log the failed verification
-      await db.webhookLog.create({
-        data: {
-          provider: "stripe",
-          eventType: "signature_verification_failed",
-          payload: body.slice(0, 10000),
-          signature,
-          status: "failed",
-          error: e.message,
-        },
-      });
-      return apiError(`Webhook signature verification failed: ${e.message}`, 400);
-    }
-  } else {
-    // ── Log mode (no secret configured) ──
+  // ── Fail-closed: require both secret AND signature ──
+  if (!webhookSecret) {
+    // Log the rejected event for audit, but DO NOT process it
     try {
       event = JSON.parse(body);
     } catch {
       return apiError("Invalid JSON", 400);
     }
+    await db.webhookLog.create({
+      data: {
+        provider: "stripe",
+        eventType: event.type ?? "unknown",
+        payload: body.slice(0, 10000),
+        signature: signature || null,
+        status: "rejected",
+        error: "STRIPE_WEBHOOK_SECRET not configured — webhook rejected (fail-closed)",
+      },
+    });
+    return apiError("Webhook secret not configured", 401);
   }
 
-  // Log the webhook
+  if (!signature) {
+    return apiError("Missing stripe-signature header", 401);
+  }
+
+  // ── Real signature verification ──
+  try {
+    event = verifyStripeWebhook(body, signature, webhookSecret);
+    if (!event) {
+      return apiError("Webhook signature verification failed", 400);
+    }
+  } catch (e: any) {
+    // Log the failed verification
+    await db.webhookLog.create({
+      data: {
+        provider: "stripe",
+        eventType: "signature_verification_failed",
+        payload: body.slice(0, 10000),
+        signature,
+        status: "failed",
+        error: e.message,
+      },
+    });
+    return apiError(`Webhook signature verification failed: ${e.message}`, 400);
+  }
+
+  // Log the webhook (verified)
   const log = await db.webhookLog.create({
     data: {
       provider: "stripe",
@@ -109,7 +124,7 @@ export async function POST(req: NextRequest) {
       data: { status: "processed" },
     });
 
-    return apiOk({ received: true, verified });
+    return apiOk({ received: true });
   } catch (e: any) {
     console.error("[webhooks/stripe] processing error:", e);
     await db.webhookLog.update({
@@ -286,15 +301,7 @@ async function handleCheckoutSessionCompleted(session: any) {
       sendEmail: true,
     });
 
-    await db.auditLog.create({
-      data: {
-        userId: txn.userId,
-        action: "create",
-        entity: "transaction",
-        entityId: txn.id,
-        metadata: JSON.stringify({ type: "topup", amount: txn.amount, method: "stripe", sessionId }),
-      },
-    });
+    await audit(txn.userId, "create", "transaction", txn.id, { type: "topup", amount: txn.amount, method: "stripe", sessionId });
 
     return;
   }

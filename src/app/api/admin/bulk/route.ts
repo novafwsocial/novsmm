@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { requireAdmin, apiError, apiOk } from "@/lib/api-utils";
+import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
 
 const bulkSchema = z.object({
@@ -58,14 +58,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await db.auditLog.create({
-    data: {
-      userId: adminId,
-      action: `bulk_${action}`,
-      entity,
-      metadata: JSON.stringify({ count: affected, ids }),
-    },
-  });
+  await audit(adminId, `bulk_${action}`, entity, null, { count: affected, ids });
 
   return apiOk({ affected, message: `${affected} ${entity}(s) ${action}d` });
 }
