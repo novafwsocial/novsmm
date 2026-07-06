@@ -22,6 +22,15 @@ ok()   { echo -e "  ${GREEN}✅${NC} $1"; PASS=$((PASS+1)); }
 fail() { echo -e "  ${RED}❌${NC} $1"; FAIL=$((FAIL+1)); }
 info() { echo -e "  ℹ️  $1"; }
 
+# P1-032: Use jq if available (lighter than python3), fall back to python3
+json_state() {
+  if command -v jq &>/dev/null; then
+    jq -r '.State // "unknown"' 2>/dev/null
+  else
+    python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('State','unknown'))" 2>/dev/null
+  fi
+}
+
 echo "════════════════════════════════════════════════════════════════"
 echo "  NOVSMM — Validación Post-Deploy (Docker + PostgreSQL + Redis)"
 echo "  $(date '+%Y-%m-%d %H:%M:%S')"
@@ -33,7 +42,7 @@ echo "=== 1. ESTADO DE SERVICIOS (docker compose) ==="
 
 SERVICES="postgres redis web worker notifications nginx"
 for svc in $SERVICES; do
-  STATUS=$(docker compose ps --format json "$svc" 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('State','unknown'))" 2>/dev/null || echo "not found")
+  STATUS=$(docker compose ps --format json "$svc" 2>/dev/null | json_state || echo "not found")
   if [ "$STATUS" = "running" ]; then
     ok "$svc: running"
   else

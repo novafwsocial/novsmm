@@ -45,6 +45,13 @@ services:
       - '--config.expand-env'
     environment:
       SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL:?Set SLACK_WEBHOOK_URL in .env}"
+      # Email escalation/fallback (P1-067/068) — optional, no-op if SMTP_HOST empty
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      SMTP_FROM: "${SMTP_FROM:-alerts@novsmm.com}"
+      ALERT_EMAIL_TO: "${ALERT_EMAIL_TO:-oncall@novsmm.com}"
     ports:
       - "127.0.0.1:9093:9093"
     networks:
@@ -115,6 +122,47 @@ services:
       - redis
     networks:
       - novsmm-network
+
+  # ── Blackbox Exporter (P1-063: SSL cert expiry probes) ──
+  # Probes the public HTTPS endpoint to check availability + SSL cert expiry.
+  # The SslCertExpiringSoon / SslCertExpired alerts (alerts.yml) use the
+  # probe_ssl_earliest_cert_expiry metric emitted by this exporter.
+  blackbox-exporter:
+    image: prom/blackbox-exporter:v0.25.0
+    container_name: novsmm-blackbox-exporter
+    restart: unless-stopped
+    init: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
+    configs:
+      - source: blackbox_config
+        target: /etc/blackbox_exporter/config.yml
+    ports:
+      - "127.0.0.1:9115:9115"
+    networks:
+      - novsmm-network
+
+configs:
+  blackbox_config:
+    content: |
+      modules:
+        http_2xx:
+          prober: http
+          timeout: 10s
+          http:
+            valid_http_versions: ["HTTP/1.1", "HTTP/2.0"]
+            valid_status_codes: [200, 301, 302, 401, 403]
+            method: GET
+            preferred_ip_protocol: ip4
+            ip_protocol_fallback: false
+        http_ssl:
+          prober: http
+          timeout: 10s
+          http:
+            fail_if_ssl: false
+            preferred_ip_protocol: ip4
 
 volumes:
   prometheus_data:

@@ -36,12 +36,22 @@ ALERT_WEBHOOK="${ALERT_WEBHOOK:-}"
 send_alert() {
   local message="$1"
   echo -e "${RED}🚨 ALERT: ${message}${NC}"
-  
+
   if [ -n "$ALERT_WEBHOOK" ]; then
-    curl -s -X POST "$ALERT_WEBHOOK" \
+    # P1-018: Add --max-time to prevent indefinite hang if webhook endpoint is unreachable
+    curl -s --max-time 10 -X POST "$ALERT_WEBHOOK" \
       -H "Content-Type: application/json" \
       -d "{\"text\":\"🚨 NOVSMM Alert: ${message}\"}" \
       &>/dev/null || true
+  fi
+}
+
+# P1-017: Use jq if available (lighter than python3), fall back to python3
+json_state() {
+  if command -v jq &>/dev/null; then
+    jq -r '.State // "unknown"' 2>/dev/null
+  else
+    python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('State','unknown'))" 2>/dev/null
   fi
 }
 
@@ -49,14 +59,14 @@ run_check() {
   local CHECKS_PASS=0
   local CHECKS_FAIL=0
   local ALERTS=""
-  
+
   echo "╔═══════════════════════════════════════════════════════════════╗"
   echo "║  NOVSMM Healthcheck — $(date '+%Y-%m-%d %H:%M:%S')              ║"
   echo "╚═══════════════════════════════════════════════════════════════╝"
-  
+
   # ── Docker services ──
   for svc in postgres redis web worker notifications nginx; do
-    STATE=$(docker compose ps --format json "$svc" 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('State','unknown'))" 2>/dev/null || echo "not found")
+    STATE=$(docker compose ps --format json "$svc" 2>/dev/null | json_state || echo "not found")
     if [ "$STATE" = "running" ]; then
       ok "$svc: running"
       CHECKS_PASS=$((CHECKS_PASS+1))

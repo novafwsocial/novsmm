@@ -36,6 +36,53 @@ warn() { echo -e "${YELLOW}  ⚠️${NC} $1"; }
 info() { echo -e "${BLUE}  ℹ️${NC} $1"; }
 step() { echo -e "\n${BOLD}${BLUE}═══ $1 ═══${NC}"; }
 
+# ── P1-001/P1-002: Rollback trap ──
+# Track deploy state so the trap knows whether to rollback.
+DEPLOY_PHASE="init"  # init → built → started → healthy → migrated → seeded → done
+PREV_IMAGE_TAGGED=false
+
+rollback() {
+  local exit_code=$?
+  if [ "$exit_code" -eq 0 ] || [ "$DEPLOY_PHASE" = "done" ]; then
+    return 0  # Success — no rollback needed
+  fi
+  echo ""
+  echo -e "${RED}${BOLD}═══ DEPLOY FAILED — initiating rollback ═══${NC}"
+  echo -e "${RED}Failed at phase: ${DEPLOY_PHASE}${NC}"
+
+  case "$DEPLOY_PHASE" in
+    built|started|healthy)
+      # Services were started but not verified or migrated → stop them
+      warn "Stopping newly started services..."
+      docker compose down 2>/dev/null || true
+
+      if [ "$PREV_IMAGE_TAGGED" = true ]; then
+        warn "Rolling back to previous images..."
+        docker tag novsmm:previous novsmm:latest 2>/dev/null || true
+        docker compose up -d 2>/dev/null || true
+        ok "Rolled back to previous version"
+      else
+        info "No previous images tagged — cannot auto-rollback."
+        info "Manual recovery: inspect logs with 'docker compose logs'"
+      fi
+      ;;
+    migrated|seeded)
+      # Database was migrated — DO NOT auto-rollback the DB (data loss risk).
+      # Instead, stop services and print clear instructions.
+      warn "Database was already migrated — NOT auto-rolling back DB (data loss risk)."
+      warn "Stopping services..."
+      docker compose stop web worker 2>/dev/null || true
+      echo ""
+      echo -e "${YELLOW}Manual recovery required:${NC}"
+      echo "  1. Inspect logs:        docker compose logs web worker"
+      echo "  2. If migration broke:  ./scripts/restore.sh /backups/novsmm_<date>.sql.gz"
+      echo "  3. If app bug:          docker tag novsmm:previous novsmm:latest && docker compose up -d"
+      ;;
+  esac
+  echo -e "${RED}${BOLD}═══ Rollback complete ═══${NC}"
+}
+trap rollback EXIT
+
 # ── Parse args ──
 MIGRATE_SQLITE=false
 SEED=true
@@ -108,13 +155,25 @@ fi
 # ── STEP 2: Build + Start ──
 step "STEP 2/7: Build y start de servicios Docker"
 
+# P1-001: Tag current images as :previous BEFORE building, so we can rollback.
+# Only tag if an image already exists (first deploy has nothing to rollback to).
+if docker image inspect novsmm-web:latest &>/dev/null 2>&1; then
+  docker tag novsmm-web:latest novsmm-web:previous 2>/dev/null || true
+  PREV_IMAGE_TAGGED=true
+  ok "Previous images tagged as :previous (rollback available)"
+else
+  info "First deploy — no previous images to tag (no auto-rollback possible)"
+fi
+
 log "Construyendo imágenes (esto puede tardar varios minutos)..."
 docker compose build --progress=plain 2>&1 | tail -5
 ok "Imágenes construidas"
+DEPLOY_PHASE="built"
 
 log "Iniciando servicios..."
 docker compose up -d
 ok "docker compose up ejecutado"
+DEPLOY_PHASE="started"
 
 # ── STEP 3: Esperar health ──
 step "STEP 3/7: Esperando que los servicios estén healthy"
@@ -140,14 +199,26 @@ check_service() {
   return 1
 }
 
-check_service "PostgreSQL" "docker compose exec -T postgres pg_isready -U novsmm -d novsmm"
-check_service "Redis" "docker compose exec -T redis redis-cli ping | grep -q PONG"
-check_service "Web" "curl -sf http://localhost:3000/api/health/live"
-check_service "Notifications" "curl -sf http://localhost:3003/healthz"
+# P1-002: check_service failures now trigger the rollback trap (set -e + trap).
+# Each check_service call that fails will abort the script, and the trap will
+# rollback based on the current DEPLOY_PHASE.
+check_service "PostgreSQL" "docker compose exec -T postgres pg_isready -U novsmm -d novsmm" || { fail "PostgreSQL health check failed"; exit 1; }
+check_service "Redis" "docker compose exec -T redis redis-cli ping | grep -q PONG" || { fail "Redis health check failed"; exit 1; }
+check_service "Web" "curl -sf --max-time 10 http://localhost:3000/api/health/live" || { fail "Web health check failed"; exit 1; }
+check_service "Notifications" "curl -sf --max-time 10 http://localhost:3003/healthz" || { fail "Notifications health check failed"; exit 1; }
+DEPLOY_PHASE="healthy"
 
 # Worker y Nginx no tienen healthcheck, solo verificar que están running
+# P1-003: Use jq if available (lighter than python3), fall back to python3.
+json_state() {
+  if command -v jq &>/dev/null; then
+    jq -r '.State // "unknown"' 2>/dev/null
+  else
+    python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('State','unknown'))" 2>/dev/null
+  fi
+}
 for svc in worker nginx; do
-  STATE=$(docker compose ps --format json "$svc" 2>/dev/null | python3 -c "import json,sys;d=json.load(sys.stdin);print(d.get('State','unknown'))" 2>/dev/null || echo "unknown")
+  STATE=$(docker compose ps --format json "$svc" 2>/dev/null | json_state || echo "unknown")
   if [ "$STATE" = "running" ]; then
     ok "$svc running"
   else
@@ -166,6 +237,7 @@ else
   docker compose exec -T web bun run db:push 2>&1
   ok "Schema pushado con db:push"
 fi
+DEPLOY_PHASE="migrated"
 
 # Verificar tablas
 TABLES=$(docker compose exec -T postgres psql -U novsmm -d novsmm -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' \n')
@@ -191,6 +263,7 @@ if [ "$SEED" = true ]; then
     warn "   ¡Cámbialo inmediatamente después del primer login!"
   fi
   ok "Seed completado"
+  DEPLOY_PHASE="seeded"
 fi
 
 # ── STEP 6: Migración SQLite (opcional) ──
@@ -216,15 +289,15 @@ fi
 # ── STEP 7: Smoke Test ──
 step "STEP 7/7: Smoke Test final"
 
-# Health endpoints
-LIVE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health/live 2>/dev/null)
-[ "$LIVE" = "200" ] && ok "Health live: 200" || fail "Health live: $LIVE"
+# Health endpoints — failures here abort (triggering rollback if applicable)
+LIVE=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:3000/api/health/live 2>/dev/null)
+if [ "$LIVE" = "200" ]; then ok "Health live: 200"; else fail "Health live: $LIVE"; exit 1; fi
 
-READY=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health/ready 2>/dev/null)
-[ "$READY" = "200" ] && ok "Health ready: 200" || fail "Health ready: $READY"
+READY=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:3000/api/health/ready 2>/dev/null)
+if [ "$READY" = "200" ]; then ok "Health ready: 200"; else fail "Health ready: $READY"; exit 1; fi
 
 # DB connection
-DB_HEALTH=$(curl -s http://localhost:3000/api/health/db 2>/dev/null)
+DB_HEALTH=$(curl -s --max-time 10 http://localhost:3000/api/health/db 2>/dev/null)
 echo "$DB_HEALTH" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
@@ -238,7 +311,7 @@ else:
 " 2>&1
 
 # Redis connection
-READY_JSON=$(curl -s http://localhost:3000/api/health/ready 2>/dev/null)
+READY_JSON=$(curl -s --max-time 10 http://localhost:3000/api/health/ready 2>/dev/null)
 echo "$READY_JSON" | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
@@ -250,13 +323,14 @@ else:
 " 2>&1
 
 # Security
-CSRF=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/orders -H "Content-Type: application/json" -d '{}' 2>/dev/null)
+CSRF=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/orders -H "Content-Type: application/json" -d '{}' 2>/dev/null)
 [ "$CSRF" = "403" ] && ok "CSRF protection: 403" || fail "CSRF: $CSRF"
 
-STRIPE_WH=$(curl -s -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/webhooks/stripe -H "Content-Type: application/json" -d '{}' 2>/dev/null)
+STRIPE_WH=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST http://localhost:3000/api/webhooks/stripe -H "Content-Type: application/json" -d '{}' 2>/dev/null)
 [ "$STRIPE_WH" = "401" ] && ok "Stripe webhook fail-closed: 401" || fail "Stripe webhook: $STRIPE_WH"
 
 # ── RESUMEN FINAL ──
+DEPLOY_PHASE="done"  # All checks passed — trap will not rollback
 echo ""
 echo -e "${BOLD}${GREEN}"
 echo "╔═══════════════════════════════════════════════════════════════╗"

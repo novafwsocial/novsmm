@@ -57,6 +57,40 @@ fi
 FILE_SIZE=$(du -h "$BACKUP_FILE" | cut -f1)
 info "Backup seleccionado: $BACKUP_FILE ($FILE_SIZE)"
 
+# ── P1-005: Decrypt if encrypted (.enc extension) ──
+# Encrypted backups use AES-256-GCM (see backup.sh). We decrypt to a temp
+# file, then proceed with the normal gunzip + pg_restore flow.
+DECRYPTED_FILE=""
+case "$BACKUP_FILE" in
+  *.enc)
+    if [ -z "${BACKUP_ENCRYPTION_KEY:-}" ]; then
+      fail "Backup está encriptado (.enc) pero BACKUP_ENCRYPTION_KEY no está seteada"
+      echo "  Setéala en .env o pásala como env var:"
+      echo "    BACKUP_ENCRYPTION_KEY='tu_key' ./scripts/restore.sh $BACKUP_FILE"
+      exit 1
+    fi
+    echo ""
+    echo "═══ Decrypting backup (AES-256-GCM) ═══"
+    DECRYPTED_FILE=$(mktemp /tmp/novsmm_restore_XXXXXX.sql.gz)
+    if openssl enc -d -aes-256-gcm -pbkdf2 -in "$BACKUP_FILE" -out "$DECRYPTED_FILE" -pass env:BACKUP_ENCRYPTION_KEY 2>/dev/null; then
+      ok "Backup desencriptado → $DECRYPTED_FILE"
+      BACKUP_FILE="$DECRYPTED_FILE"
+    else
+      fail "Desencriptación falló — key incorrecta o archivo corrupto"
+      rm -f "$DECRYPTED_FILE"
+      exit 1
+    fi
+    ;;
+esac
+
+# Cleanup decrypted temp file on exit
+cleanup_decrypted() {
+  if [ -n "$DECRYPTED_FILE" ] && [ -f "$DECRYPTED_FILE" ]; then
+    rm -f "$DECRYPTED_FILE"
+  fi
+}
+trap cleanup_decrypted EXIT
+
 # ── Verificar integridad ──
 echo ""
 echo "═══ Verificación de integridad ═══"
@@ -124,11 +158,24 @@ ok "Base de datos recreada"
 # ── Restore ──
 echo ""
 echo "═══ Restaurando desde backup ═══"
-if gunzip -c "$BACKUP_FILE" | docker compose exec -T postgres pg_restore -U novsmm -d novsmm --no-owner --no-privileges --clean --if-exists --verbose 2>&1 | tail -5; then
-  ok "Restore completado"
+# P1-011: pg_restore returns non-zero for non-fatal warnings (e.g., "DROP TABLE"
+# on a fresh DB with --clean). We capture the exit code explicitly and only
+# treat it as fatal if the data verification (next step) fails. The pipe to
+# `tail` would mask the exit code without PIPESTATUS.
+set +e
+gunzip -c "$BACKUP_FILE" | docker compose exec -T postgres pg_restore -U novsmm -d novsmm --no-owner --no-privileges --clean --if-exists --verbose 2>&1 | tail -5
+RESTORE_EXIT=${PIPESTATUS[1]}
+set -e
+
+if [ "$RESTORE_EXIT" -eq 0 ]; then
+  ok "Restore completado (pg_restore exit 0)"
+elif [ "$RESTORE_EXIT" -eq 1 ]; then
+  # Exit code 1 from pg_restore = non-fatal warnings (objects already exist, etc.)
+  warn "pg_restore exit code 1 (warnings no fatales — verificando datos...)"
 else
-  # pg_restore puede dar warnings no fatales, verificar si hay datos
-  warn "pg_restore tuvo warnings (puede ser normal)"
+  # Exit code 2+ = fatal error
+  fail "pg_restore falló con exit code $RESTORE_EXIT (error fatal)"
+  exit 1
 fi
 
 # ── Verify ──
@@ -147,10 +194,12 @@ info "Órdenes: $ORDERS"
 SERVICES=$(docker compose exec -T postgres psql -U novsmm -d novsmm -t -c "SELECT count(*) FROM services;" 2>/dev/null | tr -d ' \n')
 info "Servicios: $SERVICES"
 
-if [ "${USERS:-0}" -ge 1 ]; then
-  ok "Restore verificado: datos presentes"
+if [ "${USERS:-0}" -ge 1 ] 2>/dev/null; then
+  ok "Restore verificado: datos presentes ($USERS usuarios)"
 else
-  fail "Restore falló: no hay usuarios"
+  fail "Restore falló: no hay usuarios (value: '$USERS')"
+  fail "El backup puede estar corrupto o incompleto. NO reinicies servicios."
+  fail "Recupera de otro backup: ./scripts/restore.sh /backups/novsmm_<otra_fecha>.sql.gz"
   exit 1
 fi
 
@@ -160,12 +209,40 @@ echo "═══ Reiniciando servicios ═══"
 docker compose start web worker notifications 2>/dev/null
 ok "Servicios reiniciados"
 
-# Esperar a que web esté listo
-sleep 10
-if curl -sf http://localhost:3000/api/health/live &>/dev/null; then
-  ok "App respondiendo"
+# P1-012: Verify app actually reconnects to the restored DB (not just that it
+# responds). A stale connection pool could return 200 on /health/live (which
+# only checks the process is up) while DB queries fail. We check /health/ready
+# which includes a DB round-trip, and /health/db for explicit DB connectivity.
+echo ""
+echo "═══ Verificación de reconexión de la app ═══"
+APP_READY=false
+for i in $(seq 1 12); do
+  sleep 5
+  READY_CODE=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:3000/api/health/ready 2>/dev/null || echo "000")
+  if [ "$READY_CODE" = "200" ]; then
+    ok "App respondiendo (health/ready: 200 tras $((i*5))s)"
+    APP_READY=true
+    break
+  fi
+  printf "\r  ⏳ Esperando app... %ds (health/ready: %s)" $((i*5)) "$READY_CODE"
+done
+echo ""
+
+if [ "$APP_READY" != true ]; then
+  fail "App no responde en /health/ready después de 60s"
+  warn "El restore de DB fue exitoso, pero la app no reconectó."
+  warn "Inspecciona logs: docker compose logs web --tail 50"
+  warn "Prueba reiniciar: docker compose restart web"
+  exit 1
+fi
+
+# Double-check DB connectivity through the app
+DB_HEALTH=$(curl -s --max-time 10 http://localhost:3000/api/health/db 2>/dev/null)
+if echo "$DB_HEALTH" | grep -q '"connected":true' 2>/dev/null; then
+  ok "App conectada a PostgreSQL (verificado vía /api/health/db)"
 else
-  warn "App no responde aún — espera 30s más"
+  warn "No se pudo verificar DB connectivity vía /api/health/db"
+  warn "Respuesta: $DB_HEALTH"
 fi
 
 # ── Resumen ──

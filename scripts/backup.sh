@@ -26,6 +26,17 @@ RETENTION_DAYS="${RETENTION_DAYS:-30}"
 DATE=$(date +%Y%m%d_%H%M%S)
 UPLOAD_S3=false
 
+# P1-005: Backup encryption at rest. If BACKUP_ENCRYPTION_KEY is set, all
+# backup files are encrypted with AES-256-GCM before storage. The encrypted
+# files (.enc) are what's stored locally and uploaded to S3. restore.sh
+# detects the .enc extension and decrypts before restore.
+# Generate a key: openssl rand -hex 32
+ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
+ENCRYPT_FILES=false
+if [ -n "$ENCRYPTION_KEY" ]; then
+  ENCRYPT_FILES=true
+fi
+
 for arg in "$@"; do
   case $arg in
     --s3) UPLOAD_S3=true ;;
@@ -99,11 +110,57 @@ tar -czf "$CONFIG_FILE" \
   2>/dev/null
 ok "Config backup: $CONFIG_FILE"
 
-# ── 5. S3 Upload ──
-# P0-003: Previously `aws s3 cp ... 2>/dev/null` + unconditional `ok` swallowed
-# upload failures silently. Now we capture the exit code, surface failures
-# with a clear message, and count failures so the script can warn (not abort —
-# the local backup already succeeded, which is the primary objective).
+# ── 5. Encrypt backups (P1-005) ──
+if [ "$ENCRYPT_FILES" = true ]; then
+  echo ""
+  echo "═══ Encryption (AES-256-GCM) ═══"
+  ENC_FAIL=0
+  for f in "$PG_FILE" "$UPLOADS_FILE" "$CONFIG_FILE"; do
+    if [ -f "$f" ]; then
+      # AES-256-GCM. The salt + IV are embedded in the .enc file (openssl format).
+      # Decrypt with: openssl enc -d -aes-256-gcm -in file.enc -out file -pass env:BACKUP_ENCRYPTION_KEY
+      if openssl enc -aes-256-gcm -salt -pbkdf2 -in "$f" -out "${f}.enc" -pass env:BACKUP_ENCRYPTION_KEY 2>/dev/null; then
+        # Replace the plaintext file with the encrypted version
+        rm -f "$f"
+        ok "Encriptado: $(basename "$f").enc"
+      else
+        fail "Encriptación falló: $(basename "$f")"
+        ENC_FAIL=$((ENC_FAIL + 1))
+      fi
+    fi
+  done
+  if [ "$ENC_FAIL" -gt 0 ]; then
+    fail "$ENC_FAIL archivo(s) no se encriptaron — abortando por seguridad (no dejar backups sin encriptar)"
+    exit 1
+  fi
+  # Update file variables to point to .enc versions for S3 upload + cleanup
+  PG_FILE="${PG_FILE}.enc"
+  UPLOADS_FILE="${UPLOADS_FILE}.enc"
+  CONFIG_FILE="${CONFIG_FILE}.enc"
+  ok "Todos los backups encriptados"
+else
+  warn "BACKUP_ENCRYPTION_KEY no seteada — backups SIN encriptar"
+  warn "Setéala en .env: BACKUP_ENCRYPTION_KEY=$(openssl rand -hex 32)"
+fi
+
+# ── 6. S3 Upload (off-site) — P1-076: warn if not configured ──
+# P1-076: Off-site backup is NOT the default. If S3 is not configured, warn
+# loudly. A local-only backup is a single point of failure (VPS loss = total
+# data loss). We don't force S3 (some deployments may not want cloud), but
+# the operator MUST be aware of the risk.
+if [ "$UPLOAD_S3" != true ] || [ -z "${S3_BACKUP_BUCKET:-}" ]; then
+  echo ""
+  warn "═══ OFF-SITE BACKUP NOT CONFIGURED ═══"
+  warn "Backups are LOCAL ONLY ($BACKUP_DIR). If this VPS fails, ALL backups are lost."
+  warn "To enable off-site backup:"
+  warn "  1. Set S3_BACKUP_BUCKET=your-bucket in .env"
+  warn "  2. Configure AWS credentials: aws configure"
+  warn "  3. Run: ./scripts/backup.sh --s3"
+  warn "  Or add to cron: 0 2 * * * /opt/novsmm/scripts/backup.sh --s3"
+fi
+
+# ── 7. S3 Upload (if --s3 flag + S3_BACKUP_BUCKET set) ──
+# P0-003 fix: captures exit codes, surfaces failures, counts them.
 if [ "$UPLOAD_S3" = true ] && [ -n "${S3_BACKUP_BUCKET:-}" ]; then
   echo ""
   echo "═══ S3 Upload ═══"
@@ -133,7 +190,7 @@ if [ "$UPLOAD_S3" = true ] && [ -n "${S3_BACKUP_BUCKET:-}" ]; then
   fi
 fi
 
-# ── 6. Cleanup old backups ──
+# ── 8. Cleanup old backups ──
 echo ""
 echo "═══ Cleanup (retención: $RETENTION_DAYS días) ═══"
 find "$BACKUP_DIR" -name "novsmm_*" -mtime +$RETENTION_DAYS -delete 2>/dev/null

@@ -48,6 +48,44 @@ scrape_configs:
         labels:
           service: "redis"
 
+  # Blackbox exporter — SSL cert expiry probe (P1-063)
+  # Probes the public HTTPS endpoint. The SslCertExpiringSoon / SslCertExpired
+  # alerts use the probe_ssl_earliest_cert_expiry metric emitted by this job.
+  #
+  # NOTE: Prometheus does NOT support env var substitution in its config.
+  # Replace the target below with your production domain (e.g. https://novsmm.com)
+  # before deploying. The monitor-setup.sh script can do this automatically.
+  - job_name: "blackbox-ssl"
+    metrics_path: /probe
+    params:
+      module: [http_ssl]
+    static_configs:
+      - targets:
+          - "https://localhost"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Blackbox exporter — HTTP availability probe (external endpoint check)
+  - job_name: "blackbox-http"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - "https://localhost/api/health/live"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
   # Prometheus self-monitoring
   - job_name: "prometheus"
     static_configs:

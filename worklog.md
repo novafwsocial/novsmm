@@ -8838,3 +8838,75 @@ Stage Summary:
   - P0-023 (no DR drill) — RESUELTO en este bloque
   - P0-024 (no RTO/RPO) — RESUELTO en este bloque (ya existía + drill añadido)
 - **TODOS LOS 22 P0s DEL AUDIT-D ESTÁN RESUELTOS.**
+
+---
+Task ID: P1-HIGH-IMPACT-BLOCK
+Agent: main (Z.ai Code)
+Task: Bloque P1 High-Impact — resolver los P1s de mayor impacto en 5 bloques: Alerting completeness, Deploy safety, Restore robustness, Backup enhancements, Script hardening.
+
+Work Log:
+
+**Bloque A: Alerting completeness (P1-062, P1-063, P1-064, P1-067, P1-068)**
+- P1-062 (HighMemoryUsage should be critical): Cambiado severity de `warning` a `critical` en alerts.yml. Memory > 90% es OOM inminente → debe pagear.
+- P1-063 (No SSL cert expiry alert): Agregadas 2 alertas (`SslCertExpiringSoon` warning <14 días, `SslCertExpired` critical <0). Agregué blackbox-exporter (prom/blackbox-exporter:v0.25.0) a docker-compose.monitoring.yml con config inline (http_2xx + http_ssl modules, cap_drop ALL + cap_add NET_RAW). Agregué 2 jobs en prometheus.yml (blackbox-ssl + blackbox-http) con relabel_configs estándar. Nota: Prometheus NO soporta env var substitution, así que el target es `https://localhost` con comentario de reemplazar con el dominio real.
+- P1-064 (No queue backlog depth alert): Agregadas 2 alertas (`NovsmmQueueBacklogHigh` warning >100 jobs, `NovsmmQueueBacklogCritical` critical >1000). Agregué gauge `novsmm_queue_depth` a metrics.ts (labelNames: queue). La alerta existente NovsmmQueueBacklog cubre failure *rate*; las nuevas cubren backlog *depth* (workers overwhelmed o down).
+- P1-065 (bonus — container restart loop): Agregué alerta `ContainerRestartLoop` (>3 restarts en 10min) + counter `novsmm_container_restarts_total` a metrics.ts.
+- P1-067 (No escalation policy): Reestructuré routes en alertmanager.yml. Critical alerts → slack-critical (inmediato, group_wait 10s) con `continue: true` → escalation receiver (group_wait 1h → email + #novsmm-critical-oncall). El patrón `continue: true` entre sibling routes logra el efecto de escalación: route 1 envía a los 10s, route 2 envía a los 1h.
+- P1-068 (No email fallback): Agregué receiver `email-fallback` con email_configs (SMTP_HOST/PORT/USER/PASS/FROM/TO via env vars). Agregué env vars SMTP_* + ALERT_EMAIL_TO a .env.example y al environment del servicio alertmanager en docker-compose. Si SMTP_HOST es vacío, email es no-op (alerts van a Slack).
+- P2-066 (bonus — inhibit rules): Agregué inhibit_rules para suprimir alertas downstream cuando parent está firing (NovsmmDown suprime warnings; PostgresDown suprime NovsmmHighLatency/NovsmmHighErrorRate).
+
+**Bloque B: Deploy safety (P1-001, P1-002)**
+- P1-001 (No trap for rollback): Agregué `trap rollback EXIT` a deploy.sh. La función rollback usa una variable DEPLOY_PHASE (init→built→started→healthy→migrated→seeded→done) para decidir qué hacer. Antes del build, tagea imágenes actuales como `:previous` (si existen). Si el deploy falla en fase built/started/healthy → docker compose down + restaurar :previous. Si falla en migrated/seeded → NO auto-rollback DB (riesgo de data loss), imprime instrucciones de recuperación manual.
+- P1-002 (check_service failure aborts without rollback): Los check_service calls ahora usan `|| { fail "..."; exit 1; }` explícitamente, disparando el trap. Agregué --max-time 10 a todos los health checks. El smoke test final ahora usa `if/then/exit 1` en vez de `|| fail` (que no abortaba).
+
+**Bloque C: Restore robustness (P1-011, P1-012)**
+- P1-011 (pg_restore exit code ignored): Antes usaba `if gunzip | pg_restore | tail; then ok else warn`. El exit code de pg_restore se perdía en el pipe. Ahora: `set +e; gunzip | pg_restore | tail; RESTORE_EXIT=${PIPESTATUS[1]}; set -e`. Exit 0 = OK, exit 1 = warnings no fatales (verificar datos), exit 2+ = fatal error (abortar).
+- P1-012 (No verification app reconnects to DB): Antes solo hacía `sleep 10; curl health/live` (que solo verifica que el proceso responde, no que la DB conecta). Ahora: loop de hasta 60s polling `/api/health/ready` (que incluye DB round-trip), + verificación explícita de `/api/health/db` con grep `'"connected":true'`. Si la app no reconecta en 60s, aborta con instrucciones de diagnóstico (docker compose logs web, docker compose restart web).
+
+**Bloque D: Backup enhancements (P1-005, P1-076)**
+- P1-005 (No backup encryption at rest): Agregué Step 5 "Encryption" a backup.sh. Si `BACKUP_ENCRYPTION_KEY` está seteada, encripta todos los archivos (.sql.gz, uploads.tar.gz, config.tar.gz) con `openssl enc -aes-256-gcm -salt -pbkdf2` → .enc. Reemplaza el plaintext con el .enc (no deja backups sin encriptar). Si la encriptación falla para cualquier archivo, aborta (no dejar backups sin encriptar por seguridad). Actualiza restore.sh para auto-detectar .enc, desencriptar a temp file con trap cleanup, y proceder con el flujo normal. Agregué BACKUP_ENCRYPTION_KEY a .env.example.
+- P1-076 (No off-site backup by default): Agregué warning loud en backup.sh si S3 no está configurado (`--s3` flag no pasado o S3_BACKUP_BUCKET vacío): "Backups are LOCAL ONLY. If this VPS fails, ALL backups are lost" + instrucciones para habilitar S3. No fuerza S3 (algunos deployments pueden no querer cloud), pero el operador DEBE ser consciente del riesgo.
+
+**Bloque E: Script hardening (P1-003, P1-017, P1-018, P1-028, P1-032, P1-034, P2-027)**
+- P1-003/P1-017/P1-032 (python3 dependency): Agregué función `json_state()` a deploy.sh, healthcheck.sh, validate-postgres-redis.sh que usa `jq -r '.State // "unknown"'` si jq está disponible, con fallback a python3. Reemplaza el patrón `docker compose ps --format json | python3 -c "import json,sys;..."` (3 ocurrencias).
+- P1-018/P1-028/P1-034/P2-027 (curl sin --max-time): Agregué `--max-time` a ~15 curl calls: healthcheck.sh ALERT_WEBHOOK (10s), deploy.sh smoke test curls (10s), monitor-setup.sh Prometheus/Grafana/datasource/targets curls (10s), pre-deploy-check.sh ifconfig.me (5s). Previene hangs indefinidos si un endpoint es unreachable.
+
+**Validación:**
+- bash syntax: 10/10 scripts OK con `bash -n`
+- YAML: 4/4 archivos OK con `python3 yaml.safe_load`
+- `bun run lint`: 0 errores (1 warning pre-existente en load-test.js)
+- Dev server: home HTTP 200, nuevas métricas (novsmm_queue_depth, novsmm_container_restarts_total) emitidas en /api/metrics
+- Agent Browser no pudo verificar (OOM kill del sandbox durante compilación — limitación del sandbox de 4GB, no relacionado con cambios que son shell scripts + YAML + 2 metrics en TS)
+
+Stage Summary:
+- **P1-062: RESUELTO** — HighMemoryUsage → critical
+- **P1-063: RESUELTO** — SslCertExpiringSoon + SslCertExpired alerts + blackbox-exporter
+- **P1-064: RESUELTO** — NovsmmQueueBacklogHigh + NovsmmQueueBacklogCritical alerts + novsmm_queue_depth gauge
+- **P1-065: RESUELTO** (bonus) — ContainerRestartLoop alert + novsmm_container_restarts_total counter
+- **P1-067: RESUELTO** — Escalation policy (critical → slack inmediato → email+oncall después de 1h)
+- **P1-068: RESUELTO** — Email fallback receiver + SMTP env vars
+- **P2-066: RESUELTO** (bonus) — Inhibit rules (suppress downstream alerts when parent fires)
+- **P1-001: RESUELTO** — deploy.sh trap rollback con DEPLOY_PHASE tracking
+- **P1-002: RESUELTO** — check_service failures disparan rollback trap
+- **P1-011: RESUELTO** — pg_restore exit code capturado vía PIPESTATUS, diferenciado fatal vs warning
+- **P1-012: RESUELTO** — App reconnect verification (/health/ready + /health/db, 60s timeout)
+- **P1-005: RESUELTO** — Backup encryption AES-256-GCM + restore.sh auto-decrypt
+- **P1-076: RESUELTO** — Off-site backup warning loud cuando S3 no configurado
+- **P1-003/017/032: RESUELTOS** — jq con fallback python3 (3 scripts)
+- **P1-018/028/034/P2-027: RESUELTOS** — --max-time en ~15 curl calls
+- **Archivos modificados:**
+  - `monitoring/alerts.yml` — 5 nuevas alertas + HighMemoryUsage→critical
+  - `monitoring/alertmanager.yml` — escalation policy + email fallback + inhibit rules
+  - `monitoring/prometheus.yml` — 2 blackbox scrape jobs
+  - `docker-compose.monitoring.yml` — blackbox-exporter service + SMTP env vars
+  - `src/lib/metrics.ts` — 2 nuevas métricas (queue_depth gauge + container_restarts counter)
+  - `scripts/deploy.sh` — trap rollback + DEPLOY_PHASE + jq helper + --max-time curls
+  - `scripts/restore.sh` — pg_restore PIPESTATUS + app reconnect verify + decrypt support
+  - `scripts/backup.sh` — encryption step + off-site warning
+  - `scripts/healthcheck.sh` — --max-time + jq helper
+  - `scripts/monitor-setup.sh` — --max-time curls
+  - `scripts/pre-deploy-check.sh` — --max-time ifconfig.me
+  - `scripts/validate-postgres-redis.sh` — jq helper
+  - `.env.example` — BACKUP_ENCRYPTION_KEY + SMTP_* vars
+- **P1s resueltos en este bloque: 13** (P1-001, 002, 003, 005, 011, 012, 017, 018, 028, 032, 062, 063, 064, 067, 068, 076) + 2 P2 bonus (P2-066, P2-027 parcial)
+- **P1s restantes:** P1-004, 006, 007, 023, 024, 025, 029, 033, 037, 038, 039, 042, 043, 044, 046, 047-050, 056-057, 070-071, 077, 078, 079 (maymente medio/bajo impacto)

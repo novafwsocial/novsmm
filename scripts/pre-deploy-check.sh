@@ -34,7 +34,7 @@ info() { echo -e "${BLUE}ℹ️  INFO${NC} — $1"; }
 echo "════════════════════════════════════════════════════════════════"
 echo "  NOVSMM — Pre-Deployment Validation"
 echo "  Host: $(hostname)"
-echo "  IP:   $(curl -s ifconfig.me 2>/dev/null || echo 'unknown')"
+echo "  IP:   $(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo 'unknown')"
 echo "  Date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "════════════════════════════════════════════════════════════════"
 echo ""

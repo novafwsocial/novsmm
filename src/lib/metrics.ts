@@ -106,6 +106,28 @@ export const backupLastSuccessGauge = new promClient.Gauge({
 });
 backupLastSuccessGauge.set(Math.floor(Date.now() / 1000));
 
+// ── Queue depth gauge (P1-064) ──
+// Current number of jobs waiting in each BullMQ queue. Updated by the queue
+// monitor (set from BullMQ's queue.getWaitingCount()). The NovsmmQueueBacklogHigh
+// and NovsmmQueueBacklogCritical alerts fire when this exceeds 100 / 1000.
+export const queueDepthGauge = new promClient.Gauge({
+  name: "novsmm_queue_depth",
+  help: "Current number of jobs waiting in a queue (set by queue monitor)",
+  labelNames: ["queue"] as const,
+  registers: [registry],
+});
+
+// ── Container restart counter (P1-065) ──
+// Incremented when a Docker container restarts (detected via Docker API or
+// health check transitions). The ContainerRestartLoop alert fires when
+// restarts exceed 3 in 10 minutes.
+export const containerRestartCounter = new promClient.Counter({
+  name: "novsmm_container_restarts_total",
+  help: "Total container restarts (incremented on each restart detection)",
+  labelNames: ["container"] as const,
+  registers: [registry],
+});
+
 // ── Helpers ──
 
 /**

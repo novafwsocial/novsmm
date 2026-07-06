@@ -76,8 +76,8 @@ info "Esperando a que los servicios estén listos..."
 for i in $(seq 1 12); do
   sleep 5
   
-  PROM_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy 2>/dev/null || echo "000")
-  GRAFANA_OK=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/api/health 2>/dev/null || echo "000")
+  PROM_OK=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy 2>/dev/null || echo "000")
+  GRAFANA_OK=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:3001/api/health 2>/dev/null || echo "000")
   
   if [ "$PROM_OK" = "200" ] && [ "$GRAFANA_OK" = "200" ]; then
     ok "Prometheus: healthy"
@@ -104,7 +104,7 @@ if ! curl -sf -o /dev/null --max-time 5 -u "${GRAFANA_USER}:${GRAFANA_PASSWORD}"
 fi
 ok "Credenciales de Grafana verificadas"
 
-curl -s -X POST "http://localhost:3001/api/datasources" \
+curl -s --max-time 10 -X POST "http://localhost:3001/api/datasources" \
   -H "Content-Type: application/json" \
   -u "${GRAFANA_USER}:${GRAFANA_PASSWORD}" \
   -d '{
@@ -134,7 +134,7 @@ info "Verificando que Prometheus scrapea NOVSMM..."
 
 sleep 5
 
-TARGETS=$(curl -s http://localhost:9090/api/v1/targets 2>/dev/null | python3 -c "
+TARGETS=$(curl -s --max-time 10 http://localhost:9090/api/v1/targets 2>/dev/null | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 active = d['data']['activeTargets']
