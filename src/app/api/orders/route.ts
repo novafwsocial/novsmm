@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
@@ -57,50 +57,6 @@ function buildDripFeedConfig(
  * order is still in the pre-fulfillment `pending` / `processing` states.
  */
 const CANCEL_WINDOW_MS = 60_000;
-
-/**
- * Plan-based monthly order limits.
- * `null` means unlimited.
- *
- * free       → 50 orders / calendar month
- * starter    → 1,000
- * growth     → 10,000
- * enterprise → unlimited
- */
-const PLAN_ORDER_LIMITS: Record<string, number | null> = {
-  free: 50,
-  starter: 1000,
-  growth: 10000,
-  enterprise: null,
-};
-
-/**
- * Plan-based order priority (speed differentiation).
- *
- * free / starter → "standard"  (normal queue, ~2s start)
- * growth         → "priority"  (priority queue, <1.2s start)
- * enterprise     → "highest"   (highest priority, <800ms start)
- *
- * Stored on every Order row so the fulfillment worker / admin
- * views can sort and dispatch accordingly.
- */
-const PLAN_PRIORITY: Record<string, "standard" | "priority" | "highest"> = {
-  free: "standard",
-  starter: "standard",
-  growth: "priority",
-  enterprise: "highest",
-};
-
-/** Returns the priority for a given plan (defaults to standard). */
-function priorityForPlan(plan: string): "standard" | "priority" | "highest" {
-  return PLAN_PRIORITY[plan] ?? "standard";
-}
-
-/** Returns the start of the current calendar month (UTC). */
-function startOfMonth(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
 
 /**
  * GET /api/orders — list the authenticated user's orders.
@@ -209,32 +165,11 @@ export async function POST(req: NextRequest) {
     // Check balance
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { balance: true, status: true, plan: true },
+      select: { balance: true, status: true },
     });
     if (!user) return apiError("User not found", 404);
     if (user.status !== "active")
       return apiError("Account suspended", 403);
-
-    // ── Plan limit enforcement (BEFORE balance validation) ──
-    const planLimit = PLAN_ORDER_LIMITS[user.plan] ?? PLAN_ORDER_LIMITS.free;
-    if (planLimit !== null) {
-      const monthStart = startOfMonth();
-      const used = await db.order.count({
-        where: { userId, createdAt: { gte: monthStart } },
-      });
-      if (used >= planLimit) {
-        return NextResponse.json(
-          {
-            error: "Plan limit exceeded",
-            limit: planLimit,
-            used,
-            plan: user.plan,
-            upgradeUrl: "/?upgrade=true",
-          },
-          { status: 403 }
-        );
-      }
-    }
 
     // Race-safe atomic purchase.
     //
@@ -256,7 +191,7 @@ export async function POST(req: NextRequest) {
     // drivers. The order.create inside this tx consumes the pre-computed IDs.
     const publicId = await nextPublicId("A", 10432);
     const txPublicId = await nextPublicId("TX", 8842);
-    const priority = priorityForPlan(user.plan);
+    const priority = "standard";
 
     // Drip-feed orders start in "pending" so the fulfillment worker / admin
     // can schedule the chunks. Non-drip orders start in "processing".
@@ -304,7 +239,7 @@ export async function POST(req: NextRequest) {
             // ordering on the `priority` column.
             eta: dripConfig
               ? `${dripDays}d drip`
-              : priority === "highest" ? "<1m" : priority === "priority" ? "1m" : "2m",
+              : "2m",
             flag: "🌍",
             // dripFeedConfig is a Json column. Prisma needs DbNull (not JS null)
             // when the value is absent so the column writes SQL NULL.
@@ -377,7 +312,6 @@ export async function POST(req: NextRequest) {
       quantity,
       total: totalPrice,
       priority,
-      plan: user.plan,
       dripFeed: !!dripConfig,
       dripDays: dripConfig ? dripDays : undefined,
     });

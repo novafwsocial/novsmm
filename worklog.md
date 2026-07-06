@@ -8979,3 +8979,64 @@ Stage Summary:
 - **P1s resueltos en este bloque: 13** (P1-006, 023, 024, 025, 029, 033, 037, 038, 039, 043, 044, 070, 071, 077, 079) + 1 P2 bonus (P2-073)
 - **P1s resueltos acumulados:** 29 de ~41 (todos los de alto + medio impacto)
 - **P1s restantes:** P1-004, 007, 042, 046, 047-050, 056-057 (la mayoría ahora N/A porque los scripts fueron eliminados/deprecated en bloques anteriores), P1-078 (DR docs — ya cubierto por docs/disaster-recovery.md existente + mejoras)
+
+---
+Task ID: SUBSCRIPTION-REMOVAL
+Agent: full-stack-developer
+Task: Eliminar completamente el feature de suscripciones/pricing que debió haberse removido antes de producción.
+
+Work Log:
+- Phase 1 (Delete): Eliminé 4 archivos y sus directorios vacíos:
+  - `src/components/novsmm/plans.tsx` (sección Pricing del landing)
+  - `src/app/api/subscriptions/route.ts` (CRUD subscriptions)
+  - `src/app/api/subscriptions/seats/route.ts` (seats endpoint)
+  - `src/app/api/invoices/route.ts` (invoices list)
+  - Removed dirs: `src/app/api/subscriptions/seats/`, `src/app/api/subscriptions/`, `src/app/api/invoices/`
+
+- Phase 2 (Frontend):
+  - `src/app/page.tsx`: removí import `Plans` y `<Plans />` del JSX
+  - `src/components/novsmm/navbar.tsx`: removí entrada `{ label: "Pricing", href: "#plans" }` de NAV_LINKS
+  - `src/components/novsmm/app-view.tsx`: removí handling de `?sub=success`, `?sub=cancelled`, `?upgrade=true` (params, toasts, redirect); limpié `setDashboardTab, setView` destructuring ya no usado en `useUrlParamHandlers`
+  - `src/components/novsmm/dashboard-profile.tsx`: removí imports `useSubscriptions, useCreateSubscription, useCancelSubscription, useInvoices, CreditCard`; removí `"billing"` del union type; removí tab button Billing; DELETÉ entera `function BillingSection()` (~75 líneas); removí conditional render `{activeSection === "billing" && <BillingSection />}`; removí `planMultiplier` y `plan` del destructured data en AchievementsSection; removí span `{planMultiplier}× {plan} plan multiplier`
+  - `src/components/novsmm/dashboard-home.tsx`: removí `planMultiplier, plan` del destructured data; removí span `{planMultiplier}× {plan} multiplier`
+  - `src/hooks/use-api.ts`: DELETÉ `useSubscriptions, useCreateSubscription, useCancelSubscription` hooks; DELETÉ `useInvoices` hook; removí campos `planMultiplier: number; plan: string;` del tipo de respuesta de `useLoyalty`
+
+- Phase 3 (API routes):
+  - `src/app/api/webhooks/stripe/route.ts`: removí menciones a subscription events del docstring; removí dispatcher calls a `handleSubscriptionUpdated`, `handleSubscriptionDeleted`; en `handleCheckoutSessionCompleted` KEEP wallet top-up branch, DELETE subscription branch; DELETÉ `handleSubscriptionUpdated` y `handleSubscriptionDeleted` functions; en `handleInvoicePaymentSucceeded` removí `isSubscription` branch y lógica de extensión de period de Subscription; en `handleInvoicePaymentFailed` removí `db.subscription.findFirst/update` a past_due; DELETÉ `mapStripeSubStatus` helper; limpié import `getStripe` ya no usado
+  - `src/app/api/orders/route.ts`: DELETÉ `PLAN_ORDER_LIMITS`, `PLAN_PRIORITY`, `priorityForPlan()`, `startOfMonth()` helper; cambié `select` a `{ balance, status }`; DELETÉ plan-limit enforcement block con upgradeUrl; reemplacé `priorityForPlan(user.plan)` con `const priority = "standard"`; simplifiqué ETA a valor único "2m"; removí `plan: user.plan` del audit log metadata; limpié import `NextResponse`
+  - `src/app/api/orders/mass/route.ts`: DELETÉ `PLAN_ORDER_LIMITS`, `PLAN_PRIORITY`, `startOfMonth()`; cambié `select` a `{ balance, status }`; DELETÉ plan-limit enforcement block; reemplacé `PLAN_PRIORITY[user.plan] ?? "standard"` con `const priority = "standard"`; simplifiqué ETA a "2m"; removí `plan: user.plan` del audit log metadata
+  - `src/app/api/services/route.ts`: DELETÉ `PLAN_PLATFORM_LIMITS`; DELETÉ caller plan resolution block (let plan = "free"; select: { plan: true }); DELETÉ platform-limit enforcement block entero (allowedPlatforms, connectedPlatforms padding, platformBlocked); removí `plan, platformLimit, connectedPlatforms, platformBlocked` del response payload; limpié import `getAuthSession` ya no usado
+  - `src/app/api/me/loyalty/route.ts`: removí `PLAN_MULTIPLIERS` de re-export y import; cambié `select` a `{ id, createdAt }`; removí `planMultiplier` variable y sus campos del response payload (`planMultiplier, plan: user.plan`); limpié import `createNotification` ya no usado
+  - `src/app/api/public/settings/route.ts`: DELETÉ `PLANS` constant array (~40 líneas); removí `plans: PLANS` del response payload
+
+- Phase 4 (Lib):
+  - `src/lib/stripe.ts`: DELETÉ `createCheckoutSession()` function (subscription-mode Checkout). KEEP: `getStripe`, `setStripeCredentials`, `clearStripeCredentials`, `getWebhookSecret`, `isStripeConfigured`, `createPaymentIntent`, `createTopupCheckoutSession`, `verifyStripeWebhook`, `resolveStripeWebhookSecret`, `createRefund`
+  - `src/lib/orders.ts`: cambié `select: { plan: true, name: true }` a `select: { name: true }` en user lookup; removí `userPlan.plan` arg de `awardOrderPoints(...)` call; actualicé notification message de `${awarded.multiplier}× ${userPlan.plan} plan multiplier` a `${awarded.multiplier}× loyalty multiplier`
+  - `src/lib/services/loyalty.service.ts`: DELETÉ `PLAN_MULTIPLIERS` constant; en `awardOrderPoints` removí el parámetro `plan` y reemplacé `const multiplier = PLAN_MULTIPLIERS[plan] ?? 1` con `const multiplier = 1`. KEEP: ACHIEVEMENTS, TIERS, resolveTier, reconcileAchievements
+
+- Phase 5 (Prisma schema):
+  - `prisma/schema.prisma` (SQLite dev): removí `plan String @default("free")` field de User model; removí `subscriptions Subscription[]` relation de User; actualicé comment de `Order.priority` (removí "(plan-based)"); DELETÉ entero `Subscription` model (~22 líneas); DELETÉ entero `Invoice` model (~20 líneas). KEEP `License.plan` (panel rental, NO subscriptions)
+  - `prisma/schema.postgres.prisma` (PostgreSQL production): DELETÉ `enum UserPlan { free / starter / growth / enterprise }`; DELETÉ `enum SubscriptionStatus { active / canceled / past_due / trialing }`; DELETÉ `enum InvoiceStatus { paid / pending / void }`; removí `plan UserPlan @default(free)` de User; removí `subscriptions Subscription[]` relation de User; DELETÉ entero `Subscription` model; DELETÉ entero `Invoice` model. KEEP: `enum OrderPriority`, `enum TicketPriority`, `enum LicensePlan`, `License.plan` field
+  - `prisma/migrate-sqlite-to-postgres.ts`: DELETÉ `await migrateTable("Subscription", ...)` block (~17 líneas); DELETÉ `await migrateTable("Invoice", ...)` block (~24 líneas)
+  - Ran `bunx prisma db push --accept-data-loss` (aceptó pérdida de 5 Subscription rows + 4 Invoice rows + 5 User.plan values — todos dev/seed data). Prisma Client regenerado.
+
+- Phase 6 (Verification):
+  - `bun run lint`: 0 errores (1 warning pre-existente en load-test.js, no relacionado)
+  - Dev server running: `curl http://localhost:3000/` → HTTP 200 (0.79s)
+  - Endpoints removed: `/api/subscriptions` 404, `/api/subscriptions/seats` 404, `/api/invoices` 404
+  - Endpoints kept: `/api/public/settings` 200 (sin `plans` field en response, verificado), `/api/services` 200, `/api/me/loyalty` 401 (auth required), `/api/orders` 401 (auth required), `/api/orders/mass` 403 (CSRF)
+  - `dev.log` sin errores de compilación recientes. (Errores viejos "Module not found: '@/components/novsmm/plans'" fueron de compilaciones stale antes de que Turbopack reconociera mi edición de page.tsx — desaparecieron tras el hot-reload)
+  - JWT_SESSION_ERROR pre-existente en log (no relacionado con este task — NextAuth + JWE decryption issue del entorno dev)
+
+Stage Summary:
+- **SUBSCRIPCIONES/PRICING ELIMINADAS COMPLETAMENTE** de toda la app.
+- **4 archivos eliminados**: plans.tsx, subscriptions/route.ts, subscriptions/seats/route.ts, invoices/route.ts
+- **15 archivos modificados**:
+  - Frontend (6): page.tsx, navbar.tsx, app-view.tsx, dashboard-profile.tsx, dashboard-home.tsx, hooks/use-api.ts
+  - API routes (6): webhooks/stripe/route.ts, orders/route.ts, orders/mass/route.ts, services/route.ts, me/loyalty/route.ts, public/settings/route.ts
+  - Lib (3): lib/stripe.ts, lib/orders.ts, lib/services/loyalty.service.ts
+  - Prisma (3): schema.prisma, schema.postgres.prisma, migrate-sqlite-to-postgres.ts
+- **DB schema synced** via `bunx prisma db push --accept-data-loss` (Subscription e Invoice tables dropped, User.plan column dropped)
+- **Lint: 0 errors, 1 pre-existing warning** (load-test.js)
+- **Dev server: HTTP 200** on home page; todos los endpoints removidos retornan 404; los kept endpoints funcionan correctamente
+- **KEEP intactos (no tocados)**: `stripe` package, wallet/topup flow, admin/refunds (createRefund), License.plan + LicensePlan enum (panel rental), OrderPriority enum + Order.priority field (fulfillment priority, default "standard")

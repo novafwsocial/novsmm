@@ -371,50 +371,6 @@ async function main() {
     }
   });
 
-  await migrateTable("Subscription", async () => {
-    const rows = await sqlite.subscription.findMany();
-    counts.Subscription = { source: rows.length, dest: 0 };
-    for (const row of rows) {
-      await postgres.subscription.upsert({
-        where: { id: row.id },
-        create: {
-          ...row,
-          amount: toDecimal(row.amount),
-        },
-        update: {
-          ...row,
-          amount: toDecimal(row.amount),
-        },
-      });
-      counts.Subscription.dest++;
-    }
-  });
-
-  await migrateTable("Invoice", async () => {
-    const rows = await sqlite.invoice.findMany();
-    counts.Invoice = { source: rows.length, dest: 0 };
-    for (const row of rows) {
-      await postgres.invoice.upsert({
-        where: { id: row.id },
-        create: {
-          ...row,
-          amount: toDecimal(row.amount),
-          tax: toDecimal(row.tax),
-          total: toDecimal(row.total),
-          items: tryParseJSON(row.items) || [],
-        },
-        update: {
-          ...row,
-          amount: toDecimal(row.amount),
-          tax: toDecimal(row.tax),
-          total: toDecimal(row.total),
-          items: tryParseJSON(row.items) || [],
-        },
-      });
-      counts.Invoice.dest++;
-    }
-  });
-
   await migrateTable("Promotion", async () => {
     const rows = await sqlite.promotion.findMany();
     counts.Promotion = { source: rows.length, dest: 0 };

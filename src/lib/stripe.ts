@@ -94,38 +94,6 @@ export async function createPaymentIntent(
 }
 
 /**
- * Create a Stripe Checkout Session for a recurring subscription.
- *
- * Used by POST /api/subscriptions when STRIPE_PRICE_* env vars are set.
- * Returns the hosted checkout URL the browser should be redirected to.
- */
-export async function createCheckoutSession(params: {
-  priceId: string;
-  userId: string;
-  customerEmail: string;
-  successUrl: string;
-  cancelUrl: string;
-}): Promise<{ id: string; url: string | null } | null> {
-  const stripe = getStripe();
-  if (!stripe) return null;
-
-  const session = await stripe.checkout.sessions.create({
-    mode: "subscription",
-    line_items: [{ price: params.priceId, quantity: 1 }],
-    success_url: params.successUrl,
-    cancel_url: params.cancelUrl,
-    client_reference_id: params.userId,
-    customer_email: params.customerEmail,
-    metadata: {
-      userId: params.userId,
-      source: "novsmm_subscription",
-    },
-  });
-
-  return { id: session.id, url: session.url };
-}
-
-/**
  * Create a Stripe Checkout Session for a one-time wallet top-up.
  *
  * The browser redirects to session.url. After payment, Stripe redirects

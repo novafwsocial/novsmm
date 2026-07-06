@@ -18,23 +18,7 @@ import { enqueueJob } from "@/lib/queues";
  * - Debits the balance once and creates all orders + transactions in a single
  *   `db.$transaction([...])` so the batch either fully succeeds or fully fails.
  * - Returns the array of created orders.
- *
- * Plan-based monthly limits are still enforced — each row counts as one order.
  */
-
-const PLAN_ORDER_LIMITS: Record<string, number | null> = {
-  free: 50,
-  starter: 1000,
-  growth: 10000,
-  enterprise: null,
-};
-
-const PLAN_PRIORITY: Record<string, "standard" | "priority" | "highest"> = {
-  free: "standard",
-  starter: "standard",
-  growth: "priority",
-  enterprise: "highest",
-};
 
 const massOrderRowSchema = z.object({
   serviceId: z.string().min(1),
@@ -48,11 +32,6 @@ const massOrderSchema = z.object({
     .min(1, "At least one order is required")
     .max(100, "Max 100 orders per mass batch"),
 });
-
-function startOfMonth(): Date {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-}
 
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -71,25 +50,10 @@ export async function POST(req: NextRequest) {
     // Load user once for the whole batch
     const user = await db.user.findUnique({
       where: { id: userId },
-      select: { balance: true, status: true, plan: true },
+      select: { balance: true, status: true },
     });
     if (!user) return apiError("User not found", 404);
     if (user.status !== "active") return apiError("Account suspended", 403);
-
-    // ── Plan limit enforcement (whole batch counts against monthly quota) ──
-    const planLimit = PLAN_ORDER_LIMITS[user.plan] ?? PLAN_ORDER_LIMITS.free;
-    if (planLimit !== null) {
-      const monthStart = startOfMonth();
-      const used = await db.order.count({
-        where: { userId, createdAt: { gte: monthStart } },
-      });
-      if (used + rows.length > planLimit) {
-        return apiError(
-          `Mass order would exceed your plan limit (${planLimit}/month). Used ${used}, attempting to place ${rows.length}.`,
-          403,
-        );
-      }
-    }
 
     // ── Resolve services + validate quantities + compute totals ──
     const serviceIds = Array.from(new Set(rows.map((r) => r.serviceId)));
@@ -141,7 +105,7 @@ export async function POST(req: NextRequest) {
     // full-table count() scans. They MUST be generated OUTSIDE the outer
     // $transaction below (nesting Prisma transactions would deadlock/error
     // on some drivers).
-    const priority = PLAN_PRIORITY[user.plan] ?? "standard";
+    const priority = "standard";
 
     const createdOrderMetas: {
       publicId: string;
@@ -210,12 +174,7 @@ export async function POST(req: NextRequest) {
               providerId: row.service.providerId,
               providerName: row.service.provider?.name,
               link: row.link,
-              eta:
-                priority === "highest"
-                  ? "<1m"
-                  : priority === "priority"
-                    ? "1m"
-                    : "2m",
+              eta: "2m",
               flag: "🌍",
             },
           });
@@ -274,7 +233,6 @@ export async function POST(req: NextRequest) {
       count: prepared.length,
       total: grandTotal,
       publicIds: createdOrderMetas.map((m) => m.publicId),
-      plan: user.plan,
     });
 
     // Enqueue fulfillment as a background job for each order

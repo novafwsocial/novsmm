@@ -1,13 +1,11 @@
 import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiOk, apiError } from "@/lib/api-utils";
-import { createNotification } from "@/lib/notify";
 
 // Phase 5: Business logic extracted to src/lib/services/loyalty.service.ts
 // Re-export for backward compatibility (other modules may import from here)
 export {
   ACHIEVEMENTS,
-  PLAN_MULTIPLIERS,
   TIERS,
   resolveTier,
   reconcileAchievements,
@@ -17,7 +15,6 @@ export {
 // Import for local use in the GET handler
 import {
   ACHIEVEMENTS,
-  PLAN_MULTIPLIERS,
   TIERS,
   resolveTier,
   reconcileAchievements,
@@ -85,7 +82,7 @@ export async function GET() {
     const [user, pointsAgg, recentPoints, unlockedAchievements] = await Promise.all([
       db.user.findUnique({
         where: { id: userId },
-        select: { id: true, plan: true, createdAt: true },
+        select: { id: true, createdAt: true },
       }),
       db.loyaltyPoint.aggregate({
         where: { userId },
@@ -108,7 +105,6 @@ export async function GET() {
 
     const totalPoints = pointsAgg._sum.points ?? 0;
     const tierInfo = resolveTier(totalPoints);
-    const planMultiplier = PLAN_MULTIPLIERS[user.plan] ?? 1;
 
     // Build the achievements list (unlocked + locked).
     const unlockedMap = new Map(unlockedAchievements.map((a) => [a.type, a]));
@@ -175,8 +171,6 @@ export async function GET() {
         progress: tierInfo.progress,
         pointsToNext: tierInfo.pointsToNext,
       },
-      planMultiplier,
-      plan: user.plan,
       recentPoints,
       achievements: {
         unlocked,

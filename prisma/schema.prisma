@@ -28,7 +28,6 @@ model User {
   currency      String    @default("USD")
   language      String    @default("English")
   status        String    @default("active") // active | suspended | pending
-  plan          String    @default("free") // free | starter | growth | enterprise
   balance       Float     @default(0)
   heldBalance   Float     @default(0)
   lifetimeEarnings Float  @default(0)
@@ -46,7 +45,6 @@ model User {
   favorites     Favorite[]
   loyaltyPoints LoyaltyPoint[]
   achievements  Achievement[]
-  subscriptions Subscription[]
 }
 
 model Account {
@@ -143,7 +141,7 @@ model Order {
   profit          Float
   status          String   @default("processing") // pending | processing | in_progress | partial | completed | cancelled
   progress        Int      @default(0) // 0-100
-  priority        String   @default("standard") // standard | priority | highest (plan-based)
+  priority        String   @default("standard") // standard | priority | highest
   providerId      String?
   providerName    String?
   link            String?
@@ -378,52 +376,6 @@ model WebhookLog {
   @@index([provider])
   @@index([status])
   @@index([createdAt])
-}
-
-// ─────────── Subscriptions (recurring billing) ───────────
-model Subscription {
-  id                   String   @id @default(cuid())
-  userId               String
-  plan                 String   // starter | growth | enterprise
-  stripeSubscriptionId String?
-  status               String   @default("active") // active | canceled | past_due | trialing
-  amount               Float    // monthly amount in USD
-  currentPeriodStart   DateTime?
-  currentPeriodEnd     DateTime?
-  cancelAtPeriodEnd    Boolean  @default(false)
-  seatsUsed            Int      @default(1) // currently-occupied seats (owner counts as 1)
-  seatsLimit           Int      @default(1) // max seats allowed by the plan
-  createdAt            DateTime @default(now())
-  updatedAt            DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([stripeSubscriptionId])
-  @@index([userId, status])
-}
-
-// ─────────── Invoices ───────────
-model Invoice {
-  id          String   @id @default(cuid())
-  publicId    String   @unique // INV-0001
-  userId      String
-  type        String   // order | topup | subscription | refund
-  amount      Float
-  tax         Float    @default(0)
-  total       Float
-  currency    String   @default("USD")
-  status      String   @default("paid") // paid | pending | void
-  items       Json   // JSON: [{ description, quantity, unitPrice, total }]
-  pdfUrl      String?
-  createdAt   DateTime @default(now())
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([userId, status])
-  @@index([userId, createdAt])
 }
 
 // ─────────── Promotions (temporary discounts) ───────────

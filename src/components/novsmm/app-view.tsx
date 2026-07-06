@@ -39,9 +39,6 @@ function TabLoader() {
 // On mount we inspect window.location.search for one of:
 //   ?verify=<token>     → POST /api/auth/verify-email
 //   ?reset=<token>      → show the ResetPasswordModal
-//   ?sub=success        → toast + strip
-//   ?sub=cancelled      → toast + strip
-//   ?upgrade=true       → setDashboardTab("profile") + toast + strip
 // `history.replaceState` strips the param from the URL after handling.
 
 function stripParam(key: string) {
@@ -54,7 +51,6 @@ function stripParam(key: string) {
 
 function useUrlParamHandlers() {
   const { toast } = useToast();
-  const { setDashboardTab, setView } = useApp();
   const [resetToken, setResetToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -63,8 +59,6 @@ function useUrlParamHandlers() {
 
     const verify = params.get("verify");
     const reset = params.get("reset");
-    const sub = params.get("sub");
-    const upgrade = params.get("upgrade");
 
     if (verify) {
       (async () => {
@@ -86,24 +80,6 @@ function useUrlParamHandlers() {
     if (reset) {
       setResetToken(reset);
       stripParam("reset");
-    }
-
-    if (sub === "success") {
-      toast({ title: "Subscription activated", description: "Your plan is now live." });
-      stripParam("sub");
-    } else if (sub === "cancelled") {
-      toast({ title: "Subscription cancelled", description: "No charge was made." });
-      stripParam("sub");
-    }
-
-    if (upgrade === "true") {
-      setView("dashboard");
-      setDashboardTab("profile");
-      toast({
-        title: "Upgrade your plan",
-        description: "You've hit your current plan's limits. Pick a higher tier to keep going.",
-      });
-      stripParam("upgrade");
     }
   }, []);
 

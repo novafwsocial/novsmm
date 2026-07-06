@@ -8,7 +8,6 @@ import { Marketplace } from "@/components/novsmm/marketplace";
 import { Payments } from "@/components/novsmm/payments";
 import { Stats } from "@/components/novsmm/stats";
 import { Testimonials } from "@/components/novsmm/testimonials";
-import { Plans } from "@/components/novsmm/plans";
 import { Security } from "@/components/novsmm/security";
 import { Footer } from "@/components/novsmm/footer";
 import { AppView } from "@/components/novsmm/app-view";
@@ -31,7 +30,6 @@ export default function Home() {
                 <Payments />
                 <Stats />
                 <Testimonials />
-                <Plans />
                 <Security />
               </main>
               <Footer />

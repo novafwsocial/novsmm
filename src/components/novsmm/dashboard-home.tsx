@@ -650,7 +650,7 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
     );
   }
 
-  const { totalPoints, tier, achievements, planMultiplier, plan } = data;
+  const { totalPoints, tier, achievements } = data;
   const current = tier.current;
   const next = tier.next;
   const recentUnlocked = achievements.unlocked.slice(0, 6);
@@ -698,9 +698,6 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
               >
                 <Crown className="h-3 w-3" />
                 {current.emoji} {current.label}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">
-                {planMultiplier}× {plan} multiplier
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-700">
                 <Trophy className="h-3 w-3" />

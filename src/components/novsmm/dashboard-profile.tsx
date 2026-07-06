@@ -19,7 +19,6 @@ import {
   Eye,
   EyeOff,
   Gift,
-  CreditCard,
   Copy,
   Crown,
   MessageCircle,
@@ -37,10 +36,6 @@ import {
   useUpdateProfile,
   usePublicCurrencies,
   usePublicLanguages,
-  useSubscriptions,
-  useCreateSubscription,
-  useCancelSubscription,
-  useInvoices,
   useReferrals,
   useLoyalty,
 } from "@/hooks/use-api";
@@ -60,7 +55,7 @@ export function DashboardProfile() {
   const languages = langData?.languages ?? [];
 
   const [edits, setEdits] = useState<Record<string, string>>({});
-  const [activeSection, setActiveSection] = useState<"profile" | "security" | "notifications" | "sessions" | "billing" | "referrals" | "achievements">("profile");
+  const [activeSection, setActiveSection] = useState<"profile" | "security" | "notifications" | "sessions" | "referrals" | "achievements">("profile");
 
   const form = {
     name: edits.name ?? user.name ?? "",
@@ -126,7 +121,6 @@ export function DashboardProfile() {
           {[
             { id: "profile", label: "Profile", icon: User },
             { id: "security", label: "Security", icon: Shield },
-            { id: "billing", label: "Billing", icon: DollarSign },
             { id: "achievements", label: "Achievements", icon: Trophy },
             { id: "referrals", label: "Referrals", icon: Gift },
             { id: "notifications", label: "Notifications", icon: Bell },
@@ -194,9 +188,6 @@ export function DashboardProfile() {
 
       {/* Security section */}
       {activeSection === "security" && <SecuritySection />}
-
-      {/* Billing section */}
-      {activeSection === "billing" && <BillingSection />}
 
       {/* Achievements section */}
       {activeSection === "achievements" && <AchievementsSection />}
@@ -537,83 +528,6 @@ function SessionsSection() {
   );
 }
 
-// ─── Billing Section (Subscriptions + Invoices) ───
-function BillingSection() {
-  const { data: subData, isLoading } = useSubscriptions();
-  const { data: invData } = useInvoices();
-  const createSub = useCreateSubscription();
-  const cancelSub = useCancelSubscription();
-  const { data: sessionData } = useSession();
-  const currency = (sessionData?.user as any)?.currency ?? "USD";
-  const [loadingPlan, setLoadingPlan] = useState<string | null>(null);
-
-  const subscription = subData?.subscription;
-  const plans = subData?.plans ?? [];
-  const invoices = invData?.invoices ?? [];
-
-  const handleSubscribe = async (planId: string) => {
-    setLoadingPlan(planId);
-    await createSub.mutateAsync(planId);
-    setLoadingPlan(null);
-  };
-
-  if (isLoading) return <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>;
-
-  return (
-    <div className="flex flex-col gap-4">
-      {/* Current subscription */}
-      <div className="rounded-2xl border border-border/60 bg-background p-6">
-        <div className="flex items-center gap-2 text-base font-semibold"><CreditCard className="h-4 w-4 text-primary" />Subscription</div>
-        {subscription ? (
-          <div className="mt-4 flex items-center justify-between rounded-xl bg-muted/30 p-4">
-            <div>
-              <div className="text-lg font-semibold capitalize">{subscription.plan} plan</div>
-              <div className="text-sm text-muted-foreground">{formatPrice(subscription.amount, currency)}/mo · {subscription.status}</div>
-              {subscription.currentPeriodEnd && <div className="text-xs text-muted-foreground">Next billing: {new Date(subscription.currentPeriodEnd).toLocaleDateString()}</div>}
-            </div>
-            <button onClick={() => cancelSub.mutate()} className="rounded-lg border border-red-500/30 px-4 py-2 text-xs font-medium text-red-600 hover:bg-red-500/5">Cancel</button>
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">No active subscription. Choose a plan below.</p>
-        )}
-      </div>
-
-      {/* Plans */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        {plans.map((p: any) => (
-          <div key={p.id} className={cn("rounded-2xl border p-5", p.id === "growth" ? "border-primary nov-ring" : "border-border/60")}>
-            {p.id === "growth" && <div className="mb-2 inline-block rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">POPULAR</div>}
-            <div className="text-lg font-semibold">{p.name}</div>
-            <div className="mt-1 text-3xl font-semibold tabular-nums">{formatPrice(p.amount, currency)}<span className="text-sm font-normal text-muted-foreground">/mo</span></div>
-            <ul className="mt-3 flex flex-col gap-1.5">
-              {p.features.map((f: string) => <li key={f} className="flex items-center gap-1.5 text-xs text-muted-foreground"><CheckCircle2 className="h-3 w-3 text-emerald-500" />{f}</li>)}
-            </ul>
-            <button onClick={() => handleSubscribe(p.id)} disabled={loadingPlan === p.id || !!subscription} className="mt-4 w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60">
-              {loadingPlan === p.id ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Subscribe"}
-            </button>
-          </div>
-        ))}
-      </div>
-
-      {/* Invoices */}
-      <div className="rounded-2xl border border-border/60 bg-background p-6">
-        <div className="flex items-center justify-between">
-          <div className="text-base font-semibold">Invoices</div>
-          <button onClick={() => window.open("/api/invoices?format=csv", "_blank")} className="text-xs font-medium text-primary hover:underline">Export CSV →</button>
-        </div>
-        <div className="mt-3 flex flex-col gap-2">
-          {invoices.length > 0 ? invoices.slice(0, 5).map((inv: any) => (
-            <div key={inv.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3">
-              <div><div className="text-sm font-medium font-mono">{inv.publicId}</div><div className="text-[10px] text-muted-foreground">{inv.type} · {new Date(inv.createdAt).toLocaleDateString()}</div></div>
-              <div className="flex items-center gap-3"><span className="text-sm font-semibold tabular-nums">{formatPrice(inv.total, currency)}</span><span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", inv.status === "paid" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{inv.status}</span></div>
-            </div>
-          )) : <div className="py-6 text-center text-sm text-muted-foreground">No invoices yet.</div>}
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Referrals Section ───
 function ReferralsSection() {
   const { data, isLoading } = useReferrals();
@@ -934,7 +848,7 @@ function AchievementsSection() {
     );
   }
 
-  const { totalPoints, tier, achievements, recentPoints, planMultiplier, plan, stats } = data;
+  const { totalPoints, tier, achievements, recentPoints, stats } = data;
   const current = tier.current;
   const next = tier.next;
 
@@ -975,9 +889,6 @@ function AchievementsSection() {
                 style={{ background: current.color }}
               >
                 <Crown className="h-3 w-3" /> {current.emoji} {current.label}
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 text-xs font-medium text-foreground">
-                {planMultiplier}× {plan} plan multiplier
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-semibold text-emerald-700">
                 <Trophy className="h-3 w-3" /> {totalPoints.toLocaleString()} pts

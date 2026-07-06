@@ -46,13 +46,6 @@ enum UserStatus {
   pending
 }
 
-enum UserPlan {
-  free
-  starter
-  growth
-  enterprise
-}
-
 enum ProviderStatus {
   healthy
   degraded
@@ -136,19 +129,6 @@ enum WebhookLogStatus {
   rejected
 }
 
-enum SubscriptionStatus {
-  active
-  canceled
-  past_due
-  trialing
-}
-
-enum InvoiceStatus {
-  paid
-  pending
-  void
-}
-
 enum PromotionStatus {
   scheduled
   active
@@ -225,7 +205,6 @@ model User {
   currency      String    @default("USD") @db.VarChar(10)
   language      String    @default("English") @db.VarChar(50)
   status        UserStatus @default(active)
-  plan          UserPlan  @default(free)
   balance       Decimal   @default(0) @db.Decimal(12, 4)
   heldBalance   Decimal   @default(0) @db.Decimal(12, 4)
   lifetimeEarnings Decimal @default(0) @db.Decimal(12, 4)
@@ -243,7 +222,6 @@ model User {
   favorites     Favorite[]
   loyaltyPoints LoyaltyPoint[]
   achievements  Achievement[]
-  subscriptions Subscription[]
 
   @@map("users")
 }
@@ -598,56 +576,6 @@ model WebhookLog {
   @@index([status])
   @@index([createdAt])
   @@map("webhook_logs")
-}
-
-// ─────────── Subscriptions ───────────
-
-model Subscription {
-  id                   String             @id @default(cuid())
-  userId               String
-  plan                 String             @db.VarChar(50)
-  stripeSubscriptionId String?            @db.VarChar(255)
-  status               SubscriptionStatus @default(active)
-  amount               Decimal            @db.Decimal(12, 4)
-  currentPeriodStart   DateTime?
-  currentPeriodEnd     DateTime?
-  cancelAtPeriodEnd    Boolean            @default(false)
-  seatsUsed            Int                @default(1)
-  seatsLimit           Int                @default(1)
-  createdAt            DateTime           @default(now())
-  updatedAt            DateTime           @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([status])
-  @@index([stripeSubscriptionId])
-  @@index([userId, status])
-  @@map("subscriptions")
-}
-
-// ─────────── Invoices ───────────
-
-model Invoice {
-  id          String        @id @default(cuid())
-  publicId    String        @unique @db.VarChar(50)
-  userId      String
-  type        String        @db.VarChar(50)
-  amount      Decimal       @db.Decimal(12, 4)
-  tax         Decimal       @default(0) @db.Decimal(12, 4)
-  total       Decimal       @db.Decimal(12, 4)
-  currency    String        @default("USD") @db.VarChar(10)
-  status      InvoiceStatus @default(paid)
-  items       Json
-  pdfUrl      String?       @db.Text
-  createdAt   DateTime      @default(now())
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
-  @@index([userId, status])
-  @@index([userId, createdAt])
-  @@map("invoices")
 }
 
 // ─────────── Promotions ───────────

@@ -53,13 +53,6 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   { type: "loyal_customer", label: "Loyal Customer",  description: "Active for 30+ days",             icon: "💚", bonus: 200 },
 ];
 
-export const PLAN_MULTIPLIERS: Record<string, number> = {
-  free: 1,
-  starter: 1.5,
-  growth: 2,
-  enterprise: 3,
-};
-
 export const TIERS: Tier[] = [
   {
     id: "bronze",
@@ -240,16 +233,15 @@ export async function reconcileAchievements(userId: string): Promise<string[]> {
 
 /**
  * Award loyalty points for a completed order.
- * Points = floor(amount × planMultiplier).
+ * Points = floor(amount × tier multiplier).
  * Returns the points awarded and the multiplier used.
  */
 export async function awardOrderPoints(
   userId: string,
   orderId: string,
   amount: number,
-  plan: string,
 ): Promise<{ points: number; multiplier: number }> {
-  const multiplier = PLAN_MULTIPLIERS[plan] ?? 1;
+  const multiplier = 1;
   const points = Math.max(0, Math.floor(amount * multiplier));
   if (points <= 0) return { points: 0, multiplier };
   await db.loyaltyPoint.create({

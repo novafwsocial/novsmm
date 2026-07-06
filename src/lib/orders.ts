@@ -155,21 +155,20 @@ export async function simulateFulfillment(
       try {
         const userPlan = await db.user.findUnique({
           where: { id: userId },
-          select: { plan: true, name: true },
+          select: { name: true },
         });
         if (userPlan) {
           const awarded = await awardOrderPoints(
             userId,
             currentOrder.id,
             currentOrder.totalPrice,
-            userPlan.plan,
           );
           if (awarded.points > 0) {
             await createNotification({
               userId,
               type: "system",
               title: `+${awarded.points} loyalty points earned`,
-              message: `Order #${currentOrder.publicId} — ${awarded.points} pts awarded (${awarded.multiplier}× ${userPlan.plan} plan multiplier).`,
+              message: `Order #${currentOrder.publicId} — ${awarded.points} pts awarded (${awarded.multiplier}× loyalty multiplier).`,
               severity: "success",
               sendEmail: false,
             });

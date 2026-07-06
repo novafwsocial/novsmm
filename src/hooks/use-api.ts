@@ -847,44 +847,11 @@ export function useRemoveFavorite() {
   });
 }
 
-// ── Subscriptions ──
-export function useSubscriptions() {
-  return useQuery({
-    queryKey: ["subscriptions"],
-    queryFn: () => api.get<{ subscription: any; plans: any[] }>("/api/subscriptions"),
-  });
-}
-export function useCreateSubscription() {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  return useMutation({
-    mutationFn: (planId: string) => api.post("/api/subscriptions", { planId }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subscriptions"] }); toast({ title: "Subscribed!" }); },
-    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
-  });
-}
-export function useCancelSubscription() {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  return useMutation({
-    mutationFn: () => api.delete("/api/subscriptions"),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["subscriptions"] }); toast({ title: "Subscription canceled" }); },
-  });
-}
-
 // ── Referrals ──
 export function useReferrals() {
   return useQuery({
     queryKey: ["referrals"],
     queryFn: () => api.get<any>("/api/referrals"),
-  });
-}
-
-// ── Invoices ──
-export function useInvoices() {
-  return useQuery({
-    queryKey: ["invoices"],
-    queryFn: () => api.get<{ invoices: any[] }>("/api/invoices"),
   });
 }
 
@@ -917,8 +884,6 @@ export function useLoyalty() {
           progress: number;
           pointsToNext: number;
         };
-        planMultiplier: number;
-        plan: string;
         recentPoints: {
           id: string;
           points: number;

@@ -14,7 +14,6 @@ const NAV_LINKS = [
   { label: "Marketplace", href: "#marketplace" },
   { label: "Payments", href: "#payments" },
   { label: "Security", href: "#security" },
-  { label: "Pricing", href: "#plans" },
 ];
 
 export function Navbar() {
