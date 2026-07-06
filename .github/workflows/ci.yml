@@ -116,7 +116,6 @@ jobs:
             type=ref,event=branch
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
-
       - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
@@ -139,29 +138,53 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Get short SHA for image tag
+        id: sha
+        run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1
+        env:
+          IMAGE_TAG: ${{ steps.sha.outputs.short }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
           key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: IMAGE_TAG,REGISTRY,IMAGE_NAME
           script: |
             cd /opt/novsmm
-            
-            # Save current image tags for rollback
-            PREV_WEB=$(docker compose images web 2>/dev/null | awk 'NR==2 {print $3}' || echo "")
-            
-            docker compose pull
-            
+
+            FULL_IMAGE="${REGISTRY}/${IMAGE_NAME}:main-${IMAGE_TAG}"
+            PREV_IMAGE=$(docker compose config --images web 2>/dev/null || echo "")
+
+            echo "Deploying image: $FULL_IMAGE"
+            echo "Previous image: $PREV_IMAGE"
+
+            # Pull the new image explicitly
+            docker pull "$FULL_IMAGE" || { echo "❌ Failed to pull image"; exit 1; }
+
+            # Update docker-compose.yml to use the SHA-tagged image
+            # This ensures we deploy the exact image from this build, not :latest
+            sed -i "s|image:.*web|image: $FULL_IMAGE|" docker-compose.yml 2>/dev/null || true
+
             # Run migrations BEFORE starting new containers
-            # This prevents new code from running against old schema
             docker compose up -d postgres redis
             sleep 10
+
+            # Run migrations using the new image
             docker compose run --rm --no-deps web bun run prisma migrate deploy
-            
-            # Now start all services with the updated schema
+            MIGRATE_EXIT=$?
+
+            if [ $MIGRATE_EXIT -ne 0 ]; then
+              echo "❌ Migration failed — aborting deploy (no containers updated)"
+              exit 1
+            fi
+
+            # Start all services with the new image
             docker compose up -d --remove-orphans
-            
+
             # Post-deploy health check (5 retries, 10s apart)
             HEALTHY=false
             for i in 1 2 3 4 5; do
@@ -173,15 +196,26 @@ jobs:
               fi
               echo "Health check attempt $i failed, retrying..."
             done
-            
+
             if [ "$HEALTHY" = "false" ]; then
               echo "❌ Deploy failed health check — rolling back"
+
+              # Print diagnostics
               docker compose logs --tail 50 web
-              if [ -n "$PREV_WEB" ]; then
-                docker tag "$PREV_WEB" novsmm-web:latest
+
+              # Rollback: restore previous image
+              if [ -n "$PREV_IMAGE" ] && [ "$PREV_IMAGE" != "$FULL_IMAGE" ]; then
+                echo "Rolling back to previous image: $PREV_IMAGE"
+                sed -i "s|image:.*web|image: $PREV_IMAGE|" docker-compose.yml 2>/dev/null || true
                 docker compose up -d --no-deps --force-recreate web
+                echo "⚠️  Image rolled back to: $PREV_IMAGE"
+                echo "⚠️  Database migrations were applied and NOT rolled back."
+                echo "⚠️  If the migration was destructive, manual intervention is required."
+              else
+                echo "⚠️  No previous image available for rollback."
               fi
+
               exit 1
             fi
-            
-            echo "✅ Deploy completed at $(date)"
+
+            echo "✅ Deploy completed at $(date) with image: $FULL_IMAGE"
