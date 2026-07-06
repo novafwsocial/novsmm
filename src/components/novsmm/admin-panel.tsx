@@ -131,7 +131,7 @@ const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
   { id: "security", label: "Security", icon: Lock },
   { id: "roles", label: "Roles", icon: ShieldCheck },
   { id: "socialAuth", label: "Social Auth", icon: KeyRound },
-  { id: "version", label: "Version", icon: Globe },
+  { id: "version", label: "Version", icon: ScrollText },
 ];
 
 export function AdminPanel() {
