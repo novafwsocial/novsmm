@@ -19,6 +19,7 @@ RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC
 ok()   { echo -e "${GREEN}  ✅${NC} $1"; }
 fail() { echo -e "${RED}  ❌${NC} $1"; }
 info() { echo -e "${CYAN}  ℹ️${NC} $1"; }
+warn() { echo -e "${YELLOW}  ⚠️${NC} $1"; }
 
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
@@ -62,7 +63,9 @@ else
 fi
 
 # Verificar que el backup tiene datos
-TABLE_COUNT=$(gunzip -c "$PG_FILE" 2>/dev/null | grep -c "CREATE TABLE" || echo "0")
+# pg_dump --format=custom es binario — grep no funciona.
+# Usar pg_restore --list para listar objetos del backup de forma confiable.
+TABLE_COUNT=$(docker compose exec -T postgres pg_restore --list "$PG_FILE" 2>/dev/null | grep -c "TABLE" || echo "0")
 info "Tablas en backup: $TABLE_COUNT"
 if [ "$TABLE_COUNT" -ge 25 ]; then
   ok "Backup contiene $TABLE_COUNT tablas"

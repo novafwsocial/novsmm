@@ -102,7 +102,11 @@ ok "Servicios web/worker/notifications detenidos"
 # ── Drop + recreate database ──
 echo ""
 echo "═══ Recreando base de datos ═══"
+# Terminate active connections before dropping — otherwise DROP DATABASE
+# fails with "database is being accessed by other users" and the script
+# aborts AFTER dropping, causing total data loss.
 docker compose exec -T postgres psql -U novsmm -d postgres <<'SQL'
+SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = 'novsmm' AND pid <> pg_backend_pid();
 DROP DATABASE IF EXISTS novsmm;
 CREATE DATABASE novsmm;
 SQL
