@@ -14,7 +14,7 @@
 
 services:
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.54.1
     container_name: novsmm-prometheus
     restart: unless-stopped
     volumes:
@@ -34,7 +34,7 @@ services:
       - novsmm-network
 
   alertmanager:
-    image: prom/alertmanager:latest
+    image: prom/alertmanager:v0.27.0
     container_name: novsmm-alertmanager
     restart: unless-stopped
     volumes:
@@ -45,12 +45,12 @@ services:
       - novsmm-network
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.3.0
     container_name: novsmm-grafana
     restart: unless-stopped
     environment:
-      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
-      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:?Set GRAFANA_USER in .env}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env — must not be 'admin'}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - grafana_data:/var/lib/grafana
@@ -62,7 +62,7 @@ services:
       - novsmm-network
 
   node-exporter:
-    image: prom/node-exporter:latest
+    image: prom/node-exporter:v1.8.2
     container_name: novsmm-node-exporter
     restart: unless-stopped
     pid: host

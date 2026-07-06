@@ -26,6 +26,7 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    init: true
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-novsmm}
       POSTGRES_USER: ${POSTGRES_USER:-novsmm}
@@ -33,8 +34,8 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups  # Mount for backup scripts
-    ports:
-      - "127.0.0.1:5432:5432"  # Only accessible locally (nginx/web access via network)
+    # No ports exposed — services communicate via Docker network
+    # Use `docker compose exec postgres psql ...` for direct access
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-novsmm} -d ${POSTGRES_DB:-novsmm}"]
       interval: 10s
@@ -47,13 +48,14 @@ services:
   redis:
     image: redis:7-alpine
     restart: unless-stopped
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    init: true
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
     volumes:
       - redis_data:/data
-    ports:
-      - "127.0.0.1:6379:6379"  # Only accessible locally
+    # No ports exposed — services communicate via Docker network
+    # Use `docker compose exec redis redis-cli ...` for direct access
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -66,10 +68,11 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
+    init: true
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?connection_limit=10&pool_timeout=20
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       WS_SERVICE_URL: http://notifications:3003/broadcast
       NODE_ENV: production
     depends_on:
@@ -96,11 +99,11 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["bun", "run", "worker"]
+    command: ["bun", "run", "worker:prod"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?connection_limit=10&pool_timeout=20
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       NODE_ENV: production
     depends_on:
       postgres:
@@ -109,6 +112,14 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
+    # Worker has no HTTP server — override the web HEALTHCHECK
+    healthcheck:
+      test: ["CMD-SHELL", "bun -e \"process.exit(0)\" || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    init: true
     networks:
       - novsmm-network
 
@@ -118,9 +129,10 @@ services:
       context: ./mini-services/notifications-service
       dockerfile: Dockerfile
     restart: unless-stopped
+    init: true
     env_file: .env
     environment:
-      REDIS_URL: redis://redis:6379
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       NOTIFICATIONS_SERVICE_PORT: "3003"
       NODE_ENV: production
     depends_on:
@@ -140,6 +152,7 @@ services:
   nginx:
     image: nginx:alpine
     restart: unless-stopped
+    init: true
     ports:
       - "80:80"
       - "443:443"

@@ -11,7 +11,7 @@ FROM oven/bun:1.1 AS deps
 WORKDIR /app
 
 # Copy only package files for caching
-COPY package.json bun.lockb* ./
+COPY package.json bun.lock* ./
 COPY mini-services/notifications-service/package.json ./mini-services/notifications-service/package.json
 
 # Install all dependencies (including dev for build)
@@ -40,19 +40,21 @@ RUN bun run db:generate
 # Build Next.js (standalone output)
 RUN bun run build
 
-# Build mini-services
-RUN cd mini-services/notifications-service && bun run build 2>/dev/null || true
-
 # ── Stage 3: Production ──
 FROM oven/bun:1.1-slim AS runner
 WORKDIR /app
+
+# Install curl for healthchecks (slim images don't include it)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl ca-certificates && \
+    rm -rf /var/lib/apt/lists/*
 
 # Security: run as non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
 # Install only production dependencies
-COPY package.json bun.lockb* ./
+COPY package.json bun.lock* ./
 RUN bun install --frozen-lockfile --production
 
 # Copy mini-service deps
@@ -87,6 +89,9 @@ ENV HOSTNAME=0.0.0.0
 # Health check
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
   CMD curl -f http://localhost:3000/api/health/ready || exit 1
+
+# Create uploads directory with correct ownership before switching to non-root user
+RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads
 
 # Switch to non-root user
 USER nextjs
