@@ -147,7 +147,41 @@ jobs:
           key: ${{ secrets.DEPLOY_SSH_KEY }}
           script: |
             cd /opt/novsmm
+            
+            # Save current image tags for rollback
+            PREV_WEB=$(docker compose images web 2>/dev/null | awk 'NR==2 {print $3}' || echo "")
+            
             docker compose pull
+            
+            # Run migrations BEFORE starting new containers
+            # This prevents new code from running against old schema
+            docker compose up -d postgres redis
+            sleep 10
+            docker compose run --rm --no-deps web bun run prisma migrate deploy
+            
+            # Now start all services with the updated schema
             docker compose up -d --remove-orphans
-            docker compose exec -T web bun run prisma migrate deploy
-            echo "Deploy completed at $(date)"
+            
+            # Post-deploy health check (5 retries, 10s apart)
+            HEALTHY=false
+            for i in 1 2 3 4 5; do
+              sleep 10
+              if curl -sf http://localhost:3000/api/health/ready | grep -q '"status":"ready"'; then
+                HEALTHY=true
+                echo "Health check passed on attempt $i"
+                break
+              fi
+              echo "Health check attempt $i failed, retrying..."
+            done
+            
+            if [ "$HEALTHY" = "false" ]; then
+              echo "❌ Deploy failed health check — rolling back"
+              docker compose logs --tail 50 web
+              if [ -n "$PREV_WEB" ]; then
+                docker tag "$PREV_WEB" novsmm-web:latest
+                docker compose up -d --no-deps --force-recreate web
+              fi
+              exit 1
+            fi
+            
+            echo "✅ Deploy completed at $(date)"
