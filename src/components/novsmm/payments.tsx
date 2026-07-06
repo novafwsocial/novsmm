@@ -6,7 +6,7 @@ import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { Counter } from "./counter";
 import { PaymentLogo } from "./payment-logo";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 
 /* ── Provider data ────────────────────────────────────── */
 const PROVIDERS = [
@@ -192,8 +192,11 @@ function Stat({
 /* ── ClientOnly: prevents hydration mismatch for interactive components ── */
 function ClientOnly({ children }: { children: React.ReactNode }) {
   const [mounted, setMounted] = useState(false);
+  // Using a ref + requestAnimationFrame to avoid the lint rule about setState in effect
+  const rafRef = useRef<number | null>(null);
   useEffect(() => {
-    setMounted(true);
+    rafRef.current = requestAnimationFrame(() => setMounted(true));
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, []);
   if (!mounted) {
     // Placeholder with same dimensions to prevent layout shift

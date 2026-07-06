@@ -46,7 +46,9 @@ export type AdminTab =
   | "refunds"
   | "settings"
   | "security"
-  | "roles";
+  | "roles"
+  | "socialAuth"
+  | "version";
 
 type AppState = {
   view: AppView;

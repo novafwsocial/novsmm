@@ -130,6 +130,8 @@ const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
   { id: "settings", label: "Settings", icon: Settings },
   { id: "security", label: "Security", icon: Lock },
   { id: "roles", label: "Roles", icon: ShieldCheck },
+  { id: "socialAuth", label: "Social Auth", icon: KeyRound },
+  { id: "version", label: "Version", icon: Globe },
 ];
 
 export function AdminPanel() {
@@ -211,6 +213,8 @@ export function AdminPanel() {
           {adminTab === "settings" && <AdminSettingsTab />}
           {adminTab === "security" && <AdminSecurity />}
           {adminTab === "roles" && <AdminRoles />}
+          {adminTab === "socialAuth" && <AdminSocialAuth />}
+          {adminTab === "version" && <AdminVersion />}
         </motion.div>
     </div>
   );
@@ -2597,6 +2601,230 @@ function AdminRefunds() {
           </AlertDialogContent>
         </AlertDialog>
       )}
+    </Reveal>
+  );
+}
+
+/* ─────────── Social Auth ─────────── */
+function AdminSocialAuth() {
+  const { toast } = useToast();
+  const [googleClientId, setGoogleClientId] = useState("");
+  const [googleClientSecret, setGoogleClientSecret] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [existing, setExisting] = useState<{ google?: { configured: boolean } }>({});
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/social-auth");
+        if (res.ok) {
+          const data = await res.json();
+          setExisting(data);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const handleSave = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/social-auth", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          provider: "google",
+          clientId: googleClientId,
+          clientSecret: googleClientSecret,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      toast({ title: "Google credentials saved", description: "OAuth provider updated successfully." });
+      setGoogleClientId("");
+      setGoogleClientSecret("");
+      setExisting({ google: { configured: true } });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    }
+    setLoading(false);
+  };
+
+  return (
+    <Reveal>
+      <div className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">Social Authentication</h2>
+          <p className="text-sm text-muted-foreground">
+            Configure OAuth providers for login. Credentials are encrypted with AES-256-GCM.
+          </p>
+        </div>
+
+        <div className="rounded-2xl border border-border/60 bg-background p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50">
+                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+                  <path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.6c2.1-2 3.2-4.9 3.2-7.9z" />
+                  <path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.6-2.7c-1 .7-2.3 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.8A11 11 0 0 0 12 23z" />
+                  <path fill="#FBBC05" d="M6 14.4a6.6 6.6 0 0 1 0-4.2V7.4H2.3a11 11 0 0 0 0 9.8L6 14.4z" />
+                  <path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.3 7.4L6 10.2c.9-2.6 3.2-4.8 6-4.8z" />
+                </svg>
+              </div>
+              <div>
+                <div className="font-semibold">Google OAuth</div>
+                <div className="text-xs text-muted-foreground">
+                  {existing.google?.configured
+                    ? "✅ Configured — users can sign in with Google"
+                    : "Not configured — users can only use email/password"}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Google Client ID
+              </label>
+              <input
+                type="text"
+                value={googleClientId}
+                onChange={(e) => setGoogleClientId(e.target.value)}
+                placeholder="xxxxxxxxxx.apps.googleusercontent.com"
+                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Google Client Secret
+              </label>
+              <input
+                type="password"
+                value={googleClientSecret}
+                onChange={(e) => setGoogleClientSecret(e.target.value)}
+                placeholder="GOCSPX-xxxxxxxxxxxxx"
+                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              />
+            </div>
+            <button
+              onClick={handleSave}
+              disabled={loading || (!googleClientId && !googleClientSecret)}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {loading ? "Saving..." : "Save Google credentials"}
+            </button>
+          </div>
+
+          <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs text-muted-foreground">
+            <strong>Setup instructions:</strong>
+            <ol className="mt-1 list-decimal pl-4 space-y-0.5">
+              <li>Go to Google Cloud Console</li>
+              <li>Create OAuth 2.0 Client ID (Web application)</li>
+              <li>Add authorized redirect URI</li>
+              <li>Copy Client ID + Client Secret here</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </Reveal>
+  );
+}
+
+/* ─────────── Version ─────────── */
+function AdminVersion() {
+  const { toast } = useToast();
+  const [version, setVersion] = useState("");
+  const [notes, setNotes] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [current, setCurrent] = useState<any>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/admin/version");
+        if (res.ok) {
+          const data = await res.json();
+          setCurrent(data);
+        }
+      } catch {}
+    })();
+  }, []);
+
+  const handlePublish = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/version", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ version, notes }),
+      });
+      if (!res.ok) throw new Error("Failed to publish");
+      toast({ title: "Version published", description: `v${version} is now live.` });
+      setVersion("");
+      setNotes("");
+      const updated = await res.json();
+      setCurrent(updated);
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    }
+    setLoading(false);
+  };
+
+  return (
+    <Reveal>
+      <div className="flex flex-col gap-4">
+        <div>
+          <h2 className="text-xl font-semibold">Version Announcements</h2>
+          <p className="text-sm text-muted-foreground">
+            Publish version announcements that users see as a dismissible banner.
+          </p>
+        </div>
+
+        {current && (
+          <div className="rounded-2xl border border-border/60 bg-background p-4">
+            <div className="text-sm font-medium">Current: v{current.version}</div>
+            {current.notes && <div className="mt-1 text-sm text-muted-foreground">{current.notes}</div>}
+            <div className="mt-1 text-xs text-muted-foreground">
+              Published: {new Date(current.publishedAt).toLocaleDateString()}
+            </div>
+          </div>
+        )}
+
+        <div className="rounded-2xl border border-border/60 bg-background p-6">
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Version number
+              </label>
+              <input
+                type="text"
+                value={version}
+                onChange={(e) => setVersion(e.target.value)}
+                placeholder="1.2.0"
+                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Release notes
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="What's new in this version..."
+                rows={4}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <button
+              onClick={handlePublish}
+              disabled={loading || !version}
+              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+            >
+              {loading ? "Publishing..." : "Publish version"}
+            </button>
+          </div>
+        </div>
+      </div>
     </Reveal>
   );
 }
