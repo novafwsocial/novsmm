@@ -70,6 +70,7 @@ export function withErrorHandler(handler: HandlerFn): HandlerFn {
 
 /**
  * Map an error to an HTTP response.
+ * Also captures the error in Sentry (if configured) for production error tracking.
  * Used by withErrorHandler and can be called directly for manual error handling.
  */
 export function handleError(
@@ -100,6 +101,21 @@ export function handleError(
     },
     "Request failed"
   );
+
+  // ── Capture in Sentry (if configured) ──
+  // Only capture server errors (500) and unexpected errors — not 4xx client errors
+  // (4xx are expected user errors like validation, auth, not-found — not bugs).
+  if (statusCode >= 500) {
+    import("@/lib/sentry").then(({ captureException }) => {
+      captureException(error, {
+        requestId,
+        tags: { errorCode: code, statusCode: String(statusCode) },
+        extra: { method: req?.method, url: req?.url, durationMs },
+      });
+    }).catch(() => {
+      // Sentry import failed — don't let this crash error handling
+    });
+  }
 
   // Return sanitized error to client (no internal details)
   const clientMessage = sanitizeErrorMessage(error, code);
