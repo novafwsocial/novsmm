@@ -139,8 +139,18 @@ echo ""
 # ── 4. CONEXIÓN APP → POSTGRESQL ──
 echo "=== 4. CONEXIÓN APP → POSTGRESQL ==="
 
-# Check from web container
-WEB_DB_CHECK=$(docker compose exec -T web curl -s http://localhost:3000/api/health/db 2>/dev/null)
+# P1-033: Check from host first (port published). Fall back to web container
+# with node fetch if curl isn't in the web image.
+if curl -s --max-time 5 http://localhost:3000/api/health/db &>/dev/null 2>&1; then
+  WEB_DB_CHECK=$(curl -s --max-time 5 http://localhost:3000/api/health/db 2>/dev/null || echo "")
+else
+  WEB_DB_CHECK=$(docker compose exec -T web node -e "
+    fetch('http://localhost:3000/api/health/db')
+      .then(r => r.text())
+      .then(t => process.stdout.write(t))
+      .catch(() => process.stdout.write(''))
+  " 2>/dev/null || echo "")
+fi
 echo "$WEB_DB_CHECK" | python3 -c "
 import json,sys
 try:
@@ -160,7 +170,17 @@ echo ""
 # ── 5. CONEXIÓN APP → REDIS ──
 echo "=== 5. CONEXIÓN APP → REDIS ==="
 
-WEB_READY=$(docker compose exec -T web curl -s http://localhost:3000/api/health/ready 2>/dev/null)
+# P1-033: Same pattern — host first, node fetch fallback
+if curl -s --max-time 5 http://localhost:3000/api/health/ready &>/dev/null 2>&1; then
+  WEB_READY=$(curl -s --max-time 5 http://localhost:3000/api/health/ready 2>/dev/null || echo "")
+else
+  WEB_READY=$(docker compose exec -T web node -e "
+    fetch('http://localhost:3000/api/health/ready')
+      .then(r => r.text())
+      .then(t => process.stdout.write(t))
+      .catch(() => process.stdout.write(''))
+  " 2>/dev/null || echo "")
+fi
 echo "$WEB_READY" | python3 -c "
 import json,sys
 try:
@@ -222,8 +242,39 @@ echo ""
 # ── 8. NOTIFICATIONS SERVICE ──
 echo "=== 8. NOTIFICATIONS SERVICE ==="
 
-NOTIF_HEALTH=$(docker compose exec -T notifications curl -s http://localhost:3003/healthz 2>/dev/null)
-echo "$NOTIF_HEALTH" | python3 -c "
+# P1-033: Previously assumed curl is installed in the notifications container
+# (which is a minimal Node image — curl may not be present). Now we check from
+# the host instead (the notifications port is published to localhost:3003).
+# Fall back to `docker compose exec` with node's fetch API if the port isn't
+# published (internal-only deployments).
+NOTIF_HEALTH=""
+if curl -s --max-time 5 http://localhost:3003/healthz &>/dev/null 2>&1; then
+  # Port is published — check from host (no curl needed in container)
+  NOTIF_HEALTH=$(curl -s --max-time 5 http://localhost:3003/healthz 2>/dev/null || echo "")
+elif docker compose exec -T notifications command -v curl &>/dev/null 2>&1; then
+  # curl exists in container — use it
+  NOTIF_HEALTH=$(docker compose exec -T notifications curl -s --max-time 5 http://localhost:3003/healthz 2>/dev/null || echo "")
+else
+  # No curl in container and port not published — use node's fetch (always available)
+  NOTIF_HEALTH=$(docker compose exec -T notifications node -e "
+    fetch('http://localhost:3003/healthz')
+      .then(r => r.text())
+      .then(t => process.stdout.write(t))
+      .catch(() => process.stdout.write(''))
+  " 2>/dev/null || echo "")
+fi
+
+if [ -n "$NOTIF_HEALTH" ]; then
+  if command -v jq &>/dev/null; then
+    echo "$NOTIF_HEALTH" | jq -r '
+      if .ok then
+        "  ✅ Notifications service healthz OK\n  ℹ️  Connections: \(.connections // 0)\n  ℹ️  Redis: \(.redis // "unknown")"
+      else
+        "  ❌ Notifications service healthz falló"
+      end
+    ' 2>/dev/null || echo "  ⚠️ No se pudo parsear respuesta de notifications"
+  else
+    echo "$NOTIF_HEALTH" | python3 -c "
 import json,sys
 try:
   d=json.load(sys.stdin)
@@ -236,6 +287,10 @@ try:
 except:
   print('  ❌ No se pudo verificar notifications service')
 " 2>&1
+  fi
+else
+  fail "No se pudo alcanzar notifications service (ni host:3003 ni curl ni node fetch)"
+fi
 
 echo ""
 

@@ -32,8 +32,8 @@ const loginLatency = new Trend('login_latency', true);
 const dashboardLatency = new Trend('dashboard_latency', true);
 const orderLatency = new Trend('order_latency', true);
 
-// Configuración
-export let options = STRESS ? {
+// Configuración (P2-073: const instead of let — options is never reassigned)
+export const options = STRESS ? {
   // Stress test: 50 VUs creando órdenes constantemente
   scenarios: {
     stress: {
@@ -60,9 +60,19 @@ export let options = STRESS ? {
   },
 };
 
-// Credenciales de prueba (cambiar por las reales)
-const TEST_EMAIL = 'admin@novsmm.io';
-const TEST_PASSWORD = 'CHANGE_ME';
+// Credenciales de prueba — se leen de env vars (P1-070, P1-071)
+// Setéalas al ejecutar:
+//   k6 run --env BASE_URL=https://novsmm.com \
+//     --env TEST_EMAIL=admin@novsmm.io \
+//     --env TEST_PASSWORD='tu_password_real' \
+//     --env TEST_SERVICE_ID='un_service_id_real' \
+//     scripts/load-test.js
+//
+// NUNCA hardcodees passwords reales en este archivo (se commitea a git).
+// Para CI, usa secrets del CI runner (GitHub Actions secrets, etc.).
+const TEST_EMAIL = __ENV.TEST_EMAIL || 'admin@novsmm.io';
+const TEST_PASSWORD = __ENV.TEST_PASSWORD || '';
+const TEST_SERVICE_ID = __ENV.TEST_SERVICE_ID || '';
 
 export default function () {
   const cookies = {};
@@ -148,28 +158,33 @@ export default function () {
 
   // Stress test: crear órdenes
   if (STRESS) {
-    group('Create Order (stress)', () => {
-      const orderRes = http.post(
-        `${BASE_URL}/api/orders`,
-        JSON.stringify({
-          serviceId: 'test-service-id',
-          quantity: 1000,
-          link: 'https://instagram.com/test',
-        }),
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': BASE_URL,
-          },
-          cookies,
-        }
-      );
-      orderLatency.add(orderRes.timings.duration);
-      check(orderRes, {
-        'order creation handled': (r) => r.status === 200 || r.status === 400 || r.status === 402,
+    // P1-071: Skip order creation if TEST_SERVICE_ID not provided (was hardcoded 'test-service-id')
+    if (!TEST_SERVICE_ID) {
+      console.warn('STRESS=true pero TEST_SERVICE_ID no seteado — saltando creación de órdenes');
+    } else {
+      group('Create Order (stress)', () => {
+        const orderRes = http.post(
+          `${BASE_URL}/api/orders`,
+          JSON.stringify({
+            serviceId: TEST_SERVICE_ID,
+            quantity: 1000,
+            link: 'https://instagram.com/test',
+          }),
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Origin': BASE_URL,
+            },
+            cookies,
+          }
+        );
+        orderLatency.add(orderRes.timings.duration);
+        check(orderRes, {
+          'order creation handled': (r) => r.status === 200 || r.status === 400 || r.status === 402,
+        });
       });
-    });
-    sleep(0.5);
+      sleep(0.5);
+    }
   }
 
   group('Public Endpoints', () => {

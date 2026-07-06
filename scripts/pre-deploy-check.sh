@@ -113,10 +113,18 @@ echo ""
 # ── 3. POSTGRESQL (via Docker) ──
 echo "=== 3. POSTGRESQL (verificación de imagen) ==="
 
-if docker pull postgres:16-alpine &> /dev/null 2>&1; then
-  ok "Imagen postgres:16-alpine descargable"
+# P1-029: `docker pull` downloads hundreds of MB and is slow. Check if the
+# image already exists locally first (instant). Only pull if missing.
+if docker image inspect postgres:16-alpine &>/dev/null 2>&1; then
+  ok "Imagen postgres:16-alpine ya descargada localmente"
 else
-  warn "No se pudo descargar postgres:16-alpine (se descargará en docker compose up)"
+  info "Imagen postgres:16-alpine no encontrada localmente — verificando disponibilidad..."
+  # Just check if the image CAN be pulled (manifest check), don't download layers.
+  if docker manifest inspect postgres:16-alpine &>/dev/null 2>&1; then
+    ok "Imagen postgres:16-alpine disponible en registry (se descargará en docker compose up)"
+  else
+    warn "No se pudo verificar postgres:16-alpine (registry inaccesible o sin red)"
+  fi
 fi
 
 # Verificar que no hay PostgreSQL local conflicting
@@ -131,10 +139,16 @@ echo ""
 # ── 4. REDIS (via Docker) ──
 echo "=== 4. REDIS (verificación de imagen) ==="
 
-if docker pull redis:7-alpine &> /dev/null 2>&1; then
-  ok "Imagen redis:7-alpine descargable"
+# P1-029: Check local first, manifest inspect if missing (avoids slow pull)
+if docker image inspect redis:7-alpine &>/dev/null 2>&1; then
+  ok "Imagen redis:7-alpine ya descargada localmente"
 else
-  warn "No se pudo descargar redis:7-alpine (se descargará en docker compose up)"
+  info "Imagen redis:7-alpine no encontrada localmente — verificando disponibilidad..."
+  if docker manifest inspect redis:7-alpine &>/dev/null 2>&1; then
+    ok "Imagen redis:7-alpine disponible en registry (se descargará en docker compose up)"
+  else
+    warn "No se pudo verificar redis:7-alpine (registry inaccesible o sin red)"
+  fi
 fi
 
 echo ""
@@ -142,10 +156,16 @@ echo ""
 # ── 5. NGINX (via Docker) ──
 echo "=== 5. NGINX (verificación de imagen) ==="
 
-if docker pull nginx:alpine &> /dev/null 2>&1; then
-  ok "Imagen nginx:alpine descargable"
+# P1-029: Check local first, manifest inspect if missing
+if docker image inspect nginx:alpine &>/dev/null 2>&1; then
+  ok "Imagen nginx:alpine ya descargada localmente"
 else
-  warn "No se pudo descargar nginx:alpine"
+  info "Imagen nginx:alpine no encontrada localmente — verificando disponibilidad..."
+  if docker manifest inspect nginx:alpine &>/dev/null 2>&1; then
+    ok "Imagen nginx:alpine disponible en registry (se descargará en docker compose up)"
+  else
+    warn "No se pudo verificar nginx:alpine (registry inaccesible o sin red)"
+  fi
 fi
 
 echo ""

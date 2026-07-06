@@ -8910,3 +8910,72 @@ Stage Summary:
   - `.env.example` — BACKUP_ENCRYPTION_KEY + SMTP_* vars
 - **P1s resueltos en este bloque: 13** (P1-001, 002, 003, 005, 011, 012, 017, 018, 028, 032, 062, 063, 064, 067, 068, 076) + 2 P2 bonus (P2-066, P2-027 parcial)
 - **P1s restantes:** P1-004, 006, 007, 023, 024, 025, 029, 033, 037, 038, 039, 042, 043, 044, 046, 047-050, 056-057, 070-071, 077, 078, 079 (maymente medio/bajo impacto)
+
+---
+Task ID: P1-MEDIUM-IMPACT-BLOCK
+Agent: main (Z.ai Code)
+Task: Bloque P1 Medium-Impact — resolver los P1s de medio impacto en 4 bloques: monitor-setup robustness, smoke-test hardening, backup monitoring+retention docs, load-test creds + backup-uploads + pre-deploy docker pull.
+
+Work Log:
+
+**Bloque F: monitor-setup.sh robustness (P1-023, P1-024, P1-025)**
+- P1-023 (no verify docker-compose.monitoring.yml exists): Agregué verificación fail-fast al inicio: si docker-compose.monitoring.yml no existe, aborta con mensaje claro. También verifico que los 3 archivos de config (prometheus.yml, alerts.yml, alertmanager.yml) existan antes de levantar contenedores.
+- P1-024 (python3 dependency): Reemplacé 2 bloques python3 con jq + fallback python3: (1) parsing de respuesta de Grafana datasource creation, (2) parsing de Prometheus targets list. Patrón: `if command -v jq; then jq -r '...'; else python3 -c '...'; fi`.
+- P1-025 (AlertManager health not checked): Agregué AM_OK al loop de health checks (junto con PROM_OK y GRAFANA_OK). Después del loop, verificación explícita de AlertManager: si no está healthy, aborta con instrucciones de diagnóstico (logs, SLACK_WEBHOOK_URL). Ahora también levanta postgres-exporter, redis-exporter, y blackbox-exporter (no solo los 4 originales).
+
+**Bloque G: smoke-test.sh hardening (P1-037, P1-038, P1-039)**
+- P1-037 (no exit code on failure): Reescribí el final del script: si FAIL > 0, `exit 1` explícito (antes siempre salía con 0, así que CI/cron no detectaba fallos). Agregé docstring con EXIT CODES.
+- P1-038 (curl commands without --max-time): Agregué `--max-time 10` a TODOS los curl calls del script (~15 calls: health/live, health/ready, public/settings, status, payment-methods, services, CSRF, login, authenticated APIs, webhooks, metrics). Cada curl ahora tiene `|| echo "000"` para que un timeout no aborte el script (set -e).
+- P1-039 (/tmp/smoke.txt predictable path): Reemplacé `/tmp/smoke.txt` con `mktemp /tmp/novsmm-smoke-XXXXXX.cookies` (path aleatorio, previene symlink attacks + colisión entre runs concurrentes). Agregué `trap 'rm -f "$SMOKE_COOKIE_JAR"' EXIT` para cleanup garantizado.
+- Bonus: Agregué jq + python3 fallback para parsing de health/ready, providers, y CSRF token (consistente con los otros scripts).
+
+**Bloque H: Backup monitoring + retention docs (P1-006, P1-077, P1-079)**
+- P1-006 (no backup failure alerting): Agregué `trap report_failure_to_monitoring EXIT` a backup.sh. Si el script sale non-zero (set -e + cualquier fallo), reporta `{"status":"failed"}` a /api/internal/backup-status. La gauge NO se actualiza en fallo (solo success la actualiza), así que el timer de 24h del BackupFailure alert sigue corriendo — pero el reporte de fallo da feedback inmediato. Variable BACKUP_SUCCEEDED rastrea si el reporte de success ya se hizo (para no reportar failure falsamente en exit 0).
+- P1-077 (no backup retention policy documented): Agregué sección "Retention Policy (P1-077)" a docs/disaster-recovery.md con esquema Grandfather-Father-Son (GFS): Son=daily 30d, Father=weekly 90d, Grandfather=monthly 365d. Documenté la implementación (find -mtime +N -delete para local, S3 lifecycle rules para Glacier/Deep Archive) y la prioridad de restore (más reciente primero, luego anterior, luego weekly/monthly).
+- P1-079 (no backup monitoring): Agregué sección "Backup Monitoring (P1-079)" documentando las 3 capas de protección: (1) BackupFailure alert (24h sin success), (2) backup failure trap (feedback inmediato), (3) DR drill mensual. Listé las métricas emitidas y el routing de alertas.
+
+**Bloque I: load-test.js creds + backup-uploads.sh + pre-deploy docker pull (P1-070, P1-071, P1-029, P1-033, P1-043, P1-044)**
+- P1-070 (hardcoded TEST_PASSWORD='CHANGE_ME'): Reemplacé con `__ENV.TEST_PASSWORD || ''`. Si no se setea, el login fallará (esperado en smoke test). Documenté cómo pasar credenciales vía env vars en el header del archivo. Nota de seguridad: NUNCA hardcodear passwords reales (se commitea a git).
+- P1-071 (hardcoded serviceId='test-service-id'): Reemplacé con `__ENV.TEST_SERVICE_ID || ''`. Si STRESS=true pero TEST_SERVICE_ID no está seteado, el script hace `console.warn` y salta la creación de órdenes (en vez de mandar un serviceId inexistente que siempre fallaría). Arreglé el brace nesting del if/else anidado.
+- P2-073 bonus (export let options → export const): Cambié `export let options` a `export const options` (nunca se reasigna).
+- P1-029 (docker pull slow during pre-deploy): Reemplacé `docker pull` con `docker image inspect` (check local, instantáneo) + `docker manifest inspect` (check registry sin descargar layers) para los 3 imágenes (postgres, redis, nginx). Pre-deploy ahora es instantáneo si las imágenes ya existen localmente, y rápido (solo manifest check) si no.
+- P1-033 (assumes curl in notifications container): Reescribí la sección de notifications health check con 3 fallbacks: (1) curl desde host si el puerto 3003 está publicado, (2) curl dentro del contenedor si existe, (3) node fetch (siempre disponible en contenedores Node) como último recurso. Mismo patrón aplicado a las verificaciones de web→PostgreSQL y web→Redis (que también asumían curl en el contenedor web). Agregué --max-time 5 a todos los curls.
+- P1-043 (backup-uploads.sh partially duplicates backup.sh): Reescribí backup-uploads.sh con propósito claro: backup.sh hace full tar.gz de todo (DB + uploads + config) nightly; backup-uploads.sh hace sync incremental de uploads/ a S3 daily (más frecuente, más eficiente para archivos grandes que cambian poco). Documenté la separación de concerns en el header.
+- P1-044 (no local backup, S3-only): backup-uploads.sh ahora SIEMPRE hace un backup local (tar.gz) primero, luego sync a S3. Antes si S3 no estaba configurado, el script salía sin hacer nada (exit 0) — uploads no se respaldaban. Ahora el backup local es el objetivo primario, S3 es el off-site.
+
+**Validación:**
+- bash syntax: 10/10 scripts OK con `bash -n`
+- `bun run lint`: 0 errores (1 warning pre-existente en load-test.js — default export anónimo, cosmético)
+- Verifiqué que load-test.js no tiene credenciales hardcodeadas (solo el comentario explicativo de P1-071)
+- Dev server: home HTTP 200, 7 líneas de métricas clave presentes (queue_depth, container_restarts, backup_last_success × HELP/TYPE/value)
+- Agent Browser no usado en este bloque (cambios son shell scripts + docs + 1 JS file de load test, no código de la app)
+
+Stage Summary:
+- **P1-023: RESUELTO** — monitor-setup.sh verifica docker-compose.monitoring.yml + configs antes de levantar
+- **P1-024: RESUELTO** — monitor-setup.sh usa jq con fallback python3 (2 bloques)
+- **P1-025: RESUELTO** — AlertManager health check en loop + verificación post-loop con fail-fast
+- **P1-037: RESUELTO** — smoke-test.sh exit 1 on failure (antes siempre 0)
+- **P1-038: RESUELTO** — smoke-test.sh --max-time 10 en ~15 curl calls
+- **P1-039: RESUELTO** — smoke-test.sh mktemp cookie jar + trap cleanup
+- **P1-006: RESUELTO** — backup.sh trap report_failure_to_monitoring EXIT
+- **P1-077: RESUELTO** — docs/disaster-recovery.md sección Retention Policy (GFS)
+- **P1-079: RESUELTO** — docs/disaster-recovery.md sección Backup Monitoring (3 capas)
+- **P1-070: RESUELTO** — load-test.js TEST_PASSWORD vía env var
+- **P1-071: RESUELTO** — load-test.js TEST_SERVICE_ID vía env var + skip si no seteado
+- **P2-073: RESUELTO** (bonus) — export const options
+- **P1-029: RESUELTO** — pre-deploy-check.sh docker image inspect + manifest inspect (no pull)
+- **P1-033: RESUELTO** — validate-postgres-redis.sh host curl + container curl + node fetch fallback (3 verificaciones)
+- **P1-043: RESUELTO** — backup-uploads.sh propósito claro (sync incremental S3, separado de backup.sh full)
+- **P1-044: RESUELTO** — backup-uploads.sh siempre local backup + S3 sync opcional
+- **Archivos modificados:**
+  - `scripts/monitor-setup.sh` — verify compose file + configs, AM health check, jq fallback
+  - `scripts/smoke-test.sh` — exit code, --max-time, mktemp, jq fallback (rewrite completo)
+  - `scripts/backup.sh` — trap report_failure_to_monitoring + BACKUP_SUCCEEDED flag
+  - `scripts/backup-uploads.sh` — local backup + S3 sync + cleanup (rewrite completo)
+  - `scripts/pre-deploy-check.sh` — docker image inspect + manifest inspect (3 imágenes)
+  - `scripts/validate-postgres-redis.sh` — host/container/node fetch fallback (3 checks) + jq helper
+  - `scripts/load-test.js` — env vars for creds + const options + skip if no serviceId
+  - `docs/disaster-recovery.md` — secciones Retention Policy (GFS) + Backup Monitoring
+- **P1s resueltos en este bloque: 13** (P1-006, 023, 024, 025, 029, 033, 037, 038, 039, 043, 044, 070, 071, 077, 079) + 1 P2 bonus (P2-073)
+- **P1s resueltos acumulados:** 29 de ~41 (todos los de alto + medio impacto)
+- **P1s restantes:** P1-004, 007, 042, 046, 047-050, 056-057 (la mayoría ahora N/A porque los scripts fueron eliminados/deprecated en bloques anteriores), P1-078 (DR docs — ya cubierto por docs/disaster-recovery.md existente + mejoras)

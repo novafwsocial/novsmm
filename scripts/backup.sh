@@ -21,6 +21,32 @@ fail() { echo -e "${RED}  ❌${NC} $1"; }
 info() { echo -e "${CYAN}  ℹ️${NC} $1"; }
 warn() { echo -e "${YELLOW}  ⚠️${NC} $1"; }
 
+# P1-006: Backup failure reporting. If the script exits non-zero (due to
+# `set -e` + any command failure), report the failure to monitoring so the
+# BackupFailure alert has accurate data. The gauge is NOT updated on failure
+# (only success updates it), so the 24h timer keeps ticking — but explicit
+# failure reporting gives the operator immediate feedback via a separate
+# metric that can be alerted on.
+BACKUP_SUCCEEDED=false
+
+report_failure_to_monitoring() {
+  local exit_code=$?
+  if [ "$exit_code" -ne 0 ] && [ "$BACKUP_SUCCEEDED" = false ]; then
+    if [ -n "${INTERNAL_API_TOKEN:-}" ] && [ -n "${BACKUP_REPORT_URL:-http://localhost:3000/api/internal/backup-status}" ]; then
+      # Report failure — the endpoint accepts {"status":"failed"} and does NOT
+      # update the success gauge (only "success" does). This is for future
+      # alerting on failure events (a counter could be added).
+      curl -s -o /dev/null --max-time 10 \
+        -X POST \
+        -H "Authorization: Bearer ${INTERNAL_API_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d '{"status":"failed"}' \
+        "${BACKUP_REPORT_URL}" 2>/dev/null || true
+    fi
+  fi
+}
+trap report_failure_to_monitoring EXIT
+
 BACKUP_DIR="${BACKUP_DIR:-/backups}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 DATE=$(date +%Y%m%d_%H%M%S)
@@ -212,6 +238,7 @@ if [ -n "${INTERNAL_API_TOKEN:-}" ] && [ -n "${BACKUP_REPORT_URL:-http://localho
     "${BACKUP_REPORT_URL}" 2>/dev/null || echo "000")
   if [ "$HTTP_CODE" = "200" ]; then
     ok "Backup timestamp reported to monitoring (HTTP 200)"
+    BACKUP_SUCCEEDED=true
   else
     warn "Failed to report backup timestamp to monitoring (HTTP $HTTP_CODE) — alert may fire falsely"
   fi

@@ -63,9 +63,27 @@ fi
 
 info "Levantando servicios de monitoreo..."
 
-# Levantar monitoring stack
+# P1-023: Verify docker-compose.monitoring.yml exists BEFORE trying to use it.
+# Previously, a missing file would produce a confusing docker compose error.
+if [ ! -f "docker-compose.monitoring.yml" ]; then
+  fail "docker-compose.monitoring.yml no encontrado en el directorio actual."
+  echo "  Asegúrate de ejecutar este script desde la raíz del proyecto NOVSMM."
+  exit 1
+fi
+ok "docker-compose.monitoring.yml existe"
+
+# P1-025: Also verify the alertmanager config + prometheus config exist
+for cfg in monitoring/prometheus.yml monitoring/alerts.yml monitoring/alertmanager.yml; do
+  if [ ! -f "$cfg" ]; then
+    fail "Config file faltante: $cfg"
+    exit 1
+  fi
+done
+ok "Archivos de configuración de monitoreo presentes"
+
+# Levantar monitoring stack (now includes blackbox-exporter + exporters)
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d \
-  prometheus alertmanager grafana node-exporter
+  prometheus alertmanager grafana node-exporter postgres-exporter redis-exporter blackbox-exporter
 
 ok "Servicios de monitoreo iniciados"
 
@@ -73,20 +91,32 @@ ok "Servicios de monitoreo iniciados"
 echo ""
 info "Esperando a que los servicios estén listos..."
 
+# P1-025: Also check AlertManager health (was missing)
 for i in $(seq 1 12); do
   sleep 5
-  
+
   PROM_OK=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:9090/-/healthy 2>/dev/null || echo "000")
   GRAFANA_OK=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:3001/api/health 2>/dev/null || echo "000")
-  
-  if [ "$PROM_OK" = "200" ] && [ "$GRAFANA_OK" = "200" ]; then
+  AM_OK=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:9093/-/healthy 2>/dev/null || echo "000")
+
+  if [ "$PROM_OK" = "200" ] && [ "$GRAFANA_OK" = "200" ] && [ "$AM_OK" = "200" ]; then
     ok "Prometheus: healthy"
     ok "Grafana: healthy"
+    ok "AlertManager: healthy"
     break
   fi
-  
-  printf "\r  ⏳ Esperando... %ds (Prom:%s Grafana:%s)" $((i*5)) "$PROM_OK" "$GRAFANA_OK"
+
+  printf "\r  ⏳ Esperando... %ds (Prom:%s Grafana:%s AM:%s)" $((i*5)) "$PROM_OK" "$GRAFANA_OK" "$AM_OK"
 done
+
+# P1-025: Explicit AlertManager health check after the loop
+AM_FINAL=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" http://localhost:9093/-/healthy 2>/dev/null || echo "000")
+if [ "$AM_FINAL" != "200" ]; then
+  fail "AlertManager no está healthy (HTTP $AM_FINAL). Las alertas NO se entregarán."
+  echo "  Inspecciona logs: docker compose -f docker-compose.monitoring.yml logs alertmanager"
+  echo "  Verifica que SLACK_WEBHOOK_URL esté seteada en .env"
+  exit 1
+fi
 
 echo ""
 
@@ -114,7 +144,17 @@ curl -s --max-time 10 -X POST "http://localhost:3001/api/datasources" \
     "url": "http://prometheus:9090",
     "isDefault": true,
     "editable": true
-  }' 2>/dev/null | python3 -c "
+  }' 2>/dev/null | {
+    # P1-024: Use jq if available, fall back to python3
+    if command -v jq &>/dev/null; then
+      jq -r '
+        if .id then "  ✅ Datasource Prometheus creado (ID: \(.id))"
+        elif (.message // "") | contains("already exists") then "  ℹ️  Datasource Prometheus ya existe"
+        else "  ⚠️  Respuesta: \(.message // "unknown")"
+        end
+      ' 2>/dev/null || echo "  ⚠️  No se pudo crear datasource (respuesta no-JSON)"
+    else
+      python3 -c "
 import json,sys
 try:
   d=json.load(sys.stdin)
@@ -127,6 +167,8 @@ try:
 except:
   print('  ⚠️  No se pudo crear datasource (probablemente ya existe)')
 " 2>&1
+    fi
+  }
 
 # ── Verificar que Prometheus scrapea NOVSMM ──
 echo ""
@@ -134,7 +176,15 @@ info "Verificando que Prometheus scrapea NOVSMM..."
 
 sleep 5
 
-TARGETS=$(curl -s --max-time 10 http://localhost:9090/api/v1/targets 2>/dev/null | python3 -c "
+# P1-024: Use jq if available, fall back to python3
+if command -v jq &>/dev/null; then
+  TARGETS=$(curl -s --max-time 10 http://localhost:9090/api/v1/targets 2>/dev/null | jq -r '
+    .data.activeTargets[] |
+    "  " + (if .health == "up" then "✅" else "❌" end) + " " +
+    (.labels.job // "?") + ": " + .health + " (" + .scrapeUrl + ")"
+  ' 2>&1)
+else
+  TARGETS=$(curl -s --max-time 10 http://localhost:9090/api/v1/targets 2>/dev/null | python3 -c "
 import json,sys
 d=json.load(sys.stdin)
 active = d['data']['activeTargets']
@@ -144,6 +194,7 @@ for t in active:
   url = t['scrapeUrl']
   print(f'  {\"✅\" if health==\"up\" else \"❌\"} {job}: {health} ({url})')
 " 2>&1)
+fi
 
 echo "$TARGETS"
 

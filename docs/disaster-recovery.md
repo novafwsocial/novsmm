@@ -33,6 +33,44 @@ This document covers backup strategy, restore procedures, and disaster recovery 
 |----------|------|-----------|--------|
 | On change | Git commit | Forever | GitHub (private repo) |
 
+### Retention Policy (P1-077)
+
+The backup script (`backup.sh`) implements a **Grandfather-Father-Son (GFS)** retention scheme:
+
+| Tier | Frequency | Retention | Purpose |
+|------|-----------|-----------|---------|
+| **Son** (daily) | Nightly 2 AM | 30 days | Quick recovery from recent mistakes |
+| **Father** (weekly) | Sunday 4 AM | 90 days | Recovery from issues discovered later |
+| **Grandfather** (monthly) | 1st of month | 365 days | Long-term compliance + disaster recovery |
+
+**Implementation:**
+- `backup.sh` deletes local backups older than `RETENTION_DAYS` (default 30) via `find -mtime +N -delete`.
+- Weekly/monthly backups should use S3 lifecycle policies (Glacier after 30 days, Deep Archive after 90 days) to minimize cost while keeping long-term retention.
+- The `find -delete` only runs on local backups; S3 retention is managed by bucket lifecycle rules (configured in AWS console or Terraform).
+
+**Restore priority:**
+1. Try the most recent nightly backup first (fastest, <24h old).
+2. If corrupt, try the previous night.
+3. If the issue is older, use the weekly/monthly backups.
+
+### Backup Monitoring (P1-079)
+
+Backups are monitored via Prometheus + AlertManager. **Three layers of protection:**
+
+1. **`BackupFailure` alert** (critical): Fires when `time() - novsmm_backup_last_success_timestamp > 86400` (24h). This catches both script crashes AND silent failures (e.g., cron not running, disk full).
+
+2. **Backup failure trap** (P1-006): `backup.sh` has a `trap ... EXIT` that reports `{"status":"failed"}` to `/api/internal/backup-status` if the script exits non-zero. This gives immediate feedback (within seconds) rather than waiting 24h for the alert.
+
+3. **DR drill** (P1-023): `scripts/dr-drill.sh` runs monthly to verify backups are actually restorable. A backup that can't be restored is useless.
+
+**Metrics emitted by the app (`/api/metrics`):**
+- `novsmm_backup_last_success_timestamp` (gauge) — Unix timestamp of last successful backup
+- (Future) `novsmm_backup_failures_total` (counter) — Count of backup failures
+
+**Alert routing:**
+- `BackupFailure` → `slack-critical` (immediate) → `escalation` (email after 1h)
+- See `monitoring/alertmanager.yml` for full routing config
+
 ## Backup Scripts
 
 ### Database Backup
