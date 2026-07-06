@@ -67,8 +67,17 @@ else
   exit 1
 fi
 
-TABLE_COUNT=$(gunzip -c "$BACKUP_FILE" 2>/dev/null | grep -c "CREATE TABLE" || echo "0")
+# ── Verificar contenido del backup ──
+# pg_dump --format=custom produce un dump BINARIO comprimido con gzip.
+# grep "CREATE TABLE" sobre binario devuelve 0 o basura (P0-008).
+# pg_restore --list no puede leer gzip directamente, así que descomprimimos
+# en el host y pipeamos el stream binario al contenedor vía stdin.
+TABLE_COUNT=$(gunzip -c "$BACKUP_FILE" 2>/dev/null | docker compose exec -T postgres pg_restore --list 2>/dev/null | grep -c "TABLE DATA" || echo "0")
 info "Tablas en backup: $TABLE_COUNT"
+if [ "${TABLE_COUNT:-0}" -lt 1 ]; then
+  fail "El backup no contiene tablas (¿archivo corrupto o vacío?)"
+  exit 1
+fi
 
 # ── Confirmación ──
 echo ""

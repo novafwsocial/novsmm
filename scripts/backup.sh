@@ -63,11 +63,12 @@ else
 fi
 
 # Verificar que el backup tiene datos
-# pg_dump --format=custom es binario — grep no funciona.
-# Usar pg_restore --list para listar objetos del backup de forma confiable.
-TABLE_COUNT=$(docker compose exec -T postgres pg_restore --list "$PG_FILE" 2>/dev/null | grep -c "TABLE" || echo "0")
+# pg_dump --format=custom es binario y está comprimido con gzip.
+# pg_restore --list no puede leer gzip directamente, así que descomprimimos
+# en el host y pipeamos el stream binario al contenedor vía stdin.
+TABLE_COUNT=$(gunzip -c "$PG_FILE" 2>/dev/null | docker compose exec -T postgres pg_restore --list 2>/dev/null | grep -c "TABLE DATA" || echo "0")
 info "Tablas en backup: $TABLE_COUNT"
-if [ "$TABLE_COUNT" -ge 25 ]; then
+if [ "${TABLE_COUNT:-0}" -ge 25 ]; then
   ok "Backup contiene $TABLE_COUNT tablas"
 else
   warn "Backup solo tiene $TABLE_COUNT tablas (esperado: 30+)"
@@ -99,19 +100,36 @@ tar -czf "$CONFIG_FILE" \
 ok "Config backup: $CONFIG_FILE"
 
 # ── 5. S3 Upload ──
+# P0-003: Previously `aws s3 cp ... 2>/dev/null` + unconditional `ok` swallowed
+# upload failures silently. Now we capture the exit code, surface failures
+# with a clear message, and count failures so the script can warn (not abort —
+# the local backup already succeeded, which is the primary objective).
 if [ "$UPLOAD_S3" = true ] && [ -n "${S3_BACKUP_BUCKET:-}" ]; then
   echo ""
   echo "═══ S3 Upload ═══"
-  
+
   if command -v aws &> /dev/null; then
+    S3_FAIL=0
     for f in "$PG_FILE" "$UPLOADS_FILE" "$CONFIG_FILE"; do
       if [ -f "$f" ]; then
-        aws s3 cp "$f" "s3://$S3_BACKUP_BUCKET/$(basename $f)" --storage-class STANDARD_IA --only-show-errors 2>/dev/null
-        ok "Uploadado: $(basename $f) → s3://$S3_BACKUP_BUCKET/"
+        # --only-show-errors suppresses progress bar but still shows errors on stderr.
+        # Do NOT redirect stderr to /dev/null — we need to see failures.
+        if aws s3 cp "$f" "s3://$S3_BACKUP_BUCKET/$(basename $f)" --storage-class STANDARD_IA --only-show-errors; then
+          ok "Uploadado: $(basename $f) → s3://$S3_BACKUP_BUCKET/"
+        else
+          AWS_EXIT=$?
+          fail "S3 upload falló: $(basename $f) (aws exit $AWS_EXIT)"
+          S3_FAIL=$((S3_FAIL + 1))
+        fi
       fi
     done
+    if [ "$S3_FAIL" -gt 0 ]; then
+      warn "$S3_FAIL archivo(s) no se uploadaron a S3 — backup LOCAL OK, pero offsite incompleto"
+      warn "Revisa credenciales AWS y conectividad a S3. El backup local en $BACKUP_DIR está intacto."
+    fi
   else
     fail "AWS CLI no instalado — instala: sudo apt install awscli"
+    warn "Backup local OK, pero S3 upload saltado (awscli faltante)"
   fi
 fi
 

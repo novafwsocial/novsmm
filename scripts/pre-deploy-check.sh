@@ -57,8 +57,23 @@ else
 fi
 
 # Disco mínimo 20GB
-DISK_GB=$(df -g / 2>/dev/null | awk 'NR==2 {print $4}' || df -h / | awk 'NR==2 {print $4}' | tr -d 'G')
-if [ "${DISK_GB:-0}" -ge 20 ]; then
+# P0-012: `df -g` is a BSD/macOS flag, NOT available on Linux. The previous
+# fallback `df -h | tr -d 'G'` breaks on TB-scale disks (leaves 'T' suffix,
+# causing integer comparison failure). Use `df --output=avail -BG` which is
+# GNU-only but always returns an integer GB value on Linux.
+DISK_GB=$(df --output=avail -BG / 2>/dev/null | awk 'NR==2 {gsub(/G/,""); print}')
+if [ -z "${DISK_GB:-}" ]; then
+  # Fallback for non-GNU df (BSD/macOS) — parse human-readable output
+  DISK_AVAIL=$(df -h / | awk 'NR==2 {print $4}')
+  case "$DISK_AVAIL" in
+    *G) DISK_GB="${DISK_AVAIL%G}" ;;
+    *T) DISK_GB=$(awk "BEGIN {printf \"%d\", ${DISK_AVAIL%T} * 1024}") ;;
+    *M) DISK_GB=0 ;;  # < 1GB → definitely fails the 20GB check
+    *)  DISK_GB=0 ;;
+  esac
+fi
+DISK_GB=$(printf '%d' "${DISK_GB:-0}" 2>/dev/null || echo 0)
+if [ "$DISK_GB" -ge 20 ]; then
   ok "Disk: ${DISK_GB}GB available (>= 20GB)"
 else
   warn "Disk: ${DISK_GB}GB available (< 20GB recomendado)"

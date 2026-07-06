@@ -17,10 +17,32 @@
 
 set -euo pipefail
 
-GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; NC='\033[0m'
+GREEN='\033[0;32m'; CYAN='\033[0;36m'; YELLOW='\033[1;33m'; RED='\033[0;31m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}  ✅${NC} $1"; }
 info() { echo -e "${CYAN}  ℹ️${NC} $1"; }
 warn() { echo -e "${YELLOW}  ⚠️${NC} $1"; }
+fail() { echo -e "${RED}  ❌${NC} $1"; }
+
+# ── Validate Grafana credentials BEFORE starting any containers ──
+# P0-010: Default password "admin" is a critical security risk.
+# P0-011: Never print the password to stdout (logs/cron/journal).
+GRAFANA_USER="${GRAFANA_USER:-admin}"
+if [ -z "${GRAFANA_PASSWORD:-}" ]; then
+  fail "GRAFANA_PASSWORD no está configurada."
+  echo "  Setéala en .env o pásala como env var:"
+  echo "    GRAFANA_PASSWORD='tu_password_segura' ./scripts/monitor-setup.sh"
+  echo "  No debe ser 'admin' (default inseguro)."
+  exit 1
+fi
+if [ "$GRAFANA_PASSWORD" = "admin" ]; then
+  fail "GRAFANA_PASSWORD='admin' no está permitido (password por defecto inseguro)."
+  echo "  Genera una password segura: openssl rand -base64 24"
+  exit 1
+fi
+if [ "${#GRAFANA_PASSWORD}" -lt 8 ]; then
+  fail "GRAFANA_PASSWORD demasiado corta (mínimo 8 caracteres)."
+  exit 1
+fi
 
 echo "╔═══════════════════════════════════════════════════════════════╗"
 echo "║  NOVSMM — Monitoring Setup                                    ║"
@@ -72,8 +94,15 @@ echo ""
 echo ""
 info "Configurando datasource de Prometheus en Grafana..."
 
-GRAFANA_USER="${GRAFANA_USER:-admin}"
-GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}"
+# GRAFANA_USER/GRAFANA_PASSWORD already validated above (non-default, >= 8 chars)
+
+# Verify Grafana credentials actually work before configuring datasource
+if ! curl -sf -o /dev/null --max-time 5 -u "${GRAFANA_USER}:${GRAFANA_PASSWORD}" http://localhost:3001/api/health 2>/dev/null; then
+  fail "No se pudo autenticar a Grafana con las credenciales proporcionadas."
+  echo "  Verifica GRAFANA_USER y GRAFANA_PASSWORD en .env."
+  exit 1
+fi
+ok "Credenciales de Grafana verificadas"
 
 curl -s -X POST "http://localhost:3001/api/datasources" \
   -H "Content-Type: application/json" \
@@ -125,7 +154,7 @@ echo "║  MONITOREO ACTIVO                                             ║"
 echo "╠═══════════════════════════════════════════════════════════════╣"
 echo "│                                                               │"
 echo "│  Grafana:     http://localhost:3001"
-echo "│               User: ${GRAFANA_USER} | Pass: ${GRAFANA_PASSWORD}"
+echo "│               User: ${GRAFANA_USER} | Pass: ******** (oculta — ver .env)"
 echo "│  Prometheus:  http://localhost:9090"
 echo "│  AlertManager: http://localhost:9093"
 echo "│  NodeExporter: http://localhost:9100/metrics"

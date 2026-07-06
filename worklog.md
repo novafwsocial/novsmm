@@ -8742,3 +8742,35 @@ Stage Summary:
   - `docker-compose.monitoring.yml` — corregido `depends_on` de exporters
 - **Flujo completo de backup alerting:** backup.sh (cron 2 AM) → pg_dump → verificación → curl POST /api/internal/backup-status → gauge actualizada → Prometheus scrapea /api/metrics → si timestamp > 24h → BackupFailure alert → AlertManager → Slack webhook. Si backup.sh no corre o falla antes del curl, la gauge no se actualiza y la alerta dispara después de 24h.
 - **Verificación browser:** app renderiza, sin errores, footer sticky. Métrica emitida en /api/metrics. Endpoint interno responde y es fail-closed.
+
+---
+Task ID: SCRIPTS-INTEGRITY-BLOCK
+Agent: main (Z.ai Code)
+Task: Bloque Scripts Security & Integrity — corregir P0s en scripts de shell de backup/restore/monitoring/pre-deploy que causan riesgo de pérdida de datos o exposición de credenciales (P0-003, P0-008, P0-010, P0-011, P0-012).
+
+Work Log:
+- P0-008 (restore.sh L70 — verificación de backup sobre dump binario): El código hacía `gunzip -c "$BACKUP_FILE" | grep -c "CREATE TABLE"` sobre un dump `pg_dump --format=custom` (binario). grep de ASCII "CREATE TABLE" sobre binario siempre devuelve 0, haciendo la verificación inútil y confundiendo al operador (cree que el restore falló). FIX: Reemplacé con `gunzip -c "$BACKUP_FILE" | docker compose exec -T postgres pg_restore --list | grep -c "TABLE DATA"`. Agregué validación: si TABLE_COUNT < 1, aborta con error claro. Nota: pg_restore --list no puede leer gzip directamente, por eso se descomprime en el host y se pipea vía stdin al contenedor.
+- GAP ADICIONAL DETECTADO (backup.sh L68 — regresión silenciosa de P0-002): El fix anterior de P0-002 usaba `docker compose exec -T postgres pg_restore --list "$PG_FILE"`, pero $PG_FILE es un .sql.gz (gzip). pg_restore NO puede leer gzip → el comando fallaba silenciosamente (2>/dev/null) y TABLE_COUNT siempre era 0, disparando el warn "Backup solo tiene 0 tablas" en CADA backup. FIX: Mismo patrón que restore.sh — `gunzip -c "$PG_FILE" | docker compose exec -T postgres pg_restore --list | grep -c "TABLE DATA"`. Ahora la verificación de backup es realmente funcional.
+- P0-010 (monitor-setup.sh L76 — Grafana password default "admin"): `GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}"` permitía arrancar Grafana con admin/admin si no se seteaba la env var. FIX: Agregué validación fail-fast al inicio del script (antes de levantar contenedores): rechaza password vacía, rechaza "admin" explícitamente, requiere mínimo 8 caracteres. Mensajes claros con instrucciones (`openssl rand -base64 24`). Agregué función `fail()` (no existía). También agregué verificación post-startup de que las credenciales realmente autentican contra Grafana antes de configurar el datasource.
+- P0-011 (monitor-setup.sh L128 — password impresa a stdout): `echo "│ User: ${GRAFANA_USER} | Pass: ${GRAFANA_PASSWORD}"` exponía la password en terminal/logs/cron/journal. FIX: Reemplacé con `Pass: ******** (oculta — ver .env)`. La password ya no aparece en ninguna salida del script.
+- P0-012 (pre-deploy-check.sh L60 — `df -g` no existe en Linux): `df -g` es un flag BSD/macOS (gigabytes), NO disponible en GNU/Linux. El `2>/dev/null` ocultaba el error, y el fallback `df -h | tr -d 'G'` rompía en discos TB-scale (dejaba sufijo 'T', causando fallo en comparación entera `[ "$DISK_GB" -ge 20 ]`). FIX: Reemplacé con `df --output=avail -BG / | awk 'NR==2 {gsub(/G/,""); print}'` (GNU df, devuelve entero GB siempre). Agregué fallback robusto para BSD/macOS que parsea sufijos G/T/M con `case`. Validé funcionalmente: `df --output=avail -BG /` devuelve "8" (entero) en este Linux; `df -g /` devuelve vacío (confirma el bug).
+- P0-003 (backup.sh L109 — S3 upload failure swallowed): `aws s3 cp ... 2>/dev/null` ocultaba errores de stderr, y `ok "Uploadado"` se imprimía incondicionalmente (aunque con `set -e` el script abortaría antes). El operador no tenía feedback claro de fallos de S3. FIX: Reescribí la sección S3: (1) removí `2>/dev/null` (los errores de aws ahora son visibles; `--only-show-errors` ya suprime la barra de progreso), (2) capturo exit code con `if aws ...; then ok else fail`, (3) cuento fallos en S3_FAIL, (4) si S3_FAIL > 0, imprimo warn claro "backup LOCAL OK, pero offsite incompleto" en vez de abortar (el backup local ya es el objetivo primario). También el caso "awscli no instalado" ahora usa `warn` (no aborta) indicando que el backup local está OK.
+- Validé sintaxis bash de los 4 scripts modificados con `bash -n` — todos OK.
+- Validé que no quedan instancias de los patrones rotos: `df -g` (solo en comentario), `GRAFANA_PASSWORD:-admin` (eliminado), `Pass: ${GRAFANA_PASSWORD}` (eliminado), `grep -c "CREATE TABLE"` (eliminado), `aws s3 cp.*2>/dev/null` (solo en comentario).
+- Ejecuté `bun run lint` — 0 errores (1 warning pre-existente en load-test.js, no relacionado).
+- Verifiqué dev server: home page retorna HTTP 200, /api/metrics emite la métrica novsmm_backup_last_success_timestamp (3 líneas: HELP/TYPE/value). El bloque Monitoring anterior sigue intacto.
+- Nota: El sandbox tiene 4GB RAM y next-server es OOM-killed intermitentemente durante compilación Turbopack pesada (dmesg confirma `Out of memory: Killed process next-server`). Esto es una limitación del sandbox, NO relacionado con mis cambios (solo modifiqué shell scripts, no código de la app). La app fue verificada vía Agent Browser en el bloque Monitoring anterior.
+
+Stage Summary:
+- **P0-008: RESUELTO** — restore.sh ahora verifica contenido del backup con `pg_restore --list` vía gunzip stdin (no grep sobre binario). Aborta si el backup no contiene tablas.
+- **P0-002 regresión: RESUELTA** — backup.sh tenía el mismo bug de gzip+pg_restore. La verificación de backup ahora es funcional (antes siempre reportaba 0 tablas).
+- **P0-010: RESUELTO** — monitor-setup.sh requiere GRAFANA_PASSWORD no-vacía, no-"admin", mínimo 8 chars. Fail-fast antes de levantar contenedores.
+- **P0-011: RESUELTO** — Password de Grafana ya no se imprime a stdout. Reemplazada con `******** (oculta — ver .env)`.
+- **P0-012: RESUELTO** — pre-deploy-check.sh usa `df --output=avail -BG` (GNU Linux) con fallback BSD/macOS. Funciona en discos TB-scale.
+- **P0-003: RESUELTO** — backup.sh S3 upload ahora captura exit codes, muestra errores, cuenta fallos, y warning claro (no aborta el backup local).
+- **Archivos modificados:**
+  - `scripts/restore.sh` — verificación con pg_restore --list vía stdin
+  - `scripts/backup.sh` — verificación con pg_restore --list vía stdin + S3 upload con error handling
+  - `scripts/monitor-setup.sh` — validación fail-fast de Grafana password + no imprimir password
+  - `scripts/pre-deploy-check.sh` — df --output=avail -BG con fallback
+- **P0s restantes después de este bloque:** P0-013, P0-014 (eliminar scripts duplicados backup-db.sh/restore-db.sh), P0-015, P0-016, P0-017 (.zscripts obsoletos), P0-023, P0-024 (DR drill + RTO/RPO docs).
