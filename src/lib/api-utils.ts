@@ -3,6 +3,7 @@ import { authOptions } from "./auth";
 import { NextResponse } from "next/server";
 import { headers, cookies } from "next/headers";
 import { db } from "./db";
+import { Prisma } from "@prisma/client";
 
 /**
  * Get the base URL of the current request, respecting proxy headers.
@@ -103,7 +104,13 @@ export async function audit(
         action,
         entity,
         entityId: entityId ?? null,
-        metadata: metadata ? JSON.stringify(metadata) : null,
+        // metadata is now a Json column — Prisma serializes the object
+        // automatically. Pass the object directly (no JSON.stringify).
+        // When no metadata is supplied, use Prisma.DbNull to write SQL NULL
+        // (a plain JS `null` is not assignable to a Json field type — Prisma
+        // requires its DbNull/JsonNull sentinels to disambiguate SQL NULL
+        // from a JSON `null` literal).
+        metadata: metadata ?? Prisma.DbNull,
         ip,
         userAgent,
       },

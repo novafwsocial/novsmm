@@ -1,0 +1,856 @@
+// NOVSMM — PostgreSQL production schema
+// ----------------------------------------------------------------
+// This is the PostgreSQL version of the schema, used when deploying
+// to production with PostgreSQL. It uses native enums, JsonB columns,
+// Decimal types for monetary values, and snake_case table names.
+//
+// MIGRATION STEPS:
+// 1. Install PostgreSQL on your VPS (see docs/postgresql-migration.md)
+// 2. Create the database: createdb novsmm
+// 3. Copy this file to prisma/schema.prisma (replacing the SQLite version)
+// 4. Set DATABASE_URL=postgresql://user:pass@localhost:5432/novsmm in .env
+// 5. Run: bun run prisma migrate dev --name init_postgresql
+// 6. Run: bun run prisma/migrate-sqlite-to-postgres.ts (migrates data)
+// 7. Restart the app — now running on PostgreSQL
+//
+// DIFFERENCES FROM SQLite SCHEMA:
+// - 14 String columns → native Prisma enums
+// - 8 String JSON columns → JsonB (with GIN indexes for fast queries)
+// - ~30 monetary Float → Decimal @db.Decimal(12,4) (no floating-point errors)
+// - All String columns → VarChar(N) with length constraints
+// - All tables → snake_case via @map/@@map
+// - IP addresses → @db.Inet
+// - Case-insensitive search enabled via mode: "insensitive" in queries
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────── Enums ───────────
+
+enum UserRole {
+  user
+  reseller
+  agency
+  admin
+}
+
+enum UserStatus {
+  active
+  suspended
+  pending
+}
+
+enum UserPlan {
+  free
+  starter
+  growth
+  enterprise
+}
+
+enum ProviderStatus {
+  healthy
+  degraded
+  down
+}
+
+enum ServiceQuality {
+  standard
+  hq
+  premium
+  real
+}
+
+enum ServiceStatus {
+  active
+  paused
+  deleted
+}
+
+enum OrderStatus {
+  pending
+  processing
+  in_progress
+  partial
+  completed
+  cancelled
+}
+
+enum OrderPriority {
+  standard
+  priority
+  highest
+}
+
+enum TransactionType {
+  topup
+  withdrawal
+  sale
+  fee
+  referral
+  held
+  release
+}
+
+enum TransactionStatus {
+  pending
+  completed
+  failed
+}
+
+enum PaymentMethodStatus {
+  active
+  maintenance
+  disabled
+}
+
+enum NotificationSeverity {
+  info
+  success
+  warning
+  error
+}
+
+enum TicketStatus {
+  open
+  waiting
+  resolved
+  closed
+}
+
+enum TicketPriority {
+  low
+  medium
+  high
+}
+
+enum WebhookLogStatus {
+  received
+  processed
+  failed
+  rejected
+}
+
+enum SubscriptionStatus {
+  active
+  canceled
+  past_due
+  trialing
+}
+
+enum InvoiceStatus {
+  paid
+  pending
+  void
+}
+
+enum PromotionStatus {
+  scheduled
+  active
+  ended
+  cancelled
+}
+
+enum LicenseStatus {
+  active
+  suspended
+  expired
+  revoked
+}
+
+enum LicensePlan {
+  reseller
+  agency
+  enterprise
+  white_label
+}
+
+enum ApiKeyStatus {
+  active
+  revoked
+}
+
+enum CurrencyStatus {
+  active
+  disabled
+}
+
+enum LanguageStatus {
+  active
+  disabled
+}
+
+enum OfferStatus {
+  active
+  paused
+  sold
+}
+
+enum ReferralStatus {
+  pending
+  completed
+  rewarded
+}
+
+enum CouponStatus {
+  active
+  disabled
+  expired
+}
+
+enum PaymentIntentStatus {
+  pending
+  succeeded
+  failed
+  refunded
+}
+
+// ─────────── NextAuth required tables ───────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique @db.VarChar(255)
+  emailVerified DateTime?
+  name          String?   @db.VarChar(255)
+  username      String    @unique @db.VarChar(100)
+  passwordHash  String?   @db.VarChar(255)
+  image         String?   @db.Text
+  role          UserRole  @default(user)
+  country       String    @default("Mexico") @db.VarChar(100)
+  currency      String    @default("USD") @db.VarChar(10)
+  language      String    @default("English") @db.VarChar(50)
+  status        UserStatus @default(active)
+  plan          UserPlan  @default(free)
+  balance       Decimal   @default(0) @db.Decimal(12, 4)
+  heldBalance   Decimal   @default(0) @db.Decimal(12, 4)
+  lifetimeEarnings Decimal @default(0) @db.Decimal(12, 4)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  orders        Order[]
+  transactions  Transaction[]
+  notifications Notification[]
+  tickets       Ticket[]
+  auditLogs     AuditLog[]
+  apiKeys       ApiKey[]
+  favorites     Favorite[]
+  loyaltyPoints LoyaltyPoint[]
+  achievements  Achievement[]
+  subscriptions Subscription[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String  @db.VarChar(50)
+  provider          String  @db.VarChar(50)
+  providerAccountId String  @db.VarChar(255)
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String? @db.VarChar(50)
+  scope             String? @db.Text
+  id_token          String? @db.Text
+  session_state     String? @db.Text
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @db.VarChar(255)
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String   @db.VarChar(255)
+  token      String   @unique @db.VarChar(255)
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─────────── Business models ───────────
+
+model Provider {
+  id        String         @id @default(cuid())
+  name      String         @unique @db.VarChar(255)
+  apiUrl    String         @db.Text
+  apiKey    String?        @db.Text
+  status    ProviderStatus @default(healthy)
+  latency   Int            @default(0)
+  services  Service[]
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status])
+  @@map("providers")
+}
+
+model Service {
+  id           String         @id @default(cuid())
+  name         String         @unique @db.VarChar(255)
+  platform     String         @db.VarChar(100)
+  category     String         @default("general") @db.VarChar(100)
+  description  String         @default("") @db.Text
+  quality      ServiceQuality @default(standard)
+  deliveryTime String         @default("0-1h") @db.VarChar(50)
+  cost         Decimal        @db.Decimal(12, 4)
+  price        Decimal        @db.Decimal(12, 4)
+  minQty       Int            @default(1)
+  maxQty       Int            @default(100000)
+  status       ServiceStatus  @default(active)
+  rate         String         @default("0/d") @db.VarChar(50)
+  providerId   String?
+  provider     Provider?      @relation(fields: [providerId], references: [id])
+  orders       Order[]
+  favorites    Favorite[]
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  @@index([platform])
+  @@index([status])
+  @@map("services")
+}
+
+model Order {
+  id              String        @id @default(cuid())
+  publicId        String        @unique @db.VarChar(50)
+  userId          String
+  serviceId       String?
+  serviceName     String        @db.VarChar(255)
+  platform        String        @db.VarChar(100)
+  quantity        Int
+  unitCost        Decimal       @db.Decimal(12, 4)
+  unitPrice       Decimal       @db.Decimal(12, 4)
+  totalCost       Decimal       @db.Decimal(12, 4)
+  totalPrice      Decimal       @db.Decimal(12, 4)
+  profit          Decimal       @db.Decimal(12, 4)
+  status          OrderStatus   @default(processing)
+  progress        Int           @default(0)
+  priority        OrderPriority @default(standard)
+  providerId      String?       @db.VarChar(255)
+  providerName    String?       @db.VarChar(255)
+  link            String?       @db.Text
+  eta             String        @default("—") @db.VarChar(50)
+  flag            String        @default("🌍") @db.VarChar(10)
+  dripFeedConfig  Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  completedAt     DateTime?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([serviceId])
+  @@index([createdAt])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("orders")
+}
+
+model Transaction {
+  id          String             @id @default(cuid())
+  publicId    String             @unique @db.VarChar(50)
+  userId      String
+  type        TransactionType
+  amount      Decimal            @db.Decimal(12, 4)
+  description String             @db.Text
+  status      TransactionStatus  @default(completed)
+  method      String?            @db.VarChar(50)
+  reference   String?            @db.VarChar(255)
+  orderId     String?            @db.VarChar(255)
+  createdAt   DateTime           @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([reference])
+  @@index([createdAt])
+  @@index([userId, type])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("transactions")
+}
+
+model PaymentMethod {
+  id         String             @id @default(cuid())
+  name       String             @unique @db.VarChar(100)
+  glyph      String             @default("$") @db.VarChar(10)
+  tone       String             @default("") @db.VarChar(255)
+  settleTime String             @default("Instant") @db.VarChar(100)
+  fee        String             @default("0%") @db.VarChar(100)
+  currencies String             @default("USD") @db.VarChar(255)
+  status     PaymentMethodStatus @default(active)
+  sortOrder  Int                @default(0)
+  config     Json?
+  createdAt  DateTime           @default(now())
+  updatedAt  DateTime           @updatedAt
+
+  @@index([status])
+  @@map("payment_methods")
+}
+
+model Notification {
+  id        String               @id @default(cuid())
+  userId    String?
+  type      String               @db.VarChar(50)
+  title     String               @db.VarChar(255)
+  message   String               @db.Text
+  amount    Decimal?             @db.Decimal(12, 4)
+  severity  NotificationSeverity @default(info)
+  read      Boolean              @default(false)
+  createdAt DateTime             @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@index([userId, read])
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model Ticket {
+  id        String         @id @default(cuid())
+  publicId  String         @unique @db.VarChar(50)
+  userId    String
+  subject   String         @db.VarChar(500)
+  status    TicketStatus   @default(open)
+  priority  TicketPriority @default(medium)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+  @@map("tickets")
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  sender    String   @db.VarChar(20)
+  text      String   @db.Text
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@map("ticket_messages")
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   @db.VarChar(100)
+  entity    String   @db.VarChar(100)
+  entityId  String?  @db.VarChar(255)
+  metadata  Json?
+  ip        String?  @db.Inet
+  userAgent String?  @db.Text
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity])
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique @db.VarChar(255)
+  value String @db.Text
+
+  @@map("settings")
+}
+
+// ─────────── API Keys ───────────
+
+model ApiKey {
+  id          String       @id @default(cuid())
+  publicId    String       @unique @db.VarChar(100)
+  keyHash     String       @unique @db.VarChar(255)
+  lookupHash  String?      @unique @db.VarChar(64)
+  name        String       @db.VarChar(255)
+  userId      String
+  permissions String       @default("read,order") @db.VarChar(255)
+  status      ApiKeyStatus @default(active)
+  lastUsedAt  DateTime?
+  lastUsedIp  String?      @db.Inet
+  createdAt   DateTime     @default(now())
+  revokedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([lookupHash])
+  @@map("api_keys")
+}
+
+// ─────────── Licenses ───────────
+
+model License {
+  id            String       @id @default(cuid())
+  licenseKey    String       @unique @db.Text
+  licenseHash   String       @unique @db.VarChar(255)
+  lookupHash    String?      @unique @db.VarChar(64)
+  customerName  String       @db.VarChar(255)
+  customerEmail String       @db.VarChar(255)
+  customerId    String?      @db.VarChar(255)
+  plan          LicensePlan  @default(reseller)
+  status        LicenseStatus @default(active)
+  domain        String?      @db.VarChar(255)
+  ipAllowlist   String?      @db.Text
+  maxUsers      Int          @default(1)
+  maxOrders     Int          @default(10000)
+  issuedAt      DateTime     @default(now())
+  expiresAt     DateTime?
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([status])
+  @@index([customerEmail])
+  @@index([customerId])
+  @@index([lookupHash])
+  @@map("licenses")
+}
+
+// ─────────── Currencies ───────────
+
+model Currency {
+  id        String         @id @default(cuid())
+  code      String         @unique @db.VarChar(10)
+  name      String         @db.VarChar(100)
+  symbol    String         @db.VarChar(10)
+  rate      Decimal        @default(1.0) @db.Decimal(10, 6)
+  status    CurrencyStatus @default(active)
+  sortOrder Int            @default(0)
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([status])
+  @@map("currencies")
+}
+
+// ─────────── Languages ───────────
+
+model Language {
+  id         String         @id @default(cuid())
+  code       String         @unique @db.VarChar(10)
+  name       String         @db.VarChar(100)
+  nativeName String         @db.VarChar(100)
+  flag       String         @default("🌍") @db.VarChar(10)
+  status     LanguageStatus @default(active)
+  sortOrder  Int            @default(0)
+  createdAt  DateTime       @default(now())
+  updatedAt  DateTime       @updatedAt
+
+  @@index([status])
+  @@map("languages")
+}
+
+// ─────────── Webhook logs ───────────
+
+model WebhookLog {
+  id        String           @id @default(cuid())
+  provider  String           @db.VarChar(50)
+  eventType String           @db.VarChar(255)
+  payload   String           @db.Text
+  signature String?          @db.Text
+  status    WebhookLogStatus @default(received)
+  error     String?          @db.Text
+  createdAt DateTime         @default(now())
+
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
+  @@map("webhook_logs")
+}
+
+// ─────────── Subscriptions ───────────
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String
+  plan                 String             @db.VarChar(50)
+  stripeSubscriptionId String?            @db.VarChar(255)
+  status               SubscriptionStatus @default(active)
+  amount               Decimal            @db.Decimal(12, 4)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean            @default(false)
+  seatsUsed            Int                @default(1)
+  seatsLimit           Int                @default(1)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([stripeSubscriptionId])
+  @@index([userId, status])
+  @@map("subscriptions")
+}
+
+// ─────────── Invoices ───────────
+
+model Invoice {
+  id          String        @id @default(cuid())
+  publicId    String        @unique @db.VarChar(50)
+  userId      String
+  type        String        @db.VarChar(50)
+  amount      Decimal       @db.Decimal(12, 4)
+  tax         Decimal       @default(0) @db.Decimal(12, 4)
+  total       Decimal       @db.Decimal(12, 4)
+  currency    String        @default("USD") @db.VarChar(10)
+  status      InvoiceStatus @default(paid)
+  items       Json
+  pdfUrl      String?       @db.Text
+  createdAt   DateTime      @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  @@map("invoices")
+}
+
+// ─────────── Promotions ───────────
+
+model Promotion {
+  id          String           @id @default(cuid())
+  name        String           @db.VarChar(255)
+  description String           @default("") @db.Text
+  serviceId   String?          @db.VarChar(255)
+  discount    Decimal          @db.Decimal(5, 2)
+  startsAt    DateTime
+  endsAt      DateTime
+  status      PromotionStatus  @default(scheduled)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  @@index([status])
+  @@index([serviceId])
+  @@map("promotions")
+}
+
+// ─────────── Roles & Permissions ───────────
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique @db.VarChar(100)
+  description String   @default("") @db.Text
+  color       String   @default("#64748b") @db.VarChar(20)
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions Permission[]
+
+  @@map("roles")
+}
+
+model Permission {
+  id        String   @id @default(cuid())
+  roleId    String
+  resource  String   @db.VarChar(100)
+  actions   String   @default("read") @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, resource])
+  @@index([roleId])
+  @@map("permissions")
+}
+
+// ─────────── Offers ───────────
+
+model Offer {
+  id         String      @id @default(cuid())
+  userId     String
+  serviceId  String
+  price      Decimal     @db.Decimal(12, 4)
+  cost       Decimal     @db.Decimal(12, 4)
+  margin     Decimal     @db.Decimal(5, 2)
+  status     OfferStatus @default(active)
+  sales      Int         @default(0)
+  earnings   Decimal     @default(0) @db.Decimal(12, 4)
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([serviceId])
+  @@index([userId, status])
+  @@map("offers")
+}
+
+// ─────────── Referrals ───────────
+
+model Referral {
+  id            String         @id @default(cuid())
+  referrerId    String
+  referredId    String?
+  referredEmail String         @db.VarChar(255)
+  code          String         @unique @db.VarChar(50)
+  status        ReferralStatus @default(pending)
+  earnings      Decimal        @default(0) @db.Decimal(12, 4)
+  createdAt     DateTime       @default(now())
+  completedAt   DateTime?
+
+  @@index([referrerId])
+  @@index([code])
+  @@map("referrals")
+}
+
+// ─────────── Coupons ───────────
+
+model Coupon {
+  id          String        @id @default(cuid())
+  code        String        @unique @db.VarChar(50)
+  type        String        @default("percent") @db.VarChar(20)
+  value       Decimal       @db.Decimal(12, 4)
+  maxUses     Int           @default(100)
+  usedCount   Int           @default(0)
+  status      CouponStatus  @default(active)
+  expiresAt   DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@index([status])
+  @@map("coupons")
+}
+
+// ─────────── Favorites ───────────
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  serviceId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceId])
+  @@index([userId])
+  @@index([serviceId])
+  @@map("favorites")
+}
+
+// ─────────── Ticket attachments ───────────
+
+model TicketAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  filename  String   @db.VarChar(255)
+  url       String   @db.Text
+  mimeType  String   @db.VarChar(100)
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+  @@map("ticket_attachments")
+}
+
+// ─────────── Payment intents ───────────
+
+model PaymentIntent {
+  id               String              @id @default(cuid())
+  publicId         String              @unique @db.VarChar(100)
+  userId           String
+  amount           Decimal             @db.Decimal(12, 4)
+  currency         String              @default("USD") @db.VarChar(10)
+  method           String              @db.VarChar(50)
+  providerIntentId String?             @db.VarChar(255)
+  status           PaymentIntentStatus @default(pending)
+  description      String?             @db.Text
+  metadata         Json?
+  createdAt        DateTime            @default(now())
+  updatedAt        DateTime            @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([providerIntentId])
+  @@map("payment_intents")
+}
+
+// ─────────── Loyalty Points ───────────
+
+model LoyaltyPoint {
+  id        String   @id @default(cuid())
+  userId    String
+  points    Int
+  reason    String   @db.VarChar(100)
+  orderId   String?  @db.VarChar(255)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([userId, createdAt])
+  @@map("loyalty_points")
+}
+
+// ─────────── Achievements ───────────
+
+model Achievement {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String   @db.VarChar(100)
+  unlockedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+  @@map("achievements")
+}
+
+// ─────────── Sequence counter (atomic public-ID generation) ───────────
+
+model Sequence {
+  id         String @id
+  lastValue  Int    @default(0)
+  prefix     String @db.VarChar(10)
+  updatedAt  DateTime @updatedAt
+
+  @@map("sequences")
+}

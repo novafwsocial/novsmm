@@ -52,7 +52,9 @@ export async function GET(req: NextRequest) {
         l.action,
         l.entity,
         l.entityId ?? "",
-        l.metadata ?? "",
+        // metadata is now a Json column — Prisma returns the parsed object.
+        // CSV needs a string, so we serialize it back. Null → empty cell.
+        l.metadata ? JSON.stringify(l.metadata) : "",
         l.ip ?? "",
         l.createdAt.toISOString(),
       ]),

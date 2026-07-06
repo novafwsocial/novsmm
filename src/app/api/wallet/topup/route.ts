@@ -430,7 +430,7 @@ export async function POST(req: NextRequest) {
  * success rate. Used when no real credentials are configured.
  */
 async function processPayment(
-  pm: { name: string; config: string | null },
+  pm: { name: string; config: unknown },
   amount: number,
   reference: string
 ): Promise<{ success: boolean; reference: string }> {

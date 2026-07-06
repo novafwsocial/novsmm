@@ -1,6 +1,9 @@
-// NOVSMM — production schema
-// SQLite-compatible: no native enums (use String), no Decimal (use Float),
-// no Json (use String with JSON serialization), no arrays.
+// NOVSMM — schema (SQLite dev + PostgreSQL production ready)
+// SQLite-compatible: no native enums (use String), no @db.Decimal (use Float),
+// no @db.VarChar (ignored on SQLite).
+// Json type works on both: SQLite stores as TEXT, PostgreSQL stores as JSONB.
+// For full PostgreSQL schema with native enums + Decimal + VarChar, see
+// prisma/schema.postgres.prisma
 
 generator client {
   provider = "prisma-client-js"
@@ -149,7 +152,8 @@ model Order {
   // JSON-encoded drip-feed configuration. Populated when the user opted to
   // split delivery into chunks (e.g. 1000 followers over 10 days).
   // Shape: { totalQuantity:number, chunks:number, perChunk:number, delayMinutes:number, startDate:string }
-  dripFeedConfig  String?
+  // NOTE: Using Json type — works on SQLite (stored as TEXT) and PostgreSQL (stored as JSONB with GIN index)
+  dripFeedConfig  Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   completedAt     DateTime?
@@ -200,7 +204,7 @@ model PaymentMethod {
   currencies String   @default("USD")
   status     String   @default("active") // active | maintenance | disabled
   sortOrder  Int      @default(0)
-  config     String?  // JSON: API keys, webhook secrets, etc.
+  config     Json?   // JSON: API keys, webhook secrets, etc.
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -263,7 +267,7 @@ model AuditLog {
   action    String   // create | update | delete | login | logout | suspend
   entity    String   // user | service | provider | payment_method | order | etc.
   entityId  String?
-  metadata  String?  // JSON string
+  metadata  Json?   // JSON object (stored as JsonB on PostgreSQL)
   ip        String?
   userAgent String?
   createdAt DateTime @default(now())
@@ -411,7 +415,7 @@ model Invoice {
   total       Float
   currency    String   @default("USD")
   status      String   @default("paid") // paid | pending | void
-  items       String   // JSON: [{ description, quantity, unitPrice, total }]
+  items       Json   // JSON: [{ description, quantity, unitPrice, total }]
   pdfUrl      String?
   createdAt   DateTime @default(now())
 
@@ -557,7 +561,7 @@ model PaymentIntent {
   providerIntentId String? // stripe payment_intent_id, MP preference_id
   status          String   @default("pending") // pending | succeeded | failed | refunded
   description     String?
-  metadata        String?  // JSON
+  metadata        Json?  // JSON (stored as JsonB on PostgreSQL)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

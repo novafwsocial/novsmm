@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createOrderSchema } from "@/lib/validations";
@@ -27,7 +28,8 @@ const createOrderWithDripSchema = createOrderSchema.extend({
 );
 
 /**
- * Builds the JSON-encoded drip-feed configuration object stored on the order.
+ * Builds the drip-feed configuration object stored on the order (Json column).
+ * Prisma serializes the object automatically — no JSON.stringify needed.
  * Returns `null` when drip-feed is disabled or the inputs are invalid.
  */
 function buildDripFeedConfig(
@@ -35,18 +37,18 @@ function buildDripFeedConfig(
   totalQuantity: number,
   dripDays: number | undefined,
   dripDelay: number | undefined,
-): string | null {
+): Record<string, any> | null {
   if (!dripFeed) return null;
   const chunks = Math.max(1, Math.min(365, dripDays ?? 1));
   const perChunk = Math.max(1, Math.floor(totalQuantity / chunks));
   const delayMinutes = dripDelay ?? 1440; // 24h default
-  return JSON.stringify({
+  return {
     totalQuantity,
     chunks,
     perChunk,
     delayMinutes,
     startDate: new Date().toISOString(),
-  });
+  };
 }
 
 /**
@@ -304,7 +306,9 @@ export async function POST(req: NextRequest) {
               ? `${dripDays}d drip`
               : priority === "highest" ? "<1m" : priority === "priority" ? "1m" : "2m",
             flag: "🌍",
-            dripFeedConfig: dripConfig,
+            // dripFeedConfig is a Json column. Prisma needs DbNull (not JS null)
+            // when the value is absent so the column writes SQL NULL.
+            dripFeedConfig: dripConfig ?? Prisma.DbNull,
           },
         });
 

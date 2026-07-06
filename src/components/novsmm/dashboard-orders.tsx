@@ -251,15 +251,9 @@ function OrderDetailDrawer({
     ? Math.max(0, Math.ceil((CANCEL_WINDOW_MS - elapsed) / 1000))
     : 0;
 
-  // Parse drip-feed config if present
-  const dripConfig = useMemo(() => {
-    if (!order.dripFeedConfig) return null;
-    try {
-      return JSON.parse(order.dripFeedConfig);
-    } catch {
-      return null;
-    }
-  }, [order.dripFeedConfig]);
+  // dripFeedConfig is now a Json column — Prisma + the API JSON response
+  // already give us the parsed object, so no JSON.parse is needed.
+  const dripConfig = useMemo(() => order.dripFeedConfig ?? null, [order.dripFeedConfig]);
 
   const handleCancel = async () => {
     await cancelOrder.mutateAsync({ orderId: order.id });

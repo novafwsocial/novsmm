@@ -211,7 +211,8 @@ export async function POST(req: NextRequest) {
       total: plan.amount,
       currency: "USD",
       status: "paid",
-      items: JSON.stringify([{ description: `${plan.name} plan — ${billingCycle}`, quantity: 1, unitPrice: plan.amount, total: plan.amount }]),
+      // items is now a Json column — pass the array directly (no JSON.stringify).
+      items: [{ description: `${plan.name} plan — ${billingCycle}`, quantity: 1, unitPrice: plan.amount, total: plan.amount }],
     },
   });
 

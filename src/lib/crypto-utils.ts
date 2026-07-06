@@ -64,8 +64,15 @@ export function encryptJSON(obj: Record<string, any>): string {
 
 /**
  * Decrypt a JSON object.
+ *
+ * Accepts `unknown` so callers can pass the raw Prisma `JsonValue | null`
+ * from a Json column directly — when the column stores an encrypted string
+ * (the only thing `encryptJSON` ever writes), Prisma returns it as a JS
+ * string at runtime and this function decrypts it. Non-string values
+ * (e.g. legacy objects/arrays) return null safely.
  */
-export function decryptJSON(encryptedStr: string): Record<string, any> | null {
+export function decryptJSON(encryptedStr: unknown): Record<string, any> | null {
+  if (typeof encryptedStr !== "string") return null;
   try {
     const json = decrypt(encryptedStr);
     return JSON.parse(json);

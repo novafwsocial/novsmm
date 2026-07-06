@@ -1,4 +1,5 @@
 import { NextRequest } from "next/server";
+import { Prisma } from "@prisma/client";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createPaymentMethodSchema } from "@/lib/validations";
@@ -11,7 +12,8 @@ export async function GET() {
   const methods = await db.paymentMethod.findMany({
     orderBy: { sortOrder: "asc" },
   });
-  // Don't expose full config (credentials) in the list — mask them
+  // Don't expose full config (credentials) in the list — mask them.
+  // m.config is now a Json column; maskConfig handles any JsonValue.
   const safe = methods.map((m) => ({
     ...m,
     config: m.config ? maskConfig(m.config) : null,
@@ -19,8 +21,16 @@ export async function GET() {
   return apiOk({ methods: safe });
 }
 
-/** Mask sensitive config values for display (show only last 4 chars) */
-function maskConfig(configStr: string): string {
+/**
+ * Mask sensitive config values for display (show only last 4 chars).
+ *
+ * `configStr` is the value read from the Json column. The only thing we
+ * ever store there is an encrypted string produced by `encryptJSON()`,
+ * which Prisma returns verbatim as a JS string. We accept `unknown` for
+ * safety so the Json type flows through without per-call casts.
+ */
+function maskConfig(configStr: unknown): string {
+  if (typeof configStr !== "string") return "••••";
   try {
     // Try decrypting first (new format)
     const config = decryptJSON(configStr);
@@ -87,9 +97,11 @@ export async function PATCH(req: NextRequest) {
 
   const updateData: any = { ...data };
 
-  // If config is provided, encrypt before saving
+  // If config is provided, encrypt before saving.
+  // When clearing config (config=null), use Prisma.DbNull — a plain JS `null`
+  // is not assignable to a Json column type at the Prisma client boundary.
   if (config !== undefined) {
-    updateData.config = config ? encryptJSON(config) : null;
+    updateData.config = config ? encryptJSON(config) : Prisma.DbNull;
   }
 
   const method = await db.paymentMethod.update({ where: { id }, data: updateData });

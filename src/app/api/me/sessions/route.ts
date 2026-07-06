@@ -40,12 +40,13 @@ export async function GET() {
   });
 
   // Format sessions with device info
+  // metadata is now a Json column — Prisma returns the parsed object directly.
   const sessions = recentLogins.map((log, i) => {
     let deviceInfo = "Unknown device";
     try {
       if (log.metadata) {
-        const meta = JSON.parse(log.metadata);
-        if (meta.userAgent) deviceInfo = meta.userAgent;
+        const meta = log.metadata as Record<string, any> | null;
+        if (meta?.userAgent) deviceInfo = meta.userAgent;
       }
     } catch {}
     return {
