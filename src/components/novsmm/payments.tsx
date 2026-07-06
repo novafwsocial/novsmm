@@ -81,9 +81,7 @@ export function Payments() {
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
           {/* Coin field — gravity + mouse reactive */}
-          <Reveal blur>
-            <CoinField />
-          </Reveal>
+          <CoinField />
 
           {/* Provider cards */}
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
