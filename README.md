@@ -169,9 +169,12 @@ novsmm/
 ├── mini-services/
 │   └── notifications-service/ # Socket.IO real-time push service
 ├── scripts/
-│   ├── backup-db.sh           # PostgreSQL backup script
-│   ├── backup-uploads.sh      # File uploads backup
-│   └── restore-db.sh          # Database restore script
+│   ├── backup.sh              # PostgreSQL backup (DB + uploads + config)
+│   ├── backup-uploads.sh      # File uploads backup (S3)
+│   ├── restore.sh             # Database restore (interactive)
+│   ├── dr-drill.sh            # Monthly DR drill (restore to temp DB + verify)
+│   ├── monitor-setup.sh       # Prometheus + Grafana + AlertManager setup
+│   └── pre-deploy-check.sh    # VPS pre-deployment validation
 ├── docs/                      # Documentation
 ├── public/                    # Static assets
 ├── Dockerfile                 # Multi-stage production build

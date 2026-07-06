@@ -39,16 +39,18 @@ This document covers backup strategy, restore procedures, and disaster recovery 
 
 ```bash
 # Manual backup
-./scripts/backup-db.sh
+./scripts/backup.sh
 
 # Cron (nightly at 2 AM)
-0 2 * * * /opt/novsmm/scripts/backup-db.sh >> /var/log/novsmm-backup.log 2>&1
+0 2 * * * /opt/novsmm/scripts/backup.sh >> /var/log/novsmm-backup.log 2>&1
 ```
 
 The script:
-1. Creates a compressed `pg_dump` (`.sql.gz`)
-2. Optionally uploads to S3 (if `S3_BACKUP_BUCKET` is set)
-3. Deletes backups older than 30 days
+1. Creates a compressed `pg_dump` (`.sql.gz`, custom format)
+2. Verifies backup integrity (`gunzip -t` + `pg_restore --list` to count tables)
+3. Optionally uploads to S3 (if `S3_BACKUP_BUCKET` is set, with error reporting)
+4. Deletes backups older than 30 days
+5. Reports success to `/api/internal/backup-status` (updates `novsmm_backup_last_success_timestamp` metric for the `BackupFailure` Prometheus alert)
 
 ### File Backup
 
@@ -64,7 +66,7 @@ The script:
 
 ```bash
 # Interactive restore (requires confirmation)
-./scripts/restore-db.sh /backups/novsmm_20250115_020000.sql.gz
+./scripts/restore.sh /backups/novsmm_20250115_020000.sql.gz
 ```
 
 ## Restore Procedures
@@ -79,7 +81,7 @@ The script:
 docker compose stop web worker
 
 # 2. Restore from latest backup
-./scripts/restore-db.sh /backups/novsmm_$(date +%Y%m%d)_020000.sql.gz
+./scripts/restore.sh /backups/novsmm_$(date +%Y%m%d)_020000.sql.gz
 
 # 3. Verify data integrity
 docker compose exec postgres psql -U novsmm -d novsmm -c "SELECT COUNT(*) FROM users;"
@@ -123,7 +125,7 @@ docker compose up -d --build
 
 # 7. Restore database from S3
 aws s3 cp s3://your-backup-bucket/novsmm_latest.sql.gz /backups/
-./scripts/restore-db.sh /backups/novsmm_latest.sql.gz
+./scripts/restore.sh /backups/novsmm_latest.sql.gz
 
 # 8. Restore uploads from S3
 aws s3 sync s3://your-backup-bucket/uploads/ uploads/
@@ -178,7 +180,7 @@ docker tag novsmm:previous novsmm:latest
 docker compose up -d
 
 # 3. If database migration broke something, restore DB
-./scripts/restore-db.sh /backups/novsmm_$(date +%Y%m%d)_020000.sql.gz
+./scripts/restore.sh /backups/novsmm_$(date +%Y%m%d)_020000.sql.gz
 
 # 4. Verify
 curl https://novsmm.com/api/health/ready
@@ -188,7 +190,27 @@ curl https://novsmm.com/api/health/ready
 
 ## DR Drills
 
-### Quarterly DR Drill (Recommended)
+### Automated DR Drill (Monthly)
+
+**Purpose:** Verify backup integrity and restore procedures work end-to-end without touching production.
+
+**Script:** `scripts/dr-drill.sh` (see below)
+
+**Cron schedule (1st of each month, 6 AM):**
+```bash
+0 6 1 * * /opt/novsmm/scripts/dr-drill.sh >> /var/log/novsmm-dr-drill.log 2>&1
+```
+
+The automated drill:
+1. Picks the latest successful backup
+2. Restores it to a temporary `novsmm_drill` database (never touches `novsmm`)
+3. Verifies table counts and row counts
+4. Runs a referential integrity check
+5. Drops the temp database
+6. Exits non-zero on any failure (so cron mail / log monitoring catches it)
+7. Reports drill result to `/api/internal/backup-status` (optional, if token set)
+
+### Quarterly DR Drill (Manual, full restore test)
 
 **Purpose:** Verify backup integrity and restore procedures work.
 

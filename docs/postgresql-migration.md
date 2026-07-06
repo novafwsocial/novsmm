@@ -287,7 +287,7 @@ never writes to it. So rollback is as simple as switching the schema back.
 ```bash
 # Nightly backup script (add to cron)
 #!/bin/bash
-# /opt/novsmm/backup-db.sh
+# /opt/novsmm/scripts/backup.sh
 DATE=$(date +%Y%m%d_%H%M%S)
 pg_dump -U novsmm_user -h localhost -p 6432 novsmm | gzip > /backups/novsmm_${DATE}.sql.gz
 
@@ -295,7 +295,7 @@ pg_dump -U novsmm_user -h localhost -p 6432 novsmm | gzip > /backups/novsmm_${DA
 find /backups -name "novsmm_*.sql.gz" -mtime +30 -delete
 
 # Cron entry (every night at 2 AM)
-# 0 2 * * * /opt/novsmm/backup-db.sh
+# 0 2 * * * /opt/novsmm/scripts/backup.sh
 ```
 
 ## Next Steps

@@ -22,7 +22,7 @@ This document is the final validation that NOVSMM is ready for production deploy
 - [x] Origin check is value-matched (not presence-only)
 - [x] Caddyfile SSRF vector removed (explicit path routing)
 - [x] `admin123` removed from seed (random password generated)
-- [x] Dev DB not shipped in production build (`.zscripts/build.sh` fixed)
+- [x] Dev DB not shipped in production build (`.zscripts/build.sh` deprecated; Docker build used instead)
 - [x] Audit logs capture IP + User-Agent (via `audit()` helper)
 - [x] Zod `.strict()` validation on all PATCH routes (no arbitrary field injection)
 - [x] `process.env.STRIPE_SECRET_KEY` runtime mutation eliminated
@@ -321,8 +321,9 @@ Before deploying to production:
    - SMTP credentials
 
 4. **Set up backups**:
-   - Cron jobs for `backup-db.sh` + `backup-uploads.sh`
+   - Cron jobs for `backup.sh` + `backup-uploads.sh`
    - Verify restore works on a test VPS
+   - Schedule monthly DR drill via `dr-drill.sh`
 
 5. **Run load test** (recommended):
    - 100 concurrent users for 5 minutes

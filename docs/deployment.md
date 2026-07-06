@@ -200,13 +200,13 @@ crontab -e
 
 # Add these lines:
 # Nightly DB backup at 2 AM
-0 2 * * * /opt/novsmm/scripts/backup-db.sh >> /var/log/novsmm-backup.log 2>&1
+0 2 * * * /opt/novsmm/scripts/backup.sh >> /var/log/novsmm-backup.log 2>&1
 
 # Daily uploads backup at 3 AM (if using S3)
 0 3 * * * /opt/novsmm/scripts/backup-uploads.sh >> /var/log/novsmm-backup.log 2>&1
 
 # Weekly full backup verification at 4 AM on Sundays
-0 4 * * 0 /opt/novsmm/scripts/backup-db.sh >> /var/log/novsmm-backup-weekly.log 2>&1
+0 4 * * 0 /opt/novsmm/scripts/backup.sh >> /var/log/novsmm-backup-weekly.log 2>&1
 ```
 
 ## Step 12: Configure Sentry (Optional)
@@ -288,10 +288,10 @@ docker compose exec web bun run prisma migrate reset
 docker compose exec postgres psql -U novsmm -d novsmm
 
 # Backup
-./scripts/backup-db.sh
+./scripts/backup.sh
 
 # Restore
-./scripts/restore-db.sh /backups/novsmm_20250115_020000.sql.gz
+./scripts/restore.sh /backups/novsmm_20250115_020000.sql.gz
 ```
 
 ### Update to New Version
@@ -360,5 +360,5 @@ docker compose pull
 docker compose up -d
 
 # Roll back database (if migration broke something)
-./scripts/restore-db.sh /backups/novsmm_<previous_date>.sql.gz
+./scripts/restore.sh /backups/novsmm_<previous_date>.sql.gz
 ```
