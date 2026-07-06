@@ -5178,3 +5178,3529 @@ Stage Summary:
 - All 10 phases of the Enterprise Architecture Migration are complete
 - NOVSMM is a production-ready SaaS Enterprise platform
 - Ready for VPS deployment with Docker + Nginx + Cloudflare + PostgreSQL + Redis
+
+---
+
+## AUDIT-D — Bash Scripts + Disaster Recovery Audit
+**Task ID:** AUDIT-D
+**Auditor:** External SRE (production certification)
+**Scope:** 12 bash scripts + 1 k6 JS + 3 monitoring YAML files
+**Date:** $(date '+%Y-%m-%d %H:%M:%S')
+
+### Executive Summary
+
+| Severity | Count |
+|----------|-------|
+| ❌ P0 Crítico | 11 |
+| ⚠️ P1 Alto | 18 |
+| ℹ️ P2 Mejorable | 14 |
+
+**Production Certification: BLOCKED** until P0 issues resolved.
+
+The bash scripting layer has solid shell hygiene (`set -euo pipefail` in 10/12 scripts) but contains **critical correctness bugs** in the backup verification logic, **duplicate scripts** that drift from canonical versions, **default-`admin` Grafana credentials**, **placeholder AlertManager webhooks**, and **no real DR drill automation**. Monitoring blind spots for PostgreSQL and Redis (exporters commented out) mean the alerting layer cannot detect DB/Redis outages directly.
+
+---
+
+### File-by-File Findings
+
+
+---
+
+## AUDIT-E — Performance + Observability Audit (External SRE)
+
+**Scope:** Performance hotspots, observability stack, production failure scenarios.
+**Audited files:** 22 (15 perf + 7 observability) + dependencies + schema cross-check.
+**Method:** Static code review, schema/index inspection, runtime behavior analysis.
+**Verdict:** ⚠️ **NOT APPROVED FOR PRODUCTION** — 4 P0 / 9 P1 / 14 P2 issues found.
+
+### Executive summary
+
+| Severity | Count | Examples |
+|---|---|---|
+| P0 (critical) | 4 | Unbounded CSV exports (OOM risk), metrics are dead code, readiness ignores memory check, audit/log CSV exports with no `take` |
+| P1 (high) | 9 | Routes use `console.error` instead of `logger`/Sentry, admin-panel 2831 lines no code-splitting, no Prisma query listener, setTimeout chains in fallback mode |
+| P2 (medium) | 14 | In-memory day-by-day revenue series, missing `experimental.optimizePackageImports`, no streaming for CSV, hardcoded fake health %, etc. |
+
+Most of the *infrastructure* (logger, metrics, Sentry, health probes, Redis fallback, BullMQ queues) is well-designed. The gap is **wiring**: the structured logger, metrics recorders, Sentry `captureException`, and `withErrorHandler` HOC all exist but are bypassed by ~32 API routes that use raw `console.error` + `try/catch` + `apiError`. The observability stack is therefore blind in production.
+
+---
+
+### Performance findings
+
+#### 1. `src/lib/auth.ts` — JWT callback
+- **Status:** ⚠️ Mejorable  | **Priority:** P1 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** JWT callback runs on every authenticated request. Redis cache (30s TTL) prevents DB hit on cache hit. **But**: on Redis outage, every request falls through to a DB `findUnique` (line 270) — and the in-memory fallback cache is per-instance only, so multi-instance deployments will hammer Postgres.
+- **Evidence:** lines 246–289 (cache miss → DB), 291–293 (catch swallows errors silently — no log).
+- **Risk:** Redis outage amplifies DB load by ~7× (one JWT refresh per polling query × active users). No early-break when both cache + DB fail.
+- **Reproduce:** Stop Redis with active sessions; tail Postgres logs.
+- **Fix:** (1) Use a longer in-memory LRU fallback (5 min) when Redis is down, with a single-flight promise per `userId` to coalesce concurrent refreshes. (2) Log cache misses at `warn` so SREs see the fallback.
+
+#### 2. `src/lib/orders.ts` — simulateFulfillment
+- **Status:** ⚠️ Mejorable  | **Priority:** P1 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** 4 sequential `await new Promise(r => setTimeout(r, …))` steps, each followed by `findUnique` + `update` (lines 110–136). When the BullMQ worker is running this is fine (concurrency 5). **In fallback mode** (no Redis, sandbox/dev) `enqueueJob()` calls the handler via `setImmediate` in-process — these setTimeout chains then **hold the request process** for up to 12s × N concurrent orders, blocking the event loop on every timer wake.
+- **Evidence:** `queues.ts` lines 104–114 (fallback `setImmediate`); `orders.ts` lines 110–111.
+- **Risk:** In fallback mode, 10 concurrent orders → 10 simultaneous 12s timers → 40 DB round-trips → request latency spikes for unrelated endpoints sharing the process.
+- **Fix:** Always require Redis in production (worker exits cleanly without it). Add a feature flag that **disables** in-process fallback in production (`NODE_ENV === 'production'`) and instead marks orders as `pending` for the worker to pick up later.
+
+#### 3. `src/hooks/use-api.ts` — Polling intervals
+- **Status:** ✅ Aprobado (with notes) | **Priority:** P2 | **Impact:** Bajo | **Confidence:** Alta
+- **Description:** Polling intervals already reduced (60s dashboard/orders/wallet, 30s notifications, 120s admin). **Gap:** No `staleTime` on most queries → every mount triggers a refetch even if data is seconds old. `useAllServices` (line 155) hardcodes `limit=60` and is called on every Sell tab open with no `staleTime`.
+- **Evidence:** lines 37–43 (dashboard), 46–56 (orders), 155–161 (all-services — no staleTime, no refetchInterval).
+- **Risk:** Excessive refetches when users switch tabs rapidly. 60-service payload on every Sell open.
+- **Fix:** Add `staleTime: 30_000` to dashboard/orders/wallet queries; add `staleTime: 5 * 60_000` to admin queries; add `keepPreviousData: true` to paginated queries (already done on `useServices`).
+
+#### 4. `src/app/api/dashboard/route.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P2 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** 5 queries in `Promise.all` (good). Revenue series is built in JS: fetches all txns for the window (up to 90d), then filters day-by-day in a nested loop (lines 80–100). Should be SQL `groupBy` with `date_trunc('day', ...)`.
+- **Evidence:** lines 80–100.
+- **Risk:** A power user with 10k txns in 90d → 10k-row fetch + O(N×D) JS filter. Fine for SQLite dev; will hurt on Postgres at scale.
+- **Fix:** Replace with `db.transaction.groupBy({ by: [dateTrunc], _sum: { amount: true }, where: { userId, createdAt: { gte: NdaysAgo } } })`. Caches the result for 30s via `cacheGetOrSet('dashboard:${userId}:${range}', …)`.
+
+#### 5. `src/app/api/orders/route.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P2 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** `take: 100` cap on GET (line 134) prevents unbounded loads but is **not pagination** — users with >100 orders cannot see older ones. No cursor or page param. Search uses `contains` on 4 columns (no index on `publicId`, `serviceName`, `platform`, `providerName` → full scan).
+- **Evidence:** lines 118–158.
+- **Schema:** `Order` has `@@index([userId, createdAt])` and `@@index([userId, status])` but **no index on `publicId`-contains search** — `contains` on Postgres needs `pg_trgm` GIN index for performance.
+- **Risk:** Power users with 100+ orders lose visibility. Search becomes slow as Order table grows.
+- **Fix:** Add `?page=1&limit=50` with `skip`/`take` (mirror `admin/users` pattern). Add GIN index on `("serviceName", "publicId")` for search.
+
+#### 6. `src/app/api/wallet/route.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P2 | **Impact:** Bajo | **Confidence:** Alta
+- **Description:** Two queries (recent transactions `take:50` + 30d transactions for series) — but the series query has **no `take`** (line 43). A user with thousands of transactions in 30d loads them all into memory then filters day-by-day in JS (lines 51–65).
+- **Evidence:** lines 43–65.
+- **Fix:** SQL `groupBy` day bucket; or at minimum `take: 5000` safety cap.
+
+#### 7. `src/app/api/admin/overview/route.ts`
+- **Status:** ❌ Crítico  | **Priority:** P0 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Two issues:
+  1. **Hardcoded fake health metrics** (lines 96–106): `"API gateway": "99.99%"`, `"Order processor": "99.98%"`, `"Provider sync (P-03)": "degraded"` — these are static strings, not real metrics. Admins see misleading "99.99%" status regardless of actual health.
+  2. `revenue30dTxns` query (line 28) pulls ALL sale txns in 30d into memory with no `take` — on a busy platform this is millions of rows.
+- **Evidence:** lines 28–34 (no `take`), lines 96–106 (fake %).
+- **Risk:** Admins make decisions on fake data; OOM risk on revenue query at scale.
+- **Fix:** Replace `findMany` with `aggregate({ _sum: { amount: true }, where: {...} })` for the headline number, plus `groupBy` by day for the series. Compute real health from Prometheus metrics or remove the `health` block until real data is available.
+
+#### 8. `src/app/api/analytics/route.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P2 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** 9 sequential/parallel DB queries per request. Three in-memory day-by-day loops (30d series, 14d referrals, 24h hourly). `totalRevenue` (line 70) sums ALL sale txns for the user (no time bound) — at scale this is a full-table scan per request.
+- **Evidence:** lines 67–77 (5 counts/aggregates), 83–106 (30d series), 111–119 (24h hourly), 144–166 (14d referrals).
+- **Risk:** Slow query on users with thousands of txns; no caching layer.
+- **Fix:** Cache the entire response for 5 min via `cacheGetOrSet('analytics:${userId}', 300, …)`. Move day-bucketing to SQL. Skip the AI insights regen on cache hits (already done).
+
+#### 9. `src/app/api/admin/logs/route.ts`
+- **Status:** ❌ Crítico  | **Priority:** P0 | **Impact:** Crítico | **Confidence:** Alta
+- **Description:** CSV export path (lines 37–71) does `db.auditLog.findMany({ where, include: { user }, orderBy })` **with NO `take` limit**. Builds the entire CSV in memory as a single string, then returns it as one Response. AuditLog grows monotonically — at 1M rows (typical for a year of SaaS) this is **OOM certain**.
+- **Evidence:** lines 38–44 (no `take`), 46–62 (in-memory CSV build), 63–70 (single Response).
+- **Risk:** Single admin request can OOM the process. No pagination/streaming.
+- **Reproduce:** Generate 100k audit logs (`bun run prisma db seed`), call `/api/admin/logs?format=csv`.
+- **Fix:** (1) Stream the response using `ReadableStream` + `TextEncoder`. (2) Use Prisma cursor pagination (`cursor: { id }, skip: 1, take: 5000`) in a loop. (3) Add a hard `take: 100_000` ceiling with a "refine your filter" message.
+
+#### 10. `src/app/api/export/route.ts`
+- **Status:** ❌ Crítico  | **Priority:** P0 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Same pattern as logs: `db.order.findMany({ where: { userId } })` with no `take` (line 23), `db.transaction.findMany({ where: { userId } })` with no `take` (line 29). Builds CSV in memory.
+- **Evidence:** lines 22–36, 43–53.
+- **Risk:** A power user with 50k orders triggers a 50k-row fetch + 50k-row CSV string build. Memory spike per request.
+- **Fix:** Same as #9 — stream + cursor pagination. Also add `?from=&to=` date filter.
+
+#### 11. `next.config.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P1 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Bare-minimum config (`output: standalone`, `reactStrictMode`, `poweredByHeader: false`). **Missing:**
+  - `experimental.optimizePackageImports` for `lucide-react`, `recharts`, `framer-motion` (these are the largest deps; without tree-shaking helpers Next pulls whole packages).
+  - `images.formats: ['image/avif', 'image/webp']`.
+  - `compiler.removeConsole: { exclude: ['error'] }` for production (strip `console.log/info/debug`).
+  - `experimental.serverActions` / `serverExternalPackages` for `ioredis`, `bullmq`, `@sentry/node`.
+  - `headers()` for global `Cache-Control` on `/_next/static/`.
+- **Evidence:** entire file (12 lines).
+- **Risk:** Bundle size significantly larger than necessary; slower TTI for users on slow connections.
+- **Fix:** Add the above options; measure with `ANALYZE=true next build` + `@next/bundle-analyzer`.
+
+#### 12. `tailwind.config.ts`
+- **Status:** ✅ Aprobado | **Priority:** — | **Impact:** Bajo | **Confidence:** Alta
+- **Description:** Content globs cover `app/`, `components/`, `lib/`, `hooks/` — correct. No `safelist` (good). Minor: Tailwind v4 in `devDependencies` but config file is v3-style — confirm which version is actually active.
+
+#### 13. `src/components/novsmm/payments.tsx`
+- **Status:** ✅ Aprobado | **Priority:** P2 | **Impact:** Bajo | **Confidence:** Alta
+- **Description:** `ClientOnly` wrapper correctly prevents hydration mismatch (lines 193–206). `FloatingCoin` components not memoized but only 8 of them, so impact is negligible. Framer-motion bundle (~30KB gz) loaded for one decorative section.
+- **Fix:** Wrap `CoinField` in `next/dynamic` with `ssr: false` to skip the SSR bundle entirely.
+
+#### 14. `src/components/novsmm/admin-panel.tsx` (2831 lines, 136KB)
+- **Status:** ❌ Crítico  | **Priority:** P0 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Single client component containing **22 admin sub-views** (overview, users, orders, services, providers, payments, promotions, withdrawals, refunds, apiKeys, licenses, currencies, languages, webhooks, settings, security, roles, socialAuth, version, …). Imports 40+ icons + recharts + framer-motion + every Radix AlertDialog primitive + 30+ hooks. **Zero code splitting**: the entire admin bundle downloads before the first admin tab renders. Only one `useMemo`/`useCallback` in the whole file (line 4 import).
+- **Evidence:** file size 136KB source, `import` block lines 1–113, no `React.lazy` / `next/dynamic` / `React.memo`.
+- **Risk:** Admin users on mobile/slow connections wait 5–10s for first interactive. Every non-admin user who visits the home page also downloads this (it's in the shared bundle if any other component imports from `novsmm/`).
+- **Reproduce:** `bun run build && du -sh .next/static/chunks/*` — the admin chunk will be 200KB+.
+- **Fix:** Split each tab into its own file (`admin-tabs/users.tsx`, etc.), wrap each in `React.lazy(() => import(...))`, render with `<Suspense fallback={<Loader/>}>`. Memoize tab header. Move recharts to dynamic import (only the overview tab uses it).
+
+#### 15. `package.json`
+- **Status:** ⚠️ Mejorable  | **Priority:** P2 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** Dependency audit:
+  - `framer-motion` ^12.23 + `recharts` ^2.15 + `lenis` ^1.3 + `socket.io-client` ^4.8 — all heavy client-side deps, no bundle-analyzer configured.
+  - `@sentry/node` ^10.63 — should be `@sentry/nextjs` for Next 16 (instruments server components, edge runtime, client-side errors).
+  - 24 `@radix-ui/react-*` packages — verify all are used; dead ones add ~5KB each.
+  - `z-ai-web-dev-sdk` — runtime dep used by `ai-insights.ts`; confirm it's not pulled into the client bundle.
+- **Fix:** Add `@next/bundle-analyzer` + `@sentry/nextjs`. Run `bun run build` with analyzer and trim.
+
+---
+
+### Observability findings
+
+#### 16. `src/lib/logger.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P1 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Well-designed: pino with sensitive-field redaction (28 fields), AsyncLocalStorage for requestId propagation, pretty-print in dev / JSON in prod. **But**: production routes use `console.error` instead of this logger — 86 `console.*` calls across 32 files (worker.ts alone has 13). The logger is **bypassed in production**.
+- **Evidence:** `orders/route.ts` lines 369, 387, 487 (`console.error`); `api-utils.ts` line 184 (`console.error` in `audit()`).
+- **Risk:** Production logs are unstructured, no requestId correlation, no redaction (passwords could leak). Pino's `redact` is useless if `console.*` is used.
+- **Fix:** (1) Replace all `console.error/log` in `src/app/api/**` and `src/lib/**` with `logger.error/info` from `withContext({ module: "..." })`. (2) Add `compiler.removeConsole` to next.config to catch regressions. (3) Add a lint rule `no-console` outside `lib/logger.ts`.
+- **Log rotation:** `package.json` scripts pipe to `tee dev.log` / `tee server.log` — these grow **forever**. No `logrotate` config in repo. **P1 issue.** In Docker, stdout is captured by the daemon (rotates by default) — but the `tee` writes also go to disk unbounded. Fix: remove `tee` in production start script; rely on Docker `json-file` log driver with `max-size: 50m, max-file: 5` (set in `docker-compose.yml` `logging:` block).
+
+#### 17. `src/lib/metrics.ts`
+- **Status:** ❌ Crítico  | **Priority:** P0 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** prom-client registry with 7 custom metrics defined (http counter, http duration, db query duration, cache ops, queue jobs, ws gauge, active orders gauge). **None of them are recorded anywhere in the codebase** — `recordHttpRequest`, `recordCacheOp`, `recordQueueJob`, `dbQueryDuration.observe`, `wsConnectionsGauge.set`, `activeOrdersGauge.set` have zero callers (grep-verified). The `/api/metrics` endpoint returns only Node.js default metrics (CPU, memory, GC) — none of the business/HTTP metrics.
+- **Evidence:** grep for `recordHttpRequest|recordCacheOp|recordQueueJob|dbQueryDuration\.observe|wsConnectionsGauge\.set|activeOrdersGauge\.set` returns matches **only inside metrics.ts itself** (the doc comment + the function definitions).
+- **Risk:** Prometheus dashboards show "no data" for HTTP latency, cache hit rate, queue depth. SREs are blind to actual application behavior.
+- **Reproduce:** `curl /api/metrics | grep novsmm_` → returns nothing.
+- **Fix:** (1) Add a Next.js `instrumentation.ts` that registers `promClient.collectDefaultMetrics`. (2) Add a global `db.$extends({ query: { $allOperations: … } })` Prisma extension that observes `dbQueryDuration`. (3) Wrap `withErrorHandler` to call `recordHttpRequest` on every request (since `withErrorHandler` isn't used either, see below). (4) Call `recordCacheOp` from `cache.ts`. (5) Call `recordQueueJob` from `worker.ts` and `queues.ts` fallback.
+
+#### 18. `src/lib/sentry.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P1 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Lazy init, graceful degradation, `sendDefaultPii: false`, ignore-list for known flow-control "errors" (`2FA_REQUIRED`, `INSUFFICIENT_BALANCE`). **But**: `captureException` is only called from `api-handler.ts` (`handleError`), and `withErrorHandler` (which calls `handleError`) is **not used by any audited route** (orders, dashboard, wallet, admin/overview, analytics, admin/logs, export all use raw `try/catch + console.error + apiError`). Sentry is therefore **bypassed for all real user traffic**.
+- **Evidence:** grep `withErrorHandler` in `src/app/api/**` → 0 matches. The HOC exists but no route exports `withErrorHandler(GET)` / `withErrorHandler(POST)`.
+- **Risk:** Production errors are logged to stdout (via `console.error`) but never reach Sentry. No stack traces, no breadcrumbs, no alerting.
+- **Fix:** Wrap every API route export: `export const GET = withErrorHandler(async (req) => { … })`. Migration can be incremental. Or add a Next.js `instrumentation.ts` with `Sentry.init` from `@sentry/nextjs` to auto-instrument all routes.
+
+#### 19. `src/app/api/health/live/route.ts`
+- **Status:** ✅ Aprobado | **Priority:** — | **Impact:** Bajo | **Confidence:** Alta
+- **Description:** Pure liveness — always 200 if process can respond. Correct per k8s semantics.
+
+#### 20. `src/app/api/health/ready/route.ts`
+- **Status:** ❌ Crítico  | **Priority:** P0 | **Impact:** Alto | **Confidence:** Alta
+- **Description:** Checks DB (critical → 503) and Redis (non-critical → 200 degraded). **Memory check is computed but never gates the response** — `allHealthy` is only set false by the DB check (line 31). A process at 99% heap returns 200 "ready".
+- **Evidence:** line 31 (`allHealthy = false` only in DB catch), lines 55–61 (memory computed), line 63 (`status = allHealthy ? "ready" : "not_ready"`).
+- **Risk:** k8s keeps routing to an OOM-imminent pod. No early drain.
+- **Fix:** `if (!checks.memory.healthy) allHealthy = false;`. Also add a CPU/event-loop-lag check (`await new Promise(r => setImmediate(r))` measured) and a disk-space check (`fs.statfs('/')`).
+
+#### 21. `src/app/api/health/db/route.ts`
+- **Status:** ✅ Aprobado | **Priority:** P2 | **Impact:** Bajo | **Confidence:** Alta
+- **Description:** `SELECT 1` via Prisma raw, returns latency + provider. 503 on DB down. Clean. Minor: no connection-pool saturation check (Prisma exposes `db.$poolMetrics` only on some drivers — skip if unavailable).
+
+#### 22. `src/app/api/metrics/route.ts`
+- **Status:** ⚠️ Mejorable  | **Priority:** P2 | **Impact:** Medio | **Confidence:** Alta
+- **Description:** Optional basic-auth via `METRICS_BASIC_AUTH` env. **Risk**: the env var is compared with `decoded !== METRICS_AUTH` (constant-time comparison not used) — **timing attack** possible. Also `getMetrics()` runs `registry.metrics()` which is a synchronous full-scrape — under high cardinality this blocks the event loop.
+- **Evidence:** line 42 (`decoded !== METRICS_AUTH`).
+- **Fix:** Use `crypto.timingSafeEqual`. Consider a separate `/internal/metrics` bound to localhost only via nginx.
+
+---
+
+### Production failure scenario analysis
+
+| Scenario | Behavior | Severity | Notes |
+|---|---|---|---|
+| **Redis down** | `cacheGet/Set/Del` fall back to per-instance in-memory Map (`cache.ts` lines 73–82, 108). Rate limiter falls back to in-memory (`rate-limit.ts` line 89). Worker process exits gracefully (`worker.ts` lines 71–78); jobs run in-process via `setImmediate` (`queues.ts` lines 107–114). JWT cache TTL 30s becomes per-instance (each instance hits DB on first request per user). | ⚠️ P1 | Multi-instance deployments see 7× DB load on JWT callback. In-process fallback runs setTimeout chains in the request process — event-loop risk. |
+| **PostgreSQL down** | Every authenticated request fails at `requireAuth` → `getServerSession` → JWT callback DB fetch → 500. `/api/health/ready` returns 503 (correct). No circuit breaker — each request retries the DB connection until Prisma pool timeout (default 10s). Webhooks fail to write `WebhookLog` → payment confirmations lost. | ❌ P0 | Add circuit breaker (e.g. `opossum`) around DB; fail-fast 503 instead of 10s hang. Webhook routes must persist raw payload to disk if DB is down, then replay. |
+| **Worker process crashes** | BullMQ: jobs in `active` state remain locked until `stalledInterval` (default 30s) expires, then re-processed by another worker. DLQ captures jobs that fail all 3 retries. In fallback mode (no Redis): in-flight `setImmediate` jobs are **lost** — order stuck in `processing` forever. | ⚠️ P1 | Add a cron that marks `processing` orders older than 5 min as `pending` for re-queue. Document that fallback mode is **dev-only**. |
+| **Disk full** | `tee dev.log` / `tee server.log` (`package.json` lines 6, 9) grow unbounded → fills disk. SQLite cannot extend → INSERTs fail. Postgres WAL cannot write → server halts. BullMQ cannot persist job state. Backup scripts (`backup-db.sh`) fail silently (no alerting). | ❌ P0 | Remove `tee` from production start script; rely on Docker log driver with rotation. Add disk-space alerting (Prometheus `node_filesystem_avail_bytes`). Backup failure should page on-call. |
+| **Memory full** | `/api/health/ready` returns 200 (memory check not gating, see #20). GC pressure spikes → request latency degrades. Eventually OOM-killed by kernel → k8s restarts pod. No proactive circuit breaker. | ❌ P0 | Fix readiness probe (#20). Add `--max-old-space-size=512` to Bun start. Alert on `process_resident_memory_bytes > 80% of limit`. |
+| **Unexpected restart** | In-memory cache lost (acceptable). BullMQ jobs re-queued after stalled lock expires (30s). Drip-feed `pending` orders safe (cron-driven). Audit log writes in-flight at crash are lost (no transaction). Session JWTs survive (stateless). | ✅ OK | Document the 30s stalled-job window. Add `gracefulShutdown` to call `closeQueues()` + `closeRedis()` on SIGTERM (worker.ts has it; web process does not). |
+| **Failed deployment** | Docker pull fail → old container keeps running (good). DB migration fail → app crashes on first DB query (Prisma throws on schema mismatch). **Rolling deploy with multiple instances has no readiness gate on DB migrations** — new code expecting a new column queries old DB → 500s on all new-pod traffic. | ⚠️ P1 | Run `prisma migrate deploy` as an init container before the app starts. Add a readiness gate that checks `Schema.version` matches expected. |
+| **SSL cert expires** | nginx terminates TLS — cert expiry returns TLS handshake error to all clients. No `cert-manager` / `acme.sh` auto-renewal visible in repo. No alerting on cert TTL < 30 days. | ⚠️ P1 | Add cert-manager (k8s) or acme.sh + cron. Alert when cert TTL < 14 days. |
+| **DNS fails** | External API calls (Stripe, HuntSMM, MP, NowPayments) fail at `fetch()`/`https.request`. SMTP fails. OAuth (Google) fails. No DNS cache, no fallback IP. Each external call adds DNS lookup latency. | ⚠️ P2 | Configure a local DNS cache (`dnsmasq` sidecar) with 60s TTL. Circuit-break each external provider. |
+| **Cloudflare down** | Clients can't reach origin. WebSocket relay fails. Webhooks from Stripe/MP/NowPayments can't reach origin — **payment webhooks lost** → users pay but don't get credited. `WebhookLog` table has `failed` rows but **no replay job** exists. | ❌ P0 | Add a webhook replay admin endpoint + cron that retries `WebhookLog` rows in `failed` status. Provider SDKs (Stripe) have retry APIs — use them. |
+| **Webhooks fail** | `WebhookLog` stores raw payload, status set to `failed` (no error handler in route? — verify each webhook route). Stripe/MP retry on their own schedule; NowPayments does **not** retry. No idempotency replay job. | ❌ P0 | Same as above + add idempotency keys to all webhook handlers (Stripe: use `event.id`; MP: use `preference.id`; NowPayments: use `payment_id`). |
+| **OAuth fails** | Google OAuth is optional (registered only if env vars set, `auth.ts` line 209). On Google outage, OAuth login fails → users see generic error. No fallback. JWT callback still hits DB on every request (no OAuth-specific cache). | ⚠️ P2 | Add a "Sign in with email/password instead" CTA on OAuth failure. Cache Google well-known JWKS. |
+| **SMTP fails** | `createNotification({ sendEmail: true })` awaits `sendEmail()` → notification creation **blocks** on SMTP. In worker mode, `email.send` queue retries 3× then DLQ (acceptable). In fallback mode, SMTP timeout (default 60s) blocks the request. | ⚠️ P1 | Decouple: always write `Notification` row first (fast), enqueue `email.send` job. If queue unavailable, log + skip — never block the request on email. |
+
+---
+
+### Cross-cutting issues (top 5 to fix first)
+
+1. **Wire the observability stack** (P0): wrap all API routes in `withErrorHandler`, add `instrumentation.ts` with Prisma `$extends` for `dbQueryDuration`, call `recordCacheOp` from `cache.ts`, call `recordQueueJob` from worker. **Without this, the platform is running blind.**
+2. **Stream + paginate CSV exports** (P0): `/api/admin/logs?format=csv` and `/api/export/*` will OOM at scale. Use `ReadableStream` + cursor pagination.
+3. **Fix readiness probe** (P0): memory check must gate the 503 response.
+4. **Code-split admin-panel.tsx** (P0): 2831 lines in one client bundle is unacceptable. `React.lazy` per tab.
+5. **Add webhook replay + idempotency** (P0): Cloudflare/provider outages cause lost payment credits with no recovery path.
+
+### Confidence matrix
+
+| Area | Confidence | Reason |
+|---|---|---|
+| Performance findings | Alta | Code review + schema cross-check + bundle-size reasoning |
+| Observability gaps | Alta | Grep-verified zero callers for metrics/Sentry/logger |
+| Failure-scenario analysis | Media-Alta | Reasoned from code paths; no live load test performed |
+| Recommended fixes | Alta | Standard SRE patterns; library versions verified in package.json |
+
+### Recommended next actions
+
+1. **P0 (block go-live):** Fix the 4 critical issues above + wire metrics/Sentry.
+2. **P1 (within 1 week):** Replace `console.error` with `logger` in 32 files; add `optimizePackageImports` to next.config; add log rotation; add webhook replay job; document fallback-mode is dev-only.
+3. **P2 (next sprint):** SQL `groupBy` for revenue series; pagination on `/api/orders`; bundle analyzer; `@sentry/nextjs` migration; timing-safe metrics auth.
+4. **Load test before go-live:** k6 scenarios already defined in `docs/production-readiness.md` — run them, capture p95 latency, fix anything > 500ms.
+
+**Final verdict:** ⚠️ **NOT APPROVED FOR PRODUCTION** — 4 P0 issues must be resolved before go-live. The architecture is sound; the gap is wiring + a few unbounded queries.
+
+— *AUDIT-E, External Performance Engineer & SRE*
+
+---
+
+# AUDIT-C — External Security Audit Report (NOVSMM Production Certification)
+
+**Auditor:** Task ID AUDIT-C (External Security Auditor)
+**Scope:** All security-sensitive code paths (16 files + repo-wide pattern searches)
+**Methodology:** Line-by-line manual review of in-scope files + automated ripgrep search for XSS, RCE, SQLi, path traversal, open redirect, CORS, leaked secrets.
+**Date:** 2025 production-certification cycle
+
+## Executive Summary
+
+| Severity | Count | Status |
+|---|---|---|
+| ❌ P0 Critical | 2 | MUST FIX before production |
+| ⚠️ P1 High | 6 | Should fix before production |
+| ⚠️ P2 Medium | 9 | Recommended for v1.1 |
+| ✅ Aprobado (clean) | 13 of 16 files | Solid baseline |
+
+**Overall verdict:** ⚠️ **CONDITIONAL APPROVAL — 2 P0 issues must be resolved before go-live.** The security architecture is fundamentally sound (AES-256-GCM, bcrypt cost 12, fail-closed webhooks, HMAC signature verification with timingSafeEqual, per-account brute-force lockout, CSRF Origin value-matching, atomic balance transactions, masked API keys). The two P0s are (1) committed `.env` containing real-looking plaintext secrets, and (2) a TOCTOU race in dynamic Google OAuth provider registration that can lead to a duplicate-provider crash / inconsistent auth state.
+
+---
+
+## FILE-BY-FILE FINDINGS
+
+### 1. `/home/z/my-project/src/middleware.ts` — CSRF, rate limiting, security headers
+
+**Status:** ✅ Aprobado (with P2 improvements)
+
+**Findings:**
+- ✅ L80-94: Security headers correct — `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, HSTS with preload+includeSubDomains, `frame-ancestors 'none'` in CSP.
+- ✅ L141-178: CSRF protection uses Origin header value-matching against `NEXTAUTH_URL` host — closes the previous "presence-only" bypass. Bearer-auth requests are correctly exempt (browsers cannot set Authorization without CORS preflight).
+- ✅ L62-76: Route-specific rate limits (login 20/15min, register 10/hour, forgot-password 5/hour, admin 120/min) — sensible.
+- ✅ L23-30: Periodic cleanup of in-memory rate-limit buckets prevents memory exhaustion.
+
+**⚠️ P2 — MEDIUM — IP spoofing via `x-forwarded-for`** (L181-182)
+- **Evidence:** `const forwarded = req.headers.get("x-forwarded-for"); const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";`
+- **Risk:** If the gateway (Caddy/Nginx) doesn't strip client-supplied `X-Forwarded-For`, an attacker can spoof their IP to bypass per-IP rate limits or poison audit logs.
+- **Reproduce:** `curl -H "X-Forwarded-For: 1.2.3.4" https://novsmm.com/api/auth/callback/credentials -d '...'` — repeated with different spoofed IPs evades the 20/15min login cap.
+- **Fix:** Trust only the LAST IP in the chain (closest proxy) or use `req.ip` (Next.js native). Configure Caddy/Nginx to set `X-Forwarded-For: $remote_addr` (overwriting client value), and read the rightmost trusted-proxy IP.
+- **Confidence:** HIGH — confirmed pattern in code; depends on gateway config.
+
+**⚠️ P2 — MEDIUM — Origin check silently allows ANY origin if `NEXTAUTH_URL` unset** (L99-113, 175-177)
+- **Evidence:** Comment "If NEXTAUTH_URL is not set (e.g., dev mode), we fall back to allowing any Origin". The `if (trustedHost)` block is the only enforcement; without it the request passes.
+- **Risk:** Misconfigured production dep (missing env var) silently disables CSRF for non-Bearer state-changing requests.
+- **Fix:** Fail-closed — if `NODE_ENV==="production"` and `NEXTAUTH_URL` is unset, reject all state-changing requests with 500. Log loudly at startup.
+- **Confidence:** HIGH.
+
+**⚠️ P2 — LOW — CSP allows `'unsafe-inline'` and `'unsafe-eval'` for scripts** (L92)
+- **Evidence:** `script-src 'self' 'unsafe-inline' 'unsafe-eval'`
+- **Risk:** Weakens XSS protection — injected inline scripts can execute. `'unsafe-eval'` is rarely needed in production Next.js apps.
+- **Fix:** Drop `'unsafe-eval'` (verify no dependency on it — likely safe to remove). Replace `'unsafe-inline'` with per-request nonces (`next.config.ts` supports `headers()` nonce generation) or use Tailwind's stable class hashing.
+- **Confidence:** MEDIUM — needs runtime test to confirm no breakage.
+
+**⚠️ P2 — LOW — Webhook routes are NOT exempt from the general 300/min rate limit** (L76, L139)
+- **Evidence:** Pattern `/\/api\//` matches `/api/webhooks/*`. The middleware does set `isWebhook` but only uses it to bypass the CSRF check, NOT the rate limit.
+- **Risk:** A burst of legitimate webhook deliveries (>300/min from Stripe/MP/NowPayments during a retry storm) would be rejected with 429, dropping payment confirmations.
+- **Fix:** Add an early return for `isWebhook` before the rate-limit lookup, or add a dedicated high limit for `/api/webhooks/` (e.g. 1000/min).
+- **Confidence:** HIGH.
+
+---
+
+### 2. `/home/z/my-project/src/lib/auth.ts` — NextAuth config, JWT, 2FA, brute-force, Google OAuth
+
+**Status:** ✅ Aprobado (with P1/P2 improvements)
+
+**Findings:**
+- ✅ L15-16: Brute-force lockout — 5 attempts / 15 min, Redis-backed with in-memory fallback.
+- ✅ L108-115: bcrypt.compare on password hash (constant-time).
+- ✅ L117-145: 2FA enforced — TOTP required when 2FA setting exists. Failed 2FA increments the lockout counter.
+- ✅ L164-216: Google OAuth — `allowDangerousEmailAccountLinking` correctly NOT set (defaults to false), preventing account takeover via Google email matching.
+- ✅ L218-228: JWT session strategy with `trustHost: true` (correct for proxy deployments).
+
+**⚠️ P1 — HIGH — 2FA setup endpoint has no rate limit on token verification** (`/api/me/2fa/verify`)
+- **Evidence:** `src/app/api/me/2fa/verify/route.ts` L11-58 — accepts arbitrary `token` strings, only checks `verify2FAToken`. No per-user throttle beyond the global 300/min.
+- **Risk:** If a session is hijacked (XSS, stolen cookie), the attacker has unlimited attempts to brute-force the 6-digit TOTP (1,000,000 combinations) before the 30-second window rotates. At 300 req/min that's 5,000/min via distributed IPs.
+- **Reproduce:** Steal session cookie → POST `/api/me/2fa/verify` with `{token:"000000"}`, `{token:"000001"}`, ... at 300/min per IP from a botnet.
+- **Fix:** Add a per-user rate limit of 5 attempts per 30s on `/api/me/2fa/verify` AND `/api/me/2fa/disable`. Lock 2FA verification for 5 min after 5 failed attempts. Use the existing `checkRateLimit()` from `src/lib/rate-limit.ts`.
+- **Confidence:** HIGH.
+
+**⚠️ P1 — HIGH — 2FA backup codes are generated and hashed but NEVER validated**
+- **Evidence:** `two-factor.ts` L92-104 generates 8 backup codes; `2fa/setup` L36-37 bcrypt-hashes them and stores in `2fa:pending:{userId}` → `2fa:{userId}`. But `auth.ts` L131-137 only validates `credentials.totp` via `verify2FAToken` — there is no code path that compares a backup code against the stored bcrypt hashes.
+- **Risk:** (a) Users who lose their authenticator have no recovery path → support burden. (b) Dead security code suggests incomplete implementation — a future change might wire it in insecurely.
+- **Reproduce:** Enable 2FA → log out → attempt login with `totp: "<one of the printed backup codes>"` → returns "Invalid 2FA code".
+- **Fix:** In `auth.ts` authorize(), when `verify2FAToken` fails, iterate the stored `backupCodes` array and `bcrypt.compare(credentials.totp, code)`. On match: delete that backup code (single-use) and proceed. Add audit log "2fa_backup_code_used".
+- **Confidence:** HIGH.
+
+**⚠️ P2 — MEDIUM — JWT session has no explicit `maxAge` (defaults to 30d)** (L220)
+- **Evidence:** `session: { strategy: "jwt" }` — no `maxAge` set.
+- **Risk:** Stolen session JWT remains valid for 30 days. No sliding refresh, no server-side revocation (JWT is stateless).
+- **Fix:** Set `session: { strategy: "jwt", maxAge: 8 * 60 * 60 }` (8h) and implement refresh-token rotation OR add a `token.version` checked against `user.tokenVersion` so admins can force-logout (bump version on password change, suspension, role change).
+- **Confidence:** HIGH.
+
+**⚠️ P2 — LOW — Account lockout keyed by email, not by IP+email**
+- **Evidence:** L88 `const lockKey = email;`
+- **Risk:** An attacker who knows a victim's email can intentionally trigger 5 failed logins to lock the victim out for 15 min (DoS). Mitigated because the attacker needs to know the email — but emails are often public.
+- **Fix:** Track per-IP failed attempts separately (already done via middleware rate limit) AND per-account. Only lock the account when 5 failures come from 3+ distinct IPs (distributed attack pattern). Single-IP failures should IP-ban instead.
+- **Confidence:** MEDIUM.
+
+**⚠️ P2 — LOW — User cache (30s TTL) means role/permission changes take up to 30s to propagate**
+- **Evidence:** L288 `await cacheSet(cacheKey, dbUser, 30);`
+- **Risk:** Admin suspends a user → user retains access for up to 30s. Acceptable for most apps but problematic for incident response.
+- **Fix:** Call `cacheDel(\`user:${userId}\`)` in admin PATCH /users, password change, 2FA enable/disable, and balance-affecting routes. The code comments mention `cacheInvalidate` but I did not find it called in those routes during this audit.
+- **Confidence:** MEDIUM.
+
+---
+
+### 3. `/home/z/my-project/src/app/api/auth/[...nextauth]/route.ts` — Dynamic Google OAuth
+
+**Status:** ❌ Crítico (1 P0)
+
+**Findings:**
+- ✅ L21-64: Dynamic DB-based Google OAuth credential loading allows admin-configured OAuth without redeploy.
+- ✅ L42-45: Mutates `process.env` at runtime so `auth.ts` (which reads `process.env` at startup) picks up the credentials.
+
+**❌ P0 — CRITICAL — TOCTOU race in `ensureGoogleProvider` causes duplicate providers**
+- **Evidence:** L17-19 module-level mutable state: `let googleProviderAdded = false; let lastCheck = 0;`. L28-30 check `if (googleProviderAdded && Date.now() - lastCheck < CHECK_INTERVAL) return;` — but `lastCheck = Date.now()` is set BEFORE the async DB call resolves. L50 `authOptions.providers.push(GoogleProvider({...}))` mutates a shared array.
+- **Risk:** Two concurrent requests arriving in the same event-loop tick both pass the early-return guard, both run `db.setting.findUnique`, both push a Google provider. Result: `authOptions.providers` contains TWO `GoogleProvider` instances. NextAuth then either errors ("duplicate provider id") or routes OAuth callbacks unpredictably, potentially allowing one provider's state to interfere with another. In the worst case, this corrupts the global `authOptions` object permanently until process restart.
+- **Reproduce:** Configure Google OAuth in DB. Open 10 browser tabs simultaneously hitting `/api/auth/signin/google`. Within a few attempts, server logs will show duplicate provider registration or auth callback failures.
+- **Fix:** (a) Use a `Promise`-based singleton: `let ensurePromise: Promise<void> | null = null;` — if set, await it instead of re-running. (b) Or use a Mutex/lock around the DB check + push. (c) Best: de-duplicate providers by `provider.id` before pushing.
+  ```ts
+  if (!authOptions.providers.some(p => p.id === "google")) {
+    authOptions.providers.push(GoogleProvider({...}));
+  }
+  ```
+  Combine with a Promise singleton to prevent races.
+- **Confidence:** HIGH — race condition is provable by code inspection.
+
+**⚠️ P2 — MEDIUM — Mutating `process.env` from a request handler is anti-pattern**
+- **Evidence:** L44-45: `process.env.GOOGLE_CLIENT_ID = creds.clientId; process.env.GOOGLE_CLIENT_SECRET = creds.clientSecret;`
+- **Risk:** `process.env` is shared across all requests in the process. While the values here are intended to be persistent, this pattern is fragile — if the admin removes the DB credentials, the env vars remain set until process restart, leaving OAuth enabled when admin intended to disable it. Also pollutes env in dev.
+- **Fix:** Pass credentials directly to the GoogleProvider constructor (already done at L51-54) and remove the `process.env` mutation. The mutation is only there because `auth.ts` L209-216 also checks env at startup — but that path is for env-supplied creds, not DB-supplied. They should be independent.
+- **Confidence:** HIGH.
+
+---
+
+### 4. `/home/z/my-project/src/lib/crypto-utils.ts` — AES-256-GCM
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L15-24: `resolveEncryptionKey` is fail-closed — throws if `LICENSE_ENCRYPTION_KEY` is missing or < 16 chars. No hardcoded fallback.
+- ✅ L33-40: AES-256-GCM with random 16-byte IV, AuthTag verified on decrypt.
+- ✅ L46-56: Decrypt splits on `:` and validates all three components (iv, authTag, enc) — returns empty string if any missing (no throw → no side-channel).
+- ✅ L26-28: Key derivation via `crypto.createHash("sha256").update(key).digest()` — produces a 32-byte key suitable for AES-256. Not a KDF but acceptable since the input is a high-entropy secret (not a password).
+
+**⚠️ P2 — LOW — Key derivation is single-pass SHA-256, not a KDF**
+- **Evidence:** L27 `crypto.createHash("sha256").update(resolveEncryptionKey()).digest();`
+- **Risk:** If `LICENSE_ENCRYPTION_KEY` is a low-entropy string (e.g., a human-chosen passphrase), single-pass SHA-256 is brute-forceable. The `.env` file currently has `novsmm-prod-encryption-key-df9c83925be4030143d63175` — looks like a fixed string + suffix, not 24 random hex bytes as the comment recommends.
+- **Fix:** Either (a) enforce a strict entropy requirement (reject keys shorter than 32 bytes of entropy), or (b) use HKDF (`crypto.hkdfSync("sha256", key, salt, info, 32)`) with a fixed salt+info. Best: require `LICENSE_ENCRYPTION_KEY` to be exactly 64 hex chars (32 bytes) generated via `openssl rand -hex 32`.
+- **Confidence:** MEDIUM.
+
+---
+
+### 5. `/home/z/my-project/src/lib/two-factor.ts` — 2FA TOTP, backup codes
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L32-34: TOTP secret generated via `otplib` (uses `crypto.randomBytes` internally).
+- ✅ L40-54: Secret encrypted at rest via AES-256-GCM (`encrypt2FASecret`/`decrypt2FASecret`).
+- ✅ L78-85: TOTP verification wrapped in try/catch — never throws to caller.
+- ✅ L92-104: Backup codes generated with `crypto.randomBytes` (CSPRNG). Ambiguous characters (I, O, 0, 1) removed from alphabet.
+
+**⚠️ See auth.ts P1 above** — backup codes are generated but never validated. The two-factor.ts module itself is clean.
+
+**⚠️ P2 — LOW — `verify2FAToken` does not enforce time-window skew protection**
+- **Evidence:** L80 `await verify({ token, secret })` — uses otplib's default window (typically ±1 step = ±30s).
+- **Risk:** Default ±1 window allows up to 3 valid codes at once (previous, current, next). Acceptable for TOTP but worth tightening to 0 (only current window) for high-security deployments.
+- **Fix:** Configure `authenticator.options.window = 0` if stricter policy is desired.
+- **Confidence:** LOW.
+
+---
+
+### 6. `/home/z/my-project/src/lib/license.ts` — License key validation
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L24-35: License key generation uses `crypto.randomInt` (CSPRNG, uniform distribution).
+- ✅ L40-42: License key hashed with bcrypt cost 12.
+- ✅ L90-94: SHA-256 lookupHash for O(1) DB lookup — defence in depth (still bcrypt-compared after lookup).
+- ✅ L129-133: bcrypt.compare confirmed after lookupHash hit — prevents lookupHash collision attacks.
+- ✅ L135-149: Domain + IP allowlist + expiry checks.
+- ✅ L156-160: API key generation uses 24 random bytes → base64url (~32 chars entropy).
+
+**⚠️ P2 — LOW — Legacy license fallback scan could DoS the validate endpoint**
+- **Evidence:** L103-125 — if `lookupHash` is null for many licenses, `findMany` loads ALL active legacy licenses and bcrypt-compares each. bcrypt cost 12 ≈ 250ms per hash. 1000 legacy licenses = 250s of CPU per request.
+- **Risk:** Public endpoint `/api/public/validate-license` (unauthenticated) could be DoS'd by sending many invalid keys, each triggering the legacy scan.
+- **Fix:** Once all legacy licenses are backfilled (lookupHash populated), remove the fallback scan entirely. Add a per-IP rate limit on `/api/public/validate-license`.
+- **Confidence:** MEDIUM.
+
+---
+
+### 7. `/home/z/my-project/src/lib/api-key-auth.ts` — API key validation
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L29-30: Key format validation (`nvsk_live_` prefix) before DB lookup — rejects garbage early.
+- ✅ L32-33: SHA-256 lookupHash for O(1) index lookup.
+- ✅ L86-90: bcrypt.compare confirmed after lookupHash hit — defence in depth.
+- ✅ L92-93: User status check (`active`) — suspended users' API keys are immediately invalid.
+- ✅ L96-100: Last-used IP + timestamp recorded for audit trail.
+
+**⚠️ P2 — LOW — `apiKey.permissions.split(",")` can throw if `permissions` is null**
+- **Evidence:** L103 `const permissions = apiKey.permissions.split(",");`
+- **Risk:** If a DB row has `permissions = NULL` (schema change, manual edit), this throws TypeError, returning 500 instead of 401 to the client. Not exploitable but noisy.
+- **Fix:** `const permissions = (apiKey.permissions ?? "").split(",").filter(Boolean);`
+- **Confidence:** HIGH.
+
+---
+
+### 8. `/home/z/my-project/src/app/api/webhooks/stripe/route.ts` — Stripe webhook
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L36-37: Reads raw body via `req.text()` — required for Stripe signature verification.
+- ✅ L46-64: Fail-closed when `STRIPE_WEBHOOK_SECRET` is not configured — logs to WebhookLog with status `rejected`, returns 401.
+- ✅ L66-68: Requires `stripe-signature` header.
+- ✅ L71-89: Uses Stripe SDK's `constructEvent` for signature verification (constant-time, internally HMAC-SHA256).
+- ✅ L143-177, L244-308: All balance-mutating handlers are idempotent (check `txn.status === "pending"` before crediting).
+- ✅ L150-166, L277-293, L369-379: Balance updates use `db.$transaction([...])` — atomic debit + credit.
+
+**⚠️ P2 — LOW — `client_reference_id` trusted as userId**
+- **Evidence:** L247 `const userId = session.client_reference_id;` — used directly in `db.subscription.create({ data: { userId: subUserId, ... } })`.
+- **Risk:** `client_reference_id` is set by our own checkout session creation (`stripe.ts` L117, L163) — so an attacker cannot set it directly without our Stripe secret key. HOWEVER, if a different Stripe account's webhook secret is somehow leaked, an attacker could craft events with arbitrary `client_reference_id` values and create subscriptions for arbitrary users.
+- **Fix:** Defence in depth — after retrieving `subObj` from Stripe API (L333), verify `subObj.metadata.userId === session.client_reference_id` before trusting it.
+- **Confidence:** MEDIUM.
+
+---
+
+### 9. `/home/z/my-project/src/app/api/webhooks/mercadopago/route.ts` — MP webhook
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L34-47: Fail-closed when `MP_WEBHOOK_SECRET` is not configured.
+- ✅ L58-60: Validates both `ts` and `v1` signature components present.
+- ✅ L63-68: Constructs manifest as `{data.id}{ts}` per MP spec.
+- ✅ L71-74: Uses `crypto.timingSafeEqual` with length check — timing-attack safe.
+- ✅ L114-116: Fetches payment status from MP API to confirm — does NOT trust webhook payload alone.
+- ✅ L139: Idempotency check (`txn.status === "pending"`) before crediting.
+
+**⚠️ P2 — LOW — No timestamp freshness check on `ts`**
+- **Evidence:** L55 `const ts = sigParts["ts"];` — used in signature but not validated for freshness.
+- **Risk:** A captured webhook payload + signature can be replayed indefinitely. MP's `ts` is a Unix timestamp — should be within ~5 min of server time.
+- **Fix:** `if (Math.abs(Date.now() / 1000 - Number(ts)) > 300) return apiError("Stale webhook", 401);`
+- **Confidence:** HIGH.
+
+---
+
+### 10. `/home/z/my-project/src/app/api/webhooks/nowpayments/route.ts` — NowPayments webhook
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L37-39: Requires `x-nowpayments-sig` header — fail-closed.
+- ✅ L42-48: Looks up PaymentMethod to get IPN secret (not from env — admin-configurable).
+- ✅ L50-56: Decrypts credentials with AES-256-GCM.
+- ✅ L58-61: Fail-closed if `ipnSecret` missing.
+- ✅ L64-68: Uses `verifyNowPaymentsWebhook` (HMAC-SHA256 + timingSafeEqual — confirmed in nowpayments.ts L189-209).
+- ✅ L159-160: Idempotency check.
+- ✅ L163-179: Atomic credit via `$transaction([...])`.
+
+**⚠️ P2 — LOW — GET handler exposes webhook URL publicly without auth**
+- **Evidence:** L288-295 `export async function GET()` returns the webhook URL via `apiOk(...)` — no `requireAdmin()`.
+- **Risk:** Minor info disclosure — attacker learns the webhook endpoint (which is already discoverable). Not a real risk but inconsistent with the rest of the API which requires admin for config.
+- **Fix:** Add `requireAdmin()` or remove the GET handler (the URL is documented in admin docs already).
+- **Confidence:** HIGH.
+
+---
+
+### 11. `/home/z/my-project/src/lib/api-utils.ts` — requireAuth, requireAdmin, audit helper
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L88-102: `requireAuth` returns typed `{ user, session, error }` — eliminates `as any` casts.
+- ✅ L109-123: `requireAdmin` checks `user.role === "admin"` after `requireAuth` — defence in depth.
+- ✅ L155-161: `audit()` captures IP from `x-client-ip` (set by middleware) with `x-forwarded-for` fallback.
+- ✅ L181-185: Audit logging failures are caught and logged — never break the main request flow.
+
+**⚠️ P2 — MEDIUM — No session-status check after `requireAuth`**
+- **Evidence:** L88-102 — `requireAuth` only checks the session exists. The session's `token.status` is populated by `auth.ts` L262 from a 30s-cached DB read. But `requireAuth` does NOT verify `user.status === "active"` — it trusts the cached value.
+- **Risk:** A suspended user retains access for up to 30s (cache TTL) AND `requireAuth` doesn't double-check. Worse — if the cache is stale (Redis replication lag), a suspended user could act indefinitely.
+- **Fix:** In `requireAuth`, check `if (user.status !== "active") return 403`. Also add a `requireActiveUser` helper that always reads fresh from DB for sensitive operations (withdrawals, password change).
+- **Confidence:** HIGH.
+
+---
+
+### 12. `/home/z/my-project/src/lib/api-handler.ts` — withErrorHandler, error sanitization
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L39: Request-id generation (uses `x-request-id` if provided, else `randomUUID`).
+- ✅ L82-103: Full error details logged server-side with stack trace.
+- ✅ L121-131: Client receives sanitized error envelope — no internals leaked.
+- ✅ L186-201: `sanitizeErrorMessage` strips `sk_*`, `pk_*`, `Bearer *`, `token=*` patterns from messages.
+- ✅ L196-201: Message truncated to 500 chars — prevents log-injection / response-size abuse.
+
+**⚠️ P2 — LOW — Request-id is trusted from client**
+- **Evidence:** L39 `const requestId = req.headers.get("x-request-id") ?? randomUUID();`
+- **Risk:** Client can supply arbitrary `x-request-id` (e.g., a malicious string with CRLF characters) which is then reflected in the response header `x-request-id` (L130) and logged. Could enable log injection or HTTP response splitting if not properly sanitized by Next.js (Next.js does sanitize, so risk is theoretical).
+- **Fix:** Validate format: `if (!/^[a-f0-9-]{36}$/i.test(requestId)) requestId = randomUUID();`
+- **Confidence:** MEDIUM.
+
+---
+
+### 13. `/home/z/my-project/src/lib/validations.ts` — Zod schemas
+
+**Status:** ✅ Aprobado (with P2 improvements)
+
+**Findings:**
+- ✅ L4-19: Register schema enforces username regex (`^[a-zA-Z0-9_]+$`), email format, password ≥ 8 chars, password confirmation match.
+- ✅ L98-139: Admin PATCH schemas use `.strict()` to reject unknown fields — prevents mass-assignment.
+- ✅ L34-38: Topup amount capped at $50,000 — prevents absurd-value attacks.
+
+**⚠️ P2 — MEDIUM — Password policy is weak (8 chars, no complexity)**
+- **Evidence:** L11 `z.string().min(8, "Password must be at least 8 characters")` — no uppercase, lowercase, digit, or special-char requirement.
+- **Risk:** Users can use `password` or `12345678`. bcrypt cost 12 slows brute force but doesn't stop credential stuffing from other breaches.
+- **Fix:** Add `.regex(/[A-Z]/).regex(/[a-z]/).regex(/[0-9]/).min(10)` OR implement a password-strength estimator (zxcvbn) and reject scores < 3. Also check against HaveIBeenPwned API (k-anonymity model).
+- **Confidence:** HIGH.
+
+**⚠️ P2 — LOW — `createOrderSchema.link` accepts any URL**
+- **Evidence:** L30 `link: z.string().url().optional().or(z.literal(""))` — accepts `javascript:alert(1)` if Zod's `.url()` doesn't reject it (it does reject non-http(s) — verified, `new URL("javascript:alert(1)")` throws in Zod's implementation? Actually Zod just calls `new URL()` which DOES accept `javascript:` URLs).
+- **Risk:** If `link` is rendered as `<a href={order.link}>` in the admin dashboard without sanitization, this is a stored XSS vector.
+- **Fix:** Use `z.string().refine(v => /^https?:\/\//.test(v))` OR run all `link` values through `sanitizeUrl()` (which already restricts to http/https — `src/lib/sanitize.ts` L69-81).
+- **Reproduce:** POST /api/orders with `link: "javascript:alert(document.cookie)"` → if admin clicks the link in the dashboard, XSS fires.
+- **Confidence:** MEDIUM — needs to verify the UI rendering path.
+
+---
+
+### 14. `/home/z/my-project/src/app/api/admin/social-auth/route.ts` — Social auth API
+
+**Status:** ⚠️ Mejorable
+
+**Findings:**
+- ✅ L11-12: `requireAdmin()` on GET — only admins can list configured providers.
+- ✅ L42-43: `requireAdmin()` on POST.
+- ✅ L57-60: Credentials encrypted with AES-256-GCM before DB storage.
+- ✅ L22-24: GET does not reveal secrets — only `configured: boolean` per provider.
+
+**⚠️ P1 — HIGH — POST does not validate input with Zod**
+- **Evidence:** L45-50 `const body = await req.json(); const { provider, clientId, clientSecret } = body;` — no schema validation. Only checks `!provider || !clientId || !clientSecret`.
+- **Risk:** An admin (or attacker who compromised an admin session) could pass `provider: "<script>alert(1)</script>"` or `clientId: 1000000 chars` — stored in DB. The `provider` is used in `db.setting.upsert({ where: { key: \`oauth:${provider}\` }})` — `provider` is interpolated into the key string, so a malicious `provider` like `../../foo` could potentially create unexpected Setting keys.
+- **Reproduce:** `curl -X POST /api/admin/social-auth -H "Cookie: <admin-session>" -H "Content-Type: application/json" -d '{"provider":"google\\x00","clientId":"x","clientSecret":"y"}'`
+- **Fix:** Add a Zod schema: `z.object({ provider: z.enum(["google"]), clientId: z.string().min(10).max(255), clientSecret: z.string().min(10).max(255) })`.
+- **Confidence:** HIGH.
+
+**⚠️ P2 — MEDIUM — Setting `process.env` at runtime from admin input**
+- **Evidence:** L71-72 `process.env.GOOGLE_CLIENT_ID = clientId; process.env.GOOGLE_CLIENT_SECRET = clientSecret;`
+- **Risk:** Same as `[...nextauth]/route.ts` P2 — env pollution persists across requests, fragile if admin intends to disable OAuth by removing DB creds.
+- **Fix:** Remove the env mutation. The `auth.ts` L176-205 `getGoogleOAuthConfig()` already falls back to DB — but it's not currently wired into the NextAuth providers array (the array is built at module-load time from env). The real fix is to make `auth.ts` use `getGoogleOAuthConfig()` inside an async provider config.
+- **Confidence:** HIGH.
+
+---
+
+### 15. `/home/z/my-project/.env` — Exposed secrets check
+
+**Status:** ❌ Crítico (1 P0)
+
+**Keys present in `.env`** (values redacted per audit protocol):
+
+| Key | Length | Risk if leaked |
+|---|---|---|
+| `DATABASE_URL` | n/a | SQLite file path (low risk — sandbox) |
+| `NEXTAUTH_SECRET` | 64 hex chars | **CRITICAL** — full JWT signing secret. Anyone with this can forge any user's session. |
+| `NEXTAUTH_URL` | URL | Deployment URL (low risk — public anyway) |
+| `LICENSE_ENCRYPTION_KEY` | 46 chars | **CRITICAL** — decrypts ALL stored OAuth creds, payment configs, 2FA secrets, encrypted license keys. |
+| `HUNTSMM_API_KEY` | 40 hex chars | **HIGH** — provider API key, could place orders on behalf of platform. |
+| `NOTIFICATIONS_SERVICE_SECRET` | 36 chars | **HIGH** — authenticates to notifications microservice, could inject fake real-time notifications. |
+
+**Mitigation found:** `.gitignore` contains `.env*` (verified) — so this file would NOT be committed to git in a real repo. The file is local to the sandbox dev environment. **This downgrades severity from P0 to P1 IF git history is clean.**
+
+**❌ P0 — CRITICAL — `LICENSE_ENCRYPTION_KEY` value is a human-readable string, not random entropy**
+- **Evidence:** `LICENSE_ENCRYPTION_KEY=novsmm-prod-encryption-key-df9c83925be4030143d63175`
+- **Risk:** The first 28 chars (`novsmm-prod-encryption-key-`) are dictionary words. A targeted attacker who knows the platform name can build a custom wordlist. The 18-char suffix is hex but only adds ~72 bits. Effective entropy is well below the 128-bit minimum for an encryption key.
+- **Reproduce:** `hashcat -m 14000 -a 6 wordlist.txt?d?d?d?d?d?d?d?d?d?d?d?d?d?d?d?d?d?d` — feasible with GPU cluster.
+- **Fix:** Rotate immediately: `openssl rand -hex 32` → set as `LICENSE_ENCRYPTION_KEY`. Then write a one-time migration script to re-encrypt all `Setting.value`, `PaymentMethod.config`, `License.licenseKey` (encrypted), and `2fa:{userId}` secrets with the new key (decrypt with old, encrypt with new). Document the rotation procedure in `docs/security.md`.
+- **Confidence:** HIGH.
+
+**❌ P0 — CRITICAL — All secrets are real-looking and present in plaintext in the repo working directory**
+- **Evidence:** `/home/z/my-project/.env` contains 4 production-grade secrets.
+- **Risk:** Even though `.gitignore` excludes `.env*`, the file exists on the dev/sandbox machine. If this machine is shared, backed up, or imaged (e.g., for a Docker build context), the secrets leak. Build-time COPY of `.env` into a Docker image is a common leak vector.
+- **Reproduce:** `docker build .` → `docker history <image>` often reveals `.env` contents if Dockerfile copies it.
+- **Fix:** (a) Rotate ALL secrets in `.env` — they must be considered compromised. (b) Verify `Dockerfile` does NOT `COPY .env*` (audit shows Dockerfile — check). (c) Use a secrets manager (Doppler, Vault, AWS Secrets Manager) or Docker secrets for production. (d) Add a pre-commit hook that scans for high-entropy strings.
+- **Confidence:** HIGH.
+
+---
+
+### 16. `/home/z/my-project/Caddyfile` — Gateway config (SSRF check)
+
+**Status:** ✅ Aprobado
+
+**Findings:**
+- ✅ L19-27: Explicit `path /socket.io/*` matcher — no wildcard port forwarding.
+- ✅ L33-39: Default route proxies to `localhost:3000` — fixed destination, no SSRF.
+- ✅ Comment L1-5: Confirms the previous `?XTransformPort=<port>` SSRF vulnerability was removed.
+- ✅ `X-Forwarded-For`, `X-Forwarded-Proto`, `X-Real-IP` set correctly.
+
+**No issues found.** ✅
+
+---
+
+## CROSS-CUTTING SEARCHES (repo-wide)
+
+### A. `dangerouslySetInnerHTML` — XSS risk
+**1 hit:** `src/components/ui/chart.tsx` L83 — sets innerHTML from `THEMES` (a hardcoded constant) and `ChartConfig` (developer-supplied prop). NOT user-controlled. **No risk.** ✅
+
+### B. `eval(` / `new Function(` — RCE risk
+**0 hits.** ✅
+
+### C. `$queryRaw` / `$executeRaw` — SQL injection
+**2 hits:** `src/app/api/health/db/route.ts` L41 and `src/app/api/health/ready/route.ts` L27 — both use `await db.$queryRaw\`SELECT 1\`` (tagged template literal — Prisma escapes parameters automatically). No user input. **No risk.** ✅
+
+### D. `NEXT_PUBLIC_*` — client-leaked secrets
+**0 hits in source code.** Only mentioned in docs as a confirmed-clean item. ✅
+
+### E. `process.env.*` references — server-side only?
+**44 hits across 16 files** — all in `src/lib/*` or `src/app/api/*` (server runtime). No client components. ✅
+- ⚠️ Minor concern: `auth.ts` L209 and `[...nextauth]/route.ts` L23 both check `process.env.GOOGLE_CLIENT_ID` at module-load time — if env vars are set at runtime via DB, the module-level check won't pick them up. This is the root cause of the dynamic-loading race (P0 above).
+
+### F. File upload handlers — path traversal
+**1 handler:** `src/app/api/uploads/route.ts` — uses `sanitizeFilename` (L36) which strips non-`[a-zA-Z0-9._-]` chars, then joins with `process.cwd()/public/uploads/{userId}`. `userId` is the session user's UUID — not attacker-controlled. Path traversal NOT possible. ✅
+- ⚠️ P2 — LOW — Files served from `/uploads/{userId}/{filename}` are publicly accessible (no auth check on read). An attacker who knows or guesses the userId + timestamp + filename can read another user's uploaded ticket attachment. Fix: store uploads outside `public/` and serve via an authenticated `/api/files/:id` route.
+- ⚠️ P2 — LOW — MIME type validation uses `file.type` (client-supplied). An attacker can upload a `.zip` containing a malicious executable with `Content-Type: image/jpeg`. Fix: sniff the actual file bytes via `file-type` package.
+
+### G. Redirect handlers — open redirect
+**1 helper:** `src/lib/response.ts` L99 `redirect(url)` — used by a few routes. All callers pass internally-constructed URLs (e.g., `${origin}/?topup=success`), not user-supplied values. ✅
+- ⚠️ Verify: `origin = await getBaseUrl()` (L40-45 of api-utils.ts) uses `x-forwarded-host` — if an attacker can spoof this header (requires gateway cooperation), they could redirect users to a malicious host. Mitigated by Caddy/Nginx setting `X-Forwarded-Host` from the real `$host`. **Low risk.**
+
+### H. CORS configurations
+**0 explicit `Access-Control-Allow-Origin` in source.** Next.js default CORS (same-origin only) applies. ✅
+- Middleware CSP allows `connect-src 'self' wss: ws: https:` — slightly broad (allows any HTTPS API), but acceptable for a SaaS dashboard that talks to multiple payment providers' client SDKs.
+
+### I. Insecure deserialization
+**`JSON.parse` usage:** All `JSON.parse` calls are wrapped in try/catch or operate on encrypted-then-decrypted DB values. No `eval`-style deserialization. ✅
+
+### J. Missing authorization checks (IDOR)
+- `/api/orders` PATCH L422: `if (order.userId !== userId) return apiError("Order not found", 404);` — correct, does not reveal existence. ✅
+- `/api/tickets` PATCH L81: `if (!ticket || ticket.userId !== userId) return apiError("Ticket not found", 404);` — correct. ✅
+- `/api/admin/api-keys` PATCH L113: `db.apiKey.update({ where: { id } })` — no ownership check, but `requireAdmin` already gates this. Admins can revoke any key — by design. ✅
+- `/api/me/sessions` DELETE L77: `db.session.deleteMany({ where: { userId } })` — correctly scoped to current user. ✅
+
+### K. Privilege escalation
+- `updateUserSchema` L86-91 allows `role: z.enum(["user","reseller","agency","admin"])` — admin can promote another user to admin. **No check against self-promotion or last-admin protection.** ⚠️ P2 — admin could accidentally demote themselves and lock out the platform. Fix: in `/api/admin/users` PATCH, reject `if (id === adminId && role !== "admin") return 422` and `if (targetUser.role === "admin" && role !== "admin") count remaining admins and reject if count <= 1`.
+- `requireAdmin` correctly checks `role === "admin"`. ✅
+- API key permissions (`hasPermission`) checked via `requireApiKey(req, "write")`. ✅
+
+### L. Session fixation
+- NextAuth v4 rotates session token on login (standard behaviour). ✅
+- Password change does NOT invalidate other sessions (no `tokenVersion` check). ⚠️ P1 — if a password is changed (e.g., after a breach), stolen JWTs from before the change remain valid for 30 days. Fix: add `tokenVersion` to user table, increment on password change, check in `jwt()` callback.
+
+---
+
+## SUMMARY TABLE
+
+| # | File | Status | P0 | P1 | P2 |
+|---|---|---|---|---|---|
+| 1 | middleware.ts | ✅ Aprobado | 0 | 0 | 4 |
+| 2 | auth.ts | ⚠️ Mejorable | 0 | 2 | 3 |
+| 3 | [...nextauth]/route.ts | ❌ Crítico | 1 | 0 | 1 |
+| 4 | crypto-utils.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 5 | two-factor.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 6 | license.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 7 | api-key-auth.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 8 | webhooks/stripe/route.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 9 | webhooks/mercadopago/route.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 10 | webhooks/nowpayments/route.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 11 | api-utils.ts | ⚠️ Mejorable | 0 | 0 | 1 |
+| 12 | api-handler.ts | ✅ Aprobado | 0 | 0 | 1 |
+| 13 | validations.ts | ⚠️ Mejorable | 0 | 0 | 2 |
+| 14 | admin/social-auth/route.ts | ⚠️ Mejorable | 0 | 1 | 1 |
+| 15 | .env | ❌ Crítico | 2 | 0 | 0 |
+| 16 | Caddyfile | ✅ Aprobado | 0 | 0 | 0 |
+| - | Cross-cutting (uploads, etc.) | - | 0 | 1 | 2 |
+| **TOTAL** | | | **3** | **4** | **23** |
+
+(Note: 2 P0s in `.env` + 1 P0 in `[...nextauth]` = 3 total P0s; some tables above count sub-issues per file.)
+
+---
+
+## TOP PRIORITIZED REMEDIATION LIST
+
+### 🔴 P0 — MUST FIX BEFORE PRODUCTION (3 items)
+
+1. **Rotate ALL secrets in `.env`** — consider compromised. Generate `NEXTAUTH_SECRET` via `openssl rand -hex 32`, `LICENSE_ENCRYPTION_KEY` via `openssl rand -hex 32` (NOT a human-readable string), rotate `HUNTSMM_API_KEY` and `NOTIFICATIONS_SERVICE_SECRET`. Re-encrypt all stored secrets with the new `LICENSE_ENCRYPTION_KEY` via a one-time migration script.
+
+2. **Verify Dockerfile does not `COPY .env*`** — and add a pre-commit hook (`git-secrets` or `gitleaks`) to prevent future secret leaks.
+
+3. **Fix TOCTOU race in `[...nextauth]/route.ts` `ensureGoogleProvider`** — use a Promise-singleton pattern + deduplicate providers by `provider.id` before pushing to `authOptions.providers`.
+
+### 🟡 P1 — SHOULD FIX BEFORE PRODUCTION (4 items)
+
+4. **Add per-user rate limit on `/api/me/2fa/verify` and `/api/me/2fa/disable`** (5 attempts / 30s, lockout 5 min).
+
+5. **Wire up backup-code validation in `auth.ts` authorize()** — currently generated but never checked.
+
+6. **Add input Zod validation on `/api/admin/social-auth` POST** (`provider: z.enum(["google"])`, clientId/secret length-bounded).
+
+7. **Add `tokenVersion` to User table** — increment on password change, check in JWT callback, to invalidate stolen sessions after password reset.
+
+### 🟢 P2 — RECOMMENDED FOR v1.1 (top picks)
+
+8. Trust only the rightmost `X-Forwarded-For` IP (or `req.ip`) in middleware.
+9. Add explicit `session.maxAge` (8h) to NextAuth config.
+10. Add timestamp freshness check to MP webhook (`ts` within ±5 min).
+11. Drop `'unsafe-eval'` from CSP; consider per-request nonces for `'unsafe-inline'`.
+12. Add a per-IP rate limit on `/api/public/validate-license`.
+13. Move `/uploads/*` outside `public/` and serve via authenticated route.
+14. Validate `createOrderSchema.link` to http/https only via refine.
+15. Add admin self-demotion / last-admin protection to `/api/admin/users` PATCH.
+16. Whitelist allowed setting keys in `/api/admin/settings` PATCH.
+
+---
+
+## POSITIVE SECURITY HIGHLIGHTS
+
+The codebase demonstrates a strong security culture. Notable wins:
+
+- ✅ **Fail-closed webhooks** for all 3 payment providers (Stripe, MP, NowPayments) — no "log mode" that processes unverified events.
+- ✅ **Constant-time signature comparison** (`crypto.timingSafeEqual`) in MP and NowPayments webhooks.
+- ✅ **Atomic balance operations** — every debit/credit uses `db.$transaction([...])` with conditional `updateMany WHERE balance >=` to prevent race conditions on PostgreSQL MVCC.
+- ✅ **Defence-in-depth lookup** — both API keys and licenses use SHA-256 `lookupHash` for O(1) index lookup AND bcrypt.compare confirmation.
+- ✅ **Brute-force lockout** — Redis-backed, 5 attempts / 15 min, shared across instances.
+- ✅ **Origin value-matching CSRF** — closes the previous "any non-empty Origin" bypass.
+- ✅ **OAuth account-linking protection** — `allowDangerousEmailAccountLinking` correctly NOT set.
+- ✅ **CSP, HSTS, X-Frame-Options DENY, frame-ancestors 'none'** — solid header posture.
+- ✅ **No raw SQL** (only `SELECT 1` health checks, parameterised).
+- ✅ **No `eval`/`new Function`/`dangerouslySetInnerHTML`** in user-controlled paths.
+- ✅ **AES-256-GCM with AuthTag** for all sensitive data at rest.
+- ✅ **bcrypt cost 12** for all password / API-key / license hashes.
+- ✅ **CSPRNG (`crypto.randomBytes`, `crypto.randomInt`)** everywhere — no `Math.random()` in security contexts (verified).
+- ✅ **Error sanitization** in `api-handler.ts` strips `sk_*`, `Bearer *`, etc. from client-facing messages.
+- ✅ **Caddyfile SSRF fix** — explicit path routing, no wildcard port forwarding.
+
+---
+
+## SIGN-OFF
+
+**Verdict:** ⚠️ **CONDITIONAL APPROVAL — fix 3 P0s before go-live, 4 P1s within 30 days, 23 P2s for v1.1.**
+
+The architecture is production-grade. The remaining P0s are operational (secret rotation) and a single concurrency bug in dynamic OAuth — both fixable in <1 day of engineering effort. Once P0s are resolved, this platform is approved for production certification.
+
+**Next audit recommended:** 90 days post-launch, or after any major change to auth/payment/crypto code.
+
+— End of AUDIT-C report —
+
+---
+
+# AUDIT-B — PostgreSQL + Redis + Database/Cache Infrastructure Audit
+**Task ID:** AUDIT-B
+**Role:** External Database Administrator & Redis Specialist
+**Scope:** PostgreSQL schema (32 models), Redis client, cache, rate limiter, BullMQ queues, worker, DB helpers
+**Files audited:** 14 files (5 prisma, 5 redis/queue, 4 db helpers)
+**Date:** 2025 production certification audit
+
+## Executive Summary
+
+| Severity | Count | Status |
+|---|---|---|
+| ❌ P0 Crítico | **5** | Must fix before go-live |
+| ⚠️ P1 Mejorable | **11** | Should fix in 0–7 days |
+| ⚠️ P2 Mejorable | **7** | Backlog / hardening |
+
+**Verdict:** ⚠️ **CONDITIONAL APPROVAL — 5 P0 issues block unattended production launch.** The PostgreSQL production schema (`schema.postgres.prisma`) is solid (enums, Decimal, VarChar, snake_case tables, indexes, JsonB). However, the runtime DB helpers (`ids.ts`), Redis rate-limiter (`rate-limit.ts`), in-memory cache (`cache.ts`), and BullMQ worker (`worker.ts`) contain race conditions, leaks, and missing safety mechanisms that WILL cause production incidents under load.
+
+---
+
+## SECTION 1 — PostgreSQL Schema Audit
+
+### 1.1 `prisma/schema.prisma` (SQLite dev schema)
+
+#### Finding DB-001 — Float for monetary values in dev schema
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** The SQLite dev schema uses `Float` for all monetary fields (`User.balance`, `User.heldBalance`, `User.lifetimeEarnings`, `Service.cost`, `Service.price`, `Order.unitCost/Price/totalCost/totalPrice/profit`, `Transaction.amount`, `Invoice.amount/tax/total`, `Offer.price/cost/margin/earnings`, `Referral.earnings`, `Coupon.value`, `Subscription.amount`, `PaymentIntent.amount`, `Promotion.discount`, `Currency.rate`, `Notification.amount`). Float arithmetic causes 0.1+0.2=0.30000000000000004 errors.
+- **Evidence:** Lines 32–34, 114–115, 139–143, 177, 220, 343, 390, 413–415, 435, 477–479, 482, 500, 513, 558
+- **Risk:** Dev/prod behavior divergence — bugs that don't reproduce locally but appear in PostgreSQL with Decimal. Money-rounding bugs slip through dev testing.
+- **How to reproduce:** In dev, create an order with `unitCost=0.1, quantity=1000`. Result: `totalCost = 100.00000000000001`. In prod (Decimal) it's `100.0000` exactly.
+- **How to fix:** Document that the SQLite schema is dev-only and that the canonical schema is `schema.postgres.prisma`. Optionally replace `Float` with `String` (storing cents as integer strings) in SQLite to mirror Decimal precision.
+- **Confidence:** High
+
+#### Finding DB-002 — Missing `onDelete` rules on optional relations
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** `Service.provider` and `Order.service` relations have no `onDelete` rule, so Prisma uses the default (`NoAction` on PostgreSQL / `Restrict`). This means deleting a Provider that has Services, or a Service that has Orders, is **blocked** at the DB level — operator must manually null-out or re-parent the children first.
+- **Evidence:** 
+  - Line 121: `provider Provider? @relation(fields: [providerId], references: [id])` — no onDelete
+  - Line 162: `service Service? @relation(fields: [serviceId], references: [id])` — no onDelete
+- **Risk:** Admin "delete service" button fails with a foreign-key error. Workarounds (raw SQL bypass) risk data corruption. Same applies to PostgreSQL schema (lines 325, 363).
+- **How to reproduce:** Create a Service, link to Provider, then `db.provider.delete({ where: { id } })` → `P2003` foreign key constraint failed.
+- **How to fix:** Add `onDelete: SetNull` to both relations (so deleting the parent nulls the FK on the child). For Order.service, snapshot fields (`serviceName`, `platform`) already preserve display data — safe to null `serviceId`.
+- **Confidence:** High
+
+#### Finding DB-003 — Loose String FK columns with no relation (no constraint)
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** Multiple tables store `userId`/`orderId`/`customerId` as bare `String` columns with NO Prisma `@relation` and therefore NO foreign key constraint at the DB level. Deletions of the parent row leave orphan rows referencing non-existent IDs.
+  - `Transaction.orderId String?` (line 182) — no Order relation
+  - `LoyaltyPoint.orderId String?` (line 579) — no Order relation
+  - `License.customerId String?` (line 319) — no User relation
+  - `Offer.userId String` (line 475) + `Offer.serviceId String` (line 476) — no User or Service relations
+  - `Referral.referrerId String` (line 495) + `Referral.referredId String?` (line 496) — no User relations
+  - `TicketAttachment.messageId String` (line 543) — no TicketMessage relation
+- **Risk:** When `User` is deleted (Cascade from admin), the user's Offers, Referrals, LoyaltyPoints-by-orderId, and License-customer links **remain** with dangling IDs. Reports/joins return nulls or broken rows. Referential integrity violated.
+- **How to reproduce:** Create an Offer, then delete the offering User. The Offer row remains with `userId` pointing to a deleted user. `db.offer.findMany({ include: ... })` cannot join.
+- **How to fix:** Either (a) add proper `@relation` to each parent model (e.g., `User.offers Offer[]`, `User.referrals Referral[]`, etc.) with appropriate `onDelete: Cascade` or `SetNull`, or (b) document these as "snapshot" fields and add an admin cleanup job to periodically purge orphans. Recommend (a) for production.
+- **Confidence:** High
+
+#### Finding DB-004 — No CHECK constraints (balance >= 0, quantity > 0, price >= 0)
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** Neither schema enforces domain invariants at the DB level. There is nothing preventing `User.balance = -500`, `Order.quantity = 0`, `Service.price = -10`, or `Coupon.value = 150` (over 100%). All money/range validation is in application code, which can be bypassed by a buggy transaction, a direct Prisma update, or a future code change that forgets to validate.
+- **Evidence:** No `@check` (Prisma doesn't support CHECK), no raw `CREATE TABLE ... CHECK` migration, no `extension` for assertions.
+- **Risk:** A single bug in `wallet.service.ts` (or a direct SQL fix during incident response) can drive balances negative — silent corruption that's only discovered when users complain. This is a financial system; CHECK constraints are mandatory.
+- **How to reproduce:** `db.user.update({ where: { id }, data: { balance: -9999 } })` succeeds. No error.
+- **How to fix:** Add a raw SQL migration after `prisma migrate dev`:
+  ```sql
+  ALTER TABLE users ADD CONSTRAINT users_balance_chk CHECK (balance >= 0);
+  ALTER TABLE users ADD CONSTRAINT users_held_balance_chk CHECK (held_balance >= 0);
+  ALTER TABLE orders ADD CONSTRAINT orders_quantity_chk CHECK (quantity > 0);
+  ALTER TABLE services ADD CONSTRAINT services_price_chk CHECK (price >= 0);
+  ALTER TABLE coupons ADD CONSTRAINT coupons_value_chk CHECK (value >= 0);
+  ALTER TABLE promotions ADD CONSTRAINT promotions_discount_chk CHECK (discount >= 0 AND discount <= 100);
+  ```
+  Document in `docs/database.md` that these constraints exist and must be preserved.
+- **Confidence:** High
+
+#### Finding DB-005 — `Json` columns that should be normalized or GIN-indexed
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** `Invoice.items` (line 418) is a `Json` array of `{ description, quantity, unitPrice, total }`. This is acceptable for a snapshot, but no GIN index is defined for ad-hoc queries. `Order.dripFeedConfig` (line 156), `PaymentMethod.config` (line 207), `PaymentIntent.metadata` (line 564), and `AuditLog.metadata` (line 270) are similarly un-indexed. The PostgreSQL schema comment claims "JSONB with GIN indexes for fast queries" but no `@@index` annotations exist on these columns.
+- **Evidence:** schema.postgres.prisma lines 357, 410, 477, 564, 641 — no GIN index defined.
+- **Risk:** Queries like "find all orders with dripFeedConfig.chunks > 5" or "find invoices containing item with description LIKE '%discount%'" do full-table scans.
+- **How to reproduce:** `SELECT * FROM orders WHERE drip_feed_config @> '{"chunks": 10}'` does a seq scan without a GIN index.
+- **How to fix:** Add raw SQL migration: `CREATE INDEX orders_drip_feed_gin ON orders USING GIN (drip_feed_config jsonb_path_ops);` for columns you actually query. For pure snapshot columns (`Invoice.items`), leave unindexed but document.
+- **Confidence:** High
+
+#### Finding DB-006 — `User` table has no soft-delete column
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Users can be `suspended` (status) but never "soft-deleted" — `db.user.delete()` would CASCADE delete all their Orders, Transactions, Notifications, Tickets, AuditLogs (set null), API keys, LoyaltyPoints, Achievements, Subscriptions. This is dangerous for accounting/audit trails (a deleted user's order history vanishes).
+- **Evidence:** Lines 38–49 show 12 relations, 9 with `onDelete: Cascade`.
+- **Risk:** GDPR "right to be forgotten" or admin fat-finger → irreversible destruction of financial records.
+- **How to fix:** Add `deletedAt DateTime?` column to User. Replace `db.user.delete()` with `db.user.update({ data: { deletedAt: new Date(), status: "suspended" } })`. Filter active users with `where: { deletedAt: null }`.
+- **Confidence:** Medium
+
+### 1.2 `prisma/schema.postgres.prisma` (PostgreSQL production schema)
+
+#### Finding DB-007 — Production schema is solid (no critical issues found)
+- **Status:** ✅ Aprobado
+- **Priority:** N/A
+- **Impact:** N/A
+- **Description:** PostgreSQL production schema is well-designed:
+  - ✅ 26 native enums replace String status columns (lines 36–211)
+  - ✅ All monetary fields use `Decimal @db.Decimal(12,4)` (8 digits before decimal, 4 after — supports up to $99,999,999.9999)
+  - ✅ All string fields have `@db.VarChar(N)` or `@db.Text` constraints
+  - ✅ IP addresses use `@db.Inet` (lines 478, 511) — enables CIDR queries
+  - ✅ snake_case table names via `@@map("...")` (PostgreSQL convention)
+  - ✅ Composite indexes on hot query paths (e.g., `[userId, status]`, `[userId, createdAt]`)
+  - ✅ Indexes on all FK columns and frequently-filtered columns
+  - ✅ `AuditLog.user` uses `onDelete: SetNull` (preserves audit history when user is deleted)
+  - ✅ `lookupHash` columns use `@db.VarChar(64)` (exactly SHA-256 hex length)
+- **Confidence:** High
+
+#### Finding DB-008 — Missing unique constraint on `PaymentIntent.providerIntentId`
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** `PaymentIntent.providerIntentId` is `String? @db.VarChar(255)` with only `@@index([providerIntentId])` (line 810). It is NOT marked `@unique`. Two payment intents could be created with the same `providerIntentId` (e.g., if a webhook fires twice and the idempotency check fails). This is exactly how duplicate wallet credits happen.
+- **Evidence:** schema.postgres.prisma line 801: `providerIntentId String? @db.VarChar(255)` (no `@unique`); line 810: `@@index([providerIntentId])`.
+- **Risk:** Duplicate payment webhooks → duplicate `Transaction` rows → user credited twice. The application-level idempotency check (`db.paymentIntent.findFirst({ where: { providerIntentId } })`) is racy: two concurrent webhook handlers can both pass the check and both insert.
+- **How to reproduce:** Send the same Stripe webhook twice in parallel (e.g., retry + new delivery). Both handlers read "no existing intent", both insert, user is credited 2x.
+- **How to fix:** Add `@unique` to `providerIntentId` (the column is nullable, so partial unique index applies). This makes the second insert fail with P2002 — the webhook handler can then treat that as "already processed" and return 200.
+  ```prisma
+  providerIntentId String? @unique @db.VarChar(255)
+  ```
+- **Confidence:** High
+
+#### Finding DB-009 — Missing unique constraint on `WebhookLog.signature`
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Webhook idempotency typically relies on the signature/event ID being unique. `WebhookLog` (lines 368–381) has no `signature` field marked unique and no separate `eventId` column. The only indexes are `[provider]`, `[status]`, `[createdAt]`.
+- **Risk:** Same webhook delivered twice creates two `WebhookLog` rows. Without an idempotency key, the handler can't detect the duplicate.
+- **How to fix:** Add `eventId String? @unique @db.VarChar(255)` to `WebhookLog`. Populate from Stripe's `id`, MP's `id`, etc. Before processing, check `db.webhookLog.findUnique({ where: { eventId } })` — if exists, return 200 without re-processing.
+- **Confidence:** Medium
+
+#### Finding DB-010 — Missing index on `Order.providerId` and `Order.completedAt`
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Orders can be filtered by `providerId` (admin provider dashboard) or by `completedAt` (SLA reports), but neither column has an index.
+- **Evidence:** schema.postgres.prisma lines 365–370 — indexes on `[userId], [status], [serviceId], [createdAt], [userId, status], [userId, createdAt]` but NOT `[providerId]` or `[completedAt]`.
+- **Risk:** `SELECT * FROM orders WHERE "providerId" = X` does a full table scan on a 1M+ row orders table.
+- **How to fix:** Add `@@index([providerId])` and `@@index([completedAt])`.
+- **Confidence:** High
+
+---
+
+## SECTION 2 — Migration Scripts Audit
+
+### 2.1 `prisma/migrate-sqlite-to-postgres.ts`
+
+#### Finding MG-001 — Migration uses same PrismaClient class for source and destination
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** Lines 34–35 import the SAME `PrismaClient` from `@prisma/client` twice (one aliased as `SqlitePrismaClient`). The script's own prerequisites (step 3) require `schema.prisma` to be REPLACED with `schema.postgres.prisma` BEFORE running — so the generated PrismaClient is the PostgreSQL one. This means:
+  - `sqlite.user.findMany()` generates SQL using `@@map("users")` (snake_case table name)
+  - SQLite was created from the SQLite schema where the table is named `User` (no @@map)
+  - SQLite's case-insensitive table matching **may** save you here (queries `FROM "users"` match table `User`)
+  - **But**: PostgreSQL schema has `@@map("users")` on the TABLE only — columns are still camelCase (`balance`, `heldBalance` — no `@map`). So columns should match.
+  - Enums: PostgreSQL schema uses `UserRole` enum, but SQLite stored `role` as String "admin". Prisma should accept the string for an enum field, BUT if any row has an invalid enum value (e.g., "superadmin" leftover from old code), the PostgreSQL upsert will throw.
+- **Evidence:** Lines 34–42, 47.
+- **Risk:** Migration fails mid-way on the first invalid enum value, leaving partial data in PostgreSQL. The `migrateTable` wrapper (line 651) catches errors per-table but the script doesn't wrap the whole migration in a transaction, so partial state persists.
+- **How to reproduce:** Run the migration with a User whose `role = "superadmin"` (legacy value). The User migration aborts at that row, but earlier rows are already inserted. Re-running picks up at the failed row but the count verification fails.
+- **How to fix:** 
+  1. Generate TWO separate PrismaClient builds: one from the SQLite schema (`prisma generate --schema=prisma/schema.sqlite.prisma` into a separate output), one from PostgreSQL. Import them separately.
+  2. Add a pre-migration validator: scan all tables for invalid enum values and report before writing anything.
+  3. Wrap each table's writes in a PostgreSQL transaction so a failure rolls back that table's batch (but not the whole migration — too slow for big tables).
+- **Confidence:** Medium-High
+
+#### Finding MG-002 — `tryParseJSON` fallback can corrupt Json columns
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 636–649: `tryParseJSON` tries `JSON.parse(str)` and on failure returns the raw `str` value. The comment says this preserves AES-encrypted blobs (e.g., `PaymentMethod.config` storing "iv:authTag:enc"). But: PostgreSQL `JsonB` columns reject non-JSON values at insert time. Prisma may coerce a string to a JSON string literal (e.g., `"\"iv:authTag:enc\""`), but if the string contains characters that need escaping (backslashes, quotes), the result is silently mangled.
+- **Evidence:** Lines 636–649, called from lines 172, 181, 215, 219, 279, 283, 404, 411, 561, 566.
+- **Risk:** Payment provider credentials (`PaymentMethod.config`) silently corrupted during migration → payments break in production with no clear error.
+- **How to fix:** For columns known to store opaque strings (like `PaymentMethod.config`), wrap the raw value explicitly: `JSON.stringify(str)` to produce a valid JSON string literal. Don't rely on the fallback path. Add a post-migration smoke test that reads back each `config` and verifies decryption still works.
+- **Confidence:** Medium
+
+#### Finding MG-003 — No progress bar / no resume capability for large tables
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** The script iterates `findMany()` with no `take`/`skip` pagination. For a User table with 100K rows or Order table with 10M rows, this loads ALL rows into memory at once.
+- **Evidence:** Line 64 `const rows = await sqlite.user.findMany();` — no pagination.
+- **Risk:** OOM kill on the migration process for large datasets. Restart from scratch.
+- **How to fix:** Use cursor-based pagination: `findMany({ take: 500, skip: 1, cursor: { id: lastId } })`. Add a progress counter logged every 500 rows.
+- **Confidence:** High
+
+#### Finding MG-004 — Verification compares row counts but not data integrity
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Lines 612–626: verification only checks `source.length === dest.length`. It doesn't verify that any individual row's data matches (e.g., did `balance` round-trip correctly from Float to Decimal?).
+- **Risk:** Silent data corruption passes the count check.
+- **How to fix:** Add a sampling check: pick 10 random rows per table, compare field-by-field with a tolerance (e.g., Decimal difference < 0.0001 for monetary fields).
+- **Confidence:** High
+
+### 2.2 `prisma/backfill-lookup-hashes.ts`
+
+#### Finding BF-001 — Backfill script is solid
+- **Status:** ✅ Aprobado
+- **Priority:** N/A
+- **Impact:** N/A
+- **Description:** Well-designed: idempotent (only touches rows where `lookupHash IS NULL`), per-row try/catch (one bad row doesn't abort the batch), honest reporting (`ok / skipped / failed`). The "API keys can't be backfilled" note is correct — bcrypt is one-way, so the script correctly defers to self-healing on first use.
+- **Evidence:** Lines 25–58, especially the per-row `try/catch` and the `decryptLicenseKey` empty-string check.
+- **Confidence:** High
+
+#### Finding BF-002 — No rate limiting on decryption (CPU spike risk)
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Lines 33–52: iterates licenses synchronously, calling `decryptLicenseKey` (AES-256-GCM) on each. For 10K+ licenses, this is a sustained CPU spike.
+- **How to fix:** Add `await sleep(1)` between iterations, or process in batches of 100 with a short pause.
+- **Confidence:** Medium
+
+### 2.3 `prisma/seed.ts`
+
+#### Finding SD-001 — Seed creates real-looking financial data
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 27, 49–51: seeds admin user with `balance: 50000` and demo user with `balance: 8420.5, heldBalance: 1280.25, lifetimeEarnings: 92480.5`. If `seed.ts` is accidentally run in production (e.g., a CI/CD pipeline that runs `bun run seed` as a post-deploy step), it pollutes the production user table with demo data and creates an admin with a random password printed to stdout (lost forever).
+- **Evidence:** Lines 14–29, 36–53.
+- **Risk:** Operator can't log in as admin (password was printed to a CI log that's been rotated). Demo user appears in production dashboards.
+- **How to fix:** Add a guard at the top of `main()`:
+  ```typescript
+  if (process.env.NODE_ENV === "production" && process.env.ALLOW_PROD_SEED !== "true") {
+    console.error("Refusing to seed in production. Set ALLOW_PROD_SEED=true to override.");
+    process.exit(1);
+  }
+  ```
+- **Confidence:** High
+
+#### Finding SD-002 — Generated admin password is only 16 chars
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 12: `crypto.randomBytes(12).toString("base64url").slice(0, 16)` — 16 chars of base64url ≈ 96 bits of entropy. Adequate, but the `slice(0, 16)` truncates the 16-char base64 of 12 bytes (which would be 16 chars anyway). The slice is redundant. Minor code smell.
+- **Confidence:** High
+
+---
+
+## SECTION 3 — Redis + Cache + Rate-Limiter Audit
+
+### 3.1 `src/lib/redis.ts`
+
+#### Finding RD-001 — `withRedis` silently swallows errors
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** Lines 111–123: `withRedis` catches ALL exceptions, sets `isAvailable = false`, and returns `null`. Callers can't distinguish "Redis is genuinely down" (acceptable fallback) from "Redis is up but my specific command failed" (a real bug). Worse: a transient network blip (1 dropped packet) marks Redis unavailable for the rest of the process lifetime — `isAvailable` is set to `false` and only re-set on the next "ready" event, which may not fire if the connection auto-reconnected.
+- **Evidence:** Lines 116–122.
+- **Risk:** Production silently degrades to in-memory mode after one Redis hiccup. Cache hit rate drops to 0%, rate limits become per-instance (a user can make N requests per web container instead of per cluster), and BullMQ jobs run synchronously inside the web request (blocking). No alert fires because the code "handles" the error.
+- **How to reproduce:** Start the app with Redis up. Make 100 cache requests. Run `redis-cli DEBUG SLEEP 5` (blocks Redis for 5s). The next `withRedis` call sets `isAvailable = false`. Subsequent requests (even after Redis recovers) return `null` because nothing re-polls.
+- **How to fix:**
+  1. Distinguish connection errors (ECONNREFUSED, ETIMEDOUT) from command errors (WRONGTYPE, syntax). Only mark unavailable on connection errors.
+  2. Add a periodic health check (e.g., `PING` every 10s) that re-sets `isAvailable = true` when Redis recovers.
+  3. Emit a metrics event when degrading (`metrics.increment("redis.degraded")`) so monitoring catches it.
+- **Confidence:** High
+
+#### Finding RD-002 — `getRedis()` race condition on first connection
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 85–94: on first call, `await client.ping()` is awaited, but `connectionAttempted` is only set to `true` AFTER the await resolves. Two concurrent first-calls will both await `ping()` — not harmful, but redundant. More importantly: the `ready` event handler (line 61) sets `isAvailable = true` and `connectionAttempted = true` — but if `ready` fires BEFORE the `await ping()` returns, the ping's failure (timeout) will set `isAvailable = false`, overriding the `ready` signal.
+- **Evidence:** Lines 61–64 + 85–94.
+- **Risk:** Flapping availability flag in the first second of startup.
+- **How to fix:** Set `connectionAttempted = true` synchronously before the `await ping()`. Use a Promise-based "once connected" pattern instead of a flag.
+- **Confidence:** Medium
+
+#### Finding RD-003 — No `maxRetriesPerRequest: null` for BullMQ compatibility
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 34: `maxRetriesPerRequest: 2`. BullMQ explicitly requires `maxRetriesPerRequest: null` on its connection — otherwise BullMQ throws `"BullMQ: Your redis options maxRetriesPerRequest must be null."` on startup. The worker.ts (line 100) calls `redis.duplicate()`, but `duplicate()` inherits the parent's `maxRetriesPerRequest`. This means **the worker will fail to start** if the same `redis.ts` client is reused.
+- **Evidence:** redis.ts line 34; worker.ts line 100 `connection: redis.duplicate()`.
+- **Risk:** Worker process crashes on startup in production. Jobs never process. (This may have been masked because the worker falls back to in-process mode in dev.)
+- **How to fix:** In `queues.ts` and `worker.ts`, when creating the BullMQ connection, pass explicit options: `connection.duplicate({ maxRetriesPerRequest: null })`. Or, create a separate Redis client specifically for BullMQ with `maxRetriesPerRequest: null`.
+- **Confidence:** High
+
+#### Finding RD-004 — No connection pool / single client for all workloads
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** A single `Redis` instance is shared between cache reads, rate limiting, and BullMQ queue operations. BullMQ's blocking commands (`BRPOPLPUSH`, `BZPOPMIN`) can starve cache reads under high queue throughput.
+- **Evidence:** redis.ts exports one client; queues.ts line 61 `connection.duplicate()` does create a duplicate, but `getRedis()` elsewhere returns the shared client.
+- **How to fix:** Create three dedicated clients: one for cache/rate-limit (non-blocking), one for BullMQ producer (enqueue), one for BullMQ consumer (worker blocking). Document the separation.
+- **Confidence:** Medium
+
+### 3.2 `src/lib/cache.ts`
+
+#### Finding CA-001 — Memory leak in `memoryCache` (no proactive TTL cleanup)
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** The `memoryCache` Map (line 24) only evicts entries when: (a) `memoryGet(key)` is called for an expired entry, or (b) `memoryInvalidate(pattern)` matches the key. **There is no periodic cleanup.** Entries written with a TTL that are never re-read accumulate forever. Compare to `rate-limit.ts` which has `cleanupMemoryBuckets()` (lines 29–36).
+- **Evidence:** Lines 24–53 — `memorySet` only sets `expiresAt`, no `setInterval` cleanup.
+- **Risk:** In sandbox/dev mode (no Redis), a Next.js dev server running for a week with 1000 unique cache keys/hour × 1KB each = ~150MB of un-GC'd cache entries. Process OOMs or slows due to GC pressure. In production with Redis, this is mitigated (Redis is the primary), but the fallback still leaks.
+- **How to reproduce:** In dev mode (Redis disabled), write 100K cache entries with TTL=60s. Wait 10 minutes. Inspect `memoryCache.size` — still ~100K.
+- **How to fix:** Add a periodic cleanup:
+  ```typescript
+  if (typeof setInterval !== "undefined") {
+    setInterval(() => {
+      const now = Date.now();
+      for (const [key, entry] of memoryCache) {
+        if (entry.expiresAt !== null && entry.expiresAt < now) {
+          memoryCache.delete(key);
+        }
+      }
+    }, 60_000).unref(); // unref so it doesn't block process exit
+  }
+  ```
+  Also add a max-size cap (e.g., 10K entries) with LRU eviction.
+- **Confidence:** High
+
+#### Finding CA-002 — `cacheSet` with no TTL creates immortal entries
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 99–104: if `ttlSeconds` is undefined/0, `redis.set(key, serialized)` is called with no EXPIRE. The entry lives in Redis forever (until manually deleted or `cacheInvalidate` matches). The in-memory fallback (line 108) also sets `expiresAt: null` (line 39).
+- **Risk:** Stale data accumulates. E.g., `cacheSet("user:abc", userObj)` (no TTL) — if the user is updated elsewhere, the cache never refreshes unless `cacheDel` is called explicitly. Forgetting to invalidate = permanent stale read.
+- **How to fix:** Make TTL mandatory in `cacheGetOrSet` (it already is). For `cacheSet`, log a warning if no TTL is provided, OR default to a sane max (e.g., 24h) to prevent truly immortal entries.
+- **Confidence:** High
+
+#### Finding CA-003 — `cacheGet` returns stale type on JSON parse failure
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Lines 63–68 and 75–80: on JSON.parse failure, returns `value as unknown as T`. The caller expects type T but gets a raw string. This is a silent type mismatch.
+- **How to fix:** On parse failure, log a warning and return `null` (cache miss). Let the factory re-populate.
+- **Confidence:** High
+
+#### Finding CA-004 — `cacheGetOrSet` has no stampede protection (thundering herd)
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Lines 163–174: if the cache misses, the factory is called. But concurrent calls for the same key (e.g., 1000 requests for `public:settings` after a deploy) all see the miss, all call the factory, all write to cache. The DB takes 1000× the load.
+- **How to fix:** Add an in-flight promise map: when the first call starts, store its promise; subsequent calls await the same promise. Clear the entry after resolution.
+  ```typescript
+  const inflight = new Map<string, Promise<any>>();
+  // ... in cacheGetOrSet:
+  if (inflight.has(key)) return inflight.get(key)!;
+  const p = (async () => { /* factory + cacheSet */ })();
+  inflight.set(key, p);
+  try { return await p; } finally { inflight.delete(key); }
+  ```
+- **Confidence:** High
+
+### 3.3 `src/lib/rate-limit.ts`
+
+#### Finding RL-001 — `redisSlidingWindow` cleanup `zrem` uses a DIFFERENT random member
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** Lines 114 and 130 BOTH call `Math.random()` — but they produce DIFFERENT random numbers. The pipeline adds member ``${now}:${Math.random()}`` (call A), then on rejection tries to remove `${now}:${Math.random()}` (call B) — a DIFFERENT member that was never added. The `zrem` is a no-op. Rejected requests stay in the sorted set, consuming a slot until the key expires via `pexpire`.
+- **Evidence:** 
+  - Line 114: `pipeline.zadd(redisKey, now, \`${now}:${Math.random()}\`);`
+  - Line 130: `await redis.zrem(redisKey, \`${now}:${Math.random()}\`);`
+- **Risk:** A burst of 1000 rejected login attempts within the 15-min window fills the sorted set with 1000 "phantom" entries. Legitimate users are now blocked for the full 15 minutes (the window never shrinks). Effectively a self-DoS on the login endpoint.
+- **How to reproduce:** Send 50 login requests to `checkRateLimit("login:1.2.3.4", 20, 15*60*1000)` in parallel. The first 20 succeed, the next 30 are rejected but their entries remain. Send 1 more request — it's also rejected (count is 51, not 21).
+- **How to fix:** Capture the member ID once and reuse it:
+  ```typescript
+  const memberId = `${now}:${Math.random()}`;
+  pipeline.zadd(redisKey, now, memberId);
+  // ...
+  if (!allowed) {
+    await redis.zrem(redisKey, memberId);
+  }
+  ```
+  Even better: use a Lua script for atomic check-and-add (eliminates the pipeline race entirely):
+  ```lua
+  -- KEYS[1]=key ARGV[1]=now ARGV[2]=windowStart ARGV[3]=max ARGV[4]=memberId ARGV[5]=ttl
+  redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[2]);
+  local count = redis.call('ZCARD', KEYS[1]);
+  if count < tonumber(ARGV[3]) then
+    redis.call('ZADD', KEYS[1], ARGV[1], ARGV[4]);
+  end
+  redis.call('PEXPIRE', KEYS[1], ARGV[5]);
+  return count;
+  ```
+- **Confidence:** High
+
+#### Finding RL-002 — Pipeline is not atomic (race between ZCARD and ZADD)
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 108–118: the pipeline batches 4 commands, but Redis pipelines are NOT atomic — another client can execute between them. Two concurrent requests both see `count = 19` (under limit), both `zadd`, final count = 21 (over limit). The check `count <= maxRequests` then fails for both, but both already added members.
+- **Risk:** Under high concurrency, the rate limit is exceeded by ~N-1 where N is the number of concurrent requests at the boundary. Minor for low-volume endpoints, but breaks strict guarantees (e.g., "max 5 OTP requests per hour").
+- **How to fix:** Use the Lua script in RL-001 (true atomicity). This also fixes RL-001.
+- **Confidence:** High
+
+#### Finding RL-003 — In-memory fallback uses fixed-window, not sliding-window
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Lines 38–62: `memoryCheck` uses a fixed-window algorithm (resets fully at `resetAt`). This means a user can make 2× the limit at the window boundary (20 requests at 14:59, 20 more at 15:00). The Redis path uses sliding window. The two behaviors diverge in dev vs prod.
+- **How to fix:** Document the divergence. Or implement sliding window in-memory (sorted array of timestamps).
+- **Confidence:** High
+
+#### Finding RL-004 — `memoryBuckets` cleanup only runs when `checkRateLimit` is called
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Lines 29–36: `cleanupMemoryBuckets` is invoked inside `memoryCheck`, which is only called when a rate-limit check happens. If the app has no traffic, expired buckets never get cleaned. Not a major leak (each bucket is tiny), but a slow drip.
+- **How to fix:** Add a `setInterval(cleanupMemoryBuckets, 60_000).unref()` for proactive cleanup.
+- **Confidence:** High
+
+### 3.4 `src/lib/queues.ts` + `src/workers/worker.ts`
+
+#### Finding QU-001 — No DLQ (Dead Letter Queue) monitoring or alerting
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** `removeOnFail: { count: 50 }` (line 69) keeps the last 50 failed jobs in Redis, but there is NO mechanism to alert when jobs fail. No webhook, no Slack notification, no Sentry breadcrumb, no Prometheus counter. Failed jobs silently accumulate until they're evicted (FIFO) — at which point they're gone forever.
+- **Evidence:** queues.ts line 69; worker.ts `worker.on("failed", ...)` (line 105) only logs to stdout.
+- **Risk:** A bug in `order.fulfill` that fails all jobs → users pay for orders that never get fulfilled → no one notices until customers complain 24h later. The 50-job retention is too small to debug a multi-hour incident.
+- **How to fix:**
+  1. In `worker.ts` `worker.on("failed")`, send to Sentry: `Sentry.captureException(err, { tags: { queue: queueName, jobId: job?.id } })`.
+  2. Add a DLQ queue: when `job.attemptsMade >= job.opts.attempts`, move the job to a `dlq.<queueName>` queue. Add a `cron` to alert if `dlq.*` depth > 0.
+  3. Increase `removeOnFail: { age: 7 * 24 * 3600 }` (keep 7 days) for post-mortem debugging.
+- **Confidence:** High
+
+#### Finding QU-002 — No job timeout (long-running jobs can hang forever)
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** Neither `queues.ts` nor `worker.ts` configures a job timeout. BullMQ's default `stalledInterval` is 30s and `maxStalledCount` is 1 — meaning a job that hangs (e.g., an HTTP request with no timeout to a provider API) will be marked stalled after 30s, retried once, then moved to failed. But the ORIGINAL job's handler is still running — it could eventually finish and write to the DB, causing duplicate side effects (double-fulfilled orders).
+- **Evidence:** queues.ts lines 60–71 (no `stalledInterval`, `maxStalledCount`, `lockDuration`); worker.ts lines 89–103 (no timeout in Worker options).
+- **Risk:** Provider API hangs → order.fulfill hangs → marked stalled → retried → original eventually completes → user gets 2× delivery.
+- **How to fix:** Add explicit configuration:
+  ```typescript
+  new Worker(queueName, handler, {
+    connection: redis.duplicate({ maxRetriesPerRequest: null }),
+    concurrency,
+    stalledInterval: 30_000,
+    maxStalledCount: 1,
+    lockDuration: 60_000, // override per-queue if needed
+  });
+  ```
+  Inside each handler, enforce a hard timeout with `AbortSignal.timeout(60_000)` on all network calls.
+- **Confidence:** High
+
+#### Finding QU-003 — Worker `shutdown` has no hard timeout
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 123–129: `shutdown` calls `Promise.all(workers.map(w => w.close()))` but BullMQ's `worker.close()` waits for in-progress jobs to finish. If a job is stuck (e.g., waiting on a dead DB connection), `worker.close()` never resolves, the SIGTERM handler never completes, and Docker has to SIGKILL the process after its grace period (default 10s). In-flight jobs are NOT cleaned up — they'll be marked stalled on the next worker start.
+- **How to fix:** Add a hard timeout:
+  ```typescript
+  await Promise.race([
+    Promise.all(workers.map(w => w.close())),
+    new Promise((_, reject) => setTimeout(() => reject(new Error("shutdown timeout")), 25_000)),
+  ]);
+  ```
+- **Confidence:** High
+
+#### Finding QU-004 — No `uncaughtException` / `unhandledRejection` handler in worker
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** worker.ts has no `process.on("uncaughtException")` or `process.on("unhandledRejection")`. A single unhandled promise rejection (e.g., a missing `await` inside a handler) leaves the worker in an undefined state — it may keep consuming jobs but with broken state, or silently stop processing.
+- **How to fix:** Add handlers at the top of `main()`:
+  ```typescript
+  process.on("unhandledRejection", (err) => {
+    console.error("[worker] Unhandled rejection:", err);
+    Sentry.captureException(err);
+  });
+  process.on("uncaughtException", (err) => {
+    console.error("[worker] Uncaught exception:", err);
+    Sentry.captureException(err);
+    process.exit(1); // restart fresh
+  });
+  ```
+- **Confidence:** High
+
+#### Finding QU-005 — Worker exits with code 0 when Redis is unavailable
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Lines 71–78: when Redis isn't available, the worker calls `process.exit(0)`. Docker's `restart: unless-stopped` will NOT restart a process that exits 0 (it considers 0 a clean exit). So if Redis is briefly down at worker startup, the worker exits cleanly and never restarts — even after Redis recovers, no jobs process.
+- **How to fix:** Exit with code 1 (so Docker restarts it), OR better: wait and retry:
+  ```typescript
+  console.error("Redis not available, retrying in 5s...");
+  await new Promise(r => setTimeout(r, 5000));
+  return main(); // retry
+  ```
+- **Confidence:** High
+
+#### Finding QU-006 — Queue concurrency settings may be too aggressive
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** `ws.broadcast: 20`, `email.send: 10` (lines 40, 39). With 20 concurrent broadcast jobs, you can DoS your own notifications service. With 10 concurrent email jobs, you can hit your SMTP provider's rate limit (e.g., SendGrid's 100/s is fine, but a shared SMTP relay may be 10/min).
+- **How to fix:** Make concurrency env-configurable: `concurrency: parseInt(process.env.WS_BROADCAST_CONCURRENCY ?? "5")`. Document the limits.
+- **Confidence:** Medium
+
+#### Finding QU-007 — No queue priority implemented
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** `enqueueJob` accepts `options.priority` (line 91) but BullMQ priorities default to 0 — lower numbers = higher priority. The code doesn't document or enforce priority conventions (e.g., priority=1 for password-reset emails, priority=10 for marketing). Without conventions, the parameter is dead.
+- **How to fix:** Document a priority table in `docs/architecture.md` and enforce in code review.
+- **Confidence:** High
+
+#### Finding QU-008 — Worker imports a Next.js API route handler (loyalty)
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 44–47 and queues.ts line 144: `import("@/app/api/me/loyalty/route")` to call `reconcileAchievements`. Importing an API route handler into a worker pulls in the entire Next.js runtime (request/response objects, middleware, etc.) just to call one function. This bloats the worker bundle and couples the worker to the web app's internal structure.
+- **How to fix:** Extract `reconcileAchievements` to a pure service function in `src/lib/services/loyalty.service.ts`. Import the service from both the API route and the worker.
+- **Confidence:** High
+
+---
+
+## SECTION 4 — Database Helpers Audit
+
+### 4.1 `src/lib/ids.ts` (Sequence table)
+
+#### Finding ID-001 — Race condition on first call to `nextPublicId` for a new prefix
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** Lines 56–80: the transaction first does `findUnique`, and if null, does `create`. Two concurrent transactions can both see `existing = null` (the row doesn't exist yet) and both call `tx.sequence.create({ data: { id: prefix, ... } })`. The second `create` fails with `P2002` unique constraint on `id`. The comment on lines 13–17 claims "SELECT FOR UPDATE-equivalent semantics" — but Prisma does NOT issue `SELECT ... FOR UPDATE` inside interactive transactions by default; it uses regular `SELECT`. The increment path (`existing = truthy → update`) IS atomic at the SQL level (`UPDATE ... SET lastValue = lastValue + 1`), but the seed path is NOT.
+- **Evidence:** Lines 56–80, especially lines 58 (`findUnique`) → 60 (`if existing`) → 72 (`create` if not).
+- **Risk:** On the first ever order creation (or first order after a deploy that introduces a new prefix), two concurrent requests both try to seed the Sequence row. One fails with P2002, the user sees a 500 error, the order is lost. After the first success, subsequent calls take the `update` path and are safe.
+- **How to reproduce:** Fresh database. Fire 10 concurrent `POST /api/orders` requests. The first to win the `create` race succeeds; others fail with `PrismaClientKnownRequestError: P2002` on `Sequence.id`.
+- **How to fix:** Use `upsert` instead of `findUnique` + `create`:
+  ```typescript
+  const result = await tx.sequence.upsert({
+    where: { id: prefix },
+    update: { lastValue: { increment: 1 } },
+    create: { id: prefix, prefix, lastValue: offset + 1 },
+    select: { lastValue: true },
+  });
+  return result.lastValue;
+  ```
+  `upsert` is atomic at the SQL level (uses `INSERT ... ON CONFLICT DO UPDATE` on PostgreSQL). This also simplifies the code (no branching).
+- **Confidence:** High
+
+#### Finding ID-002 — `seedSequenceFromCount` can go backwards (bug in comment vs code)
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 100–119: the comment on line 110–111 says "Only update if the computed value is higher (don't go backwards)", but the code on line 112 unconditionally sets `lastValue: computedNext`. If `computedNext` (computed from a stale count) is LESS than the current `lastValue` (already incremented by live orders), this OVERWRITES the sequence with a lower value — causing the next `nextPublicId` to return a duplicate of an already-issued ID.
+- **Evidence:** Lines 105–118.
+- **Risk:** Running `seedSequenceFromCount` on a live production system resets the sequence backwards → duplicate public IDs → `P2002` on the next insert (the code's safety net) OR worse, if the unique constraint is missing, two orders with the same `publicId`.
+- **How to fix:** Use a conditional update:
+  ```typescript
+  await tx.sequence.update({
+    where: { id: prefix, lastValue: { lt: computedNext } }, // only if lower
+    data: { lastValue: computedNext },
+  });
+  ```
+  Or use raw SQL: `UPDATE sequences SET last_value = $1 WHERE id = $2 AND last_value < $1`.
+- **Confidence:** High
+
+#### Finding ID-003 — Interactive transaction timeout not configured
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Line 56: `db.$transaction(async (tx) => { ... })` uses the default Prisma transaction timeout of 5s. Under load (e.g., 100 concurrent order creations all hitting the Sequence row), the row lock queue can exceed 5s, causing transactions to abort with `P2028`.
+- **How to fix:** Pass `maxWait` and `timeout`:
+  ```typescript
+  await db.$transaction(async (tx) => { ... }, {
+    maxWait: 10_000, // max time to acquire a connection
+    timeout: 5_000,  // max time for the transaction body
+    isolationLevel: "Serializable", // for the seed path
+  });
+  ```
+- **Confidence:** High
+
+### 4.2 `src/lib/money.ts`
+
+#### Finding MN-001 — Solid Decimal-safe helpers (no issues)
+- **Status:** ✅ Aprobado
+- **Priority:** N/A
+- **Impact:** N/A
+- **Description:** The money helpers correctly:
+  - Accept `number | Prisma.Decimal | string | null | undefined` (line 27) — handles both SQLite (number) and PostgreSQL (Decimal) return types
+  - Convert via `toMoneyDecimal` before any arithmetic (no mixed-type ops)
+  - Guard `div === 0` (line 76) and `priceDec.isZero()` (line 137) — no division-by-zero
+  - Document display vs arithmetic usage clearly (lines 21–24)
+- **Confidence:** High
+
+#### Finding MN-002 — `toMoneyNumber` loses precision silently
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Lines 33–38: `value.toNumber()` on a `Prisma.Decimal` returns a JS float — losing the precision that Decimal was designed to preserve. Used in API responses (per the docstring), this means the frontend receives `100.00000001` instead of `100.0000` for balances.
+- **How to fix:** For API responses, prefer `.toString()` or `.toFixed(4)` (string form) to preserve exact value. Reserve `toMoneyNumber` for internal logging only.
+- **Confidence:** High
+
+### 4.3 `src/lib/db-search.ts`
+
+#### Finding SR-001 — Provider detection cached at module load
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 35: `const isPostgreSQL = process.env.DATABASE_URL?.startsWith("postgresql") ?? false;` — evaluated once at import time. If `DATABASE_URL` is changed at runtime (unusual but possible in test suites), the detection is stale.
+- **How to fix:** Document this as "set DATABASE_URL before importing any lib". Tests that switch providers must clear the require cache. Acceptable for production.
+- **Confidence:** High
+
+#### Finding SR-002 — Solid provider-agnostic API (no issues)
+- **Status:** ✅ Aprobado
+- **Priority:** N/A
+- **Impact:** N/A
+- **Description:** The helper correctly mirrors Prisma's filter shape, adds `mode: "insensitive"` only on PostgreSQL, and exports both contains/startsWith/endsWith/equals variants. Clean abstraction.
+- **Confidence:** High
+
+### 4.4 `src/lib/db.ts`
+
+#### Finding DB-008 — Prisma client singleton pattern is correct
+- **Status:** ✅ Aprobado
+- **Priority:** N/A
+- **Impact:** N/A
+- **Description:** Standard Next.js pattern: cache on `globalThis` to prevent hot-reload from spawning N Prisma clients in dev. Production log level set to `["error"]` (line 10) — appropriate.
+- **Confidence:** High
+
+#### Finding DB-009 — No connection pool tuning
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** No `connection_limit`, `pool_timeout`, or `statement_timeout` configured in the Prisma client. The `docker-compose.yml` (line 71) sets `?connection_limit=10&pool_timeout=20` in the DATABASE_URL — but `statement_timeout` is not set. A slow query (e.g., missing index on a 10M-row join) can hold a connection for minutes, exhausting the pool.
+- **How to fix:** Add `&statement_timeout=30000&idle_in_transaction_session_timeout=10000` to DATABASE_URL. Or set via `pgBouncer` config.
+- **Confidence:** High
+
+---
+
+## SECTION 5 — Cross-Cutting Findings
+
+#### Finding XC-001 — No `statement_timeout` or `idle_in_transaction_session_timeout` on PostgreSQL
+- **Status:** ⚠️ Mejorable
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** The PostgreSQL connection string in `docker-compose.yml` (lines 71, 102) sets `connection_limit=10&pool_timeout=20` but no `statement_timeout`. A single slow query (full-table scan on Orders) can hold a connection for minutes, blocking all other requests.
+- **How to fix:** Add `&statement_timeout=30000` (30s) and `&idle_in_transaction_session_timeout=10000` (10s) to DATABASE_URL. Test that long-running admin reports don't get killed (move them to a read replica if needed).
+- **Confidence:** High
+
+#### Finding XC-002 — Redis persistence: AOF enabled, RDB snapshots rely on defaults
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** `docker-compose.yml` line 50: `redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru`. AOF is on ✅. Eviction policy is `allkeys-lru` ✅. **But**: no explicit `--save` directive for RDB snapshots. Redis 7's default save policy (3600 1, 300 100, 60 10000) MAY still apply depending on image config — verify. AOF alone is durable but RDB provides faster restart and point-in-time snapshots for backups.
+- **How to fix:** Add `--save 3600 1 --save 300 100 --save 60 10000` explicitly. Also set `--appendfsync everysec` (default is `everysec` but worth being explicit) for the durability/performance tradeoff.
+- **Confidence:** Medium
+
+#### Finding XC-003 — No Redis password configured
+- **Status:** ❌ Crítico
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** `docker-compose.yml` line 50: `redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru` — no `--requirepass`. `REDIS_URL: redis://redis:6379` (line 72) — no password. Redis is bound to `127.0.0.1:6379` on the host (line 54), but inside the Docker network, any container can connect without auth. A compromised `notifications` service = full DB cache compromise.
+- **Risk:** Any container in `novsmm-network` can read/write/flush the Redis cache, including session tokens, rate-limit data, and BullMQ job payloads (which may contain user PII).
+- **How to fix:** Set `REDIS_PASSWORD` in `.env`, update the Redis command to `redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD}`, and update `REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379` in all services.
+- **Confidence:** High
+
+#### Finding XC-004 — No PostgreSQL connection pgbouncer / no statement timeout
+- **Status:** ⚠️ Mejorable
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** PostgreSQL is exposed directly with `connection_limit=10` per service. With 3 web containers + 2 workers = 50 connections max. PostgreSQL default `max_connections=100` — close to the ceiling. No PgBouncer for connection pooling.
+- **How to fix:** Add PgBouncer as a sidecar service in `docker-compose.yml`. Set `max_connections=200` on PostgreSQL, or use PgBouncer transaction-mode pooling.
+- **Confidence:** Medium
+
+---
+
+## SUMMARY TABLE
+
+| ID | Severity | Priority | Impact | File | Finding |
+|---|---|---|---|---|---|
+| DB-001 | ⚠️ | P1 | Medio | schema.prisma | Float for monetary values in dev schema |
+| DB-002 | ⚠️ | P1 | Alto | schema.prisma | Missing onDelete on Service.provider, Order.service |
+| DB-003 | ❌ | P0 | Alto | schema.prisma | Loose String FKs (Offer, Referral, LoyaltyPoint, etc.) |
+| DB-004 | ❌ | P0 | Crítico | schema.prisma | No CHECK constraints (balance>=0, quantity>0, etc.) |
+| DB-005 | ⚠️ | P2 | Medio | schema.postgres.prisma | Json columns lack GIN indexes |
+| DB-006 | ⚠️ | P2 | Bajo | schema.prisma | No soft-delete on User (CASCADE destroys audit trail) |
+| DB-007 | ✅ | N/A | N/A | schema.postgres.prisma | Production schema is solid |
+| DB-008 | ⚠️ | P1 | Alto | schema.postgres.prisma | PaymentIntent.providerIntentId not @unique |
+| DB-009 | ⚠️ | P1 | Medio | schema.postgres.prisma | WebhookLog missing eventId @unique |
+| DB-010 | ⚠️ | P2 | Medio | schema.postgres.prisma | Missing index on Order.providerId, Order.completedAt |
+| MG-001 | ❌ | P0 | Alto | migrate-sqlite-to-postgres.ts | Same PrismaClient for source+dest (enum/@@map risk) |
+| MG-002 | ⚠️ | P1 | Medio | migrate-sqlite-to-postgres.ts | tryParseJSON fallback can corrupt Json columns |
+| MG-003 | ⚠️ | P2 | Bajo | migrate-sqlite-to-postgres.ts | No pagination (OOM risk on large tables) |
+| MG-004 | ⚠️ | P2 | Bajo | migrate-sqlite-to-postgres.ts | Verification only checks counts, not data |
+| BF-001 | ✅ | N/A | N/A | backfill-lookup-hashes.ts | Solid idempotent backfill |
+| BF-002 | ⚠️ | P2 | Bajo | backfill-lookup-hashes.ts | No rate limiting on AES decryption |
+| SD-001 | ⚠️ | P1 | Medio | seed.ts | Seed runs in production without guard |
+| SD-002 | ⚠️ | P2 | Bajo | seed.ts | Redundant slice on generated password |
+| RD-001 | ❌ | P0 | Alto | redis.ts | withRedis swallows errors, no recovery |
+| RD-002 | ⚠️ | P1 | Medio | redis.ts | Race condition on first connection |
+| RD-003 | ⚠️ | P1 | Medio | redis.ts | maxRetriesPerRequest:2 breaks BullMQ |
+| RD-004 | ⚠️ | P2 | Medio | redis.ts | Single client shared across workloads |
+| CA-001 | ❌ | P0 | Alto | cache.ts | Memory leak: no proactive TTL cleanup |
+| CA-002 | ⚠️ | P1 | Medio | cache.ts | cacheSet with no TTL = immortal entries |
+| CA-003 | ⚠️ | P2 | Bajo | cache.ts | Silent type mismatch on JSON parse failure |
+| CA-004 | ⚠️ | P2 | Medio | cache.ts | No stampede protection in cacheGetOrSet |
+| RL-001 | ❌ | P0 | Alto | rate-limit.ts | zrem cleanup uses different Math.random() (phantom entries) |
+| RL-002 | ⚠️ | P1 | Medio | rate-limit.ts | Pipeline not atomic (boundary race) |
+| RL-003 | ⚠️ | P2 | Bajo | rate-limit.ts | In-memory uses fixed-window vs Redis sliding-window |
+| RL-004 | ⚠️ | P2 | Bajo | rate-limit.ts | memoryBuckets cleanup only on call |
+| QU-001 | ❌ | P0 | Alto | queues.ts/worker.ts | No DLQ monitoring or alerting |
+| QU-002 | ⚠️ | P1 | Alto | worker.ts | No job timeout (stalled jobs cause duplicate side effects) |
+| QU-003 | ⚠️ | P1 | Medio | worker.ts | Shutdown has no hard timeout |
+| QU-004 | ⚠️ | P1 | Medio | worker.ts | No uncaughtException/unhandledRejection handlers |
+| QU-005 | ⚠️ | P2 | Medio | worker.ts | Worker exits 0 when Redis down (no Docker restart) |
+| QU-006 | ⚠️ | P2 | Medio | queues.ts | Concurrency may be too aggressive |
+| QU-007 | ⚠️ | P2 | Bajo | queues.ts | No queue priority conventions |
+| QU-008 | ⚠️ | P1 | Medio | worker.ts | Worker imports Next.js API route (loyalty) |
+| ID-001 | ❌ | P0 | Crítico | ids.ts | Race condition on first nextPublicId for new prefix |
+| ID-002 | ⚠️ | P1 | Medio | ids.ts | seedSequenceFromCount can go backwards |
+| ID-003 | ⚠️ | P2 | Medio | ids.ts | No transaction timeout config |
+| MN-001 | ✅ | N/A | N/A | money.ts | Solid Decimal helpers |
+| MN-002 | ⚠️ | P2 | Bajo | money.ts | toMoneyNumber loses precision |
+| SR-001 | ⚠️ | P2 | Bajo | db-search.ts | Provider detection cached at module load |
+| SR-002 | ✅ | N/A | N/A | db-search.ts | Solid provider-agnostic API |
+| DB-008 (db.ts) | ✅ | N/A | N/A | db.ts | Prisma singleton correct |
+| DB-009 (db.ts) | ⚠️ | P2 | Medio | db.ts | No statement_timeout configured |
+| XC-001 | ⚠️ | P1 | Alto | docker-compose.yml | No statement_timeout on DATABASE_URL |
+| XC-002 | ⚠️ | P2 | Medio | docker-compose.yml | RDB snapshots rely on defaults |
+| XC-003 | ❌ | P0 | Alto | docker-compose.yml | No Redis password (any container can access) |
+| XC-004 | ⚠️ | P2 | Medio | docker-compose.yml | No PgBouncer connection pooler |
+
+---
+
+## TOP 5 P0 FIXES (must do before go-live)
+
+1. **ID-001** — `nextPublicId` race condition: replace `findUnique + create` with `upsert` in `src/lib/ids.ts`. Affects every order/transaction/ticket/invoice creation.
+2. **RL-001** — `redisSlidingWindow` phantom entries: capture `memberId` once and reuse. Self-DoS on login endpoint under attack.
+3. **CA-001** — `memoryCache` memory leak: add periodic cleanup `setInterval`. Dev-mode OOM risk.
+4. **DB-004** — No CHECK constraints: add raw SQL migration for `balance >= 0`, `quantity > 0`, etc. Financial system integrity.
+5. **XC-003** — Redis has no password: any container can read/write cache + queue data. Security P0.
+
+**Secondary P0s** (also blocking): DB-003 (loose FKs → orphans), MG-001 (migration script may fail on enums), RD-001 (silent Redis degradation), QU-001 (no DLQ alerting → silent job failures).
+
+---
+
+## FINAL VERDICT
+
+**❌ NOT APPROVED for unattended production launch** until the 5 P0 issues above (and ideally all 9 P0s) are resolved. The PostgreSQL production schema is excellent, but the runtime DB/Redis/queue infrastructure has race conditions, memory leaks, and missing safety nets that WILL cause production incidents:
+
+- Order creation will fail intermittently on first deploy (ID-001)
+- Login endpoint can self-DoS under brute-force attack (RL-001)
+- Dev/preview environments will OOM after days of running (CA-001)
+- A bad wallet service bug can drive balances negative with no DB-level protection (DB-004)
+- Redis is accessible without auth from any container (XC-003)
+- Failed jobs silently disappear (QU-001)
+- Redis blips permanently degrade to in-memory mode with no recovery (RD-001)
+
+**Recommendation:** Fix all P0s (5–7 days of work), then re-audit before go-live. P1s can be fixed in the first sprint post-launch with close monitoring.
+
+---
+
+*End of AUDIT-B report — appended to worklog.md*
+
+═══════════════════════════════════════════════════════════════════════════════
+# AUDIT-A — External DevOps Audit (Docker + Nginx + GitHub Actions)
+# Auditor: Principal DevOps Engineer (External)
+# Verdict: ❌ NOT APPROVED FOR PRODUCTION — 9 P0 issues found
+═══════════════════════════════════════════════════════════════════════════════
+
+## Executive Summary
+
+The worklog claims NOVSMM is "PRODUCTION READY ✅" with 51/51 P0s resolved. This
+external audit of the DevOps layer (Docker, Nginx, CI/CD) found **9 P0 issues**
+and **22 P1 issues** that contradict that claim. Several are catastrophic and
+would cause deployment failure on day one.
+
+**TOP P0 BLOCKERS (must fix before any production deploy):**
+1. `mini-services/notifications-service/Dockerfile` is referenced but DOES NOT EXIST — `docker compose build` fails immediately.
+2. Dockerfile uses `bun.lockb*` glob but the repo has `bun.lock` — frozen install will fail.
+3. Worker service inherits Dockerfile HEALTHCHECK that hits `:3000/api/health/ready` but the worker process doesn't serve HTTP — worker will be permanently unhealthy.
+4. Nginx `add_header` in location blocks silently DROPS all security headers (HSTS, X-Frame-Options, etc.) for static files — classic nginx gotcha.
+5. No Cloudflare `set_real_ip_from` configuration despite worklog stating Cloudflare is in front — all `$remote_addr` will be Cloudflare IPs, breaking ALL rate limiting.
+6. Redis has NO password configured and is exposed (localhost) — local users/SSRF can read cache, sessions, queues.
+7. Grafana defaults to `admin/admin` if env var unset.
+8. All monitoring images use `:latest` tag — non-reproducible.
+9. Deploy job runs `prisma migrate deploy` AFTER `docker compose up -d` — app runs new code against old schema during migration window.
+
+---
+
+### File: /home/z/my-project/Dockerfile
+
+**Status:** ❌ Crítico
+
+#### Finding 1: Lockfile glob mismatch — frozen install will fail
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** The Dockerfile copies `bun.lockb*` (legacy Bun binary lockfile) but the repository contains `bun.lock` (modern Bun text lockfile, verified at `/home/z/my-project/bun.lock`). The glob `bun.lockb*` does NOT match `bun.lock`. With `--frozen-lockfile`, Bun refuses to install without a matching lockfile, so the build will either fail or silently regenerate a lockfile (depending on Bun version), defeating reproducibility.
+- **Evidence:** Line 14: `COPY package.json bun.lockb* ./`; Line 55: `COPY package.json bun.lockb* ./`. Verified: `ls /home/z/my-project/bun.lockb` → "No such file or directory", but `bun.lock` exists (234 KB).
+- **Risk:** Build fails in CI/CD or, worse, builds with non-reproducible dependency tree if Bun auto-generates a lockfile. Production gets uncontrolled dependency versions.
+- **How to reproduce:** `docker build -t test .` — observe COPY step does not transfer any lockfile; `bun install --frozen-lockfile` either errors or recreates lockfile.
+- **How to fix:** Change to `COPY package.json bun.lock* ./` (matches both `bun.lock` and `bun.lockb`) OR explicitly `COPY package.json bun.lock ./`.
+- **Confidence:** Alto
+
+#### Finding 2: HEALTHCHECK references `curl` which is NOT in `oven/bun:1.1-slim`
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** The runner stage uses `oven/bun:1.1-slim` (Debian-slim based). Slim images do NOT include `curl` by default. The HEALTHCHECK `CMD curl -f http://localhost:3000/api/health/ready` will fail with "curl: not found", marking the container unhealthy. Any `depends_on: condition: service_healthy` consumer (nginx, depends_on web) will never start.
+- **Evidence:** Line 47: `FROM oven/bun:1.1-slim AS runner`; Line 89: `CMD curl -f http://localhost:3000/api/health/ready || exit 1`. No `RUN apt-get install -y curl` anywhere.
+- **Risk:** `docker compose up` hangs forever waiting for web to be healthy; nginx never starts. Production deployment is dead on arrival.
+- **How to reproduce:** `docker build -t novsmm .` then `docker run -d novsmm` — after 30s, `docker ps` shows `(unhealthy)`.
+- **How to fix:** Either (a) `RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates && rm -rf /var/lib/apt/lists/*` before USER directive, or (b) switch to a Node-based healthcheck using `node -e "fetch('http://localhost:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"`, or (c) use `bun` itself: `bun -e "fetch('http://localhost:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"`.
+- **Confidence:** Alto
+
+#### Finding 3: Worker container inherits broken HEALTHCHECK
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** The `worker` service in `docker-compose.yml` (line 94-113) uses the same Dockerfile but overrides `command: ["bun", "run", "worker"]`. The Dockerfile's HEALTHCHECK (line 88-89) still probes `http://localhost:3000/api/health/ready`. The worker process does NOT listen on port 3000 (it processes BullMQ jobs), so the healthcheck will fail forever. Docker will mark the worker as unhealthy. While `restart: unless-stopped` won't auto-restart on unhealthy (that's Swarm only), any future `depends_on: condition: service_healthy` chain referencing worker will break.
+- **Evidence:** Dockerfile line 88-89 defines HEALTHCHECK; `docker-compose.yml` line 99 overrides command but does NOT override healthcheck. `package.json` line 7: `"worker": "bun --hot src/workers/worker.ts"` — no HTTP server.
+- **Risk:** Worker permanently unhealthy; observability tools will alert forever; deployment automation that checks health will fail.
+- **How to reproduce:** `docker compose up -d worker` then `docker inspect --format='{{.State.Health.Status}}' <worker_container>` → `unhealthy`.
+- **How to fix:** In `docker-compose.yml` worker service, add: `healthcheck: disable: true` OR a worker-specific check (e.g., check Redis queue connection: `CMD redis-cli -u $REDIS_URL ping || exit 1`). Better: build a separate `Dockerfile.worker` with no HEALTHCHECK.
+- **Confidence:** Alto
+
+#### Finding 4: `bun --hot` (hot reload) used in production worker
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** `package.json` defines `"worker": "bun --hot src/workers/worker.ts"`. The `--hot` flag enables Bun's hot-module-reload for development. In production, this adds a filesystem watcher, memory overhead, and can cause unexpected restarts when files change (e.g., when uploads/ volume changes). The compose file calls `bun run worker` directly.
+- **Evidence:** `package.json` line 7: `"worker": "bun --hot src/workers/worker.ts"`. `docker-compose.yml` line 99: `command: ["bun", "run", "worker"]`.
+- **Risk:** Filesystem watcher consumes resources; worker may restart unexpectedly if mounted volume content changes; not production-grade.
+- **How to reproduce:** `docker compose exec worker ps aux` shows bun watching files; check `bun --hot` docs.
+- **How to fix:** Add `"worker:prod": "bun src/workers/worker.ts"` in package.json scripts and use `command: ["bun", "run", "worker:prod"]` in compose, OR call `bun src/workers/worker.ts` directly.
+- **Confidence:** Alto
+
+#### Finding 5: No `init` / TINI for PID 1 — zombie reaping risk
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Bun (and Node) are not designed as PID 1 init processes. They don't reap zombie children and don't properly forward signals (SIGTERM, SIGINT). When Next.js spawns child processes (Prisma engines, image processing, etc.) that exit, they become zombies. On `docker stop`, the SIGTERM may not propagate, leading to slow 10s timeout kills.
+- **Evidence:** Dockerfile has no `ENTRYPOINT ["tini", "--"]` or `--init` flag. `docker-compose.yml` has no `init: true` for any service.
+- **Risk:** Zombie process accumulation over weeks of uptime; slow container shutdowns; data corruption if processes are killed mid-write.
+- **How to reproduce:** `docker compose exec web ps aux | grep Z` after running for a few days with image processing workloads.
+- **How to fix:** Add `init: true` to every service in `docker-compose.yml` (uses Docker's built-in tini), or use `ENTRYPOINT ["tini", "--"]` in Dockerfile.
+- **Confidence:** Alto
+
+#### Finding 6: `uploads` volume will be owned by root — nextjs user cannot write
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** The `nextjs` user (UID 1001) is created and the container runs as this user (line 92). However, the Dockerfile never creates `/app/uploads` or chowns it to nextjs. When Docker mounts the named volume `uploads` at `/app/uploads`, it copies ownership from the image's `/app/uploads` — which doesn't exist, so the volume is created owned by root. The nextjs user cannot write to it. All file uploads (ticket attachments, payment logos, etc.) will fail with EACCES.
+- **Evidence:** No `RUN mkdir -p /app/uploads && chown nextjs:nodejs /app/uploads` anywhere in Dockerfile. `USER nextjs` at line 92. `docker-compose.yml` line 81: `- uploads:/app/uploads`.
+- **Risk:** All `/api/uploads` requests fail with 500 errors; ticket attachments break; profile pictures break; admin file management broken.
+- **How to reproduce:** `docker compose up -d web` then `docker compose exec web touch /app/uploads/test.txt` → `permission denied`.
+- **How to fix:** Before `USER nextjs` (around line 91), add: `RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads`.
+- **Confidence:** Alto
+
+#### Finding 7: Base images not pinned by digest or patch version
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** `oven/bun:1.1` and `oven/bun:1.1-slim` track the latest 1.1.x patch. A new patch release with a regression will silently break future builds. No digest pinning (`@sha256:...`) for supply-chain integrity.
+- **Evidence:** Line 10: `FROM oven/bun:1.1 AS deps`; Line 24: `FROM oven/bun:1.1 AS builder`; Line 47: `FROM oven/bun:1.1-slim AS runner`.
+- **Risk:** Non-reproducible builds; supply-chain attack vector if registry compromised; silent regressions.
+- **How to reproduce:** Build today, build in 1 month — different image digests, potentially different behavior.
+- **How to fix:** Pin to exact version: `FROM oven/bun:1.1.42-alpine@sha256:<digest>` (verify with `docker pull oven/bun:1.1.42-alpine --digests`).
+- **Confidence:** Alto
+
+#### Finding 8: Mini-service build errors silently swallowed
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 44: `RUN cd mini-services/notifications-service && bun run build 2>/dev/null || true`. The `2>/dev/null || true` swallows all stderr and any non-zero exit code. Build errors are hidden, and the build "succeeds" even if the mini-service is broken.
+- **Evidence:** Line 44 — explicit error suppression.
+- **Risk:** Broken mini-service ships to production silently; debugging build failures becomes impossible.
+- **How to reproduce:** Introduce a TypeScript error in `mini-services/notifications-service/index.ts`, run `docker build` — it still succeeds.
+- **How to fix:** Remove `2>/dev/null || true`. If the mini-service has no build step (it's a single `.ts` file run by Bun directly), remove the line entirely.
+- **Confidence:** Alto
+
+#### Finding 9: `COPY . .` is broad — destroys layer caching for source changes
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 32 `COPY . .` copies the entire build context (after .dockerignore) in one layer. Any source file change invalidates this layer and all subsequent layers. Should copy package.json/prisma schema first, generate Prisma client, then copy source.
+- **Evidence:** Line 32: `COPY . .`; Line 38: `RUN bun run db:generate` runs AFTER copying all source.
+- **Risk:** Slower CI/CD builds (every PR rebuilds Prisma client).
+- **How to reproduce:** Touch any `.ts` file, rebuild — `db:generate` runs again.
+- **How to fix:** Reorder: copy `prisma/` first, run `db:generate`, then `COPY . .`, then `bun run build`.
+- **Confidence:** Alto
+
+#### Finding 10: No OCI labels, no SBOM, no provenance
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** No `LABEL org.opencontainers.image.*` directives. No SBOM generation. No provenance attestation. Doesn't meet SLSA Level 3+ for supply-chain security.
+- **Evidence:** No LABEL directives in Dockerfile.
+- **Risk:** Cannot trace image to source commit; fails enterprise compliance.
+- **How to fix:** Add `LABEL org.opencontainers.image.source=...`, `org.opencontainers.image.revision=...`, etc. Enable `--provenance=true --sbom=true` in build-push-action.
+- **Confidence:** Alto
+
+---
+
+### File: /home/z/my-project/docker-compose.yml
+
+**Status:** ❌ Crítico
+
+#### Finding 1: `notifications` service references non-existent Dockerfile
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** Lines 117-119: `build: context: ./mini-services/notifications-service, dockerfile: Dockerfile`. This Dockerfile DOES NOT EXIST (verified: `ls /home/z/my-project/mini-services/notifications-service/Dockerfile` → "No such file or directory"). The directory only contains `package.json`, `bun.lock`, `index.ts`, `node_modules/`. `docker compose build` will fail with "Dockerfile not found".
+- **Evidence:** `docker-compose.yml` line 117-119 references `./mini-services/notifications-service/Dockerfile`. Verified via `ls`: file does not exist.
+- **Risk:** `docker compose up -d` fails entirely; nginx (which depends_on notifications healthy) never starts; production deployment is dead.
+- **How to reproduce:** `docker compose build notifications` → "Cannot locate Dockerfile".
+- **How to fix:** Create `/home/z/my-project/mini-services/notifications-service/Dockerfile` (Bun-based, similar to main Dockerfile but for a single-file service), OR use a shared image and override command, OR pre-build and use `image:` instead of `build:`.
+- **Confidence:** Alto
+
+#### Finding 2: Redis exposed without authentication or TLS
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** Redis container (line 47-61) runs `redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru` with NO `--requirepass`. Port 6379 is bound to `127.0.0.1:6379:6379` (line 54). Any local process or SSRF-exploiting web app can connect to Redis unauthenticated and read/modify: session data, rate-limit counters, BullMQ job queues (which contain order/payment payloads), cache. This is the classic Redis-unauth exploit path.
+- **Evidence:** Line 50: `command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru` (no `--requirepass`); Line 54: `ports: - "127.0.0.1:6379:6379"`.
+- **Risk:** Local privilege escalation; SSRF → Redis → RCE (well-known attack pattern via Redis `CONFIG SET dir /` + `dbfilename .ssh/authorized_keys`); cache poisoning; queue manipulation to grant free credits.
+- **How to reproduce:** `redis-cli -h 127.0.0.1 -p 6379` → connects without password, `KEYS *` returns everything.
+- **How to fix:** (a) Set `REDIS_PASSWORD` env, command becomes `redis-server --appendonly yes --requirepass ${REDIS_PASSWORD} --maxmemory 256mb --maxmemory-policy allkeys-lru`. (b) Update `REDIS_URL` to `redis://:${REDIS_PASSWORD}@redis:6379` in web/worker/notifications. (c) Remove the `ports:` mapping entirely (services communicate via Docker network, no need to expose to host). (d) Consider Redis 7 ACLs for finer-grained access.
+- **Confidence:** Alto
+
+#### Finding 3: No `init: true` for any service — PID 1 zombie reaping
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** None of the 6 services set `init: true`. Bun/Node/Postgres/Redis/Nginx containers all run their main process as PID 1 without an init system. Zombie processes from child workers (BullMQ spawns, Prisma engines) won't be reaped. SIGTERM on `docker stop` may not propagate cleanly.
+- **Evidence:** No `init:` key in any service definition.
+- **Risk:** Zombie accumulation; slow shutdowns; potential data corruption on stop.
+- **How to fix:** Add `init: true` to every service.
+- **Confidence:** Alto
+
+#### Finding 4: No resource limits (memory, CPU, pids) on any service
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** No `mem_limit`, `cpus`, `pids_limit`, `memswap_limit` on any service. A memory leak in `web` can OOM-kill the whole VPS, taking down Postgres and Redis with it. A fork-bomb in worker can exhaust PID limits. On a shared VPS (the worklog mentions VPS deployment), one runaway container takes down everything.
+- **Evidence:** No `deploy.resources.limits` or legacy `mem_limit`/`cpus` in any service.
+- **Risk:** Cascading failure; VPS crash; data loss.
+- **How to fix:** Add per-service limits, e.g.:
+  ```yaml
+  deploy:
+    resources:
+      limits:
+        memory: 1G
+        cpus: '1.5'
+      reservations:
+        memory: 256M
+  pids_limit: 200
+  ```
+  (Use `mem_limit`/`cpus` for compose v2 non-swarm if `deploy` doesn't apply.)
+- **Confidence:** Alto
+
+#### Finding 5: No `cap_drop: [ALL]` or `security_opt: [no-new-privileges:true]`
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** Containers retain all default Linux capabilities (CHOWN, DAC_OVERRIDE, NET_BIND_SERVICE, SETUID, SETGID, SYS_CHROOT, etc.). No `no-new-privileges` flag. If any service has an RCE vuln, the attacker has full container capabilities.
+- **Evidence:** No `cap_drop`, no `security_opt` in any service.
+- **Risk:** Container escape via kernel exploit becomes easier; lateral movement within Docker network.
+- **How to fix:** Add to every service:
+  ```yaml
+  cap_drop: [ALL]
+  security_opt:
+    - no-new-privileges:true
+  ```
+  Then add back only specific caps needed (e.g., `cap_add: [CHOWN]` for nginx binding to 80/443 — though nginx can use `setcap` instead).
+- **Confidence:** Alto
+
+#### Finding 6: No log rotation — logs can fill disk
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** No `logging:` driver configuration. Default json-file driver grows unbounded. A noisy service (e.g., Postgres verbose logging, BullMQ debug) can fill the VPS disk in days, causing Postgres to crash and the whole stack to fail.
+- **Evidence:** No `logging:` key in any service.
+- **Risk:** Disk exhaustion → cascading service failure; hard to debug without logs.
+- **How to fix:** Add to every service:
+  ```yaml
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+  ```
+- **Confidence:** Alto
+
+#### Finding 7: Single network — no segmentation between frontend and backend
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** All 6 services share `novsmm-network`. If `nginx` (the only internet-facing service) is compromised, the attacker has direct network access to Postgres and Redis. Best practice: separate `frontend` network (nginx ↔ web ↔ notifications) and `backend` network (web ↔ worker ↔ postgres ↔ redis). Nginx should NOT be able to reach Postgres/Redis directly.
+- **Evidence:** Lines 43-44, 60-61, 90-91, 112-113, 136-137, 155-156 — all services on `novsmm-network`.
+- **Risk:** Lateral movement; blast radius too large.
+- **How to fix:** Define two networks:
+  ```yaml
+  networks:
+    frontend:
+      driver: bridge
+    backend:
+      driver: bridge
+      internal: true  # No internet egress
+  ```
+  Attach nginx only to `frontend`; attach postgres/redis only to `backend`; attach web/worker/notifications to both.
+- **Confidence:** Alto
+
+#### Finding 8: Nginx image uses floating `:alpine` tag
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 141: `image: nginx:alpine`. The `:alpine` tag tracks the latest nginx version on latest Alpine. A new nginx major release (e.g., 1.26 → 1.27) can introduce breaking config changes. Postgres (`:16-alpine`) and Redis (`:7-alpine`) are slightly better (major.minor locked) but still float patches.
+- **Evidence:** Line 141: `image: nginx:alpine`; Line 27: `image: postgres:16-alpine`; Line 48: `image: redis:7-alpine`.
+- **Risk:** Non-reproducible deployment; breaking change on `docker compose pull`.
+- **How to fix:** Pin to exact versions and digests:
+  ```yaml
+  image: nginx:1.27.2-alpine@sha256:<digest>
+  image: postgres:16.4-alpine@sha256:<digest>
+  image: redis:7.4-alpine@sha256:<digest>
+  ```
+- **Confidence:** Alto
+
+#### Finding 9: Secrets visible in `docker inspect`
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** `POSTGRES_PASSWORD` (line 32), `DATABASE_URL` (lines 71, 102 — contains password), and any secret in `.env` are exposed via `docker inspect <container>` and `docker exec <container> env`. Any user in the `docker` group can read all production secrets.
+- **Evidence:** Line 71: `DATABASE_URL: postgresql://...:${POSTGRES_PASSWORD}@postgres:5432/...` — interpolated at compose-up time, lands in container env.
+- **Risk:** Credential leak; lateral movement to other services.
+- **How to fix:** Use Docker secrets (file-based, mounted at `/run/secrets/<name>`, NOT in env), OR use a secrets manager (Vault, AWS Secrets Manager, Doppler). For Postgres, use `POSTGRES_PASSWORD_FILE:/run/secrets/postgres_password`.
+- **Confidence:** Alto
+
+#### Finding 10: `./backups:/backups` bind mount gives Postgres write access to host
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Line 35 mounts `./backups` (host) to `/backups` (container) read-write. Postgres runs as root in container by default. If Postgres is compromised, attacker can write arbitrary files to host's `./backups` directory (symlink attacks, etc.).
+- **Evidence:** Line 35: `- ./backups:/backups`.
+- **Risk:** Host filesystem write primitive from compromised container.
+- **How to fix:** Run Postgres as non-root (official image supports `-u postgres`), use a dedicated named volume instead of bind mount, or mount read-only and have backup scripts copy out.
+- **Confidence:** Medio
+
+#### Finding 11: Postgres port bound to `127.0.0.1:5432` is still exposed locally
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Line 37 exposes Postgres on `127.0.0.1:5432`. Any local user/process on the VPS can connect. Combined with no `cap_drop`, this is a local privilege escalation vector. Also, if a reverse SSH tunnel or VPN is misconfigured, this could be exposed externally.
+- **Evidence:** Line 37: `- "127.0.0.1:5432:5432"`.
+- **Risk:** Local users bypass app-level auth; DB dump by any process.
+- **How to fix:** Remove the `ports:` mapping entirely. Internal services reach Postgres via the Docker network. Use `docker compose exec postgres psql` for admin access.
+- **Confidence:** Alto
+
+#### Finding 12: No `read_only: true` for stateless services
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** `web`, `worker`, `notifications`, `nginx` could run with read-only root filesystem (`read_only: true`) and explicit `tmpfs` for `/tmp`, `/var/run`, etc. This prevents attackers from writing persistent backdoors to the container filesystem.
+- **Evidence:** No `read_only` key in any service.
+- **Risk:** Post-exploitation persistence easier.
+- **How to fix:**
+  ```yaml
+  read_only: true
+  tmpfs:
+    - /tmp
+    - /var/run
+  ```
+  (Test thoroughly — Next.js may need to write to `.next/cache`.)
+- **Confidence:** Medio
+
+#### Finding 13: `notifications` service missing healthcheck start_period
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 131-135: `notifications` healthcheck has no `start_period`, unlike `web` (line 88). On slow VPS, notifications may be marked unhealthy before it finishes booting.
+- **Evidence:** Line 131-135 — no `start_period`.
+- **How to fix:** Add `start_period: 15s`.
+- **Confidence:** Alto
+
+#### Finding 14: No `pull_policy` defined
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** For pre-built images (nginx, postgres, redis), no `pull_policy: always` or `pull_policy: missing`. Combined with `:alpine` floating tags, you may run stale images.
+- **Evidence:** No `pull_policy` keys.
+- **How to fix:** Add `pull_policy: always` for production (or `missing` for reproducibility).
+- **Confidence:** Alto
+
+---
+
+### File: /home/z/my-project/docker-compose.monitoring.yml
+
+**Status:** ❌ Crítico
+
+#### Finding 1: All images use `:latest` tag — non-reproducible
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** Line 17: `prom/prometheus:latest`; Line 37: `prom/alertmanager:latest`; Line 47: `grafana/grafana:latest`; Line 65: `prom/node-exporter:latest`. The `:latest` tag is the worst case for reproducibility. A new major version of any of these can break config syntax, alert rules, or dashboards silently.
+- **Evidence:** Lines 17, 37, 47, 65 — all `:latest`.
+- **Risk:** Monitoring stack breaks overnight without code change; alert rules silently stop firing.
+- **How to fix:** Pin to specific versions: `prom/prometheus:v2.54.1`, `prom/alertmanager:v0.27.0`, `grafana/grafana:11.2.2`, `prom/node-exporter:v1.8.2`. Pin digests for production.
+- **Confidence:** Alto
+
+#### Finding 2: Grafana defaults to `admin/admin`
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** Line 53: `GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}`. If `GRAFANA_PASSWORD` env var is not set (which is the default), Grafana boots with admin/admin. Grafana is exposed at `127.0.0.1:3001` — any local user (or SSRF) can login, view all metrics (including internal IPs, query patterns, errors), and modify dashboards.
+- **Evidence:** Line 53: `:-admin` default.
+- **Risk:** Information disclosure; dashboard tampering; if Grafana has data source write access, could trigger queries against Postgres.
+- **How to reproduce:** `docker compose -f docker-compose.monitoring.yml up -d` without setting GRAFANA_PASSWORD, then `curl http://localhost:3001` and login admin/admin.
+- **How to fix:** Change to `GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:?Set GRAFANA_PASSWORD in .env}` (required, no default). Also set `GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:?...}`.
+- **Confidence:** Alto
+
+#### Finding 3: `pid: host` for node-exporter exposes host process namespace
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 68: `pid: host` gives node-exporter visibility into ALL host processes (not just container's). Combined with bind mounts of `/proc`, `/sys`, `/` (read-only) at lines 70-72, a compromised node-exporter can enumerate all host processes, possibly kill them (if combined with capabilities), and read host filesystem metadata.
+- **Evidence:** Line 68: `pid: host`; Lines 70-72: bind mounts of `/proc`, `/sys`, `/` `:ro`.
+- **Risk:** Container escape vector; host reconnaissance.
+- **How to fix:** This is somewhat necessary for node-exporter's purpose, but add `cap_drop: [ALL]` and `security_opt: [no-new-privileges:true]` to limit damage if compromised. Consider running node-exporter directly on the host (not in Docker) instead.
+- **Confidence:** Medio
+
+#### Finding 4: No authentication on Prometheus or AlertManager
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** Prometheus (port 9090) and AlertManager (port 9093) are exposed on localhost without any auth. Anyone with local access can read all metrics (which may include request URLs, error messages, internal service names), create/modify alert silences (effectively muting alerts during an attack), and explore the Prometheus expression browser to extract data.
+- **Evidence:** Lines 31-32 (Prometheus ports), 42-43 (AlertManager ports). No `--web.basic-auth` or reverse-proxy auth.
+- **Risk:** Alert suppression during attack; metric data leak; reconnaissance.
+- **How to fix:** Put Prometheus/AlertManager behind nginx with HTTP basic auth, OR use `--web.auth.basic.username`/`--web.auth.basic.password` flags. Better: don't expose ports at all, use `docker compose exec` or a SSH tunnel for admin access.
+- **Confidence:** Alto
+
+#### Finding 5: No healthchecks for monitoring services
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** None of the 4 monitoring services define healthchecks. Grafana's `depends_on: prometheus` (line 59-60) only waits for prometheus to start, not to be ready. Grafana may fail to configure Prometheus datasource on first boot.
+- **Evidence:** No `healthcheck:` keys in any monitoring service.
+- **How to fix:** Add healthchecks:
+  - Prometheus: `wget --quiet --tries=1 --spider http://localhost:9090/-/healthy`
+  - Grafana: `wget --quiet --tries=1 --spider http://localhost:3000/api/health`
+  - AlertManager: `wget --quiet --tries=1 --spider http://localhost:9093/-/healthy`
+- **Confidence:** Alto
+
+#### Finding 6: `networks: novsmm-network: external: true` requires manual network creation
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 87-88: `novsmm-network: external: true`. If the main `docker-compose.yml` hasn't been started (which creates the network), this compose file fails with "network novsmm-network not found". Brittle operational ordering.
+- **Evidence:** Line 88: `external: true`.
+- **How to fix:** Document the order (`docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d` works) or use a shared network creation script. Alternatively, don't use `external` and let compose create a separate `novsmm-monitoring-network`.
+- **Confidence:** Alto
+
+#### Finding 7: No resource limits on monitoring stack
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Same as main compose — no `mem_limit`, `cpus`. Prometheus with 30d retention (line 27) can grow to several GB and OOM the VPS.
+- **Evidence:** No resource limits.
+- **How to fix:** Add limits (Prometheus: 2G, Grafana: 512M, AlertManager: 256M, node-exporter: 128M).
+- **Confidence:** Alto
+
+#### Finding 8: No log rotation
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Same as main compose — no `logging:` config.
+- **How to fix:** Add `logging: { driver: json-file, options: { max-size: "10m", max-file: "3" } }` to every service.
+- **Confidence:** Alto
+
+---
+
+### File: /home/z/my-project/.dockerignore
+
+**Status:** ⚠️ Mejorable
+
+#### Finding 1: Missing `*.pem`, `*.key`, `*.crt`, `certs/` exclusions
+- **Priority:** P1
+- **Impact:** Crítico
+- **Description:** The Dockerfile stage 2 has `COPY . .` (line 32). If anyone ever commits SSL certificates, SSH keys, or `.pem` files to the repo, they will be baked into the Docker image and shipped to the registry. There's no exclusion for `*.pem`, `*.key`, `*.crt`, `certs/`, `id_rsa`, etc.
+- **Evidence:** `.dockerignore` has no entries for `*.pem`, `*.key`, `*.crt`, `certs/`, `id_rsa*`, `*.ppk`. The repo currently has no `certs/` dir (verified), but the docker-compose.yml references `./certs` — operators may commit certs by mistake.
+- **Risk:** Private key leak via Docker image; TLS impersonation; SSH access compromise.
+- **How to fix:** Add:
+  ```
+  *.pem
+  *.key
+  *.crt
+  *.cer
+  *.p12
+  *.pfx
+  certs/
+  .ssh/
+  id_rsa*
+  *.ppk
+  *.kdbx
+  ```
+- **Confidence:** Alto
+
+#### Finding 2: Missing `backups/` exclusion
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** The docker-compose mounts `./backups:/backups`. Backup files (often SQL dumps containing user data, password hashes, payment info) may end up in `./backups/` on the host. `COPY . .` in builder stage would copy them into the build image, leaking to the registry.
+- **Evidence:** No `backups/` entry in `.dockerignore`. `docker-compose.yml` line 35: `./backups:/backups`.
+- **Risk:** Database dump leak via Docker image — GDPR/HIPAA breach.
+- **How to fix:** Add `backups/` and `*.sql` and `*.dump` to `.dockerignore`.
+- **Confidence:** Alto
+
+#### Finding 3: `*.md` blanket exclusion with `!README.md` is fragile
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 70-71: `*.md` then `!README.md`. This works in Docker (last match wins), but if someone adds `!SECURITY.md` later, they need to remember the ordering rule. Also, all ADR docs (`docs/decisions/*.md`) are excluded via `docs/` (line 69) which is fine, but the audit reports at root (`ENTERPRISE_MIGRATION_COMPLETE.md`, `audit-report.md`, etc.) are correctly excluded by `*.md`.
+- **Evidence:** Lines 69-72.
+- **How to fix:** Minor — consider explicit exclusion of audit/report files instead of blanket `*.md`. Low priority.
+- **Confidence:** Alto
+
+#### Finding 4: Missing `ecosystem.config.js`, `Caddyfile`, `*.tar`, `*.zip`
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** `ecosystem.config.js` (PM2 config, not needed — we use Docker), `Caddyfile` (alternative proxy, not needed — we use nginx), archive files (`.tar`, `.tar.gz`, `.zip`, `.7z`) — none are excluded.
+- **Evidence:** No entries for these.
+- **Risk:** Larger image size; potential confusion about which proxy is active.
+- **How to fix:** Add `ecosystem.config.js`, `Caddyfile`, `*.tar`, `*.tar.gz`, `*.tgz`, `*.zip`, `*.7z`, `*.rar`.
+- **Confidence:** Alto
+
+#### Finding 5: `prisma/migrations/dev` exclusion may hide dev migrations
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 88: `prisma/migrations/dev`. This excludes a `dev` subfolder. If a developer accidentally creates real migrations in `prisma/migrations/dev/`, they won't ship to production, causing `prisma migrate deploy` to apply a different schema than expected.
+- **Evidence:** Line 88.
+- **How to fix:** Verify the intended migration folder structure. Better: only exclude `db/custom.db` and dev-specific seeds.
+- **Confidence:** Medio
+
+#### Finding 6: Missing `.env.local`, `.env.production.local`, `.env.development`
+- **Priority:** P2
+- **Impact:** Alto
+- **Description:** Line 31-33: `.env`, `.env.*`, `!.env.example`. The pattern `.env.*` matches `.env.local`, `.env.production`, etc. (good). But Next.js also uses `.env.local`, `.env.production.local`, `.env.development.local` — all matched. OK. However, the `!.env.example` whitelist is the only allow — if operators add `.env.staging.sample`, it's excluded.
+- **Evidence:** Lines 31-33.
+- **How to fix:** Add `!.env.sample` and `!.env.*.example` for consistency. Low priority.
+- **Confidence:** Medio
+
+---
+
+### File: /home/z/my-project/nginx.conf
+
+**Status:** ❌ Crítico
+
+#### Finding 1: No `set_real_ip_from` for Cloudflare — rate limiting completely broken
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** The worklog explicitly states "Ready for VPS deployment with Docker + Nginx + Cloudflare + PostgreSQL + Redis". If Cloudflare is in front of Nginx, then `$remote_addr` is ALWAYS a Cloudflare IP (e.g., `162.158.x.x`), not the client IP. All `limit_req_zone $binary_remote_addr` directives (lines 82, 84, 86) rate-limit by Cloudflare IP — meaning ALL traffic appears to come from a handful of IPs. With `rate=1r/s` for auth and Cloudflare's ~50 egress IPs, a single attacker behind one Cloudflare IP can saturate the limit for ALL legitimate users behind that same IP. Conversely, an attacker rotating across many Cloudflare IPs faces no limit.
+- **Evidence:** No `set_real_ip_from`, no `real_ip_header`, no `real_ip_recursive` directives anywhere. Lines 82-86 use `$binary_remote_addr`.
+- **Risk:** Brute-force protection broken; API rate limiting broken; payment endpoint protection broken; legitimate users locked out.
+- **How to reproduce:** Deploy behind Cloudflare, run `ab -n 1000 -c 10 https://novsmm.com/api/auth/...` from one IP — observe rate limit triggers for ALL users, then run from 100 different IPs via Cloudflare — no rate limit triggers.
+- **How to fix:** Add at top of `http {}` block:
+  ```nginx
+  # Cloudflare IP ranges (https://www.cloudflare.com/ips/)
+  set_real_ip_from 173.245.48.0/20;
+  set_real_ip_from 103.21.244.0/22;
+  set_real_ip_from 103.22.200.0/22;
+  set_real_ip_from 103.31.4.0/22;
+  set_real_ip_from 141.101.64.0/18;
+  set_real_ip_from 108.162.192.0/18;
+  set_real_ip_from 190.93.240.0/20;
+  set_real_ip_from 188.114.96.0/20;
+  set_real_ip_from 197.234.240.0/22;
+  set_real_ip_from 198.41.128.0/17;
+  set_real_ip_from 162.158.0.0/15;
+  set_real_ip_from 104.16.0.0/13;
+  set_real_ip_from 104.24.0.0/14;
+  set_real_ip_from 172.64.0.0/13;
+  set_real_ip_from 131.0.72.0/22;
+  real_ip_header CF-Connecting-IP;
+  real_ip_recursive on;
+  ```
+- **Confidence:** Alto
+
+#### Finding 2: `add_header` in location blocks DROPS all security headers
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** This is the classic nginx gotcha: `add_header` directives are ONLY inherited from the previous level if there are NO `add_header` directives defined at the current level. The `/_next/static/` location (lines 210-215) and the static-files location (lines 218-223) both define `add_header Cache-Control ...`, which means HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, COOP, CORP — ALL security headers from the server block (lines 138-144) are SILENTLY DROPPED for static files. Static files (JS, CSS, images, fonts) are served without any security headers. This includes the Next.js JS bundles that power the entire SPA.
+- **Evidence:** Lines 138-144 define security headers at server level. Line 213: `add_header Cache-Control ...` in `/_next/static/` location. Line 221: `add_header Cache-Control ...` in static files location. Per nginx docs: "These directives are inherited from the previous configuration level if and only if there are no add_header directives defined on the current level."
+- **Risk:** Static assets served without HSTS → MITM downgrade possible; without X-Frame-Options → clickjacking of static assets; without X-Content-Type-Options → MIME-sniffing attacks. Browser security score (securityheaders.com) fails.
+- **How to reproduce:** `curl -I https://novsmm.com/_next/static/chunks/main-abc123.js` — observe response headers, no HSTS, no X-Frame-Options.
+- **How to fix:** Either (a) repeat ALL security headers in every location with `add_header`, or (b) extract security headers to a `include /etc/nginx/security.conf;` snippet and include it in every location, or (c) use the `headers-more-nginx-module` (`more_set_headers` which always applies). Easiest:
+  ```nginx
+  location /_next/static/ {
+      proxy_pass http://nextjs;
+      proxy_cache_valid 200 1y;
+      add_header Cache-Control "public, max-age=31536000, immutable";
+      add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
+      add_header X-Frame-Options "DENY" always;
+      add_header X-Content-Type-Options "nosniff" always;
+      add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+      add_header Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()" always;
+      add_header Cross-Origin-Opener-Policy "same-origin" always;
+      add_header Cross-Origin-Resource-Policy "same-origin" always;
+      access_log off;
+  }
+  ```
+  Repeat for ALL location blocks.
+- **Confidence:** Alto
+
+#### Finding 3: Missing Content-Security-Policy (CSP) header
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** No `Content-Security-Policy` header is set anywhere. CSP is the single most effective XSS mitigation. Without it, any injected script (XSS vuln, third-party compromise) can execute and exfiltrate data.
+- **Evidence:** Lines 138-144 — HSTS, X-Frame-Options, etc. but NO CSP.
+- **Risk:** XSS attacks have full impact; CSP reporting/monitoring impossible.
+- **How to fix:** Add a CSP (start permissive, then tighten):
+  ```nginx
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' wss: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';" always;
+  ```
+  Use nonces or hashes for production-ready CSP.
+- **Confidence:** Alto
+
+#### Finding 4: `proxy_cache_valid` used without `proxy_cache` or `proxy_cache_path`
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 212 and 220 specify `proxy_cache_valid 200 1y` and `proxy_cache_valid 200 30d` for static file caching, but NO `proxy_cache_path` is defined at the http level, and NO `proxy_cache <zone>` directive is set in any location. The `proxy_cache_valid` directives are silently ignored — no caching actually happens. Every static asset request is proxied to Next.js, defeating the purpose of the long `Cache-Control` header (which is browser-only, not edge-cached).
+- **Evidence:** No `proxy_cache_path` in http block; no `proxy_cache` in any location. Lines 212, 220 reference `proxy_cache_valid`.
+- **Risk:** Next.js serves every static asset request directly; higher CPU/memory on web container; slower TTFB for static assets.
+- **How to fix:** Add at http level:
+  ```nginx
+  proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=static_cache:10m max_size=1g inactive=7d use_temp_path=off;
+  ```
+  Then in static locations:
+  ```nginx
+  proxy_cache static_cache;
+  proxy_cache_valid 200 1y;
+  proxy_cache_key $scheme$request_method$host$request_uri;
+  add_header X-Cache-Status $upstream_cache_status;
+  ```
+  Ensure `/var/cache/nginx` exists and is writable by nginx user.
+- **Confidence:** Alto
+
+#### Finding 5: `ssl_stapling on;` without `resolver` or `ssl_trusted_certificate`
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 134: `ssl_stapling on;`. OCSP stapling requires (a) a DNS `resolver` directive to fetch OCSP responses, and (b) `ssl_trusted_certificate` for verifying OCSP responses. Without these, OCSP stapling silently fails and clients get no stapled OCSP response — they must fetch OCSP directly, adding latency and leaking browsing history to the CA.
+- **Evidence:** Line 134: `ssl_stapling on;`; Line 135: `ssl_stapling_verify on;`. No `resolver` directive. No `ssl_trusted_certificate`.
+- **Risk:** OCSP stapling non-functional; potential SSL Labs grade downgrade; privacy leak to CA.
+- **How to fix:** Add:
+  ```nginx
+  resolver 1.1.1.1 8.8.8.8 valid=300s;
+  resolver_timeout 5s;
+  ssl_trusted_certificate /etc/nginx/certs/chain.pem;
+  ```
+- **Confidence:** Alto
+
+#### Finding 6: `Connection "upgrade"` set for ALL `/` requests — breaks keepalive
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 234: `proxy_set_header Connection "upgrade";` in the catch-all `/` location. This forces the upstream connection to be treated as a WebSocket upgrade attempt for EVERY request, including normal HTTP GETs. Combined with `proxy_set_header Upgrade $http_upgrade` (line 233), this: (a) breaks upstream keepalive (every request opens a new connection), (b) may confuse some backends that don't expect Upgrade headers on normal requests, (c) increases load on Next.js.
+- **Evidence:** Lines 233-234 in `location /`.
+- **Risk:** Higher connection churn on web container; potential subtle breakage.
+- **How to fix:** Use the standard WebSocket map pattern:
+  ```nginx
+  # At http level:
+  map $http_upgrade $connection_upgrade {
+      default upgrade;
+      ''      close;
+  }
+  # In locations:
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection $connection_upgrade;
+  ```
+  Only the `/socket.io/` location needs true WebSocket handling. For `/`, use `proxy_set_header Connection $connection_upgrade;` (which becomes `close` for non-WS).
+- **Confidence:** Alto
+
+#### Finding 7: No `proxy_buffers` / `proxy_buffer_size` configuration
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** No `proxy_buffers`, `proxy_buffer_size`, `proxy_busy_buffers_size` directives. Defaults are small (4 buffers of 4k). For large API responses (e.g., `/api/export` returning a CSV, or admin logs), responses may spill to disk or fail.
+- **Evidence:** No proxy buffer directives in any location or http block.
+- **How to fix:** Add:
+  ```nginx
+  proxy_buffer_size 16k;
+  proxy_buffers 32 16k;
+  proxy_busy_buffers_size 64k;
+  ```
+- **Confidence:** Alto
+
+#### Finding 8: No `proxy_connect_timeout` — defaults to 60s (too long)
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Default `proxy_connect_timeout` is 60s. If Next.js is hung (e.g., accepting connections but not responding), nginx waits up to 60s per request, queuing requests and exhausting worker connections.
+- **Evidence:** No `proxy_connect_timeout` directive.
+- **How to fix:** Add `proxy_connect_timeout 5s;` at http level.
+- **Confidence:** Alto
+
+#### Finding 9: No `limit_req_status 429`
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** When rate limit triggers, nginx returns 503 (Service Unavailable) by default. The correct HTTP status is 429 (Too Many Requests) with `Retry-After` header. Clients (and the Next.js frontend) may misinterpret 503 as server error and show error page instead of "slow down" message.
+- **Evidence:** No `limit_req_status` directive.
+- **How to fix:** Add `limit_req_status 429;` at http level.
+- **Confidence:** Alto
+
+#### Finding 10: Auth endpoint regex misses `/api/auth/signin` and `/api/auth/[...nextauth]`
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** Line 161: `location ~ ^/api/auth/(callback|register|forgot-password|reset-password)`. This matches NextAuth's callback flow but MISSES: `/api/auth/signin` (login page), `/api/auth/[...nextauth]` catchall (which handles providers, session, csrf, signout), and custom `/api/auth/verify-email`. More importantly, NextAuth's credentials provider POSTs to `/api/auth/callback/credentials` which IS matched, but if you use a different provider flow (e.g., direct POST to `/api/auth/[...nextauth]/signin`), it's unprotected. Also `/api/me/password` (password change) and `/api/me/2fa/*` are not rate-limited — brute-force vectors.
+- **Evidence:** Line 161 regex; compare to actual NextAuth routes in `src/app/api/auth/[...nextauth]/route.ts`.
+- **Risk:** Login brute-force on unprotected routes; password reset abuse; 2FA bypass attempts.
+- **How to fix:** Broaden to `location ~ ^/api/(auth|me/password|me/2fa|wallet/withdraw)` and apply appropriate limits. Or apply auth_limit to ALL auth-related and sensitive account endpoints.
+- **Confidence:** Medio
+
+#### Finding 11: No `limit_conn` — no concurrent connection cap
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** No `limit_conn_zone` / `limit_conn` directives. A single IP can open thousands of concurrent connections (Slowloris-style), exhausting nginx's 4096 worker_connections.
+- **Evidence:** No `limit_conn` directives.
+- **How to fix:** Add:
+  ```nginx
+  limit_conn_zone $binary_remote_addr zone=conn_limit:10m;
+  # In server block:
+  limit_conn conn_limit 20;
+  ```
+- **Confidence:** Alto
+
+#### Finding 12: No Brotli compression
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Only gzip is configured (lines 58-78). Brotli compresses 15-25% better for text assets (JS, CSS, HTML). Modern browsers all support it. Not using it leaves performance on the table — especially for Next.js's large JS bundles.
+- **Evidence:** No `brotli on;` or `brotli_types` directives. (Requires `ngx_brotli` module — stock `nginx:alpine` does NOT include it.)
+- **How to fix:** Either (a) switch to `nginx:alpine` + custom build with brotli, (b) use `fholzer/nginx-brotli:alpine` image, or (c) rely on Cloudflare's brotli (since Cloudflare is in front). At minimum, document the decision.
+- **Confidence:** Alto
+
+#### Finding 13: No default server — direct IP access returns first server block
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** No `default_server` catchall. If someone hits the VPS by IP (not domain), nginx serves the first server block (the HTTPS one) with a "domain mismatch" TLS warning — but still serves the app. Used for reconnaissance (mass-can scans find your app).
+- **Evidence:** No `listen 443 ssl default_server` returning 444.
+- **How to fix:** Add a default server that drops connections:
+  ```nginx
+  server {
+      listen 80 default_server;
+      listen 443 ssl default_server;
+      server_name _;
+      ssl_certificate /etc/nginx/certs/fullchain.pem;
+      ssl_certificate_key /etc/nginx/certs/privkey.pem;
+      return 444;
+  }
+  ```
+- **Confidence:** Alto
+
+#### Finding 14: No HTTP/3 (QUIC) support
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Only HTTP/2 over TCP (line 119). HTTP/3 over QUIC offers better performance on lossy networks (mobile) and faster connection setup (0-RTT). Modern nginx (1.25+) supports it.
+- **Evidence:** Line 119: `listen 443 ssl http2;` only. No `listen 443 quic reuseport;` or `http3 on;`.
+- **How to fix:** Upgrade nginx to 1.25+, add `listen 443 ssl; listen 443 quic reuseport; http3 on;` and `add_header Alt-Svc 'h3=":443"; ma=86400';`. (Cloudflare handles HTTP/3 automatically, so this is optional if Cloudflare is in front.)
+- **Confidence:** Alto
+
+#### Finding 15: No `ssl_dhparam` for DHE cipher suites
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 129 includes `DHE-RSA-AES128-GCM-SHA256` and `DHE-RSA-AES256-GCM-SHA384` in cipher suites, but no `ssl_dhparam` directive. nginx will use default DH params (1024-bit, weak) or fail to negotiate DHE. With TLS 1.3 and ECDHE being primary, this is low impact.
+- **Evidence:** No `ssl_dhparam` directive.
+- **How to fix:** Generate strong DH params: `openssl dhparam -out /etc/nginx/dhparam.pem 2048` and add `ssl_dhparam /etc/nginx/dhparam.pem;`. Or remove DHE ciphers entirely.
+- **Confidence:** Medio
+
+#### Finding 16: `client_max_body_size 50M` may be too large for some endpoints
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 35: `client_max_body_size 50M`. This applies globally, including to `/api/auth/*` (login form, max 1KB needed) and `/api/health/*`. An attacker can POST 50MB to any endpoint, consuming memory and bandwidth. Should be scoped per-location.
+- **Evidence:** Line 35 — global setting.
+- **How to fix:** Set global `client_max_body_size 1M`, then override in `/api/uploads` location: `client_max_body_size 50M;`.
+- **Confidence:** Alto
+
+---
+
+### File: /home/z/my-project/.github/workflows/ci.yml
+
+**Status:** ❌ Crítico
+
+#### Finding 1: `prisma migrate deploy` runs AFTER `docker compose up -d` — schema/code mismatch window
+- **Priority:** P0
+- **Impact:** Crítico
+- **Description:** Deploy script (lines 148-153):
+  ```
+  docker compose pull
+  docker compose up -d --remove-orphans
+  docker compose exec -T web bun run prisma migrate deploy
+  ```
+  The new app code starts BEFORE migrations are applied. During the migration window (seconds to minutes for large migrations), the new code runs against the OLD schema. This causes 500 errors, data corruption, or — worst case — silent data loss (e.g., new code writes to a column that doesn't exist yet, or writes NULL to a now-NOT-NULL column).
+- **Evidence:** Lines 151-152 — `docker compose up -d` (line 151) before `prisma migrate deploy` (line 152).
+- **Risk:** Production downtime during every deploy with schema changes; data corruption; failed writes.
+- **How to reproduce:** Add a new required column to a Prisma model, merge to main, dispatch deploy. During the migration window, all INSERTs fail.
+- **How to fix:** Reverse the order:
+  ```bash
+  docker compose pull
+  docker compose run --rm web bun run prisma migrate deploy
+  docker compose up -d --remove-orphans
+  ```
+  Even better: use blue-green deployment with a migration pre-step.
+- **Confidence:** Alto
+
+#### Finding 2: No health check after deploy — silent broken deployments
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** Deploy script (lines 148-153) ends with `echo "Deploy completed at $(date)"`. No verification that the new containers are actually healthy. If the new image has a runtime bug (not caught by build), the deploy "succeeds" and reports success while production is down.
+- **Evidence:** Lines 148-153 — no `curl` to `/api/health/ready`, no `docker compose ps` check, no rollback.
+- **Risk:** Production outage goes undetected until users report it.
+- **How to fix:** Add post-deploy health check:
+  ```bash
+  sleep 10
+  for i in {1..10}; do
+    if curl -sf http://localhost:3000/api/health/ready > /dev/null; then
+      echo "✅ Healthy"
+      exit 0
+    fi
+    sleep 5
+  done
+  echo "❌ Health check failed — rolling back"
+  docker compose rollback  # or: docker compose up -d --no-deps web:<previous-sha>
+  exit 1
+  ```
+- **Confidence:** Alto
+
+#### Finding 3: No rollback strategy
+- **Priority:** P0
+- **Impact:** Alto
+- **Description:** If the new deployment is broken, there's no automated rollback. Operator must manually `docker compose pull` the previous image tag and `docker compose up -d`. The workflow uses `latest` tag and `type=sha` tags, but there's no `previous-latest` tag to roll back to.
+- **Evidence:** Lines 148-153 — no rollback. Lines 115-118 — tags are `latest` and `branch-sha`.
+- **Risk:** Prolonged outage during manual rollback.
+- **How to fix:** (a) Tag the previous `latest` as `previous` before pulling new image, OR (b) use `type=sha,prefix=` tags and have a rollback script: `docker compose up -d --no-deps web@sha256:<previous>`, OR (c) use blue-green with automatic promotion/rollback.
+- **Confidence:** Alto
+
+#### Finding 4: `bun-version: latest` — non-reproducible CI
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Lines 43, 67: `bun-version: latest`. Bun is a fast-moving project; a new Bun release can break the build silently. CI is non-reproducible.
+- **Evidence:** Lines 43, 67: `bun-version: latest`.
+- **Risk:** Build breaks overnight without code change; debugging CI failures is hard.
+- **How to fix:** Pin to exact version: `bun-version: 1.1.42` (or whatever version is currently used locally).
+- **Confidence:** Alto
+
+#### Finding 5: Type check is non-blocking (`|| true`)
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** Line 55: `bunx tsc --noEmit || true`. The `|| true` makes the step always succeed, even with TypeScript errors. Type errors silently ship to production. The comment "Non-blocking for now (pre-existing errors)" suggests known type errors are being ignored rather than fixed.
+- **Evidence:** Line 55: `run: bunx tsc --noEmit || true  # Non-blocking for now (pre-existing errors)`.
+- **Risk:** Type errors cause runtime crashes in production; refactoring safety net removed.
+- **How to reproduce:** Introduce a type error in any `.ts` file, push to PR — CI passes.
+- **How to fix:** (a) Fix all pre-existing type errors, then remove `|| true`. (b) If genuinely deferred, track in a separate issue and use `continue-on-error: true` at step level (more visible than `|| true`).
+- **Confidence:** Alto
+
+#### Finding 6: No tests step
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** The pipeline has lint, typecheck (non-blocking), build, docker, deploy. There is NO test step. No unit tests, no integration tests, no e2e tests run in CI. Even if tests exist locally, they're not enforced.
+- **Evidence:** No `test` job or `bun test` step anywhere in the workflow.
+- **Risk:** Regressions ship to production untested.
+- **How to fix:** Add a `test` job:
+  ```yaml
+  test:
+    needs: lint
+    runs-on: ubuntu-latest
+    services:
+      postgres: ...
+      redis: ...
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run db:generate
+      - run: bun test
+  ```
+- **Confidence:** Alto
+
+#### Finding 7: No security scanning (CodeQL, Trivy, npm/bun audit)
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** No CodeQL analysis, no container image scanning (Trivy/Grype/Snyk), no dependency vulnerability check (`bun audit`). Known CVEs in dependencies or the base image ship to production.
+- **Evidence:** No security-related steps in workflow.
+- **Risk:** Known vulnerabilities exploited in production.
+- **How to fix:** Add:
+  - `github/codeql-action/init@v3` + `analyze@v3` for SAST
+  - `aquasecurity/trivy-action@master` to scan Docker image
+  - `bun audit --severity high` step
+  - `github/dependency-review-action@v4` on PRs
+- **Confidence:** Alto
+
+#### Finding 8: No concurrency control — parallel deploys possible
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** No `concurrency:` block. If two people trigger `workflow_dispatch` (or one pushes twice to main while a deploy runs), two deploy jobs run in parallel against the same VPS. `docker compose pull` + `up -d` from two concurrent runs can leave the stack in an inconsistent state.
+- **Evidence:** No `concurrency` key at workflow or job level.
+- **Risk:** Stack corruption; partial deploy; race conditions on migrations.
+- **How to fix:** Add at workflow level:
+  ```yaml
+  concurrency:
+    group: ${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: false  # Don't cancel mid-deploy
+  ```
+- **Confidence:** Alto
+
+#### Finding 9: Default `GITHUB_TOKEN` permissions too broad (lint/build jobs)
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** The `lint` and `build` jobs don't specify `permissions:`. The default `GITHUB_TOKEN` permissions depend on repo settings — could be `contents: write`, `pull-requests: write`, etc. Principle of least privilege violated. The `docker` job correctly scopes to `contents: read, packages: write` (lines 97-99), but lint/build don't.
+- **Evidence:** No `permissions:` block at workflow or job level for lint/build jobs.
+- **Risk:** If a step is compromised (e.g., malicious action), it has broad repo access.
+- **How to fix:** Add at workflow level:
+  ```yaml
+  permissions:
+    contents: read
+  ```
+  Then escalate per-job as needed.
+- **Confidence:** Alto
+
+#### Finding 10: Build uses SQLite (`file:./db/test.db`) but production uses PostgreSQL
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Line 79: `DATABASE_URL: "file:./db/test.db"`. The CI build uses SQLite, but production runs PostgreSQL. Schema differences (JSON operations, array columns, sequence table, specific Prisma features) may pass the SQLite build but fail in PostgreSQL. The build doesn't actually validate production-compatibility.
+- **Evidence:** Line 79: `DATABASE_URL: "file:./db/test.db"`.
+- **Risk:** Build passes, production crashes on first query that uses Postgres-specific syntax.
+- **How to fix:** Use a real PostgreSQL service in CI:
+  ```yaml
+  services:
+    postgres:
+      image: postgres:16-alpine
+      env:
+        POSTGRES_PASSWORD: test
+      ports: ['5432:5432']
+      options: >-
+        --health-cmd pg_isready
+        --health-interval 10s
+        --health-timeout 5s
+        --health-retries 5
+  env:
+    DATABASE_URL: postgresql://postgres:test@localhost:5432/test
+  ```
+- **Confidence:** Alto
+
+#### Finding 11: Hardcoded build secrets in plaintext workflow
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Lines 80-81: `NEXTAUTH_SECRET: "ci-test-secret-32bytes-..."` and `LICENSE_ENCRYPTION_KEY: "ci-test-encryption-key-32bytes!"`. These are committed to the repo. While they appear to be test-only values, the format suggests they could be real-looking secrets. If they ever match a production secret (copy-paste mistake), they're leaked.
+- **Evidence:** Lines 80-81 — plaintext secrets in workflow YAML.
+- **Risk:** Secret leak via git history; supply of "known weak secrets" for attackers to try.
+- **How to fix:** Use GitHub Actions secrets (even if values are dummy): `NEXTAUTH_SECRET: ${{ secrets.CI_NEXTAUTH_SECRET }}`. Or generate on the fly: `NEXTAUTH_SECRET: $(openssl rand -base64 32)`.
+- **Confidence:** Medio
+
+#### Finding 12: No artifact signing (cosign) for Docker images
+- **Priority:** P1
+- **Impact:** Medio
+- **Description:** Docker images are pushed to GHCR without signing. Without cosign/Sigstore signatures, consumers can't verify image authenticity. A registry compromise (or MITM on pull) could ship a malicious image undetected.
+- **Evidence:** Lines 120-129 — build and push without signing.
+- **How to fix:** Add:
+  ```yaml
+  - uses: sigstore/cosign-installer@v3
+  - run: cosign sign --yes ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
+  ```
+  Enable `provenance: true` and `sbom: true` in build-push-action.
+- **Confidence:** Alto
+
+#### Finding 13: Deploy job doesn't verify branch
+- **Priority:** P2
+- **Impact:** Medio
+- **Description:** Line 136: `if: github.event_name == 'workflow_dispatch'`. No check that the dispatch is from `main` branch. An admin could dispatch a deploy from a feature branch (which has different code, no Docker image pushed).
+- **Evidence:** Line 136 — no `github.ref == 'refs/heads/main'` check.
+- **Risk:** Deploy untested code; deploy fails because image doesn't exist.
+- **How to fix:** `if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'`
+- **Confidence:** Alto
+
+#### Finding 14: No environment protection rules / required reviewers
+- **Priority:** P1
+- **Impact:** Alto
+- **Description:** Lines 137-138: `environment: name: ${{ github.event.inputs.environment }}`. The workflow references an environment, but environment protection rules (required reviewers, wait timer, branch restrictions) must be configured in GitHub UI — not enforceable in YAML. The workflow file alone does NOT enforce approval.
+- **Evidence:** Line 137-138 — environment reference, but no guaranteed approval.
+- **Risk:** Any admin can deploy to production without review.
+- **How to fix:** In GitHub repo settings → Environments → `production`: enable "Required reviewers", "Wait timer" (e.g., 5 min), "Deployment branches" = `main` only. Document this in README/CONTRIBUTING.
+- **Confidence:** Alto
+
+#### Finding 15: No notifications on failure
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** No Slack/Discord/email notification step on job failure. If deploy fails at 3 AM, no one knows until users complain.
+- **Evidence:** No `if: failure()` notification step.
+- **How to fix:** Add:
+  ```yaml
+  - if: failure()
+    uses: slackapi/slack-github-action@v1
+    with:
+      slack-message: "Deploy failed: ${{ github.run_id }}"
+  ```
+- **Confidence:** Alto
+
+#### Finding 16: `appleboy/ssh-action@v1` floats minor versions
+- **Priority:** P2
+- **Impact:** Bajo
+- **Description:** Line 143: `uses: appleboy/ssh-action@v1`. Pinned to major version only. A breaking change in v1.x.x could silently affect deploys.
+- **Evidence:** Line 143.
+- **How to fix:** Pin to SHA: `uses: appleboy/ssh-action@<commit-sha>` (most secure) or `@v1.0.3` (specific tag).
+- **Confidence:** Alto
+
+---
+
+## Summary Table
+
+| File | Status | P0 | P1 | P2 | Total |
+|------|--------|----|----|----|----|
+| Dockerfile | ❌ Crítico | 4 | 4 | 2 | 10 |
+| docker-compose.yml | ❌ Crítico | 2 | 6 | 6 | 14 |
+| docker-compose.monitoring.yml | ❌ Crítico | 2 | 2 | 4 | 8 |
+| .dockerignore | ⚠️ Mejorable | 0 | 2 | 4 | 6 |
+| nginx.conf | ❌ Crítico | 2 | 5 | 9 | 16 |
+| .github/workflows/ci.yml | ❌ Crítico | 3 | 7 | 6 | 16 |
+| **TOTAL** | **❌ Crítico** | **13** | **26** | **31** | **70** |
+
+## Top 13 P0 Issues (Must Fix Before Production)
+
+1. **Dockerfile F1**: `bun.lockb*` glob doesn't match repo's `bun.lock` — frozen install fails.
+2. **Dockerfile F2**: HEALTHCHECK uses `curl` not in `oven/bun:1.1-slim` — web always unhealthy.
+3. **Dockerfile F3**: Worker inherits web HEALTHCHECK — worker always unhealthy.
+4. **Dockerfile F6**: No `mkdir/chown uploads` — nextjs user can't write uploads.
+5. **Compose F1**: `mini-services/notifications-service/Dockerfile` doesn't exist — build fails.
+6. **Compose F2**: Redis has no password + exposed — SSRF/RCE vector.
+7. **Monitoring F1**: All images `:latest` — non-reproducible.
+8. **Monitoring F2**: Grafana defaults to `admin/admin`.
+9. **Nginx F1**: No `set_real_ip_from` for Cloudflare — rate limiting broken.
+10. **Nginx F2**: `add_header` in location blocks drops ALL security headers for static files.
+11. **CI F1**: Migration runs AFTER app starts — schema/code mismatch window.
+12. **CI F2**: No health check after deploy — silent broken deploys.
+13. **CI F3**: No rollback strategy — manual recovery required.
+
+## Verdict
+
+❌ **NOT APPROVED FOR PRODUCTION.**
+
+The previous "PRODUCTION READY ✅" sign-off in the worklog is contradicted by 13 P0
+issues that would cause immediate deployment failure (missing Dockerfile, broken
+healthchecks, lockfile mismatch) or critical security/operational failures (no
+Cloudflare real_ip, Redis unauthenticated, migration ordering, no rollback).
+
+**Estimated effort to fix:** 2-3 days of focused DevOps work for P0s, 1 week for P1s.
+
+**Recommendation:** Block production deploy until all 13 P0s are resolved and
+re-audited. P1s should be resolved within the first sprint post-launch. P2s can
+be tracked as tech debt.
+
+— End of AUDIT-A —
+
+#### 1. `scripts/deploy.sh` — One-Command Deploy
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Alto |
+
+**P1-001 — No `trap` for rollback on failure (lines 25, 116)**
+- Evidence: `set -euo pipefail` is set but no `trap` registered. If Step 4 (migraciones, line 162) or Step 5 (seed, line 184) fails, containers stay up in a half-deployed state.
+- Risk: Half-deployed app reachable by users; migrations partially applied.
+- Reproduce: Set an invalid `DATABASE_URL`, run `./scripts/deploy.sh`. Containers start, migrate fails, script exits — no rollback.
+- Fix: Add `trap 'on_error' ERR` that runs `docker compose down` (or logs + keeps state) on failure.
+- Confidence: 95%
+
+**P1-002 — `check_service` failure aborts deploy without rollback (lines 143-146)**
+- Evidence: `check_service "PostgreSQL" ...` — when it returns 1, `set -e` exits the whole script. No rollback.
+- Risk: Deploy stops at step 3 with containers running but unhealthy.
+- Fix: Either `|| { fail "..."; docker compose down; exit 1; }` or accept partial state with explicit messaging.
+- Confidence: 95%
+
+**P1-003 — `python3` dependency without fallback (lines 150, 228, 242)**
+- Evidence: `python3 -c "import json,sys;..."` used in 3 places. No `command -v python3` check.
+- Risk: On minimal Ubuntu 22.04 Server (no `python3` installed by default in some cloud images), the script aborts mid-deploy.
+- Reproduce: `apt remove -y python3 && ./scripts/deploy.sh` — fails on line 150.
+- Fix: Use `jq` (already standard on most servers, simpler for JSON parsing) or add `command -v python3` check at top.
+- Confidence: 90%
+
+**P2-004 — curl commands lack `--max-time` and `--retry` (lines 220, 223, 227, 241, 253, 256)**
+- Evidence: `curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/api/health/live 2>/dev/null`
+- Risk: Smoke test step can hang indefinitely if web container is in a bad state (TCP accepts but never responds).
+- Fix: `curl -s --max-time 5 --retry 2 --retry-delay 1 -o /dev/null -w "%{http_code}" ...`
+- Confidence: 95%
+
+**P2-005 — `docker compose build` output truncated (line 112)**
+- Evidence: `docker compose build --progress=plain 2>&1 | tail -5`
+- Risk: Build errors hidden behind `tail -5`. Although `pipefail` catches the exit code, the user sees only last 5 lines.
+- Fix: Stream output to log file and `tail -20` on failure: `docker compose build --progress=plain 2>&1 | tee /tmp/deploy-build.log | tail -20 || { tail -50 /tmp/deploy-build.log; exit 1; }`
+- Confidence: 85%
+
+**P2-006 — Hardcoded service names without dynamic discovery (lines 143-149)**
+- Evidence: `for svc in worker nginx; do` — assumes these services exist in docker-compose.yml.
+- Risk: If compose file changes (rename service), script fails silently.
+- Fix: Discover services dynamically: `docker compose config --services`.
+- Confidence: 80%
+
+**P2-007 — Deploy final banner has placeholder `DOMAIN` (line 273)**
+- Evidence: `echo "║  1. Configurar SSL: sudo certbot certonly --standalone -d DOMAIN ║"`
+- Risk: User copy-pastes literally with `DOMAIN` instead of their domain.
+- Fix: Read `DOMAIN` from `.env` or use `${DOMAIN:-<your-domain>}`.
+- Confidence: 90%
+
+---
+
+#### 2. `scripts/backup.sh` — Backup DB + uploads + config
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Crítico |
+
+**P0-001 — `warn` function called but never defined (line 70)**
+- Evidence: Line 70 calls `warn "Backup solo tiene $TABLE_COUNT tablas (esperado: 30+)"`. The `warn` function is defined in `restore.sh`, `deploy.sh`, `monitor-setup.sh` but **NOT in `backup.sh`** (only `ok`, `fail`, `info` defined on lines 19-21).
+- Risk: With `set -euo pipefail`, when table count < 25 (e.g., during initial seed, after schema-only restore, or due to P0-002 below), the script crashes with `warn: command not found`. Backup file is created but script exits non-zero → cron reports failure → on-call gets paged → may disable cron → **backups silently stop**.
+- Reproduce: Create an empty PostgreSQL database, run `./scripts/backup.sh`. `TABLE_COUNT=0`, hits line 70, crashes.
+- Fix: Add `warn() { echo -e "${YELLOW}  ⚠️${NC} $1"; }` near line 21. Also define `YELLOW='\033[1;33m'`.
+- Confidence: 100%
+
+**P0-002 — Backup verification uses `grep "CREATE TABLE"` on binary dump (line 65)**
+- Evidence: Line 46 uses `pg_dump --format=custom` (binary). Line 65 runs `gunzip -c "$PG_FILE" | grep -c "CREATE TABLE"`. Custom-format dumps are **binary** (Postgres proprietary format), so `grep` finds 0 matches → always warns.
+- Risk: Verification is a no-op. A truncated/corrupt backup will pass `gunzip -t` (gzip CRC OK) but contain 0 tables. Combined with P0-001, **every backup looks broken** even when it's fine.
+- Reproduce: Run `./scripts/backup.sh` on a healthy DB. `TABLE_COUNT` is always 0.
+- Fix: Use `pg_restore --list "$PG_FILE" | grep -c "TABLE"` (works on custom format) OR use `--format=plain` if grep-based verification is desired.
+- Confidence: 100%
+
+**P0-003 — S3 upload failure swallowed silently (lines 99-113)**
+- Evidence: `aws s3 cp "$f" "s3://..." --only-show-errors 2>/dev/null` — stderr suppressed. `aws` exit code ignored (no `||`). With `set -e`, an `aws` failure should abort, but the surrounding `if command -v aws` only checks existence.
+- Risk: Backup appears successful in cron logs, but no off-site copy exists. If local disk fails, all data is lost.
+- Fix: `aws s3 cp ... --only-show-errors || { fail "S3 upload failed for $f"; exit 1; }`
+- Confidence: 90%
+
+**P1-004 — Low table count aborts backup (line 67-71)**
+- Evidence: `if [ "$TABLE_COUNT" -ge 25 ]; then ok; else warn; fi` — combines with P0-001 (warn undefined) to crash script.
+- Risk: New deployments with < 25 tables cannot complete backups.
+- Fix: Combine with P0-001 and P0-002 fixes.
+- Confidence: 95%
+
+**P1-005 — No backup encryption at rest**
+- Evidence: Backup written to `/backups/novsmm_db_*.sql.gz` in plaintext (no GPG/age encryption).
+- Risk: Backups contain user PII, password hashes, payment metadata. If `/backups` is on an unencrypted volume or the S3 bucket is misconfigured, data is exposed.
+- Fix: `gpg --symmetric --cipher-algo AES256 "$PG_FILE"` before S3 upload, or use `age` for key-based encryption.
+- Confidence: 95%
+
+**P1-006 — No backup failure alerting**
+- Evidence: No `ALERT_WEBHOOK` call on failure. Cron just emails root (if `MAILTO` set).
+- Risk: Silent backup failure → data loss discovered at restore time.
+- Fix: Source `healthcheck.sh`'s `send_alert` function or add `curl -X POST "$ALERT_WEBHOOK" -d "{\"text\":\"Backup failed\"}"` in the `fail` paths.
+- Confidence: 95%
+
+**P1-007 — No PITR (point-in-time recovery)**
+- Evidence: Only `pg_dump` snapshot backups. No WAL archiving.
+- Risk: RPO is 24h (whatever the cron interval is). Cannot recover to a specific point in time (e.g., before a destructive migration).
+- Fix: Enable PostgreSQL WAL archiving (`archive_mode = on`, `archive_command = 'test ! -f /backups/wal/%f && cp %p /backups/wal/%f'`), use `pgBackRest` or `wal-g` for managed PITR.
+- Confidence: 95%
+
+**P2-008 — `find -delete` with no logging (line 118)**
+- Evidence: `find "$BACKUP_DIR" -name "novsmm_*" -mtime +$RETENTION_DAYS -delete 2>/dev/null`
+- Risk: Old backups deleted silently. Cannot audit what was purged.
+- Fix: `find ... -delete -print | tee -a /var/log/novsmm-backup-cleanup.log`
+- Confidence: 90%
+
+**P2-009 — No backup manifest / checksum file**
+- Evidence: No `SHA256SUMS` file written next to backups.
+- Risk: Cannot detect bit-rot of backup files months later.
+- Fix: `sha256sum "$PG_FILE" "$UPLOADS_FILE" "$CONFIG_FILE" > "$BACKUP_DIR/manifest_${DATE}.sha256"`
+- Confidence: 85%
+
+**P2-010 — Config backup includes `.env` (line 93)**
+- Evidence: `tar -czf "$CONFIG_FILE" docker-compose.yml nginx.conf .env prisma/schema.prisma`
+- Risk: `.env` contains `NEXTAUTH_SECRET`, `POSTGRES_PASSWORD`, `LICENSE_ENCRYPTION_KEY`. Backup tarball is as sensitive as the DB dump but stored without encryption.
+- Fix: Encrypt config backup separately, or exclude `.env` and store its rotation separately.
+- Confidence: 95%
+
+---
+
+#### 3. `scripts/restore.sh` — Interactive restore
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Crítico |
+
+**P0-008 — Same binary-vs-text verification bug as backup.sh (line 70)**
+- Evidence: `TABLE_COUNT=$(gunzip -c "$BACKUP_FILE" 2>/dev/null | grep -c "CREATE TABLE" || echo "0")` on a custom-format dump.
+- Risk: Restore prints "Tablas en backup: 0" for every backup → user may cancel thinking backup is empty.
+- Fix: `pg_restore --list "$BACKUP_FILE" | grep -c "^ .* TABLE "`
+- Confidence: 100%
+
+**P0-009 — `DROP DATABASE` fails on active connections (lines 105-108)**
+- Evidence:
+  ```
+  docker compose exec -T postgres psql -U novsmm -d postgres <<'SQL'
+  DROP DATABASE IF EXISTS novsmm;
+  CREATE DATABASE novsmm;
+  SQL
+  ```
+- Risk: `DROP DATABASE` fails with `database "novsmm" is being accessed by other users` if any connection is still alive (web, worker, notifications were `stop`'d but the exec itself opens a connection, and `pg_isready`/psql sessions may linger). On failure, `set -e` aborts restore → DB is gone, no restore applied → **total data loss**.
+- Reproduce: Run restore while another psql session is open.
+- Fix:
+  ```
+  SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname='novsmm' AND pid <> pg_backend_pid();
+  DROP DATABASE IF EXISTS novsmm;
+  ```
+- Confidence: 95%
+
+**P1-010 — `pg_restore --clean` on freshly-created empty DB causes noise (line 114)**
+- Evidence: `pg_restore --clean --if-exists` — `--clean` issues `DROP` statements before each object. On a freshly `CREATE DATABASE`, nothing exists → DROP IF EXISTS is no-op but generates warnings.
+- Risk: Warnings confused with real errors. Real restore failures hidden by `2>&1 | tail -5`.
+- Fix: Drop `--clean --if-exists` when restoring to a fresh DB (the `DROP DATABASE` already did the cleaning).
+- Confidence: 90%
+
+**P1-011 — `pg_restore` exit code ignored (lines 114-119)**
+- Evidence: `if gunzip -c "$BACKUP_FILE" | docker compose exec -T postgres pg_restore ... 2>&1 | tail -5; then ok; else warn "warnings (normal)"`. The `tail -5` is the last command in the pipe → its exit code (0) is what `if` sees with `pipefail`... actually `pipefail` catches pg_restore's non-zero. But the `else` branch swallows it as "warnings".
+- Risk: Actual restore failure (e.g., corrupted dump, schema mismatch) is reported as "normal warnings".
+- Fix: Check `pg_restore` exit code explicitly; verify row counts against expected baseline; abort if 0 users.
+- Confidence: 85%
+
+**P1-012 — No verification that app reconnects to DB (lines 150-156)**
+- Evidence: After `docker compose start`, script does `sleep 10` then `curl -sf /api/health/live`. `/live` doesn't check DB connection (only `/ready` does).
+- Risk: Web app may fail to connect to restored DB (e.g., auth_cache stale) but `/live` returns 200.
+- Fix: Curl `/api/health/ready` and verify `database.connected == true`.
+- Confidence: 95%
+
+**P2-013 — Hardcoded `sleep 10` instead of poll loop (line 151)**
+- Evidence: `sleep 10; if curl ...`
+- Risk: On slow systems, 10s is not enough; on fast systems, wastes time.
+- Fix: Reuse `check_service` pattern from deploy.sh.
+- Confidence: 95%
+
+**P2-014 — `./scripts/backup.sh` called with relative path (line 86)**
+- Evidence: `./scripts/backup.sh` — only works if cwd is project root.
+- Risk: If user runs `cd /tmp && /opt/novsmm/scripts/restore.sh`, the pre-restore backup fails.
+- Fix: `"$(dirname "$0")/backup.sh"` or `"$PROJECT_DIR/scripts/backup.sh"`.
+- Confidence: 95%
+
+**P2-015 — `2>/dev/null` on docker compose stop/start hides errors (lines 99, 147)**
+- Evidence: `docker compose stop web worker notifications 2>/dev/null`
+- Risk: If a service fails to stop (e.g., container stuck), restore proceeds and may corrupt.
+- Fix: Log stderr to a file: `2>>/var/log/novsmm-restore.log`.
+- Confidence: 90%
+
+---
+
+#### 4. `scripts/healthcheck.sh` — Continuous monitoring
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Medio |
+
+**P1-016 — One-shot mode exit code ambiguity (line 171)**
+- Evidence: `else run_check; fi` — `run_check` returns 1 on failure. With `set -e` (from line 16), the script SHOULD exit non-zero, propagating to cron.
+- Re-evaluation: Behavior is actually OK for cron. **False alarm** — but document the expected exit code.
+- Confidence: 80%
+
+**P1-017 — `python3` dependency without fallback (line 59)**
+- Evidence: `python3 -c "import json,sys;..."`. If python3 missing, `STATE` becomes "not found" (caught by `|| echo "not found"`), and every service reports as failing → false alerts.
+- Risk: On python3-less hosts, the script pages on-call for every service.
+- Fix: Use `docker compose ps --format '{{.Service}}:{{.State}}'` (no python needed).
+- Confidence: 95%
+
+**P1-018 — `ALERT_WEBHOOK` curl has no `--max-time` (line 41)**
+- Evidence: `curl -s -X POST "$ALERT_WEBHOOK" ... &>/dev/null || true`
+- Risk: If webhook URL is unreachable, curl hangs (no timeout). With `|| true`, won't fail, but blocks the next check iteration.
+- Fix: `curl -s --max-time 5 --retry 2 -X POST ...`
+- Confidence: 95%
+
+**P2-019 — Redis memory threshold hardcoded (line 92)**
+- Evidence: `REDIS_MAX=256000000  # 256MB`
+- Risk: If Redis is configured with 1GB maxmemory (legitimate for large queues), this fires false alerts.
+- Fix: Read from `redis-cli CONFIG GET maxmemory` and use 80% of that.
+- Confidence: 90%
+
+**P2-020 — Disk usage checks `/` only (line 126)**
+- Evidence: `df /`
+- Risk: Misses `/var/lib/docker` (often on separate volume), `/backups`, `/var/log`.
+- Fix: `df / /var/lib/docker /backups /var/log 2>/dev/null | awk 'NR>1 {print $6, $5}'`
+- Confidence: 90%
+
+**P2-021 — Watch mode never exits (line 165-169)**
+- Evidence: `while true; do run_check || true; sleep "$INTERVAL"; done`
+- Risk: No way to stop gracefully from cron. No log rotation in-script.
+- Fix: Add `trap 'exit 0' INT TERM` and document use of `logrotate`.
+- Confidence: 80%
+
+**P2-022 — Memory check uses `free` with wrong column (line 138)**
+- Evidence: `free | awk '/^Mem:/ {printf "%.0f", $3/$2*100}'`
+- Risk: Includes cache/buffer in "used" → over-reports on Linux. Should use `MemAvailable`.
+- Fix: `free | awk '/^Mem:/ {printf "%.0f", ($2-$7)/$2*100}'` (column 7 is available on modern Linux).
+- Confidence: 90%
+
+---
+
+#### 5. `scripts/monitor-setup.sh` — Prometheus + Grafana setup
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Crítico |
+
+**P0-010 — Grafana default password is `admin` (line 76)**
+- Evidence: `GRAFANA_PASSWORD="${GRAFANA_PASSWORD:-admin}"`. Also `docker-compose.monitoring.yml:53`: `GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}`.
+- Risk: Operator runs `./scripts/monitor-setup.sh` without setting env var → Grafana boots with `admin/admin` on port 3001. Port is bound to `127.0.0.1` (line 58 of compose), so SSH-tunnel-only — but if user changes to `0.0.0.0` (common for access via reverse proxy), Grafana is exposed with default creds. Grafana also prompts password change on first login, but attacker can change it first.
+- Reproduce: `unset GRAFANA_PASSWORD; ./scripts/monitor-setup.sh; curl http://localhost:3001 -u admin:admin` → 200.
+- Fix: Refuse to start if `GRAFANA_PASSWORD` not set OR not "admin": `if [ -z "${GRAFANA_PASSWORD:-}" ] || [ "$GRAFANA_PASSWORD" = "admin" ]; then fail "..."; exit 1; fi`
+- Confidence: 100%
+
+**P0-011 — Grafana password printed to stdout (line 128)**
+- Evidence: `echo "│               User: ${GRAFANA_USER} | Pass: ${GRAFANA_PASSWORD}"`
+- Risk: Password leaks into terminal scrollback, cron email, log files (if piped).
+- Fix: Print `"Pass: *** (set in $GRAFANA_PASSWORD env)"` only.
+- Confidence: 95%
+
+**P1-023 — No verification that `docker-compose.monitoring.yml` exists (line 45)**
+- Evidence: `docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d ...`
+- Risk: If file missing, error message is cryptic.
+- Fix: `[ -f docker-compose.monitoring.yml ] || { fail "..."; exit 1; }`
+- Confidence: 95%
+
+**P1-024 — `python3` dependency without fallback (lines 88, 108)**
+- Evidence: Two `python3 -c` calls for JSON parsing.
+- Risk: Same as P1-003 — fails on minimal Ubuntu.
+- Fix: Use `jq`.
+- Confidence: 90%
+
+**P1-025 — AlertManager health not checked (lines 54-67)**
+- Evidence: Loop checks Prometheus and Grafana only. AlertManager assumed healthy.
+- Risk: Alerts silently dropped if AlertManager crashed.
+- Fix: Add `curl -s http://localhost:9093/-/healthy` check.
+- Confidence: 95%
+
+**P2-026 — No Sentry DSN setup mentioned**
+- Evidence: No mention of `SENTRY_DSN` env var (which exists in `.env.example` line 80) in monitoring setup.
+- Risk: App errors not reported to Sentry; operator relies only on metrics.
+- Fix: Add step: `info "Sentry DSN: set SENTRY_DSN in .env to enable error tracking"`.
+- Confidence: 90%
+
+**P2-027 — `curl` commands lack `--max-time` (lines 57, 58, 78, 108)**
+- Evidence: All curls without timeout.
+- Risk: Setup can hang if Prometheus/Grafana is slow to start.
+- Fix: Add `--max-time 10`.
+- Confidence: 95%
+
+---
+
+#### 6. `scripts/pre-deploy-check.sh` — Pre-deploy validation
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Medio |
+
+**P0-012 — `df -g` is BSD/macOS only, not Linux (line 60)**
+- Evidence: `DISK_GB=$(df -g / 2>/dev/null | awk 'NR==2 {print $4}' || df -h / | awk 'NR==2 {print $4}' | tr -d 'G')`
+- Risk: On Linux, `df -g` errors out (suppressed by `2>/dev/null`), falls back to `df -h`. But `df -h` returns values like `20G`, `1.5T`, `500M`. The `tr -d 'G'` only strips `G`. If disk is in TB, `DISK_GB` becomes `1.5` (float) → `[ "1.5" -ge 20 ]` errors with "integer expression expected" → `set -e` aborts the script → pre-deploy check fails before printing summary.
+- Reproduce: On a VPS with 2TB disk mostly free, run `./scripts/pre-deploy-check.sh`.
+- Fix: Use `df --output=avail -BG / | tail -1 | tr -dc '0-9'` (GNU df with `-BG` = block size in GB).
+- Confidence: 95%
+
+**P1-028 — `curl -s ifconfig.me` leaks server IP to third party (line 37)**
+- Evidence: `IP:   $(curl -s ifconfig.me 2>/dev/null || echo 'unknown')`
+- Risk: Server IP sent to `ifconfig.me` (third party). For privacy/security-conscious deployments, this is unacceptable. Also no `--max-time` → can hang.
+- Fix: Use `hostname -I | awk '{print $1}'` or `ip -4 addr show | grep inet | awk '{print $2}'`.
+- Confidence: 95%
+
+**P1-029 — `docker pull` during pre-deploy check is slow (lines 101, 119, 130)**
+- Evidence: Pulls `postgres:16-alpine`, `redis:7-alpine`, `nginx:alpine` during pre-deploy check.
+- Risk: Pre-deploy check takes 5-15 minutes on slow connections. Operator may skip it.
+- Fix: Use `docker image inspect postgres:16-alpine` first; only pull if missing.
+- Confidence: 90%
+
+**P2-030 — No `trap` for cleanup**
+- Evidence: No `trap` registered.
+- Risk: If interrupted mid-`docker pull`, no cleanup. Low impact.
+- Fix: Not critical.
+- Confidence: 70%
+
+**P2-031 — UFW check is best-effort (lines 165-182)**
+- Evidence: Uses `ufw status` text parsing.
+- Risk: On systems without UFW (e.g., nftables direct), check passes silently.
+- Fix: Document as "UFW-only check; verify nftables manually if used".
+- Confidence: 80%
+
+---
+
+#### 7. `scripts/validate-postgres-redis.sh` — Post-deploy validation
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Medio |
+
+**P1-032 — `python3` dependency without fallback (lines 36, 135, 155, 217)**
+- Evidence: 4 `python3 -c` calls.
+- Risk: Fails on python3-less hosts. Critical because this is the post-deploy validation.
+- Fix: Use `jq`.
+- Confidence: 95%
+
+**P1-033 — Assumes `curl` is in `web` and `notifications` containers (lines 134, 154, 216)**
+- Evidence: `docker compose exec -T web curl -s http://localhost:3000/...` and `docker compose exec -T notifications curl -s http://localhost:3003/healthz`.
+- Risk: If `notifications` image (likely Node.js slim/alpine) doesn't include `curl`, validation fails. (Web image confirmed has curl per Dockerfile line 89.)
+- Fix: For notifications, use `docker compose exec -T notifications wget -qO- ...` or use `node -e "fetch(...)"`.
+- Confidence: 85%
+
+**P1-034 — No `--max-time` on curl commands**
+- Evidence: Lines 174, 182, 190 — `curl -s -o /dev/null -w "%{http_code}" http://localhost/ 2>/dev/null || echo "000"`
+- Risk: Validation can hang if Nginx accepts TCP but doesn't respond.
+- Fix: Add `--max-time 5`.
+- Confidence: 95%
+
+**P2-035 — Service count threshold of 6000 hardcoded (line 84)**
+- Evidence: `if [ "${SERVICES_COUNT:-0}" -ge 6000 ]; then`
+- Risk: If catalog is legitimately smaller, false warning. If larger, no signal when count drops to 5999.
+- Fix: Compare to last known good count from a state file.
+- Confidence: 85%
+
+**P2-036 — No exit code on failure for cron use (line 257-263)**
+- Evidence: Prints "❌ HAY N PROBLEMAS" but doesn't `exit 1`.
+- Risk: Cron thinks validation succeeded; no alert.
+- Fix: `[ $FAIL -eq 0 ] || exit 1`.
+- Confidence: 95%
+
+---
+
+#### 8. `scripts/smoke-test.sh` — Functional tests
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Medio |
+
+**P1-037 — No exit code on failure (lines 135-140)**
+- Evidence: Prints `FAIL: $FAIL` but always exits 0.
+- Risk: CI/CD cannot detect smoke test failure. Deploy proceeds to production.
+- Fix: `[ $FAIL -eq 0 ] || exit 1`.
+- Confidence: 100%
+
+**P1-038 — curl commands without `--max-time` (16 calls)**
+- Evidence: 16 curl calls, none with timeout.
+- Risk: Smoke test can hang for minutes on slow/stuck endpoint.
+- Fix: Add `--max-time 10 --retry 1` to all.
+- Confidence: 95%
+
+**P1-039 — `/tmp/smoke.txt` cookie jar in world-writable location (line 112)**
+- Evidence: `curl -s -c /tmp/smoke.txt ...`
+- Risk: Predictable path; another user on the host could symlink it to overwrite arbitrary files (TOCTOU). Low risk on single-tenant VPS.
+- Fix: `COOKIE_JAR=$(mktemp)` and `trap 'rm -f "$COOKIE_JAR"' EXIT`.
+- Confidence: 85%
+
+**P2-040 — `python3` for JSON parsing (lines 42, 88, 112)**
+- Evidence: 3 `python3 -c` calls.
+- Risk: Same as P1-003.
+- Fix: Use `jq -r '.checks.database.healthy'`.
+- Confidence: 95%
+
+**P2-041 — No trap cleanup for cookie jar**
+- Evidence: No `trap` registered.
+- Risk: `/tmp/smoke.txt` left on disk if script crashes.
+- Fix: `trap 'rm -f "$COOKIE_JAR"' EXIT`.
+- Confidence: 90%
+
+---
+
+#### 9. `scripts/backup-db.sh` — Old DB backup (DUPLICATE)
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-013 — Duplicate of `backup.sh` with worse implementation**
+- Evidence: `backup-db.sh` (73 lines) and `backup.sh` (134 lines) both backup PostgreSQL. `backup-db.sh`:
+  - Uses **host-installed** `pg_dump` (requires `postgresql-client` on host) — `backup.sh` uses `docker compose exec`.
+  - Parses `DATABASE_URL` with fragile sed regex (lines 28-32) — fails on URLs with special chars in password.
+  - No integrity verification (`gunzip -t`).
+  - No table count check.
+  - No uploads/config backup.
+- Risk: Operator confusion: which script is canonical? Cron may run both → duplicate work, different retention.
+- Reproduce: `diff <(head -30 scripts/backup-db.sh) <(head -30 scripts/backup.sh)` shows divergent implementations of same task.
+- Fix: **Delete `backup-db.sh`**. Update cron jobs and documentation to use `backup.sh` only. If keeping for backward compat, add deprecation header: `echo "DEPRECATED: use backup.sh" >&2; exit 1`.
+- Confidence: 100%
+
+**P1-042 — Sed-based DATABASE_URL parsing fails on special chars (lines 28-32)**
+- Evidence: `DB_PASS=$(echo "$DB_URL" | sed -n 's/.*:\/\/[^:]*:\([^@]*\)@.*/\1/p')`
+- Risk: Passwords with `@`, `:`, `/` break parsing. Common case: generated secrets often contain these.
+- Fix: Use `psql`'s `--connection-string` flag directly: `pg_dump "$DATABASE_URL" --format=custom`.
+- Confidence: 90%
+
+---
+
+#### 10. `scripts/backup-uploads.sh` — Old uploads backup (DUPLICATE)
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Medio |
+
+**P1-043 — Partially duplicates `backup.sh` Step 3**
+- Evidence: `backup-uploads.sh` syncs `uploads/` to S3 only. `backup.sh` Step 3 (lines 73-84) tars `uploads/` to local backup dir.
+- Risk: Two scripts, two behaviors. Operator may run only `backup-uploads.sh` and have no local uploads backup.
+- Fix: Consolidate. Either (a) make `backup.sh` call `backup-uploads.sh` for S3 sync, or (b) delete `backup-uploads.sh` and add `--s3-sync-uploads` flag to `backup.sh`.
+- Confidence: 90%
+
+**P1-044 — No local backup option, S3-only (line 34)**
+- Evidence: `aws s3 sync "$UPLOADS_DIR" "s3://$S3_BUCKET/uploads/"` — no local tarball.
+- Risk: If `S3_BACKUP_BUCKET` not set, script exits 0 with "skipping" — no backup at all.
+- Fix: Always create local tarball; S3 sync is optional add-on.
+- Confidence: 95%
+
+**P2-045 — `aws s3 sync` no `--max-time` or retry (line 34)**
+- Evidence: `aws s3 sync ...` — relies on AWS CLI defaults.
+- Risk: Sync hangs on network issues.
+- Fix: AWS CLI has its own retries, but wrap in `timeout 3600 aws s3 sync ...`.
+- Confidence: 80%
+
+---
+
+#### 11. `scripts/restore-db.sh` — Old restore (DUPLICATE)
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-014 — Duplicate of `restore.sh` with worse implementation**
+- Evidence: `restore-db.sh` (79 lines) and `restore.sh` (171 lines) both restore PostgreSQL. `restore-db.sh`:
+  - No integrity check before restore.
+  - No verification of restored data (only suggests commands in echo, line 78).
+  - Same `DROP DATABASE` active-connection bug as `restore.sh` (P0-009).
+  - Uses host `psql`/`pg_restore` (lines 55, 62) — requires `postgresql-client` on host.
+- Risk: Operator picks the wrong script → silent restore failures.
+- Fix: **Delete `restore-db.sh`**. If keeping, add deprecation header.
+- Confidence: 100%
+
+**P1-046 — Line 78 suggests `require('./src/lib/db')` which may be ESM**
+- Evidence: `docker compose exec web bun -e "const{db}=require('./src/lib/db');..."`
+- Risk: If project uses ESM (`import`), `require()` fails. Project is Next.js 16 + bun → likely ESM.
+- Fix: Use `bun -e "import {db} from './src/lib/db'; ..."` or just `psql -c "SELECT count(*) FROM users;"`.
+- Confidence: 85%
+
+---
+
+#### 12. `.zscripts/build.sh` — Old build script
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-015 — Hardcoded absolute path `/home/z/my-project` (line 13)**
+- Evidence: `NEXTJS_PROJECT_DIR="/home/z/my-project"`
+- Risk: Script only works on this specific dev machine. Cannot be reused on CI or another developer's machine.
+- Fix: `NEXTJS_PROJECT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"` (same pattern as `dev.sh` line 8).
+- Confidence: 100%
+
+**P1-047 — `BUILD_ID` may be undefined (line 30)**
+- Evidence: `BUILD_DIR="/tmp/build_fullstack_$BUILD_ID"` — `BUILD_ID` not set in script, not validated.
+- Risk: `BUILD_DIR=/tmp/build_fullstack_` (empty). Multiple builds collide in same dir.
+- Fix: `BUILD_ID="${BUILD_ID:-$(date +%Y%m%d_%H%M%S)}"`.
+- Confidence: 90%
+
+**P1-048 — `set -e` only, no `pipefail` (line 6)**
+- Evidence: `set -e` — missing `-o pipefail` and `-u`.
+- Risk: `bun install | tee log.txt` won't catch `bun install` failure (only `tee`'s exit code).
+- Fix: `set -euo pipefail`.
+- Confidence: 95%
+
+**P1-049 — `exec 2>&1` defeats error attribution (line 4)**
+- Evidence: `exec 2>&1` at top.
+- Risk: stderr merged into stdout. Caller cannot distinguish errors from logs. Especially bad for the `execute_command` wrapper mentioned in comment.
+- Fix: Remove unless specifically needed; use `2>error.log` instead.
+- Confidence: 85%
+
+**P1-050 — No `trap` to clean `/tmp/build_fullstack_*` (line 32)**
+- Evidence: `mkdir -p "$BUILD_DIR"` — no cleanup on failure.
+- Risk: `/tmp` fills with stale build dirs over time.
+- Fix: `trap 'rm -rf "$BUILD_DIR"' EXIT` (or keep, since line 128 comments out the cleanup intentionally — document why).
+- Confidence: 85%
+
+**P2-051 — Chinese-only comments**
+- Evidence: All comments in Chinese (e.g., line 21, 35).
+- Risk: Non-Chinese-reading operators cannot maintain.
+- Fix: Translate to English or bilingual.
+- Confidence: 95%
+
+**P2-052 — Script is OBSOLETE for new Docker-based architecture**
+- Evidence: Builds standalone Next.js + Caddy + mini-services tarball. New architecture (per `deploy.sh`) uses Docker Compose with separate `web`/`worker`/`nginx`/`postgres`/`redis`/`notifications` containers.
+- Risk: Confusion; operator may run old build.sh expecting Docker artifacts.
+- Fix: Move to `.zscripts/.deprecated/` or delete; document `docker compose build` as canonical.
+- Confidence: 90%
+
+---
+
+#### 13. `.zscripts/dev.sh` — Dev startup
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P2 | Bajo |
+
+**P2-053 — Mini-services logs in `.zscripts/` (line 70)**
+- Evidence: `>"$PROJECT_DIR/.zscripts/mini-service-${service_name}.log" 2>&1 &`
+- Risk: Logs cluttered in scripts dir; no log rotation.
+- Fix: `>"$PROJECT_DIR/.zscripts/logs/${service_name}.log"` and add `logrotate`.
+- Confidence: 90%
+
+**P2-054 — Mini-services not cleaned up on exit (line 75, 154)**
+- Evidence: `disown "$service_pid"` then `unset DEV_PID` — mini-services keep running after dev.sh exits.
+- Risk: Orphan processes, port conflicts on next `dev.sh` run.
+- Fix: Track mini-service PIDs in array, kill in cleanup.
+- Confidence: 85%
+
+---
+
+#### 14. `.zscripts/start.sh` — Old start script
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-016 — `cleanup` function defined but never trapped (lines 13-46, 135)**
+- Evidence: `cleanup()` is defined on line 13 but **no `trap cleanup ...` is ever registered**. Then `exec caddy run ...` on line 135 replaces the shell, so even if trap existed, it would be lost.
+- Risk: On Ctrl+C or kill, mini-services and Next.js stay running as orphans.
+- Fix: `trap cleanup EXIT INT TERM` BEFORE the `exec caddy` line. But `exec` replaces the shell → trap lost. Use `caddy run ... & CADDY_PID=$!; wait $CADDY_PID` instead of `exec`.
+- Confidence: 95%
+
+**P1-056 — `set -e` only, no `pipefail` (line 3)**
+- Evidence: `set -e` — POSIX sh, no `pipefail` available.
+- Risk: Pipe failures swallowed.
+- Fix: Switch to `#!/bin/bash` and use `set -euo pipefail`.
+- Confidence: 95%
+
+**P1-057 — Hardcoded `/app/db/custom.db` (line 56)**
+- Evidence: `DEFAULT_PACKAGED_DB_PATH="/app/db/custom.db"`
+- Risk: Assumes container layout. SQLite-specific — new architecture uses PostgreSQL.
+- Fix: Script is obsolete (see P0-017). Delete or mark deprecated.
+- Confidence: 90%
+
+**P0-017 — Script targets OBSOLETE SQLite+Caddy architecture**
+- Evidence: Lines 56-80 deal with SQLite DB. New architecture (per `deploy.sh`, `docker-compose.yml`) uses PostgreSQL in Docker, no Caddy.
+- Risk: Script will not work with current architecture. Operator confusion.
+- Fix: Delete or move to `.zscripts/.deprecated/`.
+- Confidence: 100%
+
+---
+
+#### 15. `monitoring/prometheus.yml`
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-018 — PostgreSQL and Redis exporters commented out (lines 37-45)**
+- Evidence:
+  ```yaml
+  # PostgreSQL exporter (optional — install prometheus-postgres-exporter)
+  # - job_name: "postgres"
+  # Redis exporter (optional — install prometheus-redis-exporter)
+  # - job_name: "redis"
+  ```
+- Risk: **No direct monitoring of PostgreSQL or Redis.** If PostgreSQL OOMs or Redis evicts keys, Prometheus has no visibility. The `NovsmmDown` alert only fires if the web app is unreachable, but DB issues manifest as 500 errors (caught by `NovsmmHighErrorRate` only after 2 min). For a SaaS, this is unacceptable.
+- Fix: Add `prometheuscommunity/postgres-exporter` and `oliver006/redis_exporter` to `docker-compose.monitoring.yml`, uncomment scrapes, add alerts for `pg_up == 0` and `redis_up == 0`.
+- Confidence: 100%
+
+**P1-059 — No TSDB retention explicitly set in YAML (handled in compose line 27)**
+- Evidence: `prometheus.yml` has no `storage.tsdb.retention` (set in compose command `--storage.tsdb.retention.time=30d`).
+- Risk: If someone runs Prometheus without the compose overrides, retention defaults to 15d. Minor.
+- Fix: Document dependency on compose command flags.
+- Confidence: 85%
+
+**P2-060 — No `external_labels` for federation/multi-cluster**
+- Evidence: No `external_labels` block.
+- Risk: Cannot federate to central Prometheus.
+- Fix: Add `external_labels: { cluster: "novsmm-prod", region: "us-east" }`.
+- Confidence: 80%
+
+**P2-061 — No `basic_auth` or `tls_config` on scrapes**
+- Evidence: `/api/metrics` endpoint scraped without auth.
+- Risk: If port 3000 exposed, anyone can read metrics (may leak internal state).
+- Fix: Add `basic_auth` to scrape config; protect `/api/metrics` in Next.js with admin token.
+- Confidence: 90%
+
+---
+
+#### 16. `monitoring/alerts.yml`
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-019 — Missing PostgreSQL down alert**
+- Evidence: No `PostgresDown` rule. `NovsmmDown` only checks `up{job="novsmm"}` (web app).
+- Risk: PostgreSQL can be down while web returns cached 500s — no direct alert.
+- Fix: After enabling postgres-exporter (P0-018), add:
+  ```yaml
+  - alert: PostgresDown
+    expr: pg_up == 0
+    for: 1m
+    labels: { severity: critical }
+  ```
+- Confidence: 100%
+
+**P0-020 — Missing Redis down alert**
+- Evidence: No `RedisDown` rule.
+- Risk: Same as P0-019 for Redis.
+- Fix: Add `expr: redis_up == 0`.
+- Confidence: 100%
+
+**P0-021 — Missing backup failure alert**
+- Evidence: No alert for backup success/failure.
+- Risk: Silent backup failure → data loss discovered at restore time.
+- Fix: Have `backup.sh` push a metric `novsmm_backup_last_success_timestamp` (or use Pushgateway), alert if `time() - novsmm_backup_last_success_timestamp > 86400`.
+- Confidence: 95%
+
+**P1-062 — `HighMemoryUsage` is `warning`, should be `critical` (line 60)**
+- Evidence: `severity: warning` for 90% memory usage.
+- Risk: OOM kill imminent but on-call not paged.
+- Fix: Add second rule at 95% → critical, or change this to critical.
+- Confidence: 95%
+
+**P1-063 — No SSL certificate expiry alert**
+- Evidence: No `SSLCertExpiringSoon` rule.
+- Risk: Cert expires, HTTPS breaks, production down.
+- Fix: Add `blackbox_exporter` and alert on `probe_ssl_earliest_cert_expiry - time() < 86400 * 14`.
+- Confidence: 95%
+
+**P1-064 — No worker queue backlog alert (only failure rate)**
+- Evidence: `NovsmmQueueBacklog` checks `rate(...{status="failed"}[5m]) > 0.1` — only failures, not backlog size.
+- Risk: Queue can grow to 100k pending jobs with 0 failures, no alert.
+- Fix: Add `novsmm_queue_waiting > 1000 for 5m` alert.
+- Confidence: 95%
+
+**P1-065 — No Docker container restart loop alert**
+- Evidence: No alert for restart count.
+- Risk: Container in crash loop, no alert.
+- Fix: Add `increase(container_cpu... )` or use cAdvisor metrics.
+- Confidence: 90%
+
+**P2-066 — No `inhibit_rules`**
+- Evidence: No inhibit rules.
+- Risk: When `NovsmmDown` fires, all dependent alerts (high latency, etc.) also fire → alert storm.
+- Fix: Inhibit warning if critical firing on same service.
+- Confidence: 85%
+
+---
+
+#### 17. `monitoring/alertmanager.yml`
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ❌ Crítico | P0 | Alto |
+
+**P0-022 — Placeholder Slack webhook URLs (lines 35, 44)**
+- Evidence: `api_url: "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK"`
+- Risk: AlertManager cannot deliver alerts. Operator gets no notification for production-impacting issues. **Default state is "monitoring silently broken".**
+- Reproduce: Start AlertManager with this config, trigger an alert → AlertManager logs `notify error`.
+- Fix: Read from env: `api_url: "${SLACK_WEBHOOK_URL}"` (AlertManager supports env var substitution via `--config.expand-env`), OR fail fast in `monitor-setup.sh` if webhook not configured.
+- Confidence: 100%
+
+**P1-067 — No escalation policy (lines 24-29)**
+- Evidence: Critical and non-critical both go to `#novsmm-alerts`. No `repeat_interval` escalation, no PagerDuty/OpsGenie route.
+- Risk: Critical alert at 3am — Slack message only, no page. On-call may miss.
+- Fix: Add PagerDuty receiver for critical, with `repeat_interval: 30m` and `continue: true` to also keep Slack.
+- Confidence: 95%
+
+**P1-068 — No email receiver as fallback**
+- Evidence: Only Slack receivers.
+- Risk: If Slack is down, alerts lost.
+- Fix: Add email receiver for critical alerts.
+- Confidence: 90%
+
+**P2-069 — No `send_resolved: false` option to reduce noise**
+- Evidence: `send_resolved: true` on both (lines 37, 46).
+- Risk: For noisy alerts, resolved messages double the volume.
+- Fix: Set `send_resolved: false` for warning, keep `true` for critical.
+- Confidence: 80%
+
+---
+
+#### 18. `scripts/load-test.js` — k6 load test
+
+| Status | Priority | Impact |
+|--------|----------|--------|
+| ⚠️ Mejorable | P1 | Medio |
+
+**P1-070 — Hardcoded `TEST_PASSWORD = 'CHANGE_ME'` (line 65)**
+- Evidence: `const TEST_PASSWORD = 'CHANGE_ME';`
+- Risk: Load test will fail login (401) → 100% error rate → false negative. Operator thinks app is broken.
+- Fix: Read from `__ENV.TEST_PASSWORD` with validation: `if (!__ENV.TEST_PASSWORD) throw new Error('Set K6 TEST_PASSWORD env var')`.
+- Confidence: 95%
+
+**P1-071 — Hardcoded `serviceId: 'test-service-id'` (line 156)**
+- Evidence: `serviceId: 'test-service-id'`
+- Risk: Stress test order creation always fails with 404/400 → no actual stress on order pipeline.
+- Fix: Fetch a real service ID first: `const svcRes = http.get(.../api/services?limit=1); const serviceId = svcRes.json('services[0].id')`.
+- Confidence: 95%
+
+**P1-072 — Not executable permission (`-rw-rw-r--`)**
+- Evidence: `ls -la scripts/load-test.js` → `-rw-rw-r--`.
+- Risk: Not a real issue (k6 reads the file, doesn't execute). Minor.
+- Fix: Optional `chmod +x`.
+- Confidence: 80%
+
+**P2-073 — `export let options` should be `export const options` (line 36)**
+- Evidence: `export let options = ...`
+- Risk: k6 0.40+ warns about `let` for options. Future versions may error.
+- Fix: `export const options`.
+- Confidence: 90%
+
+**P2-074 — No thresholds for queue latency, cache hit rate**
+- Evidence: Only `http_req_duration` and `errors` thresholds.
+- Risk: Performance regression in cache hit rate (e.g., 95% → 50%) not caught.
+- Fix: Add thresholds for `novsmm_cache_hit_rate > 0.8` (requires custom metric from app).
+- Confidence: 85%
+
+**P2-075 — `handleSummary` writes to relative path (line 187)**
+- Evidence: `'load-test-results.json': JSON.stringify(...)`
+- Risk: File written to cwd, may be lost.
+- Fix: `'/tmp/load-test-results.json'` or accept env override.
+- Confidence: 90%
+
+---
+
+### Disaster Recovery (DR) — Cross-Cutting Findings
+
+**P0-023 — No DR drill automation**
+- Evidence: No `scripts/dr-drill.sh` exists. Restore is interactive only.
+- Risk: DR plan untested. First real restore may fail due to undocumented steps.
+- Fix: Create `scripts/dr-drill.sh` that: (1) takes a backup, (2) restores it to a staging DB, (3) runs smoke tests, (4) tears down. Schedule monthly via cron.
+- Confidence: 100%
+
+**P0-024 — No RTO/RPO defined**
+- Evidence: No documentation of Recovery Time Objective or Recovery Point Objective.
+- Risk: Without targets, cannot measure DR readiness.
+- Fix: Document in `docs/dr.md`: RPO ≤ 24h (nightly backup), RTO ≤ 4h (manual restore). Then automate to improve.
+- Confidence: 95%
+
+**P1-076 — No off-site backup by default**
+- Evidence: `backup.sh --s3` is opt-in. Default cron (from comment line 13) has no S3.
+- Risk: If VPS disk fails (hardware, provider outage), all backups lost with the server.
+- Fix: Default to `--s3` OR sync to a second region/provider nightly.
+- Confidence: 95%
+
+**P1-077 — No backup retention policy documented**
+- Evidence: `RETENTION_DAYS=30` default, but no doc on weekly/monthly/yearly retention.
+- Risk: Cannot recover data from 6 months ago (e.g., audit request).
+- Fix: Implement GFS (Grandfather-Father-Son): 7 daily + 4 weekly + 12 monthly + 3 yearly.
+- Confidence: 90%
+
+**P1-078 — No documentation of DR procedures**
+- Evidence: No `docs/dr.md` or runbook. Only inline comments in scripts.
+- Risk: On-call at 3am doesn't know the restore procedure.
+- Fix: Create `docs/dr.md` with: when to restore, how to restore, who to call, post-restore verification.
+- Confidence: 95%
+
+**P1-079 — No backup monitoring**
+- Evidence: No alert if backup fails (combines with P1-006).
+- Risk: Silent backup failure.
+- Fix: `backup.sh` should exit non-zero on failure (it does, due to `set -e`), and cron should `MAILTO=oncall@` OR push to AlertManager.
+- Confidence: 95%
+
+**P2-080 — No log rotation for backup/health logs**
+- Evidence: Cron comments suggest `>> /var/log/novsmm-backup.log` — no logrotate config.
+- Risk: Logs grow unbounded.
+- Fix: Add `logrotate` config: daily, 14 days retention, compressed.
+- Confidence: 90%
+
+---
+
+### Cross-Cutting Observations
+
+**1. Pervasive `python3` dependency** — 7 of 12 scripts use `python3 -c` for JSON parsing. On minimal Ubuntu Server images, `python3` may not be installed by default. **Recommendation:** Replace all `python3 -c "import json,sys;..."` with `jq -r '...'` calls. `jq` is:
+- Smaller (single binary, no interpreter)
+- Standard on most Linux distros
+- Purpose-built for JSON
+- Easier to read
+
+**2. Missing `trap` cleanup in 10/12 scripts** — Only `.zscripts/dev.sh` and `.zscripts/start.sh` (the latter broken via `exec`) have traps. Production scripts (`deploy.sh`, `backup.sh`, `restore.sh`) should `trap 'cleanup' EXIT INT TERM` to handle Ctrl+C and partial failures.
+
+**3. Inconsistent error handling** — Some scripts `exit 1` on failure, others `warn` and continue, others `set -e` and let bash exit. Standardize: `set -euo pipefail` + `trap` + explicit `fail()` that exits non-zero.
+
+**4. Three duplicate script pairs:**
+- `backup.sh` vs `backup-db.sh` (P0-013)
+- `restore.sh` vs `restore-db.sh` (P0-014)
+- `backup.sh` Step 3 vs `backup-uploads.sh` (P1-043)
+**Action:** Delete the three old scripts, update crons and docs.
+
+**5. Two obsolete `.zscripts/` for old architecture:**
+- `.zscripts/build.sh` (P2-052) — builds Caddy tarball, not Docker
+- `.zscripts/start.sh` (P0-017) — runs Caddy + SQLite, not Docker Compose
+**Action:** Move to `.zscripts/.deprecated/` or delete.
+
+**6. No Sentry DSN setup** — `.env.example` has `SENTRY_DSN=` (line 80) but `monitor-setup.sh` doesn't configure or verify it. App has `src/lib/sentry.ts` but if DSN is empty, Sentry is a no-op.
+
+**7. No `--max-time` anywhere** — Across all 12 scripts, only `healthcheck.sh` line 104/115 uses `--max-time 10`. All other ~30 curl calls can hang indefinitely. This is a systemic issue.
+
+---
+
+### Summary Table
+
+| ID | Severity | Priority | Impact | File | Finding |
+|---|---|---|---|---|---|
+| P0-001 | ❌ | P0 | Crítico | backup.sh | `warn` function called but undefined (line 70) |
+| P0-002 | ❌ | P0 | Crítico | backup.sh | grep "CREATE TABLE" on binary pg_dump custom format (line 65) |
+| P0-003 | ❌ | P0 | Alto | backup.sh | S3 upload failure swallowed silently (lines 99-113) |
+| P0-008 | ❌ | P0 | Crítico | restore.sh | Same binary-dump verification bug (line 70) |
+| P0-009 | ❌ | P0 | Crítico | restore.sh | DROP DATABASE fails on active connections (lines 105-108) |
+| P0-010 | ❌ | P0 | Crítico | monitor-setup.sh | Grafana default password is "admin" (line 76) |
+| P0-011 | ❌ | P0 | Alto | monitor-setup.sh | Grafana password printed to stdout (line 128) |
+| P0-012 | ❌ | P0 | Medio | pre-deploy-check.sh | `df -g` not on Linux; TB-scale breaks integer compare (line 60) |
+| P0-013 | ❌ | P0 | Alto | backup-db.sh | Duplicate of backup.sh, worse impl |
+| P0-014 | ❌ | P0 | Alto | restore-db.sh | Duplicate of restore.sh, worse impl |
+| P0-015 | ❌ | P0 | Alto | .zscripts/build.sh | Hardcoded `/home/z/my-project` (line 13) |
+| P0-016 | ❌ | P0 | Alto | .zscripts/start.sh | `cleanup` defined but never trapped; exec caddy breaks trap |
+| P0-017 | ❌ | P0 | Alto | .zscripts/start.sh | Targets obsolete SQLite+Caddy architecture |
+| P0-018 | ❌ | P0 | Alto | prometheus.yml | Postgres/Redis exporters commented out |
+| P0-019 | ❌ | P0 | Alto | alerts.yml | Missing PostgreSQL down alert |
+| P0-020 | ❌ | P0 | Alto | alerts.yml | Missing Redis down alert |
+| P0-021 | ❌ | P0 | Alto | alerts.yml | Missing backup failure alert |
+| P0-022 | ❌ | P0 | Alto | alertmanager.yml | Placeholder Slack webhook URLs |
+| P0-023 | ❌ | P0 | Crítico | (missing) | No DR drill automation |
+| P0-024 | ❌ | P0 | Alto | (missing) | No RTO/RPO defined |
+| P1-001 | ⚠️ | P1 | Alto | deploy.sh | No trap for rollback on failure |
+| P1-002 | ⚠️ | P1 | Alto | deploy.sh | check_service failure aborts without rollback |
+| P1-003 | ⚠️ | P1 | Medio | deploy.sh | python3 dependency without fallback |
+| P1-004 | ⚠️ | P1 | Alto | backup.sh | Low table count aborts backup (combined w/ P0-001) |
+| P1-005 | ⚠️ | P1 | Alto | backup.sh | No backup encryption at rest |
+| P1-006 | ⚠️ | P1 | Alto | backup.sh | No backup failure alerting |
+| P1-007 | ⚠️ | P1 | Alto | backup.sh | No PITR (point-in-time recovery) |
+| P1-010 | ⚠️ | P1 | Medio | restore.sh | pg_restore --clean on fresh DB causes noise |
+| P1-011 | ⚠️ | P1 | Alto | restore.sh | pg_restore exit code ignored |
+| P1-012 | ⚠️ | P1 | Alto | restore.sh | No verification app reconnects to DB |
+| P1-017 | ⚠️ | P1 | Medio | healthcheck.sh | python3 dependency without fallback |
+| P1-018 | ⚠️ | P1 | Medio | healthcheck.sh | ALERT_WEBHOOK curl no --max-time |
+| P1-023 | ⚠️ | P1 | Medio | monitor-setup.sh | No verify docker-compose.monitoring.yml exists |
+| P1-024 | ⚠️ | P1 | Medio | monitor-setup.sh | python3 dependency without fallback |
+| P1-025 | ⚠️ | P1 | Medio | monitor-setup.sh | AlertManager health not checked |
+| P1-028 | ⚠️ | P1 | Medio | pre-deploy-check.sh | curl ifconfig.me leaks IP, no --max-time |
+| P1-029 | ⚠️ | P1 | Medio | pre-deploy-check.sh | docker pull slow during pre-deploy |
+| P1-032 | ⚠️ | P1 | Medio | validate-postgres-redis.sh | python3 dependency without fallback |
+| P1-033 | ⚠️ | P1 | Medio | validate-postgres-redis.sh | Assumes curl in notifications container |
+| P1-034 | ⚠️ | P1 | Medio | validate-postgres-redis.sh | No --max-time on curl |
+| P1-037 | ⚠️ | P1 | Medio | smoke-test.sh | No exit code on failure |
+| P1-038 | ⚠️ | P1 | Medio | smoke-test.sh | curl commands without --max-time |
+| P1-039 | ⚠️ | P1 | Bajo | smoke-test.sh | /tmp/smoke.txt predictable path |
+| P1-042 | ⚠️ | P1 | Medio | backup-db.sh | Sed DATABASE_URL parsing fails on special chars |
+| P1-043 | ⚠️ | P1 | Medio | backup-uploads.sh | Partially duplicates backup.sh |
+| P1-044 | ⚠️ | P1 | Medio | backup-uploads.sh | No local backup, S3-only |
+| P1-046 | ⚠️ | P1 | Medio | restore-db.sh | Suggests require() in ESM project |
+| P1-047 | ⚠️ | P1 | Medio | .zscripts/build.sh | BUILD_ID may be undefined |
+| P1-048 | ⚠️ | P1 | Medio | .zscripts/build.sh | No pipefail |
+| P1-049 | ⚠️ | P1 | Medio | .zscripts/build.sh | exec 2>&1 defeats error attribution |
+| P1-050 | ⚠️ | P1 | Bajo | .zscripts/build.sh | No trap to clean /tmp/build_* |
+| P1-056 | ⚠️ | P1 | Medio | .zscripts/start.sh | No pipefail |
+| P1-057 | ⚠️ | P1 | Medio | .zscripts/start.sh | Hardcoded /app/db/custom.db |
+| P1-059 | ⚠️ | P1 | Bajo | prometheus.yml | TSDB retention only in compose, not YAML |
+| P1-062 | ⚠️ | P1 | Alto | alerts.yml | HighMemoryUsage warning, should be critical |
+| P1-063 | ⚠️ | P1 | Alto | alerts.yml | No SSL cert expiry alert |
+| P1-064 | ⚠️ | P1 | Alto | alerts.yml | No queue backlog alert |
+| P1-065 | ⚠️ | P1 | Medio | alerts.yml | No container restart loop alert |
+| P1-067 | ⚠️ | P1 | Alto | alertmanager.yml | No escalation policy |
+| P1-068 | ⚠️ | P1 | Medio | alertmanager.yml | No email fallback receiver |
+| P1-070 | ⚠️ | P1 | Medio | load-test.js | Hardcoded TEST_PASSWORD='CHANGE_ME' |
+| P1-071 | ⚠️ | P1 | Medio | load-test.js | Hardcoded serviceId='test-service-id' |
+| P1-076 | ⚠️ | P1 | Alto | (cross) | No off-site backup by default |
+| P1-077 | ⚠️ | P1 | Medio | (cross) | No backup retention policy documented |
+| P1-078 | ⚠️ | P1 | Alto | (missing) | No DR documentation / runbook |
+| P1-079 | ⚠️ | P1 | Alto | (cross) | No backup monitoring |
+| P2-004 | ℹ️ | P2 | Medio | deploy.sh | curl commands lack --max-time/--retry |
+| P2-005 | ℹ️ | P2 | Bajo | deploy.sh | docker compose build output truncated |
+| P2-006 | ℹ️ | P2 | Bajo | deploy.sh | Hardcoded service names |
+| P2-007 | ℹ️ | P2 | Bajo | deploy.sh | Placeholder DOMAIN in banner |
+| P2-008 | ℹ️ | P2 | Bajo | backup.sh | find -delete with no logging |
+| P2-009 | ℹ️ | P2 | Bajo | backup.sh | No backup manifest / checksum file |
+| P2-010 | ℹ️ | P2 | Medio | backup.sh | Config backup includes .env (sensitive) |
+| P2-013 | ℹ️ | P2 | Bajo | restore.sh | Hardcoded sleep 10 |
+| P2-014 | ℹ️ | P2 | Bajo | restore.sh | Relative path ./scripts/backup.sh |
+| P2-015 | ℹ️ | P2 | Bajo | restore.sh | 2>/dev/null hides docker compose errors |
+| P2-019 | ℹ️ | P2 | Bajo | healthcheck.sh | Redis memory threshold hardcoded |
+| P2-020 | ℹ️ | P2 | Medio | healthcheck.sh | Disk usage checks / only |
+| P2-021 | ℹ️ | P2 | Bajo | healthcheck.sh | Watch mode never exits |
+| P2-022 | ℹ️ | P2 | Bajo | healthcheck.sh | Memory check wrong column |
+| P2-026 | ℹ️ | P2 | Bajo | monitor-setup.sh | No Sentry DSN setup mentioned |
+| P2-027 | ℹ️ | P2 | Medio | monitor-setup.sh | curl commands lack --max-time |
+| P2-030 | ℹ️ | P2 | Bajo | pre-deploy-check.sh | No trap for cleanup |
+| P2-031 | ℹ️ | P2 | Bajo | pre-deploy-check.sh | UFW check best-effort |
+| P2-035 | ℹ️ | P2 | Bajo | validate-postgres-redis.sh | Service count threshold hardcoded |
+| P2-036 | ℹ️ | P2 | Medio | validate-postgres-redis.sh | No exit code on failure |
+| P2-040 | ℹ️ | P2 | Medio | smoke-test.sh | python3 for JSON parsing |
+| P2-041 | ℹ️ | P2 | Bajo | smoke-test.sh | No trap cleanup for cookie jar |
+| P2-045 | ℹ️ | P2 | Bajo | backup-uploads.sh | aws s3 sync no --max-time |
+| P2-051 | ℹ️ | P2 | Bajo | .zscripts/build.sh | Chinese-only comments |
+| P2-052 | ℹ️ | P2 | Medio | .zscripts/build.sh | Obsolete for Docker architecture |
+| P2-053 | ℹ️ | P2 | Bajo | .zscripts/dev.sh | Mini-services logs in .zscripts/ |
+| P2-054 | ℹ️ | P2 | Bajo | .zscripts/dev.sh | Mini-services not cleaned up on exit |
+| P2-060 | ℹ️ | P2 | Bajo | prometheus.yml | No external_labels |
+| P2-061 | ℹ️ | P2 | Medio | prometheus.yml | No basic_auth on scrapes |
+| P2-066 | ℹ️ | P2 | Bajo | alerts.yml | No inhibit_rules |
+| P2-069 | ℹ️ | P2 | Bajo | alertmanager.yml | send_resolved:true noisy |
+| P2-073 | ℹ️ | P2 | Bajo | load-test.js | export let options (should be const) |
+| P2-074 | ℹ️ | P2 | Medio | load-test.js | No thresholds for cache hit rate |
+| P2-075 | ℹ️ | P2 | Bajo | load-test.js | handleSummary writes to relative path |
+| P2-080 | ℹ️ | P2 | Bajo | (cross) | No log rotation for backup/health logs |
+
+**Total: 22 P0 + 41 P1 + 33 P2 = 96 findings**
+
+---
+
+### Recommendations — Priority Order
+
+**Immediate (before any production traffic):**
+1. **Fix `backup.sh` P0-001, P0-002** — define `warn`, use `pg_restore --list` for verification.
+2. **Fix `restore.sh` P0-009** — terminate active connections before DROP DATABASE.
+3. **Fix `monitor-setup.sh` P0-010, P0-011** — require non-default Grafana password, don't print it.
+4. **Fix `alertmanager.yml` P0-022** — replace placeholder webhook with env var.
+5. **Enable `prometheus.yml` P0-018** — add postgres-exporter and redis-exporter.
+6. **Add `alerts.yml` P0-019, P0-020, P0-021** — PostgresDown, RedisDown, BackupFailure alerts.
+7. **Delete `backup-db.sh`, `restore-db.sh`** (P0-013, P0-014).
+8. **Fix `pre-deploy-check.sh` P0-012** — replace `df -g` with `df --output=avail -BG`.
+
+**Within 1 week:**
+9. Add `trap` cleanup to `deploy.sh`, `backup.sh`, `restore.sh`.
+10. Replace all `python3 -c` with `jq` (or add `command -v python3` guards).
+11. Add `--max-time 5` to all curl calls.
+12. Implement backup encryption (P1-005) and backup failure alerting (P1-006).
+13. Move `.zscripts/build.sh` and `.zscripts/start.sh` to `.zscripts/.deprecated/`.
+14. Add `exit 1` on failure to `smoke-test.sh` and `validate-postgres-redis.sh`.
+15. Create `docs/dr.md` with RTO/RPO and restore runbook (P0-024, P1-078).
+
+**Within 1 month:**
+16. Implement PITR via pgBackRest or wal-g (P1-007).
+17. Create `scripts/dr-drill.sh` and schedule monthly (P0-023).
+18. Add PagerDuty receiver to alertmanager.yml (P1-067).
+19. Implement GFS backup retention (P1-077).
+20. Add SSL cert expiry alert via blackbox_exporter (P1-063).
+
+---
+
+### Production Certification Verdict
+
+**❌ BLOCKED — NOT APPROVED FOR PRODUCTION**
+
+22 P0 issues must be resolved before production certification can be granted. The most critical:
+- Backup script will crash on any low-table-count DB (P0-001)
+- Backup verification is non-functional (P0-002)
+- Restore can cause total data loss if active connections exist (P0-009)
+- Grafana ships with `admin/admin` credentials (P0-010)
+- AlertManager cannot deliver any alerts (P0-022)
+- No direct PostgreSQL/Redis monitoring (P0-018, P0-019, P0-020)
+- No DR drill, no RTO/RPO, no DR documentation (P0-023, P0-024)
+
+**Estimated remediation effort:** 3-5 engineer-days for P0s, 2-3 weeks for P1s.
+
+**Next audit:** 30 days after P0 remediation, including a live DR drill test.
+
+— End of AUDIT-D report —
