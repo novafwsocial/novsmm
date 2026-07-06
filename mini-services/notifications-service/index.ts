@@ -1,40 +1,48 @@
 /**
- * NOVSMM Notifications Mini-Service (v2 — DB-backed + ambient)
+ * NOVSMM Notifications Mini-Service (v3 — Secure + Redis-adapter)
  * ------------------------------------------------------------------
  * Real-time notifications push service for the NOVSMM SaaS dashboard.
  *
- * - Transport: Socket.IO
- * - Port: 3003 (hardcoded — required by Caddy gateway routing)
- * - Path: "/" (required by Caddy gateway; do NOT change)
- * - CORS: "*" (dashboard clients may come from any origin)
+ * SECURITY FIXES (Phase 3):
+ * - Per-user rooms: notifications are sent to `io.to(userId).emit()` instead
+ *   of `io.emit()` — users no longer see each other's notifications.
+ * - JWT auth on WebSocket connection: clients must send a valid NextAuth JWT
+ *   in the `auth.token` handshake field. The socket is joined to a room
+ *   named `user:{userId}` on connection.
+ * - /broadcast auth: requires `NOTIFICATIONS_SERVICE_SECRET` bearer token.
+ *   Only the Next.js API routes (which have the secret) can push notifications.
+ * - /healthz endpoint for k8s/docker health checks.
+ * - @socket.io/redis-adapter for multi-instance scaling (when Redis available).
+ * - Removed ambient spam loop (was broadcasting fake system notifications
+ *   every 8-15s to ALL clients — pure noise + data leak).
  *
- * Two notification sources:
- *   1. Ambient broadcast loop — emits ONLY `type: "system"` notifications
- *      every 8–15s so the dashboard always feels alive. (Real order/sale/
- *      marketplace/etc. notifications now come from DB events via /broadcast.)
- *   2. HTTP `POST /broadcast` endpoint — called by the Next.js API routes
- *      when a real Notification row is created. The posted body is pushed
- *      immediately to all connected clients via `io.emit('notification', …)`.
+ * Transport: Socket.IO
+ * Port: REDIS_PORT env or 3003 (hardcoded fallback for Caddy gateway)
+ * Path: "/" (required by gateway; do NOT change)
  *
  * Frontend connects with:
- *   io("/?XTransformPort=3003", { path: "/" })
- *
- * The Caddy gateway inspects the `XTransformPort` query param and forwards
- * the request to the matching upstream (3003 here). We must NOT listen with
- * a custom sub-path because the gateway already strips nothing.
- *
- * IMPLEMENTATION NOTE on routing POST /broadcast alongside Socket.IO:
- *   Socket.IO with `path: '/'` would intercept EVERY HTTP request (because
- *   every URL starts with '/') and reply with a 400 "Transport unknown".
- *   To let our POST /broadcast endpoint through, we capture Socket.IO's
- *   `request` listener after it attaches, remove it, and install our own
- *   dispatcher that intercepts POST /broadcast first and otherwise delegates
- *   to the captured Socket.IO listener. The WebSocket `upgrade` event is
- *   untouched.
+ *   io("/?XTransformPort=3003", {
+ *     path: "/",
+ *     auth: { token: "<nextauth-jwt>" }  // NEW: required for auth
+ *   })
  */
 
 import { createServer, IncomingMessage, ServerResponse } from 'http'
 import { Server } from 'socket.io'
+import { createAdapter } from '@socket.io/redis-adapter'
+import Redis from 'ioredis'
+import crypto from 'crypto'
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+const PORT = parseInt(process.env.NOTIFICATIONS_SERVICE_PORT || '3003', 10)
+const AUTH_SECRET = process.env.NOTIFICATIONS_SERVICE_SECRET || ''
+const REDIS_URL = process.env.REDIS_URL || ''
+
+// Hard cap on /broadcast body size
+const MAX_BROADCAST_BODY_BYTES = 1_000_000
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,172 +55,82 @@ interface Notification {
   type: string
   title: string
   message: string
-  amount?: number // USD, only for money-related notifications
-  timestamp: string // ISO 8601
+  amount?: number
+  timestamp: string
   severity: Severity
-  userId?: string // optional — for future per-user targeting
+  userId?: string
 }
 
 // ---------------------------------------------------------------------------
-// Config (hardcoded per task spec — NOT from env)
+// JWT verification (lightweight — no external deps)
 // ---------------------------------------------------------------------------
 
-const PORT = 3003
+/**
+ * Verify a NextAuth JWT token and extract the user ID.
+ * NextAuth v4 uses HS256 to sign JWTs with NEXTAUTH_SECRET.
+ * We decode + verify the signature using crypto.
+ *
+ * Returns the userId if valid, null otherwise.
+ */
+function verifyJwt(token: string): string | null {
+  try {
+    const secret = process.env.NEXTAUTH_SECRET
+    if (!secret) {
+      console.error('[notifications] NEXTAUTH_SECRET not set — cannot verify JWTs')
+      return null
+    }
 
-// Ambient broadcast interval range (ms). Randomized per-tick so the feed
-// feels alive. Only `system` notifications are emitted from this loop now.
-const MIN_INTERVAL_MS = 8_000
-const MAX_INTERVAL_MS = 15_000
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
 
-// Hard cap on /broadcast body size to keep the endpoint snappy & safe.
-const MAX_BROADCAST_BODY_BYTES = 1_000_000
+    const [headerB64, payloadB64, signatureB64] = parts
+    const signedData = `${headerB64}.${payloadB64}`
 
-// ---------------------------------------------------------------------------
-// Ambient system template pool (~8 distinct entries)
-// ---------------------------------------------------------------------------
-// Real order/sale/marketplace/etc. notifications are no longer emitted from
-// the ambient loop — they come from the DB via POST /broadcast. The ambient
-// loop is reserved for "system" notifications that give the dashboard a
-// subtle sense of liveness (uptime, maintenance, security, backups, etc.).
-// ---------------------------------------------------------------------------
+    // Verify signature (HS256)
+    const expectedSig = crypto
+      .createHmac('sha256', secret)
+      .update(signedData)
+      .digest('base64url')
 
-interface SystemTemplate {
-  title: string
-  message: string
-  severity: Severity
+    if (expectedSig !== signatureB64) {
+      console.error('[notifications] JWT signature mismatch')
+      return null
+    }
+
+    // Decode payload
+    const payload = JSON.parse(
+      Buffer.from(payloadB64, 'base64url').toString('utf8')
+    )
+
+    // Check expiry
+    if (payload.exp && Date.now() >= payload.exp * 1000) {
+      console.error('[notifications] JWT expired')
+      return null
+    }
+
+    return payload.id || payload.sub || null
+  } catch (e) {
+    console.error('[notifications] JWT verification failed:', e)
+    return null
+  }
 }
-
-const SYSTEM_TEMPLATES: SystemTemplate[] = [
-  {
-    title: 'All systems operational',
-    message: 'All NOVSMM services are running nominally (uptime 99.98%)',
-    severity: 'info',
-  },
-  {
-    title: 'Scheduled maintenance',
-    message: 'Maintenance window scheduled tonight 02:00–02:30 UTC',
-    severity: 'warning',
-  },
-  {
-    title: 'Security advisory',
-    message: 'New sign-in from Chrome on macOS — review your active sessions',
-    severity: 'info',
-  },
-  {
-    title: 'API rate limit reset',
-    message: 'Your hourly API rate limit has been reset',
-    severity: 'info',
-  },
-  {
-    title: 'Daily backup completed',
-    message: 'Your account data backup completed successfully',
-    severity: 'success',
-  },
-  {
-    title: 'New feature available',
-    message: 'Bulk order import is now available on the Orders page',
-    severity: 'info',
-  },
-  {
-    title: 'Compliance reminder',
-    message: 'Please review the updated Terms of Service at your earliest convenience',
-    severity: 'warning',
-  },
-  {
-    title: 'Performance update',
-    message: 'Avg order processing time improved to 1.2s (–18% this week)',
-    severity: 'success',
-  },
-]
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-const uuid = (): string =>
-  // Lightweight RFC-4122-ish v4 (good enough for ephemeral notifications)
-  'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-    const r = (Math.random() * 16) | 0
-    const v = c === 'x' ? r : (r & 0x3) | 0x8
-    return v.toString(16)
+const sendJson = (
+  res: ServerResponse,
+  status: number,
+  payload: unknown
+): void => {
+  const body = JSON.stringify(payload)
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': Buffer.byteLength(body),
   })
-
-const pickSystemTemplate = (): SystemTemplate =>
-  SYSTEM_TEMPLATES[Math.floor(Math.random() * SYSTEM_TEMPLATES.length)]
-
-const buildSystemNotification = (): Notification => {
-  const t = pickSystemTemplate()
-  return {
-    id: uuid(),
-    type: 'system',
-    title: t.title,
-    message: t.message,
-    timestamp: new Date().toISOString(),
-    severity: t.severity,
-  }
+  res.end(body)
 }
-
-const nextDelay = (): number =>
-  Math.floor(Math.random() * (MAX_INTERVAL_MS - MIN_INTERVAL_MS + 1)) +
-  MIN_INTERVAL_MS
-
-const logEmit = (n: Notification): void => {
-  const amountStr =
-    typeof n.amount === 'number' ? ` $${n.amount.toFixed(2)}` : ''
-  console.log(
-    `[notifications] emit ${n.type} ${n.title}${amountStr} — ${n.message}`,
-  )
-}
-
-// ---------------------------------------------------------------------------
-// HTTP + Socket.IO server
-// ---------------------------------------------------------------------------
-
-const httpServer = createServer()
-
-const io = new Server(httpServer, {
-  // DO NOT change the path — Caddy uses it to forward to this port.
-  path: '/',
-  cors: {
-    origin: '*',
-    methods: ['GET', 'POST'],
-  },
-  pingTimeout: 60_000,
-  pingInterval: 25_000,
-})
-
-// ---------------------------------------------------------------------------
-// Routing: intercept POST /broadcast BEFORE Socket.IO sees it.
-// ---------------------------------------------------------------------------
-// With path:'/', Socket.IO's engine.io layer matches EVERY HTTP request, so
-// we install our own request listener first (by capturing & replacing the
-// one Socket.IO just registered) and delegate only non-/broadcast traffic.
-// ---------------------------------------------------------------------------
-
-const socketIoRequestListeners = httpServer.listeners('request').slice(0)
-httpServer.removeAllListeners('request')
-
-httpServer.on('request', (req, res) => {
-  if (req.method === 'POST' && req.url?.split('?')[0] === '/broadcast') {
-    void handleBroadcast(req, res)
-    return
-  }
-  // Delegate everything else (Engine.IO polling, handshake, etc.) to Socket.IO.
-  for (const listener of socketIoRequestListeners) {
-    listener.call(httpServer, req, res)
-  }
-})
-
-// ---------------------------------------------------------------------------
-// POST /broadcast — used by Next.js API routes to push real DB notifications
-// ---------------------------------------------------------------------------
-// Body: { type, title, message, amount?, severity, userId? }
-//   - type, title, message, severity are required
-//   - amount (number) and userId (string) are optional
-// We add id + timestamp if the caller didn't supply them, then emit to ALL
-// connected clients. (Per-user targeting is a future enhancement; for now
-// we always broadcast to everyone.)
-// ---------------------------------------------------------------------------
 
 const readJsonBody = (req: IncomingMessage): Promise<string> =>
   new Promise((resolve, reject) => {
@@ -234,23 +152,167 @@ const readJsonBody = (req: IncomingMessage): Promise<string> =>
     req.on('error', reject)
   })
 
-const sendJson = (
-  res: ServerResponse,
-  status: number,
-  payload: unknown,
-): void => {
-  const body = JSON.stringify(payload)
-  res.writeHead(status, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Content-Length': Buffer.byteLength(body),
-  })
-  res.end(body)
+// ---------------------------------------------------------------------------
+// HTTP + Socket.IO server
+// ---------------------------------------------------------------------------
+
+const httpServer = createServer()
+const io = new Server(httpServer, {
+  path: '/',
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST'],
+  },
+  pingTimeout: 60_000,
+  pingInterval: 25_000,
+  // Require auth token on connection
+  allowRequest: (req, fn) => {
+    // Allow Engine.IO polling without auth (handshake needs to complete first)
+    // Actual auth check happens in io.use() middleware below
+    fn(null, true)
+  },
+})
+
+// ---------------------------------------------------------------------------
+// Redis adapter (multi-instance support) — graceful degradation
+// ---------------------------------------------------------------------------
+
+if (REDIS_URL) {
+  try {
+    const pubClient = new Redis(REDIS_URL, { maxRetriesPerRequest: 2 })
+    const subClient = pubClient.duplicate()
+    io.adapter(createAdapter(pubClient, subClient))
+    console.log('[notifications] Redis adapter enabled — multi-instance ready')
+
+    pubClient.on('error', (e) =>
+      console.error('[notifications] Redis pub error:', e.message)
+    )
+    subClient.on('error', (e) =>
+      console.error('[notifications] Redis sub error:', e.message)
+    )
+  } catch (e) {
+    console.error(
+      '[notifications] Redis adapter failed — running single-instance:',
+      e
+    )
+  }
+} else {
+  console.log(
+    '[notifications] No REDIS_URL — running single-instance mode'
+  )
 }
+
+// ---------------------------------------------------------------------------
+// Socket.IO auth middleware — verify JWT on every connection
+// ---------------------------------------------------------------------------
+
+io.use((socket, next) => {
+  const token = (socket.handshake.auth as any)?.token
+  if (!token) {
+    return next(new Error('Authentication required — no token provided'))
+  }
+
+  const userId = verifyJwt(token)
+  if (!userId) {
+    return next(new Error('Invalid or expired token'))
+  }
+
+  // Attach userId to socket for later use
+  ;(socket as any).userId = userId
+  next()
+})
+
+// ---------------------------------------------------------------------------
+// Connection lifecycle — join user-specific room
+// ---------------------------------------------------------------------------
+
+io.on('connection', (socket) => {
+  const userId = (socket as any).userId as string
+  console.log(
+    `[notifications] client connected: ${socket.id} (user: ${userId})`
+  )
+
+  // Join the user's personal room — notifications are emitted to this room
+  socket.join(`user:${userId}`)
+
+  socket.emit('connected', {
+    ok: true,
+    time: new Date().toISOString(),
+    userId,
+  })
+
+  socket.on('disconnect', (reason) => {
+    console.log(
+      `[notifications] client disconnected: ${socket.id} (${reason})`
+    )
+  })
+
+  socket.on('error', (err) => {
+    console.error(`[notifications] socket error (${socket.id}):`, err)
+  })
+})
+
+// ---------------------------------------------------------------------------
+// HTTP routing: /broadcast + /healthz
+// ---------------------------------------------------------------------------
+
+const socketIoRequestListeners = httpServer.listeners('request').slice(0)
+httpServer.removeAllListeners('request')
+
+httpServer.on('request', (req, res) => {
+  const url = req.url?.split('?')[0]
+
+  if (req.method === 'POST' && url === '/broadcast') {
+    void handleBroadcast(req, res)
+    return
+  }
+
+  if (req.method === 'GET' && url === '/healthz') {
+    sendJson(res, 200, {
+      ok: true,
+      uptime: process.uptime(),
+      connections: io.engine.clientsCount,
+      redis: REDIS_URL ? 'connected' : 'disabled',
+    })
+    return
+  }
+
+  // Delegate everything else to Socket.IO
+  for (const listener of socketIoRequestListeners) {
+    listener.call(httpServer, req, res)
+  }
+})
+
+// ---------------------------------------------------------------------------
+// POST /broadcast — auth-protected notification push
+// ---------------------------------------------------------------------------
 
 async function handleBroadcast(
   req: IncomingMessage,
-  res: ServerResponse,
+  res: ServerResponse
 ): Promise<void> {
+  // ── Auth check — require bearer token ──
+  if (!AUTH_SECRET) {
+    sendJson(res, 500, {
+      ok: false,
+      error: 'NOTIFICATIONS_SERVICE_SECRET not configured',
+    })
+    return
+  }
+
+  const authHeader = req.headers.authorization
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    sendJson(res, 401, { ok: false, error: 'Missing bearer token' })
+    return
+  }
+
+  const token = authHeader.slice(7)
+  if (token !== AUTH_SECRET) {
+    sendJson(res, 403, { ok: false, error: 'Invalid service token' })
+    return
+  }
+
+  // ── Parse body ──
   let raw: string
   try {
     raw = await readJsonBody(req)
@@ -261,7 +323,7 @@ async function handleBroadcast(
 
   let body: Record<string, unknown>
   try {
-    body = JSON.parse(raw) as Record<string, unknown>
+    body = JSON.parse(raw)
     if (!body || typeof body !== 'object') throw new Error('not an object')
   } catch {
     sendJson(res, 400, { ok: false, error: 'Invalid JSON body' })
@@ -277,76 +339,46 @@ async function handleBroadcast(
   ) {
     sendJson(res, 422, {
       ok: false,
-      error:
-        'Missing or invalid fields. Required: type, title, message, severity (all strings).',
+      error: 'Missing fields: type, title, message, severity required',
     })
     return
   }
 
-  const amount = body.amount
-  const userId = body.userId
+  const userId = typeof body.userId === 'string' ? body.userId : undefined
+  const amount = typeof body.amount === 'number' ? body.amount : undefined
   const timestamp =
     typeof body.timestamp === 'string'
       ? body.timestamp
       : new Date().toISOString()
 
   const payload: Notification = {
-    id: typeof body.id === 'string' ? (body.id as string) : uuid(),
+    id: typeof body.id === 'string' ? (body.id as string) : crypto.randomUUID(),
     type,
     title,
     message,
     timestamp,
     severity: severity as Severity,
-    ...(typeof amount === 'number' && Number.isFinite(amount)
-      ? { amount }
-      : {}),
-    ...(typeof userId === 'string' && userId.length > 0 ? { userId } : {}),
+    ...(amount !== undefined ? { amount } : {}),
+    ...(userId ? { userId } : {}),
   }
 
-  io.emit('notification', payload)
-  logEmit(payload)
+  // ── Per-user delivery (NOT global broadcast) ──
+  if (userId) {
+    // Send only to this user's room
+    io.to(`user:${userId}`).emit('notification', payload)
+    console.log(
+      `[notifications] delivered to user:${userId} — ${payload.type}: ${payload.title}`
+    )
+  } else {
+    // No userId — send to ALL connected clients (system-wide broadcast)
+    io.emit('notification', payload)
+    console.log(
+      `[notifications] broadcast to all — ${payload.type}: ${payload.title}`
+    )
+  }
 
   sendJson(res, 200, { ok: true, id: payload.id })
 }
-
-// ---------------------------------------------------------------------------
-// Connection lifecycle
-// ---------------------------------------------------------------------------
-
-io.on('connection', (socket) => {
-  console.log(`[notifications] client connected: ${socket.id}`)
-
-  socket.emit('connected', {
-    ok: true,
-    time: new Date().toISOString(),
-  })
-
-  socket.on('disconnect', (reason) => {
-    console.log(
-      `[notifications] client disconnected: ${socket.id} (${reason})`,
-    )
-  })
-
-  socket.on('error', (err) => {
-    console.error(`[notifications] socket error (${socket.id}):`, err)
-  })
-})
-
-// ---------------------------------------------------------------------------
-// Ambient broadcast loop — system-only, randomized 8–15s interval
-// ---------------------------------------------------------------------------
-
-let timer: ReturnType<typeof setTimeout>
-
-const broadcastNext = () => {
-  const n = buildSystemNotification()
-  io.emit('notification', n)
-  logEmit(n)
-  timer = setTimeout(broadcastNext, nextDelay())
-}
-
-// Kick off the loop shortly after boot so the welcome handshake can land first.
-timer = setTimeout(broadcastNext, 3_000)
 
 // ---------------------------------------------------------------------------
 // Boot
@@ -354,12 +386,13 @@ timer = setTimeout(broadcastNext, 3_000)
 
 httpServer.listen(PORT, () => {
   console.log(`[notifications] server running on port ${PORT}`)
-  console.log(
-    `[notifications] ambient system broadcast every ${MIN_INTERVAL_MS / 1000}–${MAX_INTERVAL_MS / 1000}s across ${SYSTEM_TEMPLATES.length} templates`,
-  )
-  console.log(
-    '[notifications] POST /broadcast available for DB-pushed notifications',
-  )
+  console.log(`[notifications] JWT auth: enabled`)
+  console.log(`[notifications] /broadcast auth: ${AUTH_SECRET ? 'enabled' : 'DISABLED (set NOTIFICATIONS_SERVICE_SECRET!)'}`)
+  console.log(`[notifications] /healthz: available`)
+  console.log(`[notifications] per-user rooms: enabled (no data leak)`)
+  if (REDIS_URL) {
+    console.log(`[notifications] Redis adapter: enabled (multi-instance)`)
+  }
 })
 
 // ---------------------------------------------------------------------------
@@ -368,7 +401,6 @@ httpServer.listen(PORT, () => {
 
 const shutdown = (signal: string) => {
   console.log(`[notifications] received ${signal}, shutting down...`)
-  clearTimeout(timer)
   io.close(() => {
     httpServer.close(() => {
       console.log('[notifications] server closed')

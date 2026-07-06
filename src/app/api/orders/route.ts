@@ -5,7 +5,7 @@ import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createOrderSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { nextPublicId } from "@/lib/ids";
-import { simulateFulfillment } from "@/lib/orders";
+import { enqueueJob } from "@/lib/queues";
 
 /**
  * Extended create-order schema with optional drip-feed configuration.
@@ -357,7 +357,11 @@ export async function POST(req: NextRequest) {
     // advances them chunk-by-chunk.
     // (In production, a background worker would poll the provider API)
     if (!dripConfig) {
-      simulateFulfillment(order.id, userId).catch((e) =>
+      // Enqueue fulfillment as a background job. When Redis is available,
+      // BullMQ processes it via the worker; otherwise enqueueJob() falls
+      // back to in-process setImmediate, which runs simulateFulfillment
+      // with the same setTimeout chain as before (sandbox/dev mode).
+      enqueueJob("order.fulfill", { orderId: order.id, userId }).catch((e) =>
         console.error("[fulfillment] error:", e)
       );
     }

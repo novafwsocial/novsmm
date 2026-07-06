@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { useSession } from "next-auth/react";
 import {
   ShoppingCart,
   DollarSign,
@@ -38,34 +39,51 @@ const TYPE_META: Record<NotifType, { icon: any; cls: string }> = {
 
 export function DashboardNotifications() {
   const { data, isLoading } = useNotifications();
+  const { data: session } = useSession();
   const [connected, setConnected] = useState(false);
   const [filter, setFilter] = useState<NotifType | "all">("all");
   const socketRef = useRef<Socket | null>(null);
   const qc = useQueryClient();
 
   useEffect(() => {
-    const socket = io("/?XTransformPort=3003", {
-      transports: ["websocket", "polling"],
-      reconnection: true,
-      reconnectionAttempts: 10,
-    });
-    socketRef.current = socket;
+    // Don't connect until we have a session
+    if (!session) return;
 
-    socket.on("connect", () => setConnected(true));
-    socket.on("disconnect", () => setConnected(false));
-    socket.on("connected", () => setConnected(true));
-    // When a WS notification arrives, invalidate the query to refetch from DB
-    socket.on("notification", () => {
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["wallet"] });
-      qc.invalidateQueries({ queryKey: ["orders"] });
-    });
+    let socket: Socket;
+
+    const connectSocket = () => {
+      // NextAuth v4 with JWT strategy stores the token in an httpOnly cookie.
+      // We can't access it from client JS. The notifications service will
+      // allow the connection but per-user room join requires a JWT.
+      // Phase 5 will add a /api/me/ws-token endpoint that returns a short-lived
+      // WS-specific token we can pass here.
+      // For now, connect without auth — the service falls back to global broadcast.
+      socket = io("/?XTransformPort=3003", {
+        transports: ["websocket", "polling"],
+        reconnection: true,
+        reconnectionAttempts: 10,
+      });
+      socketRef.current = socket;
+
+      socket.on("connect", () => setConnected(true));
+      socket.on("disconnect", () => setConnected(false));
+      socket.on("connected", () => setConnected(true));
+      socket.on("notification", () => {
+        qc.invalidateQueries({ queryKey: ["notifications"] });
+        qc.invalidateQueries({ queryKey: ["dashboard"] });
+        qc.invalidateQueries({ queryKey: ["wallet"] });
+        qc.invalidateQueries({ queryKey: ["orders"] });
+      });
+    };
+
+    connectSocket();
 
     return () => {
-      socket.disconnect();
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+      }
     };
-  }, [qc]);
+  }, [qc, session]);
 
   const items = data?.notifications ?? [];
   const visible = filter === "all" ? items : items.filter((i: any) => i.type === filter);

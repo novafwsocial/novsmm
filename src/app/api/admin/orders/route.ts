@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { nextPublicId } from "@/lib/ids";
-import { simulateFulfillment } from "@/lib/orders";
+import { enqueueJob } from "@/lib/queues";
 import { z } from "zod";
 
 const manualOrderSchema = z.object({
@@ -203,8 +203,9 @@ export async function POST(req: NextRequest) {
     total: totalPrice,
   });
 
-  // Simulate fulfillment
-  simulateFulfillment(order.id, userId).catch(() => {});
+  // Enqueue fulfillment as a background job (worker via BullMQ, or
+  // in-process setImmediate fallback when Redis is not available).
+  enqueueJob("order.fulfill", { orderId: order.id, userId }).catch(() => {});
 
   return apiOk({ order, message: "Order created manually" }, 201);
 }

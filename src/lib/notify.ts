@@ -113,14 +113,22 @@ export async function sendEmail(opts: {
  * Broadcast a notification to the WebSocket mini-service for real-time push.
  * Server-side fetch uses localhost:3003 directly (XTransformPort is browser-only).
  *
+ * SECURITY: Includes NOTIFICATIONS_SERVICE_SECRET bearer token for auth.
+ * The notifications service rejects unauthenticated /broadcast calls.
+ *
  * Exported so admin broadcast can push to WS without creating duplicate DB rows.
  */
 export async function broadcastToWs(payload: any): Promise<void> {
   const WS_SERVICE_URL =
     process.env.WS_SERVICE_URL ?? "http://localhost:3003/broadcast";
+  const serviceSecret = process.env.NOTIFICATIONS_SERVICE_SECRET;
+
   await fetch(WS_SERVICE_URL, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      ...(serviceSecret ? { Authorization: `Bearer ${serviceSecret}` } : {}),
+    },
     body: JSON.stringify(payload),
     signal: AbortSignal.timeout(3000), // don't hang if service is down
   });

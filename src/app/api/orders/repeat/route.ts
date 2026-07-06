@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { nextPublicId } from "@/lib/ids";
-import { simulateFulfillment } from "@/lib/orders";
+import { enqueueJob } from "@/lib/queues";
 
 /**
  * POST /api/orders/repeat — re-order from a previous order.
@@ -153,8 +153,9 @@ export async function POST(req: NextRequest) {
       sendEmail: true,
     });
 
-    // Simulate fulfillment
-    simulateFulfillment(order.id, userId).catch((e) =>
+    // Enqueue fulfillment as a background job (worker via BullMQ, or
+    // in-process setImmediate fallback when Redis is not available).
+    enqueueJob("order.fulfill", { orderId: order.id, userId }).catch((e) =>
       console.error("[fulfillment] error:", e)
     );
 

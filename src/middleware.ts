@@ -3,15 +3,22 @@ import { NextRequest, NextResponse } from "next/server";
 /**
  * NOVSMM Edge Middleware — rate limiting + security headers.
  *
- * In-memory rate limiter (for production, replace with Redis).
- * Limits per-IP on sensitive routes, with stricter limits on auth/payment.
+ * RATE LIMITING NOTE: The middleware runs on the Edge Runtime, which cannot
+ * use the `ioredis` package (Node.js APIs only). The middleware uses an
+ * in-memory rate limiter as a first line of defense. The Redis-backed rate
+ * limiter (src/lib/rate-limit.ts) is used by API routes and the auth system
+ * (which run on the Node.js runtime) for precise, cross-instance limiting.
+ *
+ * In production with multiple instances, each instance's middleware has its
+ * own in-memory limiter — this is acceptable because the per-instance limit
+ * is still enforced. The real cross-instance rate limiting happens at the
+ * API route level (via Redis) and at the gateway level (via Nginx in Phase 8).
  */
 
-// ── Rate limiter (in-memory, sliding window) ──
+// ── In-memory rate limiter (Edge Runtime compatible) ──
 type RateBucket = { count: number; resetAt: number };
 const rateLimitMap = new Map<string, RateBucket>();
 
-// Clean expired buckets every 60s to prevent memory leak
 let lastCleanup = Date.now();
 function cleanupExpired() {
   const now = Date.now();

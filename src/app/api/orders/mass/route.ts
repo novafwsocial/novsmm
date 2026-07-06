@@ -4,7 +4,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { nextPublicId } from "@/lib/ids";
-import { simulateFulfillment } from "@/lib/orders";
+import { enqueueJob } from "@/lib/queues";
 
 /**
  * POST /api/orders/mass — place multiple orders atomically.
@@ -277,9 +277,11 @@ export async function POST(req: NextRequest) {
       plan: user.plan,
     });
 
-    // Kick off fulfillment simulation for each order (fire-and-forget)
+    // Enqueue fulfillment as a background job for each order
+    // (fire-and-forget). With Redis, BullMQ dispatches to the worker;
+    // without Redis, enqueueJob() falls back to in-process setImmediate.
     createdOrders.forEach((order: any) => {
-      simulateFulfillment(order.id, userId).catch((e) =>
+      enqueueJob("order.fulfill", { orderId: order.id, userId }).catch((e) =>
         console.error("[fulfillment] error:", e),
       );
     });
