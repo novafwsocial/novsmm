@@ -1,0 +1,50 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Prometheus Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alert rules
+rule_files:
+  - alerts.yml
+
+# AlertManager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Scrape targets
+scrape_configs:
+  # NOVSMM app metrics
+  - job_name: "novsmm"
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ["web:3000"]
+        labels:
+          service: "novsmm-web"
+
+  # Node exporter (system metrics)
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: "node"
+
+  # PostgreSQL exporter (optional — install prometheus-postgres-exporter)
+  # - job_name: "postgres"
+  #   static_configs:
+  #     - targets: ["postgres-exporter:9187"]
+
+  # Redis exporter (optional — install prometheus-redis-exporter)
+  # - job_name: "redis"
+  #   static_configs:
+  #     - targets: ["redis-exporter:9121"]
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

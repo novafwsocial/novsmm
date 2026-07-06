@@ -1,0 +1,48 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# AlertManager Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+# Configura el webhook de Slack/Discord para recibir alertas.
+#
+# SLACK:
+#   1. Crea un webhook en https://api.slack.com/messaging/webhooks
+#   2. Reemplaza SLACK_WEBHOOK_URL abajo
+#
+# DISCORD:
+#   1. Server Settings → Integrations → Webhooks → New Webhook
+#   2. Reemplaza la URL en slack_configs.api_url
+# ═══════════════════════════════════════════════════════════════════════════
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "slack"
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 1h
+  routes:
+    - matchers:
+        - severity = "critical"
+      receiver: "slack-critical"
+      group_wait: 10s
+      repeat_interval: 30m
+
+receivers:
+  # Alertas no críticas
+  - name: "slack"
+    slack_configs:
+      - api_url: "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK"
+        channel: "#novsmm-alerts"
+        send_resolved: true
+        title: "⚠️ {{ .CommonLabels.alertname }}"
+        text: "{{ .CommonAnnotations.description }}"
+
+  # Alertas críticas (más frecuentes)
+  - name: "slack-critical"
+    slack_configs:
+      - api_url: "https://hooks.slack.com/services/REPLACE_WITH_YOUR_WEBHOOK"
+        channel: "#novsmm-alerts"
+        send_resolved: true
+        title: "🚨 CRITICAL: {{ .CommonLabels.alertname }}"
+        text: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}"

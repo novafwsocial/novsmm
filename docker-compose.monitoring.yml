@@ -1,0 +1,88 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# NOVSMM — Docker Compose Monitoring (Prometheus + Grafana + AlertManager)
+# ═══════════════════════════════════════════════════════════════════════════
+# Levanta Prometheus + Grafana + AlertManager para monitorear NOVSMM.
+#
+# USO:
+#   docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# ACCESO:
+#   Grafana:    http://localhost:3001 (admin / admin — ¡cambiar!)
+#   Prometheus: http://localhost:9090
+#   AlertManager: http://localhost:9093
+# ═══════════════════════════════════════════════════════════════════════════
+
+services:
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: novsmm-prometheus
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.console.libraries=/etc/prometheus/console_libraries'
+      - '--web.console.templates=/etc/prometheus/consoles'
+      - '--web.enable-lifecycle'
+    ports:
+      - "127.0.0.1:9090:9090"
+    networks:
+      - novsmm-network
+
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: novsmm-alertmanager
+    restart: unless-stopped
+    volumes:
+      - ./monitoring/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+    ports:
+      - "127.0.0.1:9093:9093"
+    networks:
+      - novsmm-network
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: novsmm-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "127.0.0.1:3001:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - novsmm-network
+
+  node-exporter:
+    image: prom/node-exporter:latest
+    container_name: novsmm-node-exporter
+    restart: unless-stopped
+    pid: host
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.sysfs=/host/sys'
+      - '--path.rootfs=/rootfs'
+    ports:
+      - "127.0.0.1:9100:9100"
+    networks:
+      - novsmm-network
+
+volumes:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  novsmm-network:
+    external: true
