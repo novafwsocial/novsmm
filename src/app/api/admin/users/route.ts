@@ -4,27 +4,59 @@ import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { updateUserSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 
-/** GET /api/admin/users */
-export async function GET() {
+/** GET /api/admin/users — paginated user list. */
+export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
-  const users = await db.user.findMany({
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      username: true,
-      role: true,
-      balance: true,
-      heldBalance: true,
-      status: true,
-      createdAt: true,
-      _count: { select: { orders: true } },
+
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
+  const search = searchParams.get("search");
+  const skip = (page - 1) * limit;
+
+  const where = search
+    ? {
+        OR: [
+          { email: { contains: search } },
+          { name: { contains: search } },
+          { username: { contains: search } },
+        ],
+      }
+    : {};
+
+  const [users, total] = await Promise.all([
+    db.user.findMany({
+      where,
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        username: true,
+        role: true,
+        balance: true,
+        heldBalance: true,
+        status: true,
+        createdAt: true,
+        _count: { select: { orders: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: limit,
+    }),
+    db.user.count({ where }),
+  ]);
+
+  return apiOk({
+    users,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: skip + limit < total,
     },
-    orderBy: { createdAt: "desc" },
-    take: 100,
   });
-  return apiOk({ users });
 }
 
 /** PATCH /api/admin/users — update role, status, balance. */

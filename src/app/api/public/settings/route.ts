@@ -46,6 +46,8 @@ const PLANS = [
 /**
  * GET /api/public/settings — non-sensitive platform settings for public consumption.
  * Used by the WhatsApp widget, landing page, and pre-auth UX.
+ *
+ * CACHE: 60s browser, 300s CDN (s-maxage) — settings rarely change.
  */
 export async function GET() {
   // Read all settings — filter to public-safe keys only
@@ -67,7 +69,7 @@ export async function GET() {
     }),
   ]);
 
-  return apiOk({
+  const response = apiOk({
     siteName: map["platform.siteName"] ?? "NOVSMM",
     whatsappNumber: map["platform.whatsapp"] ?? "5215512345678",
     supportEmail: map["platform.supportEmail"] ?? "support@novsmm.io",
@@ -75,4 +77,8 @@ export async function GET() {
     currencies,
     languages,
   });
+
+  // Cache-Control: browser 60s, CDN 300s
+  response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
+  return response;
 }

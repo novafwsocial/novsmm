@@ -191,7 +191,7 @@ export async function GET(req: NextRequest) {
     db.service.count({ where }),
   ]);
 
-  return apiOk({
+  const response = apiOk({
     services,
     pagination: {
       page,
@@ -206,4 +206,8 @@ export async function GET(req: NextRequest) {
     connectedPlatforms,
     platformBlocked,
   });
+
+  // Cache: 30s browser, 60s CDN — catalog can be slightly stale
+  response.headers.set("Cache-Control", "public, max-age=30, s-maxage=60");
+  return response;
 }

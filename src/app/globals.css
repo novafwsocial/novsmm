@@ -1,5 +1,6 @@
 @import "tailwindcss";
-@import "tw-animate-css";
+
+/* tw-animate-css removed — duplicates tailwindcss-animate plugin (already loaded in tailwind.config.ts) */
 
 @custom-variant dark (&:is(.dark *));
 

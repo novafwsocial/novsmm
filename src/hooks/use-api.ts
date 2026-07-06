@@ -38,7 +38,7 @@ export function useDashboard() {
   return useQuery({
     queryKey: ["dashboard"],
     queryFn: () => api.get<any>("/api/dashboard"),
-    refetchInterval: 30 * 1000, // 30s — reduced from 10s for performance
+    refetchInterval: 60 * 1000, // 60s — reduced from 30s for performance
   });
 }
 
@@ -51,7 +51,7 @@ export function useOrders(status?: string, search?: string) {
   return useQuery({
     queryKey: ["orders", status, search],
     queryFn: () => api.get<{ orders: any[] }>(`/api/orders${q ? `?${q}` : ""}`),
-    refetchInterval: 30 * 1000, // 30s — reduced from 5s
+    refetchInterval: 60 * 1000, // 60s — reduced from 30s (WebSocket handles real-time)
   });
 }
 
@@ -165,7 +165,7 @@ export function useWallet() {
   return useQuery({
     queryKey: ["wallet"],
     queryFn: () => api.get<any>("/api/wallet"),
-    refetchInterval: 30 * 1000, // 30s — reduced from 10s
+    refetchInterval: 60 * 1000, // 60s — reduced from 30s
   });
 }
 
@@ -218,7 +218,7 @@ export function useNotifications() {
     queryFn: () => api.get<{ notifications: any[]; unreadCount: number }>(
       "/api/notifications"
     ),
-    refetchInterval: 15 * 1000, // 15s — reduced from 5s (WebSocket handles real-time)
+    refetchInterval: 30 * 1000, // 30s — reduced from 15s (WebSocket handles real-time)
   });
 }
 
@@ -259,7 +259,7 @@ export function useAdminOverview() {
   return useQuery({
     queryKey: ["admin-overview"],
     queryFn: () => api.get<any>("/api/admin/overview"),
-    refetchInterval: 60 * 1000, // 60s — reduced from 15s
+    refetchInterval: 120 * 1000, // 120s — reduced from 60s (analytics do not need real-time)
   });
 }
 
@@ -955,6 +955,6 @@ export function useLoyalty() {
           accountAgeDays: number;
         };
       }>("/api/me/loyalty"),
-    refetchInterval: 60 * 1000, // 60s — points/achievements update on order completion
+    refetchInterval: 300 * 1000, // 300s — reduced from 60s (loyalty updates via invalidation on order completion)
   });
 }

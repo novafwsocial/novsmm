@@ -4,6 +4,8 @@ import { apiOk } from "@/lib/api-utils";
 /**
  * GET /api/status — public status page.
  * Returns platform health + key metrics (no auth required).
+ *
+ * CACHE: 60s browser, 300s CDN — status doesn't change frequently.
  */
 export async function GET() {
   // Count users + orders in last 24h for status display
@@ -15,7 +17,7 @@ export async function GET() {
     db.service.count({ where: { status: "active" } }),
   ]);
 
-  return apiOk({
+  const response = apiOk({
     status: "operational",
     services: {
       api: { status: "operational", latency: "~30ms" },
@@ -30,4 +32,7 @@ export async function GET() {
     },
     timestamp: new Date().toISOString(),
   });
+
+  response.headers.set("Cache-Control", "public, max-age=60, s-maxage=300");
+  return response;
 }
