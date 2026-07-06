@@ -104,14 +104,21 @@ async function redisSlidingWindow(
   const windowStart = now - windowMs;
   const redisKey = `ratelimit:${key}`;
 
+  // Capture a single unique member ID for this request.
+  // Using Math.random() twice (once for zadd, once for zrem) was a bug:
+  // the two calls produce different values, so zrem tries to remove a member
+  // that was never added — the rejected entry stays in the sorted set forever,
+  // blocking legitimate users for the full window duration (self-DoS).
+  const memberId = `${now}:${Math.random()}`;
+
   // Use a pipeline for atomicity
   const pipeline = redis.pipeline();
   // 1. Remove entries outside the window
   pipeline.zremrangebyscore(redisKey, 0, windowStart);
   // 2. Count current entries
   pipeline.zcard(redisKey);
-  // 3. Add current request (unique member via timestamp + random)
-  pipeline.zadd(redisKey, now, `${now}:${Math.random()}`);
+  // 3. Add current request (unique member captured above)
+  pipeline.zadd(redisKey, now, memberId);
   // 4. Set expiry on the key (cleanup)
   pipeline.pexpire(redisKey, windowMs);
 
@@ -125,9 +132,9 @@ async function redisSlidingWindow(
   const remaining = Math.max(0, maxRequests - count);
   const resetAt = now + windowMs;
 
-  // If not allowed, remove the entry we just added (don't count it)
+  // If not allowed, remove the entry we just added using the SAME memberId
   if (!allowed) {
-    await redis.zrem(redisKey, `${now}:${Math.random()}`);
+    await redis.zrem(redisKey, memberId);
   }
 
   return { allowed, remaining, resetAt };

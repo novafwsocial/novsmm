@@ -31,7 +31,7 @@ function getClient(): Redis | null {
 
   try {
     redisClient = new Redis(process.env.REDIS_URL, {
-      maxRetriesPerRequest: 2,
+      maxRetriesPerRequest: null, // Required by BullMQ — throws if set to a number
       enableReadyCheck: true,
       retryStrategy: (times) => {
         if (times > 3) {

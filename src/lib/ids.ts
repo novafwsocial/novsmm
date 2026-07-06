@@ -52,31 +52,25 @@ export async function nextPublicId(
 
   // Use an interactive transaction to ensure atomic increment.
   // SQLite serializes writes, so this is safe. On PostgreSQL, the
-  // `update` + `select` inside a transaction will use row-level locking.
+  // `upsert` inside a transaction uses row-level locking.
   const nextValue = await db.$transaction(async (tx) => {
-    // Try to increment an existing sequence row
-    const existing = await tx.sequence.findUnique({ where: { id: prefix } });
-
-    if (existing) {
-      const updated = await tx.sequence.update({
-        where: { id: prefix },
-        data: { lastValue: { increment: 1 } },
-        select: { lastValue: true },
-      });
-      return updated.lastValue;
-    }
-
-    // First call for this prefix — seed the sequence.
-    // If a seedOffset is provided, start from there; otherwise start from 1.
-    const startValue = offset + 1;
-    await tx.sequence.create({
-      data: {
+    // Atomic upsert: if the row exists, increment; if not, create with seed value.
+    // This is race-condition-free: Prisma translates upsert to
+    // INSERT ... ON CONFLICT DO UPDATE (PostgreSQL) or a serialized
+    // transaction (SQLite), both of which are atomic.
+    const result = await tx.sequence.upsert({
+      where: { id: prefix },
+      update: {
+        lastValue: { increment: 1 },
+      },
+      create: {
         id: prefix,
         prefix,
-        lastValue: startValue,
+        lastValue: offset + 1,
       },
+      select: { lastValue: true },
     });
-    return startValue;
+    return result.lastValue;
   });
 
   // Format with optional zero-padding
