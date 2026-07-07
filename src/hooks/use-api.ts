@@ -716,6 +716,93 @@ export function useUpdateSmmSubscription() {
   });
 }
 
+// ── Child panels (white-label sub-panels, self-service) ──
+// Purchasing a child panel auto-provisions a subdomain + API key. The panel
+// runs the same NOVSMM UI on a subdomain, uses the parent's catalog and
+// fulfils via the parent's providers. The parent earns a margin
+// (markupPercent) on every order placed through the child panel.
+//
+// The API key is returned ONCE in plaintext at creation time (same pattern as
+// License keys) — only its bcrypt hash + SHA-256 lookup hash + AES-encrypted
+// form are persisted. The plaintext key is never retrievable again.
+export function useChildPanels() {
+  return useQuery({
+    queryKey: ["child-panels"],
+    queryFn: () => api.get<{ panels: any[] }>("/api/child-panels"),
+    refetchInterval: 60 * 1000, // 60s — child panel status changes infrequently
+  });
+}
+
+export function useCreateChildPanel() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: {
+      name: string;
+      subdomain: string;
+      plan?: "reseller" | "agency" | "enterprise";
+      markupPercent?: number;
+      monthlyDays?: number;
+    }) =>
+      api.post<{ panel: any; apiKey: string; message: string }>(
+        "/api/child-panels",
+        data,
+      ),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["child-panels"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({ title: "Child panel provisioned", description: data.message });
+    },
+    onError: (e: Error) =>
+      toast({
+        title: "Failed to create child panel",
+        description: e.message,
+        variant: "destructive",
+      }),
+  });
+}
+
+export function useUpdateChildPanel() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: string;
+      name?: string;
+      markupPercent?: number;
+      status?: "active" | "suspended" | "cancelled";
+    }) => api.patch<{ panel: any; message: string }>(`/api/child-panels/${id}`, data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["child-panels"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({ title: "Child panel updated", description: data.message });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+export function useCancelChildPanel() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (id: string) =>
+      api.delete<{ panel: any; message: string }>(`/api/child-panels/${id}`),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["child-panels"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({ title: "Child panel cancelled", description: data.message });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
 // ── Public currencies (for conversion) ──
 export function usePublicCurrencies() {
   return useQuery({

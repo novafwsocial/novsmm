@@ -46,6 +46,7 @@ model User {
   loyaltyPoints LoyaltyPoint[]
   achievements  Achievement[]
   smmSubscriptions SmmSubscription[]
+  smmChildPanels ChildPanel[]
 }
 
 model Account {
@@ -96,6 +97,7 @@ model Provider {
   status    String   @default("healthy") // healthy | degraded | down
   latency   Int      @default(0)
   services  Service[]
+  serviceProviders ServiceProvider[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -121,6 +123,7 @@ model Service {
   orders       Order[]
   favorites    Favorite[]
   smmSubscriptions SmmSubscription[]
+  serviceProviders ServiceProvider[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -601,4 +604,53 @@ model SmmSubscription {
   @@index([status])
   @@index([userId, status])
   @@index([expiry])
+}
+
+// ─────────── Service-Provider mapping (multi-provider with priority) ───────────
+// Allows a service to have multiple providers with priority ordering.
+// If provider at priority 1 fails, fulfillment tries priority 2, etc.
+model ServiceProvider {
+  id          String  @id @default(cuid())
+  serviceId   String
+  providerId  String
+  priority    Int     @default(1) // 1 = primary, 2 = first fallback, etc.
+  providerServiceId String? // the service ID at this provider (for API calls)
+  cost        Float?  // cost at this provider (may differ per provider)
+  createdAt   DateTime @default(now())
+
+  service Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, providerId])
+  @@index([serviceId, priority])
+  @@index([providerId])
+}
+
+// ─────────── Child Panels (white-label sub-panels, self-service) ───────────
+// When a user purchases a child panel, a subdomain + API key are auto-provisioned.
+// The child panel runs the same NOVSMM UI on a subdomain, using the parent's
+// catalog and fulfilling via the parent's providers. The parent earns a margin.
+model ChildPanel {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // CP-XXXXX style
+  userId          String  // owner (the reseller who purchased)
+  name            String  // panel display name
+  subdomain       String  @unique // e.g. "acme" → acme.novsmm.com
+  apiKey          String  // encrypted API key for the child panel to call parent API
+  apiKeyHash      String  @unique // bcrypt hash for lookup
+  lookupHash      String? @unique // SHA-256 for O(1) lookup
+  plan            String   @default("reseller") // reseller | agency | enterprise
+  markupPercent   Float    @default(20) // markup over parent prices
+  status          String   @default("active") // active | suspended | expired | cancelled
+  monthlyFee      Float    // charged monthly
+  paidUntil       DateTime // when the current billing period ends
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([subdomain])
+  @@index([lookupHash])
 }

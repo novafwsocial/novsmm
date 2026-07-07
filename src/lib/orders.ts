@@ -1,9 +1,6 @@
 import { db } from "@/lib/db";
 import { createNotification } from "@/lib/notify";
-import {
-  placeHuntSMMOrder,
-  extractProviderServiceId,
-} from "@/lib/huntsmm";
+import { fulfillWithFailover } from "@/lib/provider-failover";
 // Phase 5: Import from the loyalty SERVICE module (not the API route).
 // This eliminates the cross-route import anti-pattern.
 import {
@@ -16,12 +13,13 @@ import {
  *
  * Behavior:
  *  1. Fetches the order by ID. Bails out if it does not exist or was cancelled.
- *  2. If the order has a link AND its service name maps to a HuntSMM service,
- *     tries to place the order on HuntSMM (the real provider). On success the
- *     order is marked in_progress with the provider order ID and we return —
- *     status updates then flow through the webhook/cron.
- *  3. Otherwise (no link, or HuntSMM call failed), falls back to a simulated
- *     fulfillment with setTimeout steps:
+ *  2. Tries the multi-provider failover flow (`fulfillWithFailover`): the
+ *     service's providers are tried in priority order. If a provider succeeds
+ *     the order is marked in_progress with the provider's order ID and we
+ *     return — status updates then flow through the webhook/cron.
+ *  3. If failover returns null (no providers, all providers failed, or no
+ *     link on the order), falls back to a simulated fulfillment with
+ *     setTimeout steps:
  *        2s  → 15%   (in_progress)
  *        5s  → 40%   (in_progress)
  *        8s  → 75%   (in_progress)
@@ -51,35 +49,28 @@ export async function simulateFulfillment(
       link: true,
       quantity: true,
       priority: true,
+      serviceId: true,
     },
   });
   if (!order || order.status === "cancelled") return;
 
-  // Try to place the order on HuntSMM
-  const providerServiceId = extractProviderServiceId(order.serviceName);
-  if (providerServiceId && order.link) {
-    const result = await placeHuntSMMOrder(
-      providerServiceId,
-      order.link,
-      order.quantity,
-    );
+  // ── Multi-provider failover ──
+  // Try the service's providers in priority order. If any provider succeeds,
+  // the order is stamped with the provider's order ID and we return early —
+  // status updates flow via the provider's webhook/cron sync. If every
+  // provider fails (or no providers are configured, or no link), we fall
+  // through to the simulated setTimeout steps below.
+  const failoverResult = await fulfillWithFailover({
+    id: order.id,
+    serviceId: order.serviceId,
+    link: order.link,
+    quantity: order.quantity,
+    serviceName: order.serviceName,
+  });
 
-    if ("orderId" in result) {
-      // Real order placed — update with provider order ID
-      await db.order.update({
-        where: { id: orderId },
-        data: {
-          status: "in_progress",
-          progress: 10,
-          eta: "Processing on HuntSMM",
-          providerName: `HuntSMM #${result.orderId}`,
-        },
-      });
-      return; // Real fulfillment — status will be updated via webhook/cron
-    } else {
-      console.error("[fulfillment] HuntSMM order failed:", result.error);
-      // Fall through to simulation
-    }
+  if (failoverResult) {
+    // Real order placed on a provider — fulfillment complete from our side.
+    return;
   }
 
   // Fallback: simulate fulfillment (when no link, or provider fails).

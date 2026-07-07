@@ -24,6 +24,7 @@ export type DashboardTab =
   | "marketplace"
   | "orders"
   | "subscriptions"
+  | "child-panels"
   | "wallet"
   | "tickets"
   | "notifications"

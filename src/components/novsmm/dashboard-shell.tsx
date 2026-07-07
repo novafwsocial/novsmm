@@ -27,6 +27,7 @@ import {
   ArrowUp,
   ArrowDown,
   CalendarClock,
+  Globe,
 } from "lucide-react";
 import { useApp, type DashboardTab } from "./app-store";
 import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
@@ -47,6 +48,7 @@ const NAV: { id: DashboardTab; label: string; icon: any }[] = [
   { id: "marketplace", label: "Services", icon: Store },
   { id: "orders", label: "Orders", icon: ShoppingCart },
   { id: "subscriptions", label: "Subscriptions", icon: CalendarClock },
+  { id: "child-panels", label: "Child Panels", icon: Globe },
   { id: "wallet", label: "Wallet", icon: Wallet },
   { id: "tickets", label: "Tickets", icon: Ticket },
   { id: "notifications", label: "Notifications", icon: Bell },
@@ -589,6 +591,7 @@ const ALL_COMMANDS: Command[] = [
   { id: "marketplace", label: "Services", group: "Navigation", icon: Store, keywords: ["marketplace", "buy", "catalog"] },
   { id: "orders", label: "Orders", group: "Navigation", icon: ShoppingCart, keywords: ["history", "purchases"] },
   { id: "subscriptions", label: "Subscriptions", group: "Navigation", icon: CalendarClock, keywords: ["auto", "recurring", "schedule", "subscription", "smm"] },
+  { id: "child-panels", label: "Child Panels", group: "Navigation", icon: Globe, keywords: ["white-label", "reseller", "subdomain", "sub-panel", "child"] },
   { id: "wallet", label: "Wallet", group: "Navigation", icon: Wallet, keywords: ["balance", "funds", "transactions"] },
   { id: "tickets", label: "Tickets", group: "Navigation", icon: Ticket, keywords: ["support", "help"] },
   { id: "notifications", label: "Notifications", group: "Navigation", icon: Bell, keywords: ["alerts", "inbox"] },
