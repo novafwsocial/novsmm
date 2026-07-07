@@ -9,6 +9,7 @@ import { Payments } from "@/components/novsmm/payments";
 import { Stats } from "@/components/novsmm/stats";
 import { Testimonials } from "@/components/novsmm/testimonials";
 import { Security } from "@/components/novsmm/security";
+import { Faq } from "@/components/novsmm/faq";
 import { Footer } from "@/components/novsmm/footer";
 import { AppView } from "@/components/novsmm/app-view";
 import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
@@ -31,6 +32,7 @@ export default function Home() {
                 <Stats />
                 <Testimonials />
                 <Security />
+                <Faq />
               </main>
               <Footer />
             </>

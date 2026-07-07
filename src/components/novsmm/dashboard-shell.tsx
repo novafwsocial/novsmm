@@ -28,6 +28,9 @@ import {
   ArrowDown,
   CalendarClock,
   Globe,
+  AlertTriangle,
+  ArrowLeft,
+  Loader2,
 } from "lucide-react";
 import { useApp, type DashboardTab } from "./app-store";
 import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
@@ -127,6 +130,25 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const activeOrders = dashData?.stats?.activeOrders ?? 0;
   const openTickets = dashData?.stats?.openTickets ?? 0;
   const isAdmin = user?.role === "admin";
+  const isImpersonating = !!user?.impersonating;
+
+  const [returningToAdmin, setReturningToAdmin] = useState(false);
+  const handleReturnToAdmin = async () => {
+    setReturningToAdmin(true);
+    try {
+      const res = await fetch("/api/admin/impersonate/stop", { method: "POST" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Failed to return to admin");
+      }
+      // Reload to pick up the new admin session
+      window.location.reload();
+    } catch (e: any) {
+      setReturningToAdmin(false);
+      console.error("[impersonate-stop] failed:", e);
+      alert(e?.message ?? "Failed to return to admin account");
+    }
+  };
 
   const handleSignOut = async () => {
     await signOut({ redirect: false });
@@ -135,9 +157,44 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="relative flex min-h-screen bg-background">
+    <div className="relative flex min-h-screen flex-col bg-background">
+      {/* ── Impersonation banner ──
+          Shown when the current session is an impersonation (admin logged in
+          as a user). Sticky at the very top, full-width. The sidebar and
+          main column shift down by the banner height (3rem = top-12 / h-12). */}
+      {isImpersonating && (
+        <div className="sticky top-0 z-50 flex h-12 shrink-0 items-center justify-between gap-3 border-b border-amber-500/40 bg-amber-500 px-3 text-amber-950 sm:px-4">
+          <div className="flex min-w-0 items-center gap-2 text-xs font-medium sm:text-sm">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span className="truncate">
+              You are impersonating{" "}
+              <strong className="font-semibold">{user?.name ?? "user"}</strong>
+              {" "}as admin. All actions are audited.
+            </span>
+          </div>
+          <button
+            onClick={handleReturnToAdmin}
+            disabled={returningToAdmin}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-amber-950 px-3 py-1.5 text-xs font-semibold text-amber-50 transition-colors hover:bg-amber-900 disabled:opacity-60"
+          >
+            {returningToAdmin ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <ArrowLeft className="h-3 w-3" />
+            )}
+            <span className="hidden sm:inline">Return to admin</span>
+            <span className="sm:hidden">Exit</span>
+          </button>
+        </div>
+      )}
+      <div className="flex flex-1">
       {/* Sidebar — desktop */}
-      <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-border/60 bg-muted/30 lg:flex">
+      <aside
+        className={cn(
+          "sticky hidden w-[248px] shrink-0 flex-col border-r border-border/60 bg-muted/30 lg:flex",
+          isImpersonating ? "top-12 h-[calc(100vh-3rem)]" : "top-0 h-screen"
+        )}
+      >
         <div className="flex h-16 items-center justify-between px-5">
           <a
             onClick={() => setDashboardTab("home")}
@@ -308,7 +365,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Topbar */}
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl sm:px-6">
+        <header
+          className={cn(
+            "sticky z-30 flex h-16 items-center gap-3 border-b border-border/60 bg-background/80 px-4 backdrop-blur-xl sm:px-6",
+            isImpersonating ? "top-12" : "top-0"
+          )}
+        >
           <button
             onClick={() => setMobileOpen(true)}
             className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted lg:hidden"
@@ -417,6 +479,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         onNavigate={(tab) => setDashboardTab(tab)}
         onSignOut={handleSignOut}
       />
+      </div>
     </div>
   );
 }

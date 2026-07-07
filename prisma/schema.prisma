@@ -654,3 +654,69 @@ model ChildPanel {
   @@index([subdomain])
   @@index([lookupHash])
 }
+
+// ─────────── Email Templates (admin-editable) ───────────
+// DB-backed email templates with {{variable}} interpolation.
+// Seeded on first boot with the DEFAULT_TEMPLATES list from
+// src/lib/email-templates.ts. Admin can edit subject/body and
+// toggle isActive. notify.createNotification() looks up a
+// template by `key` (mapped from the notif type) and renders it.
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "order_completed", "ticket_reply", "welcome"
+  name      String   // display name
+  subject   String   // subject line (supports {{variables}})
+  body      String   // email body (supports {{variables}})
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([isActive])
+}
+
+// ─────────── CMS Content (blog posts + FAQ) ───────────
+// Single polymorphic table for blog_post | faq | announcement | page.
+// Public /api/cms route returns only status:"published" items.
+// Admin /api/admin/cms route returns all (including drafts).
+// `body` is stored as markdown — rendered to HTML client-side.
+model CmsContent {
+  id          String    @id @default(cuid())
+  type        String    // "blog_post" | "faq" | "announcement" | "page"
+  slug        String    @unique // URL slug
+  title       String
+  excerpt     String    @default("") // short summary for cards/lists
+  body        String    @default("") // full content (markdown)
+  category    String    @default("general")
+  tags        String    @default("") // comma-separated
+  status      String    @default("draft") // draft | published | archived
+  authorId    String?   // linked admin user
+  sortOrder   Int       @default(0) // for FAQ ordering
+  views       Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([type, status])
+  @@index([slug])
+  @@index([category])
+}
+
+// ─────────── Canned Ticket Replies (admin/support) ───────────
+// Saved responses that admin/support can insert into ticket replies.
+// The dropdown in dashboard-tickets.tsx fetches these via /api/canned-replies.
+// `usageCount` is incremented every time a reply is inserted (analytics).
+model CannedReply {
+  id         String   @id @default(cuid())
+  title      String   // short label
+  body       String   // the canned response text
+  category   String   @default("general") // e.g. "refund", "howto", "greeting"
+  language   String   @default("en")
+  createdBy  String?  // admin user ID
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([category])
+  @@index([language])
+}

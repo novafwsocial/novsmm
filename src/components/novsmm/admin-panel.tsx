@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
 import {
   ShieldCheck,
   Users,
@@ -40,6 +40,12 @@ import {
   ChevronDown,
   MessageCircle,
   Zap,
+  Mail,
+  Newspaper,
+  LogIn,
+  Eye,
+  Save,
+  ExternalLink,
 } from "lucide-react";
 import {
   AreaChart,
@@ -53,6 +59,7 @@ import { useApp, type AdminTab } from "./app-store";
 import { Counter } from "./counter";
 import { PaymentLogo } from "./payment-logo";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
+import { signIn, useSession as useNextAuthSession } from "next-auth/react";
 import {
   useAdminOverview,
   useAdminUsers,
@@ -132,6 +139,8 @@ const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
   { id: "roles", label: "Roles", icon: ShieldCheck },
   { id: "socialAuth", label: "Social Auth", icon: KeyRound },
   { id: "version", label: "Version", icon: ScrollText },
+  { id: "emailTemplates", label: "Email Templates", icon: Mail },
+  { id: "cms", label: "CMS / Blog", icon: Newspaper },
 ];
 
 export function AdminPanel() {
@@ -215,6 +224,8 @@ export function AdminPanel() {
           {adminTab === "roles" && <AdminRoles />}
           {adminTab === "socialAuth" && <AdminSocialAuth />}
           {adminTab === "version" && <AdminVersion />}
+          {adminTab === "emailTemplates" && <AdminEmailTemplates />}
+          {adminTab === "cms" && <AdminCms />}
         </motion.div>
     </div>
   );
@@ -416,6 +427,7 @@ function AdminUsers() {
   const [query, setQuery] = useState("");
   const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [impersonateTarget, setImpersonateTarget] = useState<any | null>(null);
 
   // Debounce search input 300ms
   useEffect(() => {
@@ -571,6 +583,16 @@ function AdminUsers() {
                           icon={ShieldCheck}
                           onClick={() => updateUser.mutate({ id: u.id, role: "admin" })}
                         />
+                        {/* Impersonate — admin-only, active non-admin users only */}
+                        {u.status === "active" && u.role !== "admin" && (
+                          <button
+                            onClick={() => setImpersonateTarget(u)}
+                            title={`Impersonate ${u.name}`}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-amber-500/10 hover:text-amber-600"
+                          >
+                            <LogIn className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -587,7 +609,149 @@ function AdminUsers() {
           </div>
         </div>
       </div>
+      {impersonateTarget && (
+        <ImpersonateModal
+          user={impersonateTarget}
+          onClose={() => setImpersonateTarget(null)}
+        />
+      )}
     </Reveal>
+  );
+}
+
+/**
+ * Impersonation modal — prompts the admin for their password, then
+ * triggers `signIn("impersonate", ...)` to mint a new session for the
+ * target user. The page reloads on success.
+ */
+function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void }) {
+  const { data: session } = useNextAuthSession();
+  const { toast } = useToast();
+  const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const adminEmail = (session?.user as any)?.email ?? "";
+
+  const handleImpersonate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!password || !adminEmail) return;
+    setLoading(true);
+    try {
+      // Pre-flight: validate the target is impersonate-able
+      const res = await fetch("/api/admin/impersonate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Pre-flight check failed");
+      }
+
+      // Mint the new session via the "impersonate" credentials provider.
+      // This will overwrite the current session cookie.
+      const result = await signIn("impersonate", {
+        adminEmail,
+        adminPassword: password,
+        targetUserId: user.id,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        throw new Error(result.error);
+      }
+
+      toast({
+        title: "Impersonating user",
+        description: `You are now logged in as ${user.name}.`,
+      });
+      // Reload to pick up the new session
+      setTimeout(() => window.location.reload(), 600);
+    } catch (e: any) {
+      toast({
+        title: "Impersonation failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleImpersonate}
+        className="relative w-full max-w-md rounded-3xl border border-amber-500/40 bg-background p-6 nov-ring-lg"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-500/10 text-amber-600">
+            <LogIn className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Impersonate user</h2>
+            <p className="text-xs text-muted-foreground">
+              All actions will be audited under your admin identity.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-amber-500/5 border border-amber-500/20 p-3 text-xs">
+          <div className="font-medium text-amber-700">You will be logged in as:</div>
+          <div className="mt-1 text-foreground">
+            {user.name} · <span className="text-muted-foreground">{user.email}</span>
+          </div>
+          <div className="mt-1 text-muted-foreground">
+            Role: {user.role} · A &quot;Return to admin&quot; banner will let you
+            switch back any time.
+          </div>
+        </div>
+
+        <label className="mt-4 block">
+          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Your admin password
+          </span>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="••••••••"
+            autoFocus
+            className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(245,158,11,0.15)]"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading || !password}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-60"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Starting impersonation…
+            </>
+          ) : (
+            <>
+              <LogIn className="h-4 w-4" />
+              Impersonate {user.name}
+            </>
+          )}
+        </button>
+      </form>
+    </div>
   );
 }
 
@@ -2988,5 +3152,761 @@ function AdminVersion() {
         </div>
       </div>
     </Reveal>
+  );
+}
+
+/* ─────────── Email Templates Editor ─────────── */
+function AdminEmailTemplates() {
+  const { toast } = useToast();
+  const [templates, setTemplates] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState<any | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/email-templates");
+      if (!res.ok) throw new Error("Failed to load templates");
+      const data = await res.json();
+      setTemplates(data.templates ?? []);
+    } catch (e: any) {
+      toast({
+        title: "Failed to load templates",
+        description: e?.message,
+        variant: "destructive",
+      });
+    }
+    setLoading(false);
+  }, [toast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggleActive = async (t: any) => {
+    try {
+      const res = await fetch("/api/admin/email-templates", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: t.id, isActive: !t.isActive }),
+      });
+      if (!res.ok) throw new Error("Update failed");
+      await load();
+      toast({
+        title: t.isActive ? "Template deactivated" : "Template activated",
+        description: t.name,
+      });
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold">Email Templates · {templates.length}</div>
+            <div className="text-xs text-muted-foreground">
+              Editable email templates with <code className="rounded bg-muted px-1">{"{{variable}}"}</code> interpolation
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" /> New template
+          </button>
+        </div>
+
+        {loading ? (
+          <div className="flex h-32 items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+            <div className="overflow-x-auto nov-scroll">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium">Name</th>
+                    <th className="px-4 py-3 text-left font-medium">Key</th>
+                    <th className="px-4 py-3 text-left font-medium">Subject</th>
+                    <th className="px-4 py-3 text-left font-medium">Status</th>
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {templates.map((t: any) => (
+                    <tr key={t.id} className="transition-colors hover:bg-muted/30">
+                      <td className="px-4 py-3 font-medium text-foreground">{t.name}</td>
+                      <td className="px-4 py-3">
+                        <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono">{t.key}</code>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground max-w-xs truncate">
+                        {t.subject}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          t.isActive
+                            ? "bg-emerald-500/10 text-emerald-700"
+                            : "bg-muted text-muted-foreground"
+                        )}>
+                          <span className={cn(
+                            "h-1.5 w-1.5 rounded-full",
+                            t.isActive ? "bg-emerald-500" : "bg-muted-foreground"
+                          )} />
+                          {t.isActive ? "Active" : "Inactive"}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <IconBtn icon={Pencil} onClick={() => setEditing(t)} />
+                          <button
+                            onClick={() => toggleActive(t)}
+                            className="rounded-lg border border-border px-2.5 py-1 text-[10px] font-medium text-foreground hover:bg-muted"
+                          >
+                            {t.isActive ? "Disable" : "Enable"}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {templates.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                        No email templates yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <EmailTemplateEditor
+          template={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
+        />
+      )}
+
+      {showCreate && (
+        <EmailTemplateEditor
+          template={null}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => {
+            setShowCreate(false);
+            load();
+          }}
+        />
+      )}
+    </Reveal>
+  );
+}
+
+function EmailTemplateEditor({
+  template,
+  onClose,
+  onSaved,
+}: {
+  template: any | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const isEdit = !!template;
+  const [form, setForm] = useState({
+    key: template?.key ?? "",
+    name: template?.name ?? "",
+    subject: template?.subject ?? "",
+    body: template?.body ?? "",
+    isActive: template?.isActive ?? true,
+  });
+  const [saving, setSaving] = useState(false);
+
+  const sampleVars: Record<string, string> = {
+    name: "Alex",
+    orderId: "A-10432",
+    serviceName: "Instagram followers (HQ)",
+    quantity: "1000",
+    total: "9.99",
+    ticketId: "T-201",
+    ticketSubject: "Order delay",
+    replyText: "Hi, your order is now in progress.",
+    balance: "12.50",
+    amount: "5.00",
+    referredName: "Jordan",
+  };
+
+  const previewSubject = useMemo(
+    () => form.subject.replace(/\{\{(\w+)\}\}/g, (_, k) => sampleVars[k] ?? ""),
+    [form.subject]
+  );
+  const previewBody = useMemo(
+    () => form.body.replace(/\{\{(\w+)\}\}/g, (_, k) => sampleVars[k] ?? ""),
+    [form.body]
+  );
+
+  const handleSave = async () => {
+    if (!form.key || !form.name || !form.subject || !form.body) {
+      toast({ title: "All fields are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const url = isEdit
+        ? "/api/admin/email-templates"
+        : "/api/admin/email-templates";
+      const body = isEdit
+        ? { id: template.id, name: form.name, subject: form.subject, body: form.body, isActive: form.isActive }
+        : { key: form.key, name: form.name, subject: form.subject, body: form.body, isActive: form.isActive };
+      const res = await fetch(url, {
+        method: isEdit ? "PATCH" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Save failed");
+      }
+      toast({ title: isEdit ? "Template updated" : "Template created" });
+      onSaved();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message, variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Mail className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">
+              {isEdit ? "Edit template" : "New email template"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Use <code className="rounded bg-muted px-1">{"{{variable}}"}</code> placeholders for dynamic content.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {/* Editor */}
+          <div className="flex flex-col gap-3">
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Template key
+              </label>
+              <input
+                value={form.key}
+                onChange={(e) => setForm({ ...form, key: e.target.value.toLowerCase().replace(/\s+/g, "_") })}
+                placeholder="e.g. welcome, order_completed"
+                disabled={isEdit}
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm disabled:opacity-60"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Display name
+              </label>
+              <input
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                placeholder="Welcome Email"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Subject
+              </label>
+              <input
+                value={form.subject}
+                onChange={(e) => setForm({ ...form, subject: e.target.value })}
+                placeholder="Welcome to NOVSMM, {{name}}!"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-medium text-muted-foreground">
+                Body (plaintext, supports {"{{variables}}"})
+              </label>
+              <textarea
+                value={form.body}
+                onChange={(e) => setForm({ ...form, body: e.target.value })}
+                rows={8}
+                placeholder="Hi {{name}},&#10;&#10;Welcome to NOVSMM..."
+                className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm"
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                className="h-3.5 w-3.5 rounded border-border"
+              />
+              <span>Active (templates that are inactive won&apos;t be sent)</span>
+            </label>
+          </div>
+
+          {/* Live preview */}
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+              <Eye className="h-3.5 w-3.5" /> Live preview (sample variables)
+            </div>
+            <div className="rounded-xl border border-border bg-muted/30 p-4">
+              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                Subject
+              </div>
+              <div className="mt-1 text-sm font-medium text-foreground break-words">
+                {previewSubject || <span className="text-muted-foreground/50">—</span>}
+              </div>
+              <div className="mt-3 border-t border-border/60 pt-3">
+                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Body
+                </div>
+                <pre className="mt-1 whitespace-pre-wrap font-sans text-sm text-foreground">
+                  {previewBody || <span className="text-muted-foreground/50">—</span>}
+                </pre>
+              </div>
+            </div>
+            <div className="text-[10px] text-muted-foreground">
+              Sample variables used: name=Alex, orderId=A-10432, serviceName=Instagram followers (HQ),
+              quantity=1000, total=9.99, ticketId=T-201, balance=12.50, amount=5.00, referredName=Jordan
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {isEdit ? "Save changes" : "Create template"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── CMS / Blog / FAQ ─────────── */
+function AdminCms() {
+  const { toast } = useToast();
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [typeFilter, setTypeFilter] = useState<string>("");
+  const [editing, setEditing] = useState<any | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const url = `/api/admin/cms${typeFilter ? `?type=${typeFilter}` : ""}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error("Failed to load CMS content");
+      const data = await res.json();
+      setItems(data.items ?? []);
+    } catch (e: any) {
+      toast({
+        title: "Failed to load content",
+        description: e?.message,
+        variant: "destructive",
+      });
+    }
+    setLoading(false);
+  }, [typeFilter, toast]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const handleDelete = async (item: any) => {
+    if (!confirm(`Delete "${item.title}"? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`/api/admin/cms/${item.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      toast({ title: "Content deleted" });
+      load();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e?.message, variant: "destructive" });
+    }
+  };
+
+  return (
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div>
+            <div className="text-base font-semibold">CMS / Blog / FAQ · {items.length}</div>
+            <div className="text-xs text-muted-foreground">
+              Blog posts, FAQ entries, announcements, and static pages.
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={typeFilter}
+              onChange={(e) => setTypeFilter(e.target.value)}
+              className="h-9 rounded-lg border border-border bg-background px-3 text-xs"
+            >
+              <option value="">All types</option>
+              <option value="blog_post">Blog posts</option>
+              <option value="faq">FAQ</option>
+              <option value="announcement">Announcements</option>
+              <option value="page">Pages</option>
+            </select>
+            <button
+              onClick={() => setShowCreate(true)}
+              className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> New content
+            </button>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex h-32 items-center justify-center">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+            <div className="overflow-x-auto nov-scroll">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 text-left font-medium">Title</th>
+                    <th className="px-4 py-3 text-left font-medium">Type</th>
+                    <th className="px-4 py-3 text-left font-medium">Category</th>
+                    <th className="px-4 py-3 text-left font-medium">Status</th>
+                    <th className="px-4 py-3 text-right font-medium">Views</th>
+                    <th className="px-4 py-3 text-left font-medium">Published</th>
+                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/60">
+                  {items.map((item: any) => (
+                    <tr key={item.id} className="transition-colors hover:bg-muted/30">
+                      <td className="px-4 py-3">
+                        <div className="font-medium text-foreground">{item.title}</div>
+                        <div className="text-[11px] text-muted-foreground font-mono">/{item.slug}</div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          {item.type.replace("_", " ")}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">{item.category}</td>
+                      <td className="px-4 py-3">
+                        <span className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                          item.status === "published"
+                            ? "bg-emerald-500/10 text-emerald-700"
+                            : item.status === "archived"
+                            ? "bg-muted text-muted-foreground"
+                            : "bg-amber-500/10 text-amber-700"
+                        )}>
+                          {item.status}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                        {(item.views ?? 0).toLocaleString()}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-muted-foreground">
+                        {item.publishedAt ? new Date(item.publishedAt).toLocaleDateString() : "—"}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <IconBtn icon={Pencil} onClick={() => setEditing(item)} />
+                          <IconBtn icon={Trash2} danger onClick={() => handleDelete(item)} />
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {items.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                        No CMS content yet.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {editing && (
+        <CmsEditor
+          item={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => {
+            setEditing(null);
+            load();
+          }}
+        />
+      )}
+
+      {showCreate && (
+        <CmsEditor
+          item={null}
+          onClose={() => setShowCreate(false)}
+          onSaved={() => {
+            setShowCreate(false);
+            load();
+          }}
+        />
+      )}
+    </Reveal>
+  );
+}
+
+function CmsEditor({
+  item,
+  onClose,
+  onSaved,
+}: {
+  item: any | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const { toast } = useToast();
+  const isEdit = !!item;
+  const [form, setForm] = useState({
+    type: item?.type ?? "blog_post",
+    slug: item?.slug ?? "",
+    title: item?.title ?? "",
+    excerpt: item?.excerpt ?? "",
+    body: item?.body ?? "",
+    category: item?.category ?? "general",
+    tags: item?.tags ?? "",
+    status: item?.status ?? "draft",
+    sortOrder: item?.sortOrder ?? 0,
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Auto-generate slug from title (only when creating or slug is empty)
+  useEffect(() => {
+    if (!isEdit && form.title && !form.slug) {
+      const slug = form.title
+        .toLowerCase()
+        .trim()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-")
+        .replace(/-+/g, "-")
+        .slice(0, 80);
+      setForm((f) => ({ ...f, slug }));
+    }
+  }, [form.title, isEdit]);
+
+  const handleSave = async () => {
+    if (!form.type || !form.title) {
+      toast({ title: "Type and title are required", variant: "destructive" });
+      return;
+    }
+    setSaving(true);
+    try {
+      const url = isEdit ? `/api/admin/cms/${item.id}` : "/api/admin/cms";
+      const method = isEdit ? "PATCH" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data?.error ?? "Save failed");
+      }
+      toast({ title: isEdit ? "Content updated" : "Content created" });
+      onSaved();
+    } catch (e: any) {
+      toast({ title: "Save failed", description: e?.message, variant: "destructive" });
+    }
+    setSaving(false);
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <Newspaper className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">
+              {isEdit ? "Edit content" : "New content"}
+            </h2>
+            <p className="text-xs text-muted-foreground">
+              Body supports markdown — rendered on the public site.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 sm:grid-cols-2">
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Title</label>
+            <input
+              value={form.title}
+              onChange={(e) => setForm({ ...form, title: e.target.value })}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Type</label>
+            <select
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            >
+              <option value="blog_post">Blog post</option>
+              <option value="faq">FAQ</option>
+              <option value="announcement">Announcement</option>
+              <option value="page">Page</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Status</label>
+            <select
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value })}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            >
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Slug</label>
+            <input
+              value={form.slug}
+              onChange={(e) => setForm({ ...form, slug: e.target.value })}
+              placeholder="auto-generated-from-title"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 font-mono text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Category</label>
+            <input
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Sort order (FAQ)</label>
+            <input
+              type="number"
+              value={String(form.sortOrder)}
+              onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            />
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Tags (comma-separated)</label>
+            <input
+              value={form.tags}
+              onChange={(e) => setForm({ ...form, tags: e.target.value })}
+              placeholder="guide, beginners"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">Excerpt (short summary)</label>
+            <input
+              value={form.excerpt}
+              onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
+              placeholder="One-line summary shown in cards/lists"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <label className="mb-1 block text-xs font-medium text-muted-foreground">
+              Body (markdown)
+            </label>
+            <textarea
+              value={form.body}
+              onChange={(e) => setForm({ ...form, body: e.target.value })}
+              rows={10}
+              placeholder="# Heading&#10;&#10;Write your content in markdown..."
+              className="w-full resize-y rounded-lg border border-border bg-background px-3 py-2 font-mono text-sm"
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 flex items-center justify-end gap-2">
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-border px-4 py-2 text-xs font-medium text-muted-foreground hover:bg-muted"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
+          >
+            {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+            {isEdit ? "Save changes" : "Create content"}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

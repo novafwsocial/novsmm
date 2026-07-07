@@ -16,11 +16,13 @@ import {
   ArrowLeft,
   Inbox,
   MessageSquare,
+  ClipboardList,
 } from "lucide-react";
 import {
   useTickets,
   useCreateTicket,
   useReplyTicket,
+  useSession,
 } from "@/hooks/use-api";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Reveal } from "./reveal";
@@ -30,6 +32,7 @@ type MobilePane = "list" | "conversation";
 
 export function DashboardTickets() {
   const { data, isLoading } = useTickets();
+  const { data: sessionData } = useSession();
   const tickets = data?.tickets ?? [];
   const [activeId, setActiveId] = useState<string | null>(null);
   const [input, setInput] = useState("");
@@ -42,6 +45,10 @@ export function DashboardTickets() {
   const replyTicket = useReplyTicket();
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
+
+  // Canned replies are available to admin + support roles only
+  const userRole = (sessionData?.user as any)?.role;
+  const canUseCannedReplies = userRole === "admin" || userRole === "support";
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -230,6 +237,7 @@ export function DashboardTickets() {
                     fileInputRef={fileInputRef}
                     handleFileUpload={handleFileUpload}
                     pending={replyTicket.isPending}
+                    canUseCannedReplies={canUseCannedReplies}
                   />
                 </div>
               ) : (
@@ -312,6 +320,7 @@ export function DashboardTickets() {
                   fileInputRef={fileInputRef}
                   handleFileUpload={handleFileUpload}
                   pending={replyTicket.isPending}
+                  canUseCannedReplies={canUseCannedReplies}
                 />
               </div>
             )}
@@ -486,6 +495,7 @@ function ConversationComposer({
   fileInputRef,
   handleFileUpload,
   pending,
+  canUseCannedReplies,
 }: {
   input: string;
   setInput: (v: string) => void;
@@ -496,6 +506,7 @@ function ConversationComposer({
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   pending: boolean;
+  canUseCannedReplies?: boolean;
 }) {
   return (
     <div className="border-t border-border/60 p-3">
@@ -536,6 +547,18 @@ function ConversationComposer({
           placeholder="Type your message…"
           className="max-h-32 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
         />
+        {canUseCannedReplies && (
+          <CannedRepliesButton
+            onInsert={(body, id) => {
+              // Append with separator if there's existing content
+              setInput(input.trim() ? `${input.trimEnd()}\n\n${body}` : body);
+              // Fire-and-forget usage-count bump
+              if (id) {
+                fetch(`/api/canned-replies?incrementUsage=true&ids=${id}`).catch(() => {});
+              }
+            }}
+          />
+        )}
         <motion.button
           whileTap={{ scale: 0.94 }}
           onClick={send}
@@ -553,6 +576,120 @@ function ConversationComposer({
       <div className="mt-1.5 px-1 text-[10px] text-muted-foreground">
         Press Enter to send · Shift+Enter for newline
       </div>
+    </div>
+  );
+}
+
+/**
+ * Canned replies dropdown button — shown only to admin/support roles.
+ * Fetches the list from /api/canned-replies on first open, then caches
+ * in component state. Clicking a reply inserts its body into the input.
+ */
+function CannedRepliesButton({
+  onInsert,
+}: {
+  onInsert: (body: string, id?: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const popoverRef = useRef<HTMLDivElement>(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const handleOpen = async () => {
+    if (!open && !loaded) {
+      setLoading(true);
+      try {
+        const res = await fetch("/api/canned-replies");
+        if (res.ok) {
+          const data = await res.json();
+          setItems(data.items ?? []);
+        }
+      } catch {
+        // ignore — user just won't see canned replies
+      } finally {
+        setLoaded(true);
+        setLoading(false);
+      }
+    }
+    setOpen((v) => !v);
+  };
+
+  return (
+    <div ref={popoverRef} className="relative">
+      <button
+        type="button"
+        onClick={handleOpen}
+        title="Canned replies"
+        className={cn(
+          "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
+          open
+            ? "bg-primary/10 text-primary"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+        )}
+      >
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <ClipboardList className="h-4 w-4" />
+        )}
+      </button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.96 }}
+            transition={{ duration: 0.15 }}
+            className="absolute bottom-full right-0 z-50 mb-2 w-80 max-h-72 overflow-y-auto rounded-2xl border border-border bg-background p-1.5 nov-ring-lg nov-scroll"
+          >
+            <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+              Canned replies
+            </div>
+            {items.length === 0 ? (
+              <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+                {loading ? "Loading…" : "No canned replies yet."}
+              </div>
+            ) : (
+              items.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => {
+                    onInsert(item.body, item.id);
+                    setOpen(false);
+                  }}
+                  className="block w-full rounded-lg px-2.5 py-2 text-left transition-colors hover:bg-muted"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-xs font-medium text-foreground">
+                      {item.title}
+                    </span>
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                      {item.category}
+                    </span>
+                  </div>
+                  <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                    {item.body.slice(0, 80)}
+                  </div>
+                </button>
+              ))
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

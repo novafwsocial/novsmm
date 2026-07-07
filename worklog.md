@@ -9442,3 +9442,234 @@ Stage Summary:
   codes (401 auth, as expected).
 - **Sprint 3 completado.** Sprints pendientes: Sprint 4 (Admin power), Sprint 5
   (Landing trust), Sprint 6 (Security).
+
+---
+
+# Sprint 4 — Admin Power Features (Task ID: SPRINT-4-ADMIN-POWER)
+
+**Date**: 2026-07-07
+**Scope**: User impersonation, email templates editor, CMS/blog/FAQ, canned ticket replies.
+
+## Files Created (15)
+
+### Backend (API routes + lib)
+- `src/app/api/admin/impersonate/route.ts` — POST pre-flight check (validates
+  target user active+non-admin, audit-logs "impersonate_attempt", returns
+  adminEmail for the frontend to pass to signIn("impersonate", ...)).
+- `src/app/api/admin/impersonate/stop/route.ts` — POST restores the real admin
+  session. Reads `realAdminId` from current session JWT, validates the admin
+  still exists+active, audit-logs "impersonate_stop", then mints a fresh JWT
+  via `next-auth/jwt` `encode()` with the same NEXTAUTH_SECRET and overwrites
+  the session cookie.
+- `src/app/api/admin/email-templates/route.ts` — GET (auto-seeds defaults on
+  first call) / POST (create) / PATCH (update by id). Admin-only.
+- `src/app/api/admin/email-templates/[id]/route.ts` — GET / PATCH / DELETE
+  (default templates are deactivated instead of deleted).
+- `src/app/api/admin/cms/route.ts` — GET (list with type/status filter) /
+  POST (create with auto-slug) / PATCH (update by id). Admin-only.
+- `src/app/api/admin/cms/[id]/route.ts` — GET / PATCH / DELETE. Admin-only.
+- `src/app/api/admin/canned-replies/route.ts` — GET (with category/language
+  filter) / POST (create) / PATCH (update by id). Admin-only.
+- `src/app/api/admin/canned-replies/[id]/route.ts` — DELETE. Admin-only.
+- `src/app/api/cms/route.ts` — PUBLIC (no auth). Lists published content.
+  Query params: `?type=`, `?category=`, `?slug=` (single-item fetch
+  increments views), `?limit=`. Returns only `status:"published"` items.
+- `src/app/api/canned-replies/route.ts` — Session auth. Returns canned
+  replies for admin+support roles (users get empty list). Also accepts
+  `?incrementUsage=true&ids=...` to bump usageCount.
+- `src/lib/email-templates.ts` — `DEFAULT_TEMPLATES` seed array (6 templates:
+  welcome, order_completed, order_failed, ticket_reply, low_balance,
+  referral_earned), `renderTemplate()` ({{var}} interpolation),
+  `getEmailTemplate()` (DB lookup by key), `sendTemplatedEmail()`,
+  `seedEmailTemplates()` (idempotent upsert — doesn't overwrite admin edits),
+  `notifTypeToTemplateKey()` (maps notif type+meta → template key).
+
+### Frontend
+- `src/components/novsmm/faq.tsx` — Public FAQ section for the landing page.
+  Fetches `/api/cms?type=faq`, renders accordion-style. Gracefully hidden
+  (returns null) when no FAQ entries are published. Includes a "Still have
+  questions? Chat with us" CTA that opens the WhatsApp widget.
+
+## Files Modified (7)
+
+### `prisma/schema.prisma`
+- Added 3 new models at the end: `EmailTemplate` (key/name/subject/body/
+  isActive, indexed by key+isActive), `CmsContent` (type/slug/title/excerpt/
+  body/category/tags/status/authorId/sortOrder/views/publishedAt, indexed by
+  type+status, slug, category), `CannedReply` (title/body/category/language/
+  createdBy/usageCount, indexed by category+language).
+- `bunx prisma db push --accept-data-loss` — success, Prisma Client regenerated.
+
+### `src/lib/auth.ts`
+- Added "impersonate" NextAuth credentials provider. Accepts
+  `{ adminEmail, adminPassword, targetUserId }`. Validates admin (password
+  via bcrypt, role==="admin", status==="active"), validates target user
+  (exists, active, NOT admin), audit-logs "impersonate" action, returns a
+  user object with BOTH identities (target user's data + realAdminId/
+  realAdminEmail/realAdminName).
+- Modified `jwt` callback: when `token.realAdminId` is set, refresh the
+  impersonated user's data directly from DB (skips the per-userId cache to
+  avoid leaking impersonation state). The realAdminId/realAdminEmail/
+  realAdminName fields are preserved across refreshes.
+- Modified `session` callback: exposes `impersonating`, `realAdminId`,
+  `realAdminEmail`, `realAdminName` on session.user.
+- Updated `AppSession` type to include the impersonation fields.
+
+### `src/lib/notify.ts`
+- `createNotification()` now accepts an optional `meta` field
+  (Record<string, any>) used for both template key resolution AND
+  {{variable}} interpolation.
+- When `sendEmail` is true, looks up an email template via
+  `notifTypeToTemplateKey(type, meta)` and calls `sendTemplatedEmail()`.
+  Falls back to the legacy hardcoded text if no template exists or template
+  is inactive — preserves 100% backward compatibility.
+
+### `src/components/novsmm/admin-panel.tsx`
+- Imports: added `Mail`, `Newspaper`, `LogIn`, `Eye`, `Save`, `ExternalLink`
+  from lucide-react. Added `signIn, useSession as useNextAuthSession` from
+  next-auth/react. Added `useCallback` to React import.
+- ADMIN_NAV: added `emailTemplates` (Mail icon) and `cms` (Newspaper icon)
+  after `version`.
+- AdminPanel render: added `{adminTab === "emailTemplates" && <AdminEmailTemplates />}`
+  and `{adminTab === "cms" && <AdminCms />}`.
+- AdminUsers: added "Impersonate" button (LogIn icon, amber hover) in each
+  user row's actions — visible only for active non-admin users. Opens
+  ImpersonateModal.
+- New component `ImpersonateModal`: prompts admin for password, pre-flights
+  via `/api/admin/impersonate`, then calls `signIn("impersonate", {...})`
+  to mint the new session, reloads the page on success.
+- New component `AdminEmailTemplates`: table of templates (name, key,
+  subject, status, actions). Edit/Create modal with subject + body fields
+  (monospace textarea), live preview pane with sample variables
+  (name=Alex, orderId=A-10432, etc.), activate/deactivate toggle. Auto-seeds
+  defaults on first GET.
+- New component `AdminCms`: type filter dropdown, table of content items
+  (title, type, category, status, views, publishedAt, actions). Edit/Create
+  modal with title (auto-generates slug), type, status, category, sortOrder,
+  tags, excerpt, body (markdown textarea).
+- New components `EmailTemplateEditor` and `CmsEditor` (modals).
+
+### `src/components/novsmm/app-store.ts`
+- Added `"emailTemplates"` and `"cms"` to the `AdminTab` union (after
+  `"version"`).
+
+### `src/components/novsmm/dashboard-shell.tsx`
+- Imports: added `AlertTriangle`, `ArrowLeft`, `Loader2` from lucide-react.
+- Added impersonation banner: sticky full-width amber bar at the very top
+  (above sidebar+main). Shows "You are impersonating {user.name} as admin.
+  All actions are audited." + "Return to admin" button. Calls
+  `/api/admin/impersonate/stop` then reloads.
+- Layout: changed outer div from `flex min-h-screen` to `flex min-h-screen
+  flex-col`, wrapped sidebar+main in `<div className="flex flex-1">`. When
+  impersonating, sidebar's `top-0 h-screen` becomes `top-12 h-[calc(100vh-
+  3rem)]` and header's `top-0` becomes `top-12` — both stick below the
+  banner.
+
+### `src/components/novsmm/dashboard-tickets.tsx`
+- Imports: added `ClipboardList` icon. Added `useSession` from `@/hooks/
+  use-api`.
+- DashboardTickets: reads `session.user.role`, sets `canUseCannedReplies`
+  flag (true for admin+support only).
+- ConversationComposer: accepts new `canUseCannedReplies` prop. When true,
+  renders `CannedRepliesButton` next to the send button.
+- New component `CannedRepliesButton`: dropdown button (ClipboardList icon).
+  Fetches `/api/canned-replies` on first open. Renders a popover with the
+  list of canned replies (title, category, body preview). On select,
+  appends the body to the input (with `\n\n` separator if input has
+  content) and fire-and-forget bumps usageCount via
+  `/api/canned-replies?incrementUsage=true&ids={id}`. Closes on outside
+  click.
+
+### `src/app/page.tsx`
+- Imported `Faq` from `./faq`. Added `<Faq />` to the landing page render
+  (after `<Security />`, before `<Footer />`).
+
+## Verification
+
+- **`bun run lint`**: 0 errors, 1 pre-existing warning (load-test.js,
+  unrelated to Sprint 4).
+- **`bunx prisma db push --accept-data-loss`**: success. Prisma Client
+  v6.11.1 regenerated with the 3 new models.
+- **Dev server**: started via `.zscripts/dev.sh`. `curl http://localhost:3000/`
+  → HTTP 200 (homepage compiles in ~5s after warmup).
+- **Endpoint checks** (all without auth cookie):
+  - `GET /api/cms` → 200 (public, returns `{"items":[]}`)
+  - `GET /api/cms?type=faq` → 200 (public)
+  - `GET /api/cms?slug=nonexistent` → 200 (returns `{"item":null}`)
+  - `GET /api/admin/email-templates` → 401 (auth required)
+  - `GET /api/admin/canned-replies` → 401 (auth required)
+  - `GET /api/canned-replies` → 401 (auth required)
+  - `POST /api/admin/impersonate` (with Origin header) → 401 (auth required)
+  - `POST /api/admin/impersonate/stop` (with Origin header) → 401 (auth
+    required)
+  - `GET /api/admin/cms` → 401 (auth required)
+- **dev.log**: no compilation errors. Only pre-existing NextAuth warnings
+  (NEXTAUTH_URL, NO_SECRET) which are sandbox-only and unrelated to Sprint 4.
+
+## Architecture Notes
+
+### Impersonation flow (most complex piece)
+1. Admin clicks "Impersonate" on a user row → ImpersonateModal opens.
+2. Admin enters their password.
+3. Frontend POSTs to `/api/admin/impersonate` (pre-flight: validates target
+   user active+non-admin, audit-logs "impersonate_attempt", returns adminEmail).
+4. Frontend calls `signIn("impersonate", { adminEmail, adminPassword,
+   targetUserId })` — NextAuth routes this to the "impersonate" credentials
+   provider in auth.ts.
+5. The provider validates the admin's password via bcrypt, validates the
+   target user, audit-logs "impersonate", and returns a user object with
+   BOTH identities (target user's data + realAdminId/realAdminEmail/
+   realAdminName).
+6. NextAuth's `jwt` callback copies `realAdminId/realAdminEmail/realAdminName`
+   into the token on first sign-in. On subsequent requests, the jwt callback
+   sees `token.realAdminId` set and refreshes the IMPERSONATED user's data
+   directly from DB (skips the per-userId cache to avoid leaking
+   impersonation state into the admin's cache entry).
+7. NextAuth's `session` callback exposes `impersonating`, `realAdminId`,
+   `realAdminEmail`, `realAdminName` on `session.user`.
+8. Frontend reloads → DashboardShell sees `session.user.impersonating` is
+   true → shows the amber banner at the top.
+9. Admin clicks "Return to admin" → frontend POSTs to `/api/admin/
+   impersonate/stop`.
+10. The stop route reads `session.user.realAdminId`, validates the admin
+    still exists+active, audit-logs "impersonate_stop", mints a fresh JWT
+    for the admin via `next-auth/jwt`'s `encode()` function with the same
+    NEXTAUTH_SECRET, overwrites the session cookie.
+11. Frontend reloads → admin is back in their own account.
+
+### Email templates flow
+1. On first GET to `/api/admin/email-templates`, if the EmailTemplate table
+   is empty, `seedEmailTemplates()` runs and creates the 6 default templates
+   via `upsert` (skip update — doesn't overwrite admin edits).
+2. Admin edits subject/body in the UI → PATCH `/api/admin/email-templates`.
+3. When `createNotification({ sendEmail: true, type: "order", meta: {...} })`
+   is called, notify.ts maps the notif type+meta to a template key
+   (`notifTypeToTemplateKey`), calls `sendTemplatedEmail(key, to, vars)`.
+4. `sendTemplatedEmail` looks up the template by key, renders
+   `{{variables}}` via regex replacement, calls `sendEmail()` with the
+   rendered subject/body.
+5. If the template doesn't exist or is inactive, falls back to the legacy
+   hardcoded `Hi {name},\n\n{message}\n\n— NOVSMM Team` text — 100%
+   backward compatible.
+
+### CMS/Blog/FAQ flow
+1. Admin creates content in the CMS tab (type: blog_post|faq|announcement|
+   page, status: draft|published|archived).
+2. When status is set to "published", `publishedAt` is stamped.
+3. Public `/api/cms` route returns only `status:"published"` items. Single-
+   item fetch by slug increments `views` (fire-and-forget).
+4. The `<Faq />` component on the landing page fetches `/api/cms?type=faq`
+   and renders an accordion. Returns null (hidden) when no FAQ entries are
+   published — graceful degradation.
+
+### Canned replies flow
+1. Admin creates canned replies in the admin panel (via API routes — admin
+   UI for creating them is at `/api/admin/canned-replies`, accessible to
+   admins).
+2. Support staff + admins see a ClipboardList icon in the ticket composer.
+3. Clicking the icon fetches `/api/canned-replies` and shows a popover with
+   the list.
+4. Selecting a reply appends its body to the input (with `\n\n` separator
+   if input has content) and fire-and-forget bumps `usageCount`.
+
+## Sprint 4 complete. Pending: Sprint 5 (Landing trust), Sprint 6 (Security).

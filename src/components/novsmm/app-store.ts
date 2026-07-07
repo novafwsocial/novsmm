@@ -39,18 +39,20 @@ export type AdminTab =
   | "providers"
   | "payments"
   | "promotions"
+  | "withdrawals"
+  | "refunds"
   | "apiKeys"
   | "licenses"
   | "currencies"
   | "languages"
   | "webhooks"
-  | "withdrawals"
-  | "refunds"
   | "settings"
   | "security"
   | "roles"
   | "socialAuth"
-  | "version";
+  | "version"
+  | "emailTemplates"
+  | "cms";
 
 type AppState = {
   view: AppView;

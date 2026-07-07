@@ -159,6 +159,70 @@ const providers: NextAuthOptions["providers"] = [
       } as any;
     },
   }),
+  // ── Impersonation provider ──
+  // Allows an admin to "login as" another user to reproduce issues.
+  // The admin authenticates with their own email+password; the provider
+  // validates the admin AND the target user, then returns a user object
+  // that contains BOTH identities. The jwt callback preserves realAdminId/
+  // realAdminEmail/realAdminName so the admin can later return to their
+  // own account via /api/admin/impersonate/stop.
+  //
+  // SECURITY:
+  // - Admin password is always required (no bypass via 2FA for impersonation)
+  // - Target user must exist, be active, and NOT be an admin (safety)
+  // - Audit log records the impersonation start
+  CredentialsProvider({
+    name: "impersonate",
+    credentials: {
+      adminEmail: { label: "Admin Email", type: "email" },
+      adminPassword: { label: "Admin Password", type: "password" },
+      targetUserId: { label: "Target User ID", type: "text" },
+    },
+    async authorize(credentials) {
+      if (!credentials?.adminEmail || !credentials?.adminPassword || !credentials?.targetUserId) {
+        throw new Error("Admin email, password, and target user ID are required");
+      }
+
+      const adminEmail = credentials.adminEmail.toLowerCase();
+
+      // ── Validate the admin ──
+      const admin = await db.user.findUnique({ where: { email: adminEmail } });
+      if (!admin || !admin.passwordHash) throw new Error("Invalid admin credentials");
+      if (admin.role !== "admin") throw new Error("Only admins can impersonate");
+      if (admin.status !== "active") throw new Error("Admin account is not active");
+
+      const validPw = await bcrypt.compare(credentials.adminPassword, admin.passwordHash);
+      if (!validPw) throw new Error("Invalid admin credentials");
+
+      // ── Validate the target user ──
+      const target = await db.user.findUnique({
+        where: { id: credentials.targetUserId },
+      });
+      if (!target) throw new Error("Target user not found");
+      if (target.status !== "active") throw new Error("Target user is not active");
+      if (target.role === "admin") throw new Error("Cannot impersonate another admin");
+
+      // ── Audit log (start) ──
+      await audit(admin.id, "impersonate", "user", target.id, {
+        targetEmail: target.email,
+        targetName: target.name,
+      });
+
+      // Return the IMPERSONATED user's identity, plus the admin's identity
+      // in realAdminId/realAdminEmail/realAdminName so the jwt callback can
+      // preserve the admin context for "Return to admin".
+      return {
+        id: target.id,
+        email: target.email,
+        name: target.name,
+        role: target.role,
+        username: target.username,
+        realAdminId: admin.id,
+        realAdminEmail: admin.email,
+        realAdminName: admin.name,
+      } as any;
+    },
+  }),
 ];
 
 // ── Google OAuth ──
@@ -232,10 +296,61 @@ export const authOptions: NextAuthOptions = {
         token.id = (user as any).id;
         token.role = (user as any).role;
         token.username = (user as any).username;
+        // Preserve impersonation context from the "impersonate" provider
+        if ((user as any).realAdminId) {
+          token.realAdminId = (user as any).realAdminId;
+          token.realAdminEmail = (user as any).realAdminEmail;
+          token.realAdminName = (user as any).realAdminName;
+        }
       }
       // Only refresh from DB if we have a user id
       if (token.id) {
         const userId = token.id as string;
+
+        // ── Impersonation sessions: refresh the IMPERSONATED user's data
+        // directly from DB (skip cache — the cache key is per-userId and
+        // would overwrite the real admin's cache with the impersonated
+        // user's data, leaking impersonation state). The realAdminId/
+        // realAdminEmail/realAdminName fields are preserved across refreshes
+        // because we only overwrite the user-data fields below.
+        if (token.realAdminId) {
+          try {
+            const impersonated = await db.user.findUnique({
+              where: { id: userId },
+              select: {
+                id: true,
+                role: true,
+                balance: true,
+                heldBalance: true,
+                status: true,
+                currency: true,
+                language: true,
+                country: true,
+                name: true,
+                username: true,
+                email: true,
+                lifetimeEarnings: true,
+              },
+            });
+            if (impersonated && impersonated.status === "active") {
+              token.role = impersonated.role;
+              token.balance = impersonated.balance;
+              token.heldBalance = impersonated.heldBalance;
+              token.status = impersonated.status;
+              token.currency = impersonated.currency;
+              token.language = impersonated.language;
+              token.country = impersonated.country;
+              token.name = impersonated.name;
+              token.username = impersonated.username;
+              token.email = impersonated.email;
+              token.lifetimeEarnings = impersonated.lifetimeEarnings;
+            }
+          } catch {
+            // DB might not be available during build — ignore
+          }
+          return token;
+        }
+
         const cacheKey = `user:${userId}`;
 
         try {
@@ -306,6 +421,14 @@ export const authOptions: NextAuthOptions = {
         (session.user as any).language = token.language;
         (session.user as any).country = token.country;
         (session.user as any).lifetimeEarnings = token.lifetimeEarnings;
+        // ── Impersonation context ──
+        // Exposed so the frontend can show the "Return to admin" banner.
+        // realAdminId/realAdminEmail are only present when this session is
+        // an impersonation session.
+        (session.user as any).impersonating = !!token.realAdminId;
+        (session.user as any).realAdminId = token.realAdminId ?? null;
+        (session.user as any).realAdminEmail = token.realAdminEmail ?? null;
+        (session.user as any).realAdminName = token.realAdminName ?? null;
       }
       return session;
     },
@@ -329,5 +452,10 @@ export type AppSession = {
     balance: number;
     heldBalance: number;
     status: string;
+    // Impersonation context (only set when this session is an impersonation)
+    impersonating?: boolean;
+    realAdminId?: string | null;
+    realAdminEmail?: string | null;
+    realAdminName?: string | null;
   };
 };

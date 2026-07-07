@@ -1,4 +1,5 @@
 import { db } from "./db";
+import { sendTemplatedEmail, notifTypeToTemplateKey } from "./email-templates";
 
 /**
  * NOVSMM notification service.
@@ -14,6 +15,13 @@ type NotifInput = {
   amount?: number;
   severity?: "info" | "success" | "warning";
   sendEmail?: boolean;
+  /**
+   * Optional metadata used to:
+   *   1. Pick the right email template (e.g. order status → order_completed template)
+   *   2. Provide variables for {{var}} interpolation in the email body
+   * Example: { orderId: "A-123", serviceName: "Instagram followers", total: 9.99, status: "completed" }
+   */
+  meta?: Record<string, any>;
 };
 
 export async function createNotification(input: NotifInput) {
@@ -45,14 +53,36 @@ export async function createNotification(input: NotifInput) {
   if (input.sendEmail && input.userId) {
     const user = await db.user.findUnique({
       where: { id: input.userId },
-      select: { email: true, name: true },
+      select: { email: true, name: true, username: true },
     });
     if (user) {
-      await sendEmail({
-        to: user.email,
-        subject: input.title,
-        text: `Hi ${user.name ?? "there"},\n\n${input.message}\n\n— NOVSMM Team`,
-      }).catch((e) => console.error("[email] send failed:", e));
+      // ── Try the templated email first ──
+      // Maps notif type + meta to a template key. If a template exists &
+      // is active, sendTemplatedEmail renders it. Otherwise, fall back to
+      // the legacy hardcoded text (preserving prior behaviour).
+      const templateKey = notifTypeToTemplateKey(input.type, input.meta);
+      const templateVars: Record<string, string | number> = {
+        name: user.name ?? user.username ?? "there",
+        ...(input.meta ?? {}),
+      };
+
+      let sent = null;
+      if (templateKey) {
+        try {
+          sent = await sendTemplatedEmail(templateKey, user.email, templateVars);
+        } catch (e) {
+          console.error("[email] templated send failed:", e);
+        }
+      }
+
+      // Fallback: legacy hardcoded text
+      if (!sent) {
+        await sendEmail({
+          to: user.email,
+          subject: input.title,
+          text: `Hi ${user.name ?? "there"},\n\n${input.message}\n\n— NOVSMM Team`,
+        }).catch((e) => console.error("[email] send failed:", e));
+      }
     }
   }
 
