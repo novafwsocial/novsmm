@@ -13,12 +13,16 @@ import { getRedis, isRedisAvailable } from "./redis";
  * automatically upgrade to background processing when Redis is provisioned.
  *
  * Queue architecture:
- *   - order.fulfill      → Order fulfillment (was setTimeout in API routes)
- *   - email.send         → Email delivery (was synchronous in notify.ts)
- *   - ws.broadcast       → WebSocket broadcast (was HTTP POST to mini-service)
- *   - provider.sync      → Provider catalog sync (was manual CLI script)
- *   - loyalty.reconcile  → Achievement reconciliation (was synchronous in API)
- *   - ai.insights        → AI insights generation (was synchronous in API)
+ *   - order.fulfill           → Order fulfillment (was setTimeout in API routes)
+ *   - email.send              → Email delivery (was synchronous in notify.ts)
+ *   - ws.broadcast            → WebSocket broadcast (was HTTP POST to mini-service)
+ *   - provider.sync           → Provider catalog sync (was manual CLI script)
+ *   - loyalty.reconcile       → Achievement reconciliation (was synchronous in API)
+ *   - ai.insights             → AI insights generation (was synchronous in API)
+ *   - smm.subscription.check  → Poll active SMM subscriptions for new posts and
+ *                               auto-create orders for each new post detected.
+ *   - refill.autocheck        → Periodically check completed orders for delivery
+ *                               drops and auto-request refills (anti-drop).
  *
  * Each queue has: retries (3), exponential backoff, DLQ, concurrency limit.
  */
@@ -29,7 +33,9 @@ export type QueueName =
   | "ws.broadcast"
   | "provider.sync"
   | "loyalty.reconcile"
-  | "ai.insights";
+  | "ai.insights"
+  | "smm.subscription.check"
+  | "refill.autocheck";
 
 const QUEUE_CONFIG: Record<
   QueueName,
@@ -41,6 +47,8 @@ const QUEUE_CONFIG: Record<
   "provider.sync": { concurrency: 1, maxRetries: 2, backoffMs: 30000 },
   "loyalty.reconcile": { concurrency: 3, maxRetries: 3, backoffMs: 2000 },
   "ai.insights": { concurrency: 1, maxRetries: 2, backoffMs: 30000 },
+  "smm.subscription.check": { concurrency: 1, maxRetries: 3, backoffMs: 60000 },
+  "refill.autocheck": { concurrency: 1, maxRetries: 3, backoffMs: 60000 },
 };
 
 // Cache queue instances
@@ -147,6 +155,14 @@ const JOB_HANDLERS: Record<QueueName, (data: any) => Promise<void>> = {
   "ai.insights": async (data) => {
     // Phase 3: stub — full implementation in Phase 5
     console.log("[queue:ai.insights] Generating insights for user:", data.userId);
+  },
+  "smm.subscription.check": async (_data) => {
+    const { checkSmmSubscriptions } = await import("./smm-subscriptions");
+    await checkSmmSubscriptions();
+  },
+  "refill.autocheck": async (_data) => {
+    const { autoRefillCheck } = await import("./auto-refill");
+    await autoRefillCheck();
   },
 };
 

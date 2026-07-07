@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 const DashboardAnalytics = dynamic(() => import("./dashboard-analytics").then(m => ({ default: m.DashboardAnalytics })), { loading: () => <TabLoader /> });
 const DashboardMarketplace = dynamic(() => import("./dashboard-marketplace").then(m => ({ default: m.DashboardMarketplace })), { loading: () => <TabLoader /> });
 const DashboardOrders = dynamic(() => import("./dashboard-orders").then(m => ({ default: m.DashboardOrders })), { loading: () => <TabLoader /> });
+const DashboardSubscriptions = dynamic(() => import("./dashboard-subscriptions").then(m => ({ default: m.DashboardSubscriptions })), { loading: () => <TabLoader /> });
 const DashboardWallet = dynamic(() => import("./dashboard-wallet").then(m => ({ default: m.DashboardWallet })), { loading: () => <TabLoader /> });
 const DashboardTickets = dynamic(() => import("./dashboard-tickets").then(m => ({ default: m.DashboardTickets })), { loading: () => <TabLoader /> });
 const DashboardNotifications = dynamic(() => import("./dashboard-notifications").then(m => ({ default: m.DashboardNotifications })), { loading: () => <TabLoader /> });
@@ -288,6 +289,7 @@ export function AppView({ landing }: { landing: ReactNode }) {
         {dashboardTab === "analytics" && <DashboardAnalytics />}
         {dashboardTab === "marketplace" && <DashboardMarketplace />}
         {dashboardTab === "orders" && <DashboardOrders />}
+        {dashboardTab === "subscriptions" && <DashboardSubscriptions />}
         {dashboardTab === "wallet" && <DashboardWallet />}
         {dashboardTab === "tickets" && <DashboardTickets />}
         {dashboardTab === "notifications" && <DashboardNotifications />}

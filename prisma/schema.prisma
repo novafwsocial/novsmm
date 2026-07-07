@@ -45,6 +45,7 @@ model User {
   favorites     Favorite[]
   loyaltyPoints LoyaltyPoint[]
   achievements  Achievement[]
+  smmSubscriptions SmmSubscription[]
 }
 
 model Account {
@@ -119,6 +120,7 @@ model Service {
   provider     Provider? @relation(fields: [providerId], references: [id])
   orders       Order[]
   favorites    Favorite[]
+  smmSubscriptions SmmSubscription[]
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -562,4 +564,41 @@ model Sequence {
   lastValue  Int    @default(0)
   prefix     String             // display prefix (same as id, kept for clarity)
   updatedAt  DateTime @updatedAt
+}
+
+// ─────────── SMM Subscriptions (auto-likes on new posts) ───────────
+// Different from the removed SaaS `Subscription` model (team-seats billing).
+// SMM subscriptions are "auto-deliver X likes to every new post for N days" —
+// a standard SMM panel feature. The worker checks for new posts periodically
+// and auto-creates orders.
+model SmmSubscription {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // SUB-XXXXX style
+  userId          String
+  serviceId       String
+  serviceName     String   // snapshot
+  platform        String   // snapshot
+  username        String   // social media handle to monitor (e.g. @username)
+  link            String?  // profile URL
+  // Quantity range per post (provider delivers random amount in [min, max])
+  minQuantity     Int
+  maxQuantity     Int
+  posts           Int      // total number of posts to cover
+  postsProcessed  Int      @default(0) // how many posts have been delivered
+  delayMinutes    Int      @default(0) // delay between post detection and delivery
+  expiry          DateTime // when the subscription ends
+  status          String   @default("active") // active | paused | completed | expired | cancelled
+  lastCheckedAt   DateTime? // last time the worker checked for new posts
+  lastPostUrl     String?  // URL of the last detected post (dedup)
+  totalSpent      Float    @default(0) // cumulative cost of auto-orders
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([expiry])
 }

@@ -634,6 +634,88 @@ export function useRepeatOrder() {
   });
 }
 
+// ── Refill order (dashboard — session auth) ──
+// Triggers a refill request for a completed order. The backend creates a
+// ticket with subject [Refill] {publicId} and enqueues an order.fulfill job
+// with isRefill=true. The user sees progress via the Tickets tab.
+export function useRefillOrder() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { orderId: string }) =>
+      api.post<{ success: boolean; refillId: string }>("/api/orders/refill", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["tickets"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({
+        title: "Refill requested",
+        description: `Refill ticket ${data.refillId} created — we'll process it shortly.`,
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Refill failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+// ── SMM subscriptions (auto-deliver to every new post) ──
+// These are separate from the removed SaaS Subscription (team-seats billing).
+// The SMM worker polls active subscriptions for new posts and auto-creates
+// orders; see src/lib/smm-subscriptions.ts for the worker logic.
+export function useSmmSubscriptions(status?: string) {
+  const q = status ? `?status=${status}` : "";
+  return useQuery({
+    queryKey: ["smm-subscriptions", status],
+    queryFn: () => api.get<{ subscriptions: any[] }>(`/api/subscriptions${q}`),
+    refetchInterval: 60 * 1000, // 60s — the worker checks at most every 5 min
+  });
+}
+
+export function useCreateSmmSubscription() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: {
+      serviceId: string;
+      username: string;
+      link?: string;
+      minQuantity: number;
+      maxQuantity: number;
+      posts: number;
+      delayMinutes?: number;
+      expiryDays: number;
+    }) => api.post<{ subscription: any; message: string }>("/api/subscriptions", data),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["smm-subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({ title: "Subscription created", description: data.message });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+export function useUpdateSmmSubscription() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: string }) =>
+      api.patch<{ subscription: any; message: string }>(
+        `/api/subscriptions/${id}`,
+        { status },
+      ),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["smm-subscriptions"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+      toast({ title: "Subscription updated", description: data.message });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
 // ── Public currencies (for conversion) ──
 export function usePublicCurrencies() {
   return useQuery({

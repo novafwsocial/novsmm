@@ -7,15 +7,15 @@ import {
   Filter,
   Download,
   Repeat2,
+  RotateCcw,
   X,
   ExternalLink,
   Clock,
   AlertCircle,
   Loader2,
-  RefreshCw,
   Droplets,
 } from "lucide-react";
-import { useOrders, useRepeatOrder, useCancelOrder, useCreateTicket } from "@/hooks/use-api";
+import { useOrders, useRepeatOrder, useCancelOrder, useCreateTicket, useRefillOrder } from "@/hooks/use-api";
 import { type OrderStatus } from "./dashboard-data";
 import { StatusPill } from "./status-pill";
 import { Reveal } from "./reveal";
@@ -42,6 +42,7 @@ export function DashboardOrders() {
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const { data, isLoading } = useOrders(filter !== "all" ? filter : undefined, query || undefined);
   const repeatOrder = useRepeatOrder();
+  const refillOrder = useRefillOrder();
   const { user } = useApp();
   const currency = user?.currency ?? "USD";
 
@@ -127,7 +128,7 @@ export function DashboardOrders() {
                   <th className="px-4 py-3 text-left font-medium">Progress</th>
                   <th className="px-4 py-3 text-left font-medium">Provider</th>
                   <th className="px-4 py-3 text-right font-medium">ETA</th>
-                  <th className="px-4 py-3 text-right font-medium">Repeat</th>
+                  <th className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -191,13 +192,26 @@ export function DashboardOrders() {
                       {o.eta}
                     </td>
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => repeatOrder.mutate({ orderId: o.id })}
-                        disabled={repeatOrder.isPending}
-                        className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
-                      >
-                        <Repeat2 className="h-3 w-3" />
-                      </button>
+                      <div className="inline-flex items-center gap-1">
+                        <button
+                          onClick={() => repeatOrder.mutate({ orderId: o.id })}
+                          disabled={repeatOrder.isPending}
+                          title="Repeat order"
+                          className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
+                        >
+                          <Repeat2 className="h-3 w-3" />
+                        </button>
+                        {o.status === "completed" && (
+                          <button
+                            onClick={() => refillOrder.mutate({ orderId: o.id })}
+                            disabled={refillOrder.isPending}
+                            title="Request refill"
+                            className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
+                          >
+                            <RotateCcw className="h-3 w-3" />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -240,6 +254,7 @@ function OrderDetailDrawer({
 }) {
   const cancelOrder = useCancelOrder();
   const createTicket = useCreateTicket();
+  const refillOrder = useRefillOrder();
   const [refillSubmitting, setRefillSubmitting] = useState(false);
 
   // Cancel eligibility: status must be pending/processing and within 60s
@@ -263,9 +278,17 @@ function OrderDetailDrawer({
   const handleRefill = async () => {
     setRefillSubmitting(true);
     try {
+      // Use the internal refill endpoint (session auth) — creates a ticket
+      // with subject `[Refill] {publicId}` and enqueues an order.fulfill
+      // job with isRefill=true. Falls back to a manual support ticket only
+      // if the endpoint returns an unexpected error.
+      await refillOrder.mutateAsync({ orderId: order.id });
+      onClose();
+    } catch {
+      // Fallback: open a manual support ticket so the user isn't stuck.
       await createTicket.mutateAsync({
         subject: `Refill request — Order #${order.publicId}`,
-        message: `Please process a refill for order #${order.publicId} (${order.platform} · ${order.serviceName}, qty ${order.quantity}). The order appears to have dropped below the delivered amount. Link: ${order.link ?? "—"}`,
+        message: `Please process a refill for order #${order.publicId} (${order.platform} · ${order.serviceName}, qty ${order.quantity}). Link: ${order.link ?? "—"}`,
         priority: "medium",
       });
       onClose();
@@ -434,18 +457,20 @@ function OrderDetailDrawer({
 
           {/* Action buttons */}
           <div className="mt-2 flex flex-col gap-2">
-            <button
-              onClick={handleRefill}
-              disabled={refillSubmitting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-background py-2.5 text-sm font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-60"
-            >
-              {refillSubmitting ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <RefreshCw className="h-4 w-4" />
-              )}
-              Request refill
-            </button>
+            {order.status === "completed" && (
+              <button
+                onClick={handleRefill}
+                disabled={refillSubmitting}
+                className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/5 py-2.5 text-sm font-medium text-emerald-700 transition-colors hover:bg-emerald-500/10 disabled:opacity-60"
+              >
+                {refillSubmitting ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RotateCcw className="h-4 w-4" />
+                )}
+                Request refill
+              </button>
+            )}
 
             {canCancel ? (
               <button

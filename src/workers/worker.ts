@@ -52,6 +52,16 @@ const HANDLERS: Record<QueueName, (data: any) => Promise<any>> = {
     // Full implementation in Phase 5
     return { generated: true };
   },
+  "smm.subscription.check": async (_data) => {
+    const { checkSmmSubscriptions } = await import("../lib/smm-subscriptions");
+    const result = await checkSmmSubscriptions();
+    return result;
+  },
+  "refill.autocheck": async (_data) => {
+    const { autoRefillCheck } = await import("../lib/auto-refill");
+    const result = await autoRefillCheck();
+    return result;
+  },
 };
 
 const QUEUE_CONCURRENCY: Record<QueueName, number> = {
@@ -61,6 +71,8 @@ const QUEUE_CONCURRENCY: Record<QueueName, number> = {
   "provider.sync": 1,
   "loyalty.reconcile": 3,
   "ai.insights": 1,
+  "smm.subscription.check": 1,
+  "refill.autocheck": 1,
 };
 
 async function main() {
