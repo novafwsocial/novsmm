@@ -1,8 +1,9 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from "@/lib/app-providers";
+import { SwRegister } from "@/components/novsmm/sw-register";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -15,6 +16,13 @@ const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
   display: "swap",
 });
+
+export const viewport: Viewport = {
+  themeColor: "#0a0a0a",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+};
 
 export const metadata: Metadata = {
   title: "NOVSMM — Infrastructure for Social Media Marketing at Scale",
@@ -57,6 +65,7 @@ export default function RootLayout({
         <AppProviders>
           {children}
           <Toaster />
+          <SwRegister />
         </AppProviders>
       </body>
     </html>

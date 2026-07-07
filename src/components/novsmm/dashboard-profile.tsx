@@ -43,6 +43,9 @@ import { formatPrice } from "@/lib/currency-utils";
 import { api } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { useApp } from "./app-store";
+import { signOut } from "next-auth/react";
+import { AlertTriangle, Trash2 } from "lucide-react";
 
 export function DashboardProfile() {
   const { data: sessionData } = useSession();
@@ -146,6 +149,7 @@ export function DashboardProfile() {
 
       {/* Profile section */}
       {activeSection === "profile" && (
+        <>
         <Reveal blur>
           <div className="rounded-2xl border border-border/60 bg-background p-6">
             <div className="flex items-center gap-2 text-base font-semibold"><User className="h-4 w-4 text-primary" />Personal information</div>
@@ -184,6 +188,10 @@ export function DashboardProfile() {
             </button>
           </div>
         </Reveal>
+
+        {/* Danger Zone — GDPR self-service account deletion */}
+        <DangerZone />
+        </>
       )}
 
       {/* Security section */}
@@ -214,6 +222,197 @@ function FieldInput({ label, icon, value, onChange }: { label: string; icon: Rea
         <input value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full bg-transparent text-sm text-foreground focus:outline-none" />
       </div>
     </label>
+  );
+}
+
+// ─── Danger Zone — GDPR self-service account deletion ───
+function DangerZone() {
+  const { toast } = useToast();
+  const { setAuthed, setView } = useApp();
+  const [open, setOpen] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [acknowledged, setAcknowledged] = useState(false);
+  const [showPw, setShowPw] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const canDelete =
+    confirmPassword.trim().length > 0 && acknowledged && !loading;
+
+  const handleDelete = async () => {
+    if (!canDelete) return;
+    setLoading(true);
+    try {
+      const res = await api.post<{ success?: boolean; error?: string }>(
+        "/api/me/delete",
+        { confirmPassword }
+      );
+      if (res?.success) {
+        toast({
+          title: "Account deleted",
+          description:
+            "Your personal data has been anonymized. Redirecting…",
+        });
+        // Clear local app state + sign out of NextAuth, then return to landing
+        setAuthed(false, null);
+        setView("home");
+        await signOut({ redirect: false });
+        // Hard reload to clear any cached client state
+        if (typeof window !== "undefined") {
+          window.location.href = "/";
+        }
+      } else if (res?.error) {
+        toast({
+          title: "Could not delete account",
+          description: res.error,
+          variant: "destructive",
+        });
+      }
+    } catch (e: any) {
+      toast({
+        title: "Could not delete account",
+        description: e?.message ?? "Something went wrong. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const close = () => {
+    setOpen(false);
+    setConfirmPassword("");
+    setAcknowledged(false);
+    setShowPw(false);
+  };
+
+  return (
+    <Reveal blur>
+      <div className="rounded-2xl border-2 border-red-500/40 bg-red-500/[0.03] p-6">
+        <div className="flex items-start gap-3">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-red-500/15 text-red-600">
+            <AlertTriangle className="h-4 w-4" />
+          </span>
+          <div className="flex-1">
+            <div className="text-base font-semibold text-red-700 dark:text-red-400">
+              Danger Zone
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Permanently delete your account and anonymize your personal data.
+              This action is irreversible. Orders and transactions are retained
+              for financial audit.
+            </p>
+          </div>
+          <button
+            onClick={() => setOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-red-700"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+            Delete account
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-foreground/50 p-4 backdrop-blur-sm"
+          onClick={close}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+          >
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/15 text-red-600">
+                <AlertTriangle className="h-4 w-4" />
+              </span>
+              <div className="text-base font-semibold text-red-700 dark:text-red-400">
+                Delete account
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-xl border border-red-500/30 bg-red-500/[0.04] p-3 text-xs text-foreground">
+              This will permanently delete your account. Your orders and
+              transactions are retained for financial audit but your personal
+              data will be anonymized. This action <strong>CANNOT</strong> be
+              undone.
+            </div>
+
+            <label className="mt-4 block">
+              <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Confirm your password
+              </span>
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 transition-shadow focus-within:shadow-[0_0_0_4px_rgba(239,68,68,0.18)]">
+                <span className="text-muted-foreground">
+                  <Lock className="h-3.5 w-3.5" />
+                </span>
+                <input
+                  type={showPw ? "text" : "password"}
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  placeholder="Re-enter your password"
+                  className="h-11 w-full bg-transparent text-sm text-foreground focus:outline-none"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw((v) => !v)}
+                  className="text-muted-foreground hover:text-foreground"
+                  aria-label={showPw ? "Hide password" : "Show password"}
+                >
+                  {showPw ? (
+                    <EyeOff className="h-4 w-4" />
+                  ) : (
+                    <Eye className="h-4 w-4" />
+                  )}
+                </button>
+              </div>
+            </label>
+
+            <label className="mt-4 flex items-start gap-2 text-xs text-foreground">
+              <input
+                type="checkbox"
+                checked={acknowledged}
+                onChange={(e) => setAcknowledged(e.target.checked)}
+                className="mt-0.5 h-4 w-4 rounded border-border accent-red-600"
+              />
+              <span>
+                I understand this action is irreversible and that my personal
+                data will be anonymized.
+              </span>
+            </label>
+
+            <button
+              onClick={handleDelete}
+              disabled={!canDelete}
+              className={cn(
+                "mt-5 w-full rounded-xl py-3 text-sm font-medium transition-all",
+                canDelete
+                  ? "bg-red-600 text-white hover:bg-red-700"
+                  : "cursor-not-allowed bg-muted text-muted-foreground"
+              )}
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 inline h-4 w-4 animate-spin" />
+                  Deleting…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="mr-2 inline h-4 w-4" />
+                  Delete my account
+                </>
+              )}
+            </button>
+            <button
+              onClick={close}
+              className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+    </Reveal>
   );
 }
 

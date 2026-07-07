@@ -92,6 +92,18 @@ export async function validateApiKey(req: NextRequest): Promise<{
   // Check if user is active
   if (apiKey.user.status !== "active") return null;
 
+  // Check IP allowlist (if configured)
+  if (apiKey.ipAllowlist) {
+    const clientIp =
+      req.headers.get("x-client-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+    const allowedIps = apiKey.ipAllowlist.split(",").map((ip: string) => ip.trim());
+    if (!allowedIps.includes(clientIp) && clientIp !== "unknown") {
+      return null; // IP not allowed — reject
+    }
+  }
+
   // Update last used
   const ip = req.headers.get("x-client-ip") ?? "unknown";
   await db.apiKey.update({

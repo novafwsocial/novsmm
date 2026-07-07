@@ -488,6 +488,19 @@ export function useRevokeApiKey() {
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
   });
 }
+export function useUpdateApiKeyIpAllowlist() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: { id: string; action: "update_ip"; ipAllowlist: string }) =>
+      api.patch<{ ipAllowlist: string | null }>("/api/admin/api-keys", data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["admin-api-keys"] });
+      toast({ title: "IP allowlist updated" });
+    },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
 
 // ── Admin: Licenses ──
 export function useAdminLicenses() {

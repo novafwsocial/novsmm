@@ -28,6 +28,7 @@ export async function GET(req: NextRequest) {
     status: k.status,
     lastUsedAt: k.lastUsedAt,
     lastUsedIp: k.lastUsedIp,
+    ipAllowlist: k.ipAllowlist,
     createdAt: k.createdAt,
     revokedAt: k.revokedAt,
     user: k.user,
@@ -46,7 +47,7 @@ export async function POST(req: NextRequest) {
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { userId, name, permissions } = body;
+  const { userId, name, permissions, ipAllowlist } = body;
 
   if (!userId || !name) {
     return apiError("User ID and key name are required", 422);
@@ -54,6 +55,16 @@ export async function POST(req: NextRequest) {
 
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) return apiError("User not found", 404);
+
+  // Normalize the IP allowlist: trim, drop empties, store as CSV string
+  let normalizedAllowlist: string | null = null;
+  if (typeof ipAllowlist === "string" && ipAllowlist.trim().length > 0) {
+    const ips = ipAllowlist
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s.length > 0);
+    normalizedAllowlist = ips.length > 0 ? ips.join(",") : null;
+  }
 
   // Generate the full key + public ID
   const fullKey = generateApiKey();
@@ -72,10 +83,11 @@ export async function POST(req: NextRequest) {
       userId,
       permissions: permissions ?? "read,order",
       status: "active",
+      ipAllowlist: normalizedAllowlist,
     },
   });
 
-  await audit(adminId, "create", "api_key", apiKey.id, { publicId, forUser: user.email, name });
+  await audit(adminId, "create", "api_key", apiKey.id, { publicId, forUser: user.email, name, ipAllowlist: normalizedAllowlist });
 
   // Return the full key ONCE — the admin must copy and share it now
   return apiOk(
@@ -96,7 +108,7 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * PATCH /api/admin/api-keys — revoke an API key.
+ * PATCH /api/admin/api-keys — revoke an API key or update its IP allowlist.
  */
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAdmin();
@@ -104,9 +116,38 @@ export async function PATCH(req: NextRequest) {
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { id, action } = body;
+  const { id, action, ipAllowlist } = body;
 
-  if (!id || action !== "revoke") {
+  if (!id) {
+    return apiError("API key id is required", 422);
+  }
+
+  // Update IP allowlist (action: "update_ip")
+  if (action === "update_ip") {
+    let normalizedAllowlist: string | null = null;
+    if (typeof ipAllowlist === "string" && ipAllowlist.trim().length > 0) {
+      const ips = ipAllowlist
+        .split(",")
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0);
+      normalizedAllowlist = ips.length > 0 ? ips.join(",") : null;
+    }
+
+    const apiKey = await db.apiKey.update({
+      where: { id },
+      data: { ipAllowlist: normalizedAllowlist },
+    });
+
+    await audit(adminId, "update", "api_key", id, {
+      publicId: apiKey.publicId,
+      ipAllowlist: normalizedAllowlist,
+    });
+
+    return apiOk({ message: "IP allowlist updated", ipAllowlist: normalizedAllowlist });
+  }
+
+  // Revoke (action: "revoke")
+  if (action !== "revoke") {
     return apiError("Invalid action", 422);
   }
 

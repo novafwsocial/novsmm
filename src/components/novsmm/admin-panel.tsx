@@ -90,6 +90,7 @@ import {
   useAdminApiKeys,
   useCreateApiKey,
   useRevokeApiKey,
+  useUpdateApiKeyIpAllowlist,
   useAdminLicenses,
   useCreateLicense,
   useUpdateLicense,
@@ -1957,9 +1958,11 @@ function AdminApiKeys() {
   const { data } = useAdminApiKeys();
   const createKey = useCreateApiKey();
   const revokeKey = useRevokeApiKey();
+  const updateIp = useUpdateApiKeyIpAllowlist();
   const [showCreate, setShowCreate] = useState(false);
   const [newKey, setNewKey] = useState<string | null>(null);
-  const [form, setForm] = useState({ userId: "", name: "", permissions: "read,order" });
+  const [form, setForm] = useState({ userId: "", name: "", permissions: "read,order", ipAllowlist: "" });
+  const [editingIp, setEditingIp] = useState<{ id: string; value: string } | null>(null);
   const keys = data?.apiKeys ?? [];
 
   const handleCreate = async () => {
@@ -1967,8 +1970,14 @@ function AdminApiKeys() {
     if (res?.key) {
       setNewKey(res.key);
       setShowCreate(false);
-      setForm({ userId: "", name: "", permissions: "read,order" });
+      setForm({ userId: "", name: "", permissions: "read,order", ipAllowlist: "" });
     }
+  };
+
+  const handleSaveIp = async () => {
+    if (!editingIp) return;
+    await updateIp.mutateAsync({ id: editingIp.id, action: "update_ip", ipAllowlist: editingIp.value });
+    setEditingIp(null);
   };
 
   return (
@@ -2018,6 +2027,7 @@ function AdminApiKeys() {
                   <th className="px-4 py-3 text-left font-medium">Name</th>
                   <th className="px-4 py-3 text-left font-medium">User</th>
                   <th className="px-4 py-3 text-left font-medium">Permissions</th>
+                  <th className="px-4 py-3 text-left font-medium">IP Allowlist</th>
                   <th className="px-4 py-3 text-left font-medium">Status</th>
                   <th className="px-4 py-3 text-left font-medium">Last used</th>
                   <th className="px-4 py-3 text-right font-medium">Action</th>
@@ -2030,6 +2040,13 @@ function AdminApiKeys() {
                     <td className="px-4 py-3 font-medium text-foreground">{k.name}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{k.user?.email}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{k.permissions}</td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {k.ipAllowlist ? (
+                        <span className="font-mono text-[11px]">{k.ipAllowlist}</span>
+                      ) : (
+                        <span className="text-muted-foreground/60">Any IP</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3">
                       <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", k.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700")}>
                         {k.status}
@@ -2039,19 +2056,29 @@ function AdminApiKeys() {
                       {k.lastUsedAt ? new Date(k.lastUsedAt).toLocaleString() : "Never"}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      {k.status === "active" && (
-                        <button
-                          onClick={() => revokeKey.mutate({ id: k.id, action: "revoke" })}
-                          className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20"
-                        >
-                          Revoke
-                        </button>
-                      )}
+                      <div className="flex items-center justify-end gap-1.5">
+                        {k.status === "active" && (
+                          <>
+                            <button
+                              onClick={() => setEditingIp({ id: k.id, value: k.ipAllowlist ?? "" })}
+                              className="rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-500/20"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                            <button
+                              onClick={() => revokeKey.mutate({ id: k.id, action: "revoke" })}
+                              className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20"
+                            >
+                              Revoke
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
                 {keys.length === 0 && (
-                  <tr><td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No API keys yet</td></tr>
+                  <tr><td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No API keys yet</td></tr>
                 )}
               </tbody>
             </table>
@@ -2067,11 +2094,31 @@ function AdminApiKeys() {
               <Input label="User ID" value={form.userId} onChange={(v) => setForm({ ...form, userId: v })} />
               <Input label="Key name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
               <Input label="Permissions (comma-separated)" value={form.permissions} onChange={(v) => setForm({ ...form, permissions: v })} />
+              <Input label="IP Allowlist (comma-separated, optional)" value={form.ipAllowlist} onChange={(v) => setForm({ ...form, ipAllowlist: v })} />
+              <p className="text-[11px] text-muted-foreground">
+                Restrict this key to specific IPs. Leave empty to allow any IP.
+              </p>
             </div>
             <button onClick={handleCreate} disabled={createKey.isPending || !form.userId || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
               {createKey.isPending ? "Generating…" : "Generate key"}
             </button>
             <button onClick={() => setShowCreate(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {editingIp && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setEditingIp(null)}>
+          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+            <div className="text-base font-semibold">Edit IP Allowlist</div>
+            <p className="mt-1 text-xs text-muted-foreground">Comma-separated list of allowed IPs. Leave empty to allow any IP.</p>
+            <div className="mt-4 flex flex-col gap-3">
+              <Input label="Allowed IPs" value={editingIp.value} onChange={(v) => setEditingIp({ ...editingIp, value: v })} />
+            </div>
+            <button onClick={handleSaveIp} disabled={updateIp.isPending} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+              {updateIp.isPending ? "Saving…" : "Save allowlist"}
+            </button>
+            <button onClick={() => setEditingIp(null)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
         </div>
       )}

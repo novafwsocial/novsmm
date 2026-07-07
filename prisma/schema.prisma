@@ -298,6 +298,7 @@ model ApiKey {
   name        String   // label e.g. "Production key"
   userId      String
   permissions String   @default("read,order") // comma-separated: read,order,wallet,marketplace
+  ipAllowlist String?  // comma-separated allowed IPs (null = any IP allowed) — P1 security
   status      String   @default("active") // active | revoked
   lastUsedAt  DateTime?
   lastUsedIp  String?
