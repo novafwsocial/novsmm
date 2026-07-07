@@ -5,6 +5,10 @@ import { headers, cookies } from "next/headers";
 import { db } from "./db";
 import { Prisma } from "@prisma/client";
 
+// Re-export requireApiKey from api-key-auth for backward compatibility.
+// Many v1 API routes import { requireApiKey } from "@/lib/api-utils".
+export { requireApiKey } from "./api-key-auth";
+
 /**
  * Typed user object extracted from the session.
  * Eliminates the 73 `(session!.user as any).id` casts across the codebase.

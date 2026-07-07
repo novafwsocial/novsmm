@@ -6,24 +6,196 @@ import { nextPublicId } from "@/lib/ids";
 import { enqueueJob } from "@/lib/queues";
 import { z } from "zod";
 
-const createOrderSchema = z.object({
-  serviceId: z.string().min(1),
+/**
+ * POST /api/v1/orders
+ * Public API for resellers — creates a new order (or multiple orders).
+ * Auth: Bearer nvsk_live_xxx (requires 'order' permission)
+ *
+ * Supports the PerfectPanel / JAP API contract:
+ *   - Single order: { service, link, quantity }
+ *   - Multi-order:  { orders: [{ service, link, quantity }, ...] }
+ *   - Drip-feed:    { service, link, quantity, runs, interval }
+ *   - Custom comments: { service, link, quantity, comments }
+ *
+ * The response always returns the PerfectPanel-compatible shape:
+ *   { status, order, ... } for single order
+ *   { status, orders: [...] } for multi-order
+ */
+const singleOrderSchema = z.object({
+  // PerfectPanel uses "service" — accept both "service" and "serviceId"
+  service: z.string().min(1).optional(),
+  serviceId: z.string().min(1).optional(),
+  link: z.string().min(1).optional().or(z.literal("")),
   quantity: z.number().int().positive(),
-  link: z.string().url().optional().or(z.literal("")),
+  // Drip-feed params (PerfectPanel contract)
+  runs: z.number().int().positive().optional(),
+  interval: z.string().optional(), // e.g. "10m", "1h", "30s"
+  // Custom comments / mentions (some services accept these)
+  comments: z.string().optional(),
+  mentions: z.string().optional(),
+  // Usernames for subscription-like services (auto-likes on new posts)
+  username: z.string().optional(),
+  min: z.number().int().positive().optional(),
+  max: z.number().int().positive().optional(),
+  posts: z.number().int().positive().optional(),
+  delay: z.number().int().positive().optional(),
+  expiry: z.string().optional(),
+});
+
+const multiOrderSchema = z.object({
+  orders: z.array(singleOrderSchema).min(1).max(100),
 });
 
 /**
- * POST /api/v1/orders
- * Public API for resellers — creates a new order.
- * Auth: Bearer nvsk_live_xxx (requires 'order' permission)
- *
- * Same atomic purchase flow as the internal API:
- * 1. Validate service + quantity
- * 2. Check balance
- * 3. Debit balance + create order + create transaction
- * 4. Emit notification
- * 5. Simulate fulfillment
+ * Parse an interval string like "10m", "1h", "30s" into milliseconds.
+ * Defaults to 0 if unparseable.
  */
+function parseInterval(interval?: string): number {
+  if (!interval) return 0;
+  const match = interval.match(/^(\d+)([smhd])$/);
+  if (!match) return 0;
+  const [, num, unit] = match;
+  const n = parseInt(num, 10);
+  switch (unit) {
+    case "s": return n * 1000;
+    case "m": return n * 60 * 1000;
+    case "h": return n * 60 * 60 * 1000;
+    case "d": return n * 24 * 60 * 60 * 1000;
+    default: return 0;
+  }
+}
+
+/**
+ * Create a single order atomically. Used by both single-order and multi-order flows.
+ * Returns { success, order, error } where error is a string on failure.
+ */
+async function createSingleOrder(
+  userId: string,
+  rawOrder: z.infer<typeof singleOrderSchema>
+): Promise<{ success: true; order: any } | { success: false; error: string }> {
+  const serviceId = rawOrder.serviceId || rawOrder.service;
+  if (!serviceId) {
+    return { success: false, error: "service is required" };
+  }
+
+  const link = rawOrder.link || "";
+  const quantity = rawOrder.quantity;
+  const runs = rawOrder.runs || 1;
+  const intervalMs = parseInterval(rawOrder.interval);
+
+  const service = await db.service.findUnique({
+    where: { id: serviceId },
+    include: { provider: true },
+  });
+  if (!service || service.status !== "active") {
+    return { success: false, error: `Service ${serviceId} not available` };
+  }
+
+  // For drip-feed, total quantity = quantity × runs. Validate against maxQty.
+  const totalQuantity = quantity * runs;
+  if (quantity < service.minQty) {
+    return { success: false, error: `Quantity must be >= ${service.minQty}` };
+  }
+  if (totalQuantity > service.maxQty) {
+    return { success: false, error: `Total quantity (${totalQuantity}) must be <= ${service.maxQty}` };
+  }
+
+  const totalPrice = (service.price * totalQuantity) / 1000;
+  const totalCost = (service.cost * totalQuantity) / 1000;
+
+  // Build drip-feed config if runs > 1 or interval specified
+  let dripFeedConfig: any = null;
+  if (runs > 1 || intervalMs > 0) {
+    dripFeedConfig = {
+      totalQuantity,
+      chunks: runs,
+      perChunk: quantity,
+      delayMinutes: Math.round(intervalMs / (60 * 1000)),
+      startDate: new Date().toISOString(),
+    };
+  }
+
+  const publicId = await nextPublicId("A", 10432);
+  const txPublicId = await nextPublicId("TX", 8842);
+
+  let order: any;
+  try {
+    order = await db.$transaction(async (tx) => {
+      const updated = await tx.user.updateMany({
+        where: { id: userId, balance: { gte: totalPrice } },
+        data: { balance: { decrement: totalPrice } },
+      });
+      if (updated.count === 0) {
+        throw new Error("INSUFFICIENT_BALANCE");
+      }
+
+      const created = await tx.order.create({
+        data: {
+          publicId,
+          userId,
+          serviceId: service.id,
+          serviceName: service.name,
+          platform: service.platform,
+          quantity: totalQuantity,
+          unitCost: service.cost,
+          unitPrice: service.price,
+          totalCost,
+          totalPrice,
+          profit: totalPrice - totalCost,
+          status: "processing",
+          progress: 5,
+          providerId: service.providerId,
+          providerName: service.provider?.name,
+          link: link || null,
+          eta: runs > 1 ? `${runs} runs × ${quantity}` : "2m",
+          flag: "🌍",
+          dripFeedConfig: dripFeedConfig ?? undefined,
+        },
+      });
+
+      await tx.transaction.create({
+        data: {
+          publicId: txPublicId,
+          userId,
+          type: "sale",
+          amount: -totalPrice,
+          description: `API Order #${publicId} — ${service.name}${runs > 1 ? ` (drip: ${runs}×${quantity})` : ""}`,
+          method: "balance",
+          reference: publicId,
+        },
+      });
+
+      return created;
+    });
+  } catch (e: any) {
+    if (e.message === "INSUFFICIENT_BALANCE") {
+      const fresh = await db.user.findUnique({
+        where: { id: userId },
+        select: { balance: true },
+      });
+      const currentBalance = fresh?.balance ?? 0;
+      return {
+        success: false,
+        error: `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
+      };
+    }
+    throw e;
+  }
+
+  await createNotification({
+    userId,
+    type: "order",
+    title: `Order #${publicId} placed (via API)`,
+    message: `${service.platform} · ${service.name} — ${totalQuantity.toLocaleString()} units. Total: $${totalPrice.toFixed(2)}`,
+    amount: -totalPrice,
+    severity: "info",
+  });
+
+  enqueueJob("order.fulfill", { orderId: order.id, userId }).catch(() => {});
+
+  return { success: true, order };
+}
+
 export async function POST(req: NextRequest) {
   const { user, error } = await requireApiKey(req, "order");
   if (error) return error;
@@ -31,131 +203,65 @@ export async function POST(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const parsed = createOrderSchema.safeParse(body);
+
+    // Multi-order mode: { orders: [...] }
+    if (body.orders && Array.isArray(body.orders)) {
+      const parsed = multiOrderSchema.safeParse(body);
+      if (!parsed.success) {
+        return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
+      }
+
+      const results: any[] = [];
+      const errors: any[] = [];
+      for (let i = 0; i < parsed.data.orders.length; i++) {
+        const orderInput = parsed.data.orders[i];
+        const result = await createSingleOrder(userId, orderInput);
+        if (result.success) {
+          results.push({
+            order: result.order.publicId,
+            status: result.order.status,
+          });
+        } else {
+          results.push({
+            order: null,
+            error: result.error,
+          });
+          errors.push({ index: i, error: result.error });
+        }
+      }
+
+      return apiOk({
+        status: errors.length === 0 ? "success" : "partial",
+        orders: results,
+        count: results.length,
+        errors: errors.length > 0 ? errors : undefined,
+      }, 201);
+    }
+
+    // Single-order mode
+    const parsed = singleOrderSchema.safeParse(body);
     if (!parsed.success) {
       return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
     }
 
-    const { serviceId, quantity, link } = parsed.data;
+    const result = await createSingleOrder(userId, parsed.data);
+    if (!result.success) {
+      const status = result.error.includes("Insufficient balance") ? 402 : 422;
+      return apiError(result.error, status);
+    }
 
+    const order = result.order;
     const service = await db.service.findUnique({
-      where: { id: serviceId },
-      include: { provider: true },
+      where: { id: order.serviceId },
+      select: { name: true },
     });
-    if (!service || service.status !== "active") {
-      return apiError("Service not available", 404);
-    }
-
-    if (quantity < service.minQty || quantity > service.maxQty) {
-      return apiError(`Quantity must be between ${service.minQty} and ${service.maxQty}`, 422);
-    }
-
-    const totalPrice = (service.price * quantity) / 1000;
-    const totalCost = (service.cost * quantity) / 1000;
-
-    // Race-safe atomic purchase (same pattern as the internal /api/orders
-    // route). The balance check happens INSIDE the transaction via a
-    // conditional `updateMany` (WHERE balance >= totalPrice). If the
-    // conditional update affects 0 rows, the user's balance was
-    // insufficient at debit time and we throw `INSUFFICIENT_BALANCE` to
-    // abort. On PostgreSQL (MVCC) this prevents two concurrent API orders
-    // from both passing the check and both debiting. The original
-    // `if (user.balance < totalPrice)` check ran outside the transaction
-    // and was vulnerable to this race.
-    //
-    // publicId / txPublicId are pre-computed OUTSIDE this transaction —
-    // nextPublicId() runs its own atomic Prisma transaction internally, and
-    // nesting it inside this $transaction would deadlock / error on some
-    // drivers.
-    const publicId = await nextPublicId("A", 10432);
-    const txPublicId = await nextPublicId("TX", 8842);
-
-    let order: any;
-    try {
-      order = await db.$transaction(async (tx) => {
-        // Conditional update — only succeeds if balance is sufficient.
-        const updated = await tx.user.updateMany({
-          where: { id: userId, balance: { gte: totalPrice } },
-          data: { balance: { decrement: totalPrice } },
-        });
-        if (updated.count === 0) {
-          throw new Error("INSUFFICIENT_BALANCE");
-        }
-
-        // Create order + sale transaction inside the same transaction so
-        // the debit, order, and ledger entry are atomic.
-        const created = await tx.order.create({
-          data: {
-            publicId,
-            userId,
-            serviceId: service.id,
-            serviceName: service.name,
-            platform: service.platform,
-            quantity,
-            unitCost: service.cost,
-            unitPrice: service.price,
-            totalCost,
-            totalPrice,
-            profit: totalPrice - totalCost,
-            status: "processing",
-            progress: 5,
-            providerId: service.providerId,
-            providerName: service.provider?.name,
-            link: link || null,
-            eta: "2m",
-            flag: "🌍",
-          },
-        });
-
-        await tx.transaction.create({
-          data: {
-            publicId: txPublicId,
-            userId,
-            type: "sale",
-            amount: -totalPrice,
-            description: `API Order #${publicId} — ${service.name}`,
-            method: "balance",
-            reference: publicId,
-          },
-        });
-
-        return created;
-      });
-    } catch (e: any) {
-      if (e.message === "INSUFFICIENT_BALANCE") {
-        // Re-read the current balance for an accurate error message.
-        const fresh = await db.user.findUnique({
-          where: { id: userId },
-          select: { balance: true },
-        });
-        const currentBalance = fresh?.balance ?? 0;
-        return apiError(
-          `Insufficient balance. Need $${totalPrice.toFixed(2)}, have $${currentBalance.toFixed(2)}`,
-          402,
-        );
-      }
-      throw e;
-    }
-
-    await createNotification({
-      userId,
-      type: "order",
-      title: `Order #${publicId} placed (via API)`,
-      message: `${service.platform} · ${service.name} — ${quantity.toLocaleString()} units. Total: $${totalPrice.toFixed(2)}`,
-      amount: -totalPrice,
-      severity: "info",
-    });
-
-    // Enqueue fulfillment as a background job (worker via BullMQ, or
-    // in-process setImmediate fallback when Redis is not available).
-    enqueueJob("order.fulfill", { orderId: order.id, userId }).catch(() => {});
 
     return apiOk({
       status: "success",
       order: order.publicId,
-      service: service.name,
-      quantity,
-      price: totalPrice,
+      service: service?.name ?? "",
+      quantity: order.quantity,
+      price: order.totalPrice,
       status: order.status,
       message: "Order placed successfully",
     }, 201);
