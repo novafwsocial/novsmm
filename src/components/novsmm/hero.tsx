@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useScroll, useTransform } from "framer-motion";
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ArrowRight,
   Play,
@@ -26,6 +26,26 @@ export function Hero() {
   const yBg = useTransform(scrollYProgress, [0, 1], [0, 120]);
   const yDash = useTransform(scrollYProgress, [0, 1], [0, 80]);
   const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+
+  // Live orders/min — fetched from /api/status (public). Falls back to 1200
+  // if the request fails so the eyebrow never renders empty.
+  const [ordersPerMin, setOrdersPerMin] = useState(1200);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/status")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.stats?.ordersPerMin) {
+          setOrdersPerMin(d.stats.ordersPerMin);
+        }
+      })
+      .catch(() => {
+        /* keep default */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   return (
     <section
@@ -63,7 +83,7 @@ export function Hero() {
             </span>
             Now processing
             <span className="text-foreground">
-              <Counter to={1284} duration={2.2} /> orders/min
+              <Counter to={ordersPerMin} duration={2.2} /> orders/min
             </span>
             <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </a>

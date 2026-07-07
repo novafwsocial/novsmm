@@ -9,6 +9,8 @@ import { Payments } from "@/components/novsmm/payments";
 import { Stats } from "@/components/novsmm/stats";
 import { Testimonials } from "@/components/novsmm/testimonials";
 import { Security } from "@/components/novsmm/security";
+import { ApiDocsSection } from "@/components/novsmm/api-docs-section";
+import { AffiliateSection } from "@/components/novsmm/affiliate-section";
 import { Faq } from "@/components/novsmm/faq";
 import { Footer } from "@/components/novsmm/footer";
 import { AppView } from "@/components/novsmm/app-view";
@@ -32,6 +34,8 @@ export default function Home() {
                 <Stats />
                 <Testimonials />
                 <Security />
+                <ApiDocsSection />
+                <AffiliateSection />
                 <Faq />
               </main>
               <Footer />

@@ -9673,3 +9673,116 @@ Stage Summary:
    if input has content) and fire-and-forget bumps `usageCount`.
 
 ## Sprint 4 complete. Pending: Sprint 5 (Landing trust), Sprint 6 (Security).
+
+---
+
+## Sprint 5 — Landing Trust (Task ID: SPRINT-5-LANDING-TRUST)
+
+### Files created
+
+- `src/app/api/public/offers/route.ts` — public, no-auth endpoint returning
+  up to 8 active marketplace offers with limited fields (no seller info).
+  Hydrates service names via a parallel `db.service.findMany` lookup since
+  `Offer` has no Prisma relation to `Service` (just an FK column).
+  Cache: 60s browser / 300s CDN.
+- `src/app/api/status/history/route.ts` — public endpoint returning 30-day
+  uptime history + incident log. Until a real incident DB exists, returns
+  an operational 30-day window with 4 monitored services (API, Dashboard,
+  Payments, WebSocket). Cache: 60s/300s.
+- `src/components/novsmm/api-docs-section.tsx` — landing section with
+  eyebrow="Developer API". Two-column layout: dark terminal-style code
+  blocks (curl request + JSON response) on the left, 6 feature cards on
+  the right. "View full API docs" button opens `/api/docs` in a new tab.
+  Anchor: `#api-docs`.
+- `src/components/novsmm/affiliate-section.tsx` — landing section with
+  eyebrow="Affiliates". Stats row (affiliates, paid out, lifetime %)
+  derived from `/api/status`, commission-structure card with 10%/90%
+  visual bar + 3 payout methods, 3-step "how it works" card, CTA that
+  routes authed users to `dashboardTab="profile"` and guests to register.
+  Anchor: `#affiliates`.
+- `src/components/novsmm/status-page.tsx` — full-screen overlay (fixed,
+  z-[100], backdrop blur) opened from the footer. Shows overall status
+  badge, 30-day uptime %, 4-service breakdown, 30-day history bar,
+  incident log (empty state for now), last-updated timestamp, auto-refresh
+  every 60s, manual refresh button. ESC to close, body-scroll lock,
+  click-outside-to-close, ARIA dialog semantics.
+
+### Files modified
+
+- `src/app/api/status/route.ts` — added `totalOrders` (all-time order
+  count), `totalRevenue` (sum of `totalPrice` where `status="completed"`),
+  `ordersPerMin` (`max(1, round(orders24h / 1440))`) to the `stats` object
+  in the response.
+- `src/components/novsmm/hero.tsx` — replaced hardcoded `Counter to={1284}`
+  with `ordersPerMin` state initialised to `1200` (fallback) and updated
+  via `useEffect` fetching `/api/status`.
+- `src/components/novsmm/stats.tsx` — replaced module-level `BIG_STATS`
+  with `useStatusStats()` hook (fetches `/api/status`, falls back to
+  hardcoded defaults on failure). Replaced module-level `dailySales` with
+  `useDailySeries(ordersPerMin)` `useMemo` (avoids
+  `react-hooks/set-state-in-effect` lint error). BIG_STATS now maps:
+  Orders fulfilled ← totalOrders, Active users ← totalUsers, Revenue
+  routed ← totalRevenue, Enterprise clients ← `max(312, totalUsers *
+  0.0017)`. Throughput mini-stat uses real `ordersPerMin`. DoD badge
+  computes from last two days of the series.
+- `src/components/novsmm/marketplace.tsx` — added `usePublicOffers()` hook
+  fetching `/api/public/offers`. Renamed hardcoded `OFFERS` to
+  `SAMPLE_OFFERS` as fallback. Added `isLive` flag: when no live offers,
+  shows an amber "Showing sample offers" notice and changes the "live"
+  badge to "sample". Updated offer rendering to use the public-offer
+  shape (`serviceName`, numeric `cost`/`price`/`margin`/`sales`).
+- `src/components/novsmm/footer.tsx` — extended `FooterLink` with
+  `externalUrl?`, `overlay?: "status"`, `placeholderMessage?`. Wired:
+  API/Docs/API reference → `window.open("/api/docs", "_blank")`;
+  Affiliates → `#affiliates`; Resellers/Agencies/Enterprises/Creators →
+  `#services`; Wholesale → `#marketplace`; Changelog → external CMS URL;
+  Status → opens StatusPage overlay; Legal/Privacy → custom placeholder
+  message. Added `statusOpen` state + `<StatusPage />` rendered when open.
+  The "All systems operational" badge is now a button that opens the
+  overlay.
+- `src/app/page.tsx` — imported `ApiDocsSection` + `AffiliateSection`,
+  inserted both after `<Security />` and before `<Faq />`.
+
+### Verification
+
+- **`bun run lint`**: 0 errors. 1 pre-existing warning in
+  `scripts/load-test.js` (unrelated to Sprint 5).
+- **Dev server**: started via `setsid nohup npx next dev -p 3000` (the
+  `bun run dev` wrapper was being killed when the agent shell exited —
+  `setsid` properly detaches it from the controlling terminal).
+- **Endpoint checks** (all without auth):
+  - `GET /` → HTTP 200 (~240ms warm)
+  - `GET /api/status` → 200, response includes `stats.totalOrders=57`,
+    `stats.totalRevenue=554.953`, `stats.ordersPerMin=1`,
+    `stats.totalUsers=5`, `stats.activeServices=6382`
+  - `GET /api/status/history` → 200, `overall:"operational"`,
+    `uptime30d:99.98`, 4 services, 30 history entries, 0 incidents
+  - `GET /api/public/offers` → 200, `{"offers":[],"count":0}` (DB has no
+    active offers yet — landing falls back to SAMPLE_OFFERS)
+- **dev.log**: no compilation errors after the public-offers Prisma fix.
+  Initial 500 on `/api/public/offers` was a `PrismaClientValidationError`
+  (Offer model has no relation to Service) — fixed by replacing
+  `include: { service: ... }` with a parallel `db.service.findMany`.
+
+### Architecture notes
+
+- **Public offers hydration**: the `Offer` model has `serviceId String`
+  but no `service Service @relation(...)` field, so
+  `db.offer.findMany({ include: { service: ... } })` throws. Fix: do a
+  separate `db.service.findMany({ where: { id: { in: serviceIds } } })`
+  and hydrate in JS.
+- **`useMemo` for daily series**: React 19's `react-hooks/set-state-in-
+  effect` rule blocks `setState` synchronously inside an effect body. The
+  14-day bar series is a pure function of `ordersPerMin`, so `useMemo` is
+  the correct primitive — recomputes only when `ordersPerMin` changes,
+  with no extra render.
+- **Affiliate CTA routing**: reads `authed` from the `useApp` Zustand
+  store. If `authed`, calls `setView("dashboard")` +
+  `setDashboardTab("profile")` — this lands on the profile tab where the
+  existing Referrals section lives. If not authed, calls
+  `setView("register")`.
+- **Status overlay accessibility**: `role="dialog"` + `aria-modal="true"`
+  + `aria-label`, ESC-to-close, body-scroll lock, click-outside-to-close,
+  auto-refresh every 60s, manual refresh button with `refreshing` state.
+
+## Sprint 5 complete. Pending: Sprint 6 (Security).

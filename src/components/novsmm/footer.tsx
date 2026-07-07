@@ -1,12 +1,14 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useState } from "react";
 import { ArrowRight, Globe2 } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { Reveal } from "./reveal";
 import { useApp, type DashboardTab } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
+import { StatusPage } from "./status-page";
 
 type FooterLink = {
   label: string;
@@ -16,8 +18,14 @@ type FooterLink = {
   tab?: DashboardTab;
   /** Auth view to switch to */
   view?: "login" | "register";
+  /** Open an external URL in a new tab (e.g. "/api/docs") */
+  externalUrl?: string;
+  /** Open the system status overlay */
+  overlay?: "status";
   /** Legal/commercial placeholder → toast */
   placeholder?: boolean;
+  /** Custom toast message when placeholder is true */
+  placeholderMessage?: string;
 };
 
 type FooterColumn = {
@@ -34,18 +42,18 @@ const COLUMNS: FooterColumn[] = [
       { label: "Marketplace", anchor: "#marketplace" },
       { label: "Payments", anchor: "#payments" },
       { label: "Analytics", tab: "analytics" },
-      { label: "API", placeholder: true },
+      { label: "API", externalUrl: "/api/docs" },
     ],
   },
   {
     title: "Solutions",
     links: [
-      { label: "Resellers", placeholder: true },
-      { label: "Agencies", placeholder: true },
-      { label: "Enterprises", placeholder: true },
-      { label: "Creators", placeholder: true },
-      { label: "Wholesale", placeholder: true },
-      { label: "Affiliates", placeholder: true },
+      { label: "Resellers", anchor: "#services" },
+      { label: "Agencies", anchor: "#services" },
+      { label: "Enterprises", anchor: "#services" },
+      { label: "Creators", anchor: "#services" },
+      { label: "Wholesale", anchor: "#marketplace" },
+      { label: "Affiliates", anchor: "#affiliates" },
     ],
   },
   {
@@ -56,18 +64,28 @@ const COLUMNS: FooterColumn[] = [
       { label: "Press", placeholder: true },
       { label: "Partners", placeholder: true },
       { label: "Contact", tab: "tickets" },
-      { label: "Status", placeholder: true },
+      { label: "Status", overlay: "status" },
     ],
   },
   {
     title: "Resources",
     links: [
-      { label: "Docs", placeholder: true },
-      { label: "API reference", placeholder: true },
-      { label: "Changelog", placeholder: true },
+      { label: "Docs", externalUrl: "/api/docs" },
+      { label: "API reference", externalUrl: "/api/docs" },
+      { label: "Changelog", externalUrl: "/api/cms?type=blog_post&category=changelog" },
       { label: "Security", anchor: "#security" },
-      { label: "Legal", placeholder: true },
-      { label: "Privacy", placeholder: true },
+      {
+        label: "Legal",
+        placeholder: true,
+        placeholderMessage:
+          "Legal docs available soon — contact support for questions.",
+      },
+      {
+        label: "Privacy",
+        placeholder: true,
+        placeholderMessage:
+          "Legal docs available soon — contact support for questions.",
+      },
     ],
   },
 ];
@@ -75,14 +93,25 @@ const COLUMNS: FooterColumn[] = [
 export function Footer() {
   const { setView, setDashboardTab, authed } = useApp();
   const { toast } = useToast();
+  const [statusOpen, setStatusOpen] = useState(false);
 
-  const showToast = (label: string) =>
+  const showToast = (label: string, message?: string) =>
     toast({
-      title: `${label} — coming soon`,
-      description: "We're still putting the finishing touches on this page.",
+      title: message ? `${label}` : `${label} — coming soon`,
+      description:
+        message ??
+        "We're still putting the finishing touches on this page.",
     });
 
   const handleLink = (link: FooterLink) => {
+    if (link.overlay === "status") {
+      setStatusOpen(true);
+      return;
+    }
+    if (link.externalUrl) {
+      window.open(link.externalUrl, "_blank", "noopener,noreferrer");
+      return;
+    }
     if (link.anchor) {
       // Scroll to landing section. If we're inside the dashboard (authed),
       // first bounce back to the landing view so the anchor is in the DOM.
@@ -115,7 +144,7 @@ export function Footer() {
       return;
     }
     if (link.placeholder) {
-      showToast(link.label);
+      showToast(link.label, link.placeholderMessage);
       return;
     }
   };
@@ -216,15 +245,17 @@ export function Footer() {
                 Automation infrastructure for digital marketing teams and
                 resellers — engineered for performance.
               </p>
-              <div className="mt-5 flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-                  <span className="relative flex h-1.5 w-1.5">
-                    <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  </span>
-                  All systems operational
+              <button
+                type="button"
+                onClick={() => setStatusOpen(true)}
+                className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15"
+              >
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 </span>
-              </div>
+                All systems operational
+              </button>
             </div>
 
             {COLUMNS.map((c) => (
@@ -247,14 +278,18 @@ export function Footer() {
               <span>© {new Date().getFullYear()} NOVSMM, Inc.</span>
               <button
                 type="button"
-                onClick={() => showToast("Terms")}
+                onClick={() =>
+                  showToast("Terms", "Legal docs available soon — contact support for questions.")
+                }
                 className="hover:text-foreground"
               >
                 Terms
               </button>
               <button
                 type="button"
-                onClick={() => showToast("Privacy")}
+                onClick={() =>
+                  showToast("Privacy", "Legal docs available soon — contact support for questions.")
+                }
                 className="hover:text-foreground"
               >
                 Privacy
@@ -295,6 +330,8 @@ export function Footer() {
           NOVSMM
         </motion.div>
       </div>
+
+      {statusOpen && <StatusPage onClose={() => setStatusOpen(false)} />}
     </footer>
   );
 }

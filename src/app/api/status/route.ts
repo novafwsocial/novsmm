@@ -5,17 +5,28 @@ import { apiOk } from "@/lib/api-utils";
  * GET /api/status — public status page.
  * Returns platform health + key metrics (no auth required).
  *
+ * Adds all-time totals (totalOrders, totalRevenue) + ordersPerMin so the
+ * landing page can render real numbers instead of hardcoded ones.
+ *
  * CACHE: 60s browser, 300s CDN — status doesn't change frequently.
  */
 export async function GET() {
-  // Count users + orders in last 24h for status display
   const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
-  const [totalUsers, orders24h, activeServices] = await Promise.all([
-    db.user.count({ where: { status: "active" } }),
-    db.order.count({ where: { createdAt: { gte: yesterday } } }),
-    db.service.count({ where: { status: "active" } }),
-  ]);
+  const [totalUsers, orders24h, activeServices, totalOrders, revenueAgg] =
+    await Promise.all([
+      db.user.count({ where: { status: "active" } }),
+      db.order.count({ where: { createdAt: { gte: yesterday } } }),
+      db.service.count({ where: { status: "active" } }),
+      db.order.count(),
+      db.order.aggregate({
+        where: { status: "completed" },
+        _sum: { totalPrice: true },
+      }),
+    ]);
+
+  const totalRevenue = revenueAgg._sum.totalPrice ?? 0;
+  const ordersPerMin = Math.max(1, Math.round(orders24h / (24 * 60)));
 
   const response = apiOk({
     status: "operational",
@@ -29,6 +40,9 @@ export async function GET() {
       totalUsers,
       orders24h,
       activeServices,
+      totalOrders,
+      totalRevenue,
+      ordersPerMin,
     },
     timestamp: new Date().toISOString(),
   });

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { useEffect, useState } from "react";
 import {
   Store,
   TrendingUp,
@@ -41,14 +42,56 @@ const FLOW = [
   },
 ];
 
-const OFFERS = [
-  { svc: "Instagram · Followers HQ", cost: "$0.84", price: "$2.40", margin: "186%", trend: "+12" },
-  { svc: "TikTok · Views (1M)", cost: "$3.20", price: "$7.80", margin: "144%", trend: "+8" },
-  { svc: "YouTube · Watch hours", cost: "$11.00", price: "$24.00", margin: "118%", trend: "+5" },
-  { svc: "Spotify · Monthly listeners", cost: "$6.50", price: "$14.90", margin: "129%", trend: "+3" },
+// Hardcoded fallback offers — used when /api/public/offers returns no rows
+// (e.g. fresh install with no marketplace activity yet). They are clearly
+// labelled as samples in the UI.
+const SAMPLE_OFFERS = [
+  { serviceName: "Instagram · Followers HQ", platform: "Instagram", cost: 0.84, price: 2.4, margin: 65.0, sales: 124 },
+  { serviceName: "TikTok · Views (1M)", platform: "TikTok", cost: 3.2, price: 7.8, margin: 58.9, sales: 88 },
+  { serviceName: "YouTube · Watch hours", platform: "YouTube", cost: 11.0, price: 24.0, margin: 54.2, sales: 51 },
+  { serviceName: "Spotify · Monthly listeners", platform: "Spotify", cost: 6.5, price: 14.9, margin: 56.4, sales: 33 },
 ];
 
+type PublicOffer = {
+  id: string;
+  serviceName: string;
+  platform: string;
+  cost: number;
+  price: number;
+  margin: number;
+  sales: number;
+  quality?: string;
+  deliveryTime?: string;
+};
+
+function usePublicOffers() {
+  const [offers, setOffers] = useState<PublicOffer[] | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/public/offers")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.offers?.length) {
+          setOffers(d.offers);
+        } else if (!cancelled) {
+          setOffers(null); // signal: use samples
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setOffers(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return offers;
+}
+
 export function Marketplace() {
+  const liveOffers = usePublicOffers();
+  const offers = liveOffers ?? SAMPLE_OFFERS;
+  const isLive = liveOffers !== null && liveOffers.length > 0;
+
   return (
     <section id="marketplace" className="relative py-24 sm:py-32">
       {/* divider glow */}
@@ -144,14 +187,20 @@ export function Marketplace() {
                     <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   </span>
-                  live
+                  {isLive ? "live" : "sample"}
                 </div>
               </div>
 
+              {!isLive && (
+                <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
+                  Showing sample offers — publish your own from the dashboard to populate the live board.
+                </div>
+              )}
+
               <div className="mt-5 flex flex-col gap-2">
-                {OFFERS.map((o, i) => (
+                {offers.map((o, i) => (
                   <motion.div
-                    key={o.svc}
+                    key={o.id ?? i}
                     initial={{ opacity: 0, y: 12 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-10%" }}
@@ -164,21 +213,21 @@ export function Marketplace() {
                   >
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-foreground">
-                        {o.svc}
+                        {o.serviceName}
                       </div>
                       <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
-                        <span>cost {o.cost}</span>
+                        <span>cost ${o.cost.toFixed(2)}</span>
                         <ArrowRight className="h-3 w-3" />
-                        <span>retail {o.price}</span>
+                        <span>retail ${o.price.toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
                       <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 tabular-nums">
-                        {o.margin}
+                        {o.margin.toFixed(0)}%
                       </span>
                       <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600">
                         <TrendingUp className="h-3 w-3" />
-                        {o.trend} today
+                        {o.sales} sold
                       </span>
                     </div>
                   </motion.div>
