@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { ShieldCheck, Globe2, Clock, Zap } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
@@ -261,8 +261,8 @@ function FloatingCoin({
 }: {
   coin: Coin;
   index: number;
-  smx: ReturnType<typeof useSpring<number>>;
-  smy: ReturnType<typeof useSpring<number>>;
+  smx: MotionValue<number>;
+  smy: MotionValue<number>;
 }) {
   const px = useTransform(smx, (v) => v * c.depth);
   const py = useTransform(smy, (v) => v * c.depth);

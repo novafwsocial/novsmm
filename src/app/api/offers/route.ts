@@ -18,19 +18,26 @@ export async function GET() {
 
   const offers = await db.offer.findMany({
     where: { userId },
-    include: {
-      service: {
-        select: { id: true, name: true, platform: true, cost: true, price: true, quality: true, deliveryTime: true },
-      },
-    },
     orderBy: { createdAt: "desc" },
   });
 
-  // Calculate totals
-  const totalEarnings = offers.reduce((s, o) => s + o.earnings, 0);
-  const totalSales = offers.reduce((s, o) => s + o.sales, 0);
+  // Fetch related services separately (Offer has no relation in schema)
+  const serviceIds = [...new Set(offers.map((o) => o.serviceId))];
+  const services = await db.service.findMany({
+    where: { id: { in: serviceIds } },
+    select: { id: true, name: true, platform: true, cost: true, price: true, quality: true, deliveryTime: true },
+  });
+  const serviceMap = new Map(services.map((s) => [s.id, s]));
+  const offersWithService = offers.map((o) => ({
+    ...o,
+    service: serviceMap.get(o.serviceId) ?? null,
+  }));
 
-  return apiOk({ offers, totalEarnings, totalSales });
+  // Calculate totals
+  const totalEarnings = offersWithService.reduce((s, o) => s + o.earnings, 0);
+  const totalSales = offersWithService.reduce((s, o) => s + o.sales, 0);
+
+  return apiOk({ offers: offersWithService, totalEarnings, totalSales });
 }
 
 /**
@@ -75,10 +82,9 @@ export async function POST(req: NextRequest) {
       margin,
       status: "active",
     },
-    include: { service: true },
   });
 
-  return apiOk({ offer, message: "Offer published" }, 201);
+  return apiOk({ offer: { ...offer, service }, message: "Offer published" }, 201);
 }
 
 /**

@@ -264,7 +264,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
   const canCancel = p.status === "active" || p.status === "suspended";
 
   const setStatus = (status: string) => {
-    updateMutation.mutate({ id: p.id, status });
+    updateMutation.mutate({ id: p.id, status: status as "active" | "suspended" | "cancelled" });
   };
 
   const handleCancel = () => {

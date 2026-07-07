@@ -82,7 +82,7 @@ export async function GET(req: NextRequest) {
       quantity: order.quantity,
       charge: Number(order.totalPrice.toFixed(4)),
       start_count: 0,
-      status: mapStatusToApi(order.status),
+      orderStatus: mapStatusToApi(order.status),
       remains: order.quantity - Math.floor((order.progress / 100) * order.quantity),
       currency: user.currency || "USD",
     });

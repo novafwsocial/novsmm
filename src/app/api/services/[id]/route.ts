@@ -7,13 +7,15 @@ import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { error } = await requireAuth();
   if (error) return error;
 
+  const { id } = await params;
+
   const service = await db.service.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: {
       provider: {
         select: { name: true, status: true, latency: true },

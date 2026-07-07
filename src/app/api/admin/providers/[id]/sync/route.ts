@@ -18,14 +18,16 @@ import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
  */
 export async function POST(
   req: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   const { session, error } = await requireAdmin();
   if (error) return error;
   const adminId = (session!.user as any).id;
 
+  const { id } = await params;
+
   const provider = await db.provider.findUnique({
-    where: { id: params.id },
+    where: { id },
     include: { _count: { select: { services: true } } },
   });
 
@@ -53,7 +55,7 @@ export async function POST(
 
     // Update provider with fresh latency + status
     const updated = await db.provider.update({
-      where: { id: params.id },
+      where: { id },
       data: { latency, status },
     });
 
@@ -80,7 +82,7 @@ export async function POST(
   } catch (e: any) {
     // Mark provider as down
     await db.provider.update({
-      where: { id: params.id },
+      where: { id },
       data: { status: "down", latency: Date.now() - startTime },
     });
 

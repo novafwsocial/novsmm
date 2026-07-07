@@ -139,7 +139,7 @@ async function handlePaymentConfirmed(
   }
 
   // Find the pending transaction
-  let txn = null;
+  let txn: any = null;
   if (paymentId) {
     txn = await db.transaction.findFirst({
       where: { reference: `nowpayments:${paymentId}`, status: "pending" },
@@ -207,7 +207,7 @@ async function handlePaymentFailed(
   paymentId: string,
   txnPublicId?: string
 ) {
-  let txn = null;
+  let txn: any = null;
   if (paymentId) {
     txn = await db.transaction.findFirst({
       where: { reference: `nowpayments:${paymentId}` },
@@ -242,7 +242,7 @@ async function handlePaymentRefunded(
   paymentId: string,
   txnPublicId?: string
 ) {
-  let txn = null;
+  let txn: any = null;
   if (paymentId) {
     txn = await db.transaction.findFirst({
       where: { reference: `nowpayments:${paymentId}`, status: "completed" },

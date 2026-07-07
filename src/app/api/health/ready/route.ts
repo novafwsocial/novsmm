@@ -18,7 +18,7 @@ import { apiOk, apiError } from "@/lib/api-utils";
  */
 export async function GET() {
   const start = Date.now();
-  const checks: Record<string, { healthy: boolean; latencyMs?: number; error?: string }> = {};
+  const checks: Record<string, Record<string, any>> = {};
   let allHealthy = true;
 
   // ── Database check (CRITICAL) ──
@@ -44,7 +44,7 @@ export async function GET() {
       }
     } else {
       // Redis not configured — this is fine (sandbox/dev mode)
-      checks.redis = { healthy: true, note: "not configured (in-memory mode)" };
+      checks.redis = { healthy: true, error: "not configured (in-memory mode)" };
     }
   } catch (e: any) {
     checks.redis = { healthy: false, error: e.message };

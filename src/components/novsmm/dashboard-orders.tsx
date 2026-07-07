@@ -44,7 +44,7 @@ export function DashboardOrders() {
   const repeatOrder = useRepeatOrder();
   const refillOrder = useRefillOrder();
   const { user } = useApp();
-  const currency = user?.currency ?? "USD";
+  const currency = (user as any)?.currency ?? "USD";
 
   const filtered = data?.orders ?? [];
   const selectedOrder = filtered.find((o: any) => o.id === selectedOrderId) ?? null;

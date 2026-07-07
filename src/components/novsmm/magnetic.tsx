@@ -55,7 +55,7 @@ export function Magnetic({
       ref={ref as never}
       className={className}
       style={{ x: sx, y: sy }}
-      onMouseMove={handleMove}
+      onMouseMove={handleMove as any}
       onMouseLeave={handleLeave}
       href={href as never}
       onClick={onClick}

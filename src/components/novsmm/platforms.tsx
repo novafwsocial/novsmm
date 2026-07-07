@@ -1,4 +1,4 @@
-import type { SVGProps } from "react";
+import type { SVGProps, ReactElement } from "react";
 
 /**
  * Custom monochrome platform marks — built from scratch.
@@ -100,7 +100,7 @@ export function TwitchMark(props: IconProps) {
 
 export type Platform = {
   name: string;
-  Icon: (p: IconProps) => JSX.Element;
+  Icon: (p: IconProps) => ReactElement;
   tint: string;
   services: number;
   blurb: string;

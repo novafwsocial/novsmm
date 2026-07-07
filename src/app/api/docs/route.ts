@@ -82,7 +82,7 @@ export async function GET() {
           service: "Instagram · Followers HQ",
           quantity: 1000,
           price: 2.4,
-          status: "processing",
+          orderStatus: "processing",
           message: "Order placed successfully",
         },
         notes: [
@@ -109,7 +109,7 @@ export async function GET() {
           quantity: 1000,
           charge: 2.4,
           start_count: 0,
-          status: "In progress",
+          orderStatus: "In progress",
           remains: 500,
           currency: "USD",
         },

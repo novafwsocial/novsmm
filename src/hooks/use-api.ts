@@ -147,7 +147,7 @@ export function useServices(params?: {
       api.get<{ services: any[]; pagination: any }>(
         `/api/services${q ? `?${q}` : ""}`
       ),
-    keepPreviousData: true,
+    placeholderData: (prev: any) => prev,
   });
 }
 
@@ -174,7 +174,7 @@ export function useTopup() {
   const { toast } = useToast();
   return useMutation({
     mutationFn: (data: { amount: number; method: string }) =>
-      api.post<{ message: string; transaction: any }>("/api/wallet/topup", data),
+      api.post<{ message: string; transaction: any; provider?: string; checkoutUrl?: string; whatsappUrl?: string; address?: string; network?: string; expectedConfirmations?: number }>("/api/wallet/topup", data),
     onSuccess: (data) => {
       qc.invalidateQueries({ queryKey: ["wallet"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });

@@ -66,7 +66,7 @@ export async function createNotification(input: NotifInput) {
         ...(input.meta ?? {}),
       };
 
-      let sent = null;
+      let sent: any = null;
       if (templateKey) {
         try {
           sent = await sendTemplatedEmail(templateKey, user.email, templateVars);

@@ -246,7 +246,7 @@ async function handleCheckoutSessionCompleted(session: any) {
 
     // Find the pending transaction by publicId or by the Stripe session id
     // (we stored checkout.id in transaction.reference when creating the session).
-    let txn = null;
+    let txn: any = null;
     if (txnPublicId) {
       txn = await db.transaction.findFirst({
         where: { publicId: txnPublicId, status: "pending" },

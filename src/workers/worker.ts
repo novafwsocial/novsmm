@@ -109,7 +109,7 @@ async function main() {
         return result;
       },
       {
-        connection: redis.duplicate(),
+        connection: redis.duplicate() as any,
         concurrency,
       }
     );

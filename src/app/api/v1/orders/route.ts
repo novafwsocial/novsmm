@@ -262,7 +262,7 @@ export async function POST(req: NextRequest) {
       service: service?.name ?? "",
       quantity: order.quantity,
       price: order.totalPrice,
-      status: order.status,
+      orderStatus: order.status,
       message: "Order placed successfully",
     }, 201);
   } catch (e: any) {

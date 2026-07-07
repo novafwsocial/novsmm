@@ -241,7 +241,7 @@ function WelcomeStep({ setData }: StepProps) {
       />
       <div className="mt-7 grid grid-cols-2 gap-3">
         {roles.map((r, i) => {
-          const active = setData && false; // selection tracked below
+          const active = false; // selection tracked below
           return (
             <RoleCard
               key={r.id}

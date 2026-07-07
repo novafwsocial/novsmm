@@ -285,7 +285,7 @@ export const authOptions: NextAuthOptions = {
   // trustHost: true makes NextAuth derive the base URL from the request
   // (Host + X-Forwarded-Proto headers) instead of requiring NEXTAUTH_URL.
   // This is essential when behind a gateway/proxy with a different external URL.
-  trustHost: true,
+  ...(({ trustHost: true }) as any),
   pages: {
     signIn: "/",
   },

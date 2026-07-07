@@ -254,7 +254,7 @@ function DangerZone() {
         });
         // Clear local app state + sign out of NextAuth, then return to landing
         setAuthed(false, null);
-        setView("home");
+        setView("landing");
         await signOut({ redirect: false });
         // Hard reload to clear any cached client state
         if (typeof window !== "undefined") {

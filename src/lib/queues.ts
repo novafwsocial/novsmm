@@ -66,7 +66,7 @@ export async function getQueue(name: QueueName): Promise<Queue | null> {
   if (!connection) return null;
 
   const queue = new Queue(name, {
-    connection: connection.duplicate(),
+    connection: connection.duplicate() as any,
     defaultJobOptions: {
       attempts: QUEUE_CONFIG[name].maxRetries,
       backoff: {

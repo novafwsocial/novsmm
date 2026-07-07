@@ -45,11 +45,11 @@ const FLOW = [
 // Hardcoded fallback offers — used when /api/public/offers returns no rows
 // (e.g. fresh install with no marketplace activity yet). They are clearly
 // labelled as samples in the UI.
-const SAMPLE_OFFERS = [
-  { serviceName: "Instagram · Followers HQ", platform: "Instagram", cost: 0.84, price: 2.4, margin: 65.0, sales: 124 },
-  { serviceName: "TikTok · Views (1M)", platform: "TikTok", cost: 3.2, price: 7.8, margin: 58.9, sales: 88 },
-  { serviceName: "YouTube · Watch hours", platform: "YouTube", cost: 11.0, price: 24.0, margin: 54.2, sales: 51 },
-  { serviceName: "Spotify · Monthly listeners", platform: "Spotify", cost: 6.5, price: 14.9, margin: 56.4, sales: 33 },
+const SAMPLE_OFFERS: PublicOffer[] = [
+  { id: "sample-1", serviceName: "Instagram · Followers HQ", platform: "Instagram", cost: 0.84, price: 2.4, margin: 65.0, sales: 124 },
+  { id: "sample-2", serviceName: "TikTok · Views (1M)", platform: "TikTok", cost: 3.2, price: 7.8, margin: 58.9, sales: 88 },
+  { id: "sample-3", serviceName: "YouTube · Watch hours", platform: "YouTube", cost: 11.0, price: 24.0, margin: 54.2, sales: 51 },
+  { id: "sample-4", serviceName: "Spotify · Monthly listeners", platform: "Spotify", cost: 6.5, price: 14.9, margin: 56.4, sales: 33 },
 ];
 
 type PublicOffer = {
