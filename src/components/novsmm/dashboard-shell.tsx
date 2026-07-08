@@ -810,8 +810,8 @@ function CommandPalette({
           Search commands and navigate the dashboard.
         </DialogDescription>
 
-        {/* Search input */}
-        <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3">
+        {/* Search input — F-15 fix: combobox ARIA */}
+        <div className="flex items-center gap-3 border-b border-border/60 px-4 py-3" role="combobox" aria-expanded="true" aria-haspopup="listbox" aria-owns="cmd-list" aria-activedescendant={filtered[safeIndex] ? `cmd-${safeIndex}` : undefined}>
           <Search className="h-4 w-4 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
@@ -825,6 +825,10 @@ function CommandPalette({
             className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             autoComplete="off"
             spellCheck={false}
+            role="combobox"
+            aria-autocomplete="list"
+            aria-controls="cmd-list"
+            aria-activedescendant={filtered[safeIndex] ? `cmd-${safeIndex}` : undefined}
           />
           <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 text-[10px] text-muted-foreground sm:inline">
             Esc
@@ -834,6 +838,8 @@ function CommandPalette({
         {/* Command list */}
         <div
           ref={listRef}
+          id="cmd-list"
+          role="listbox"
           className="max-h-[60vh] overflow-y-auto p-2 nov-scroll"
         >
           {filtered.length === 0 ? (
@@ -853,7 +859,10 @@ function CommandPalette({
                   return (
                     <button
                       key={`${group}-${cmd.id}`}
+                      id={`cmd-${flatIndex}`}
                       type="button"
+                      role="option"
+                      aria-selected={isActive}
                       onMouseMove={() => setActiveIndex(flatIndex)}
                       onClick={() => run(cmd)}
                       className={cn(

@@ -531,7 +531,7 @@ function AdminUsers() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium w-10">
+                  <th scope="col" className="px-4 py-3 text-left font-medium w-10">
                     <input
                       type="checkbox"
                       checked={users.length > 0 && selected.size === users.length}
@@ -539,13 +539,13 @@ function AdminUsers() {
                       className="h-3.5 w-3.5 rounded border-border"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">Role</th>
-                  <th className="px-4 py-3 text-right font-medium">Balance</th>
-                  <th className="px-4 py-3 text-right font-medium">Orders</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Joined</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">User</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Role</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Balance</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Orders</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Joined</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -833,14 +833,14 @@ function AdminServices() {
           <table className="w-full text-sm">
             <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Service</th>
-                <th className="px-4 py-3 text-left font-medium">Platform</th>
-                <th className="px-4 py-3 text-right font-medium">Cost</th>
-                <th className="px-4 py-3 text-right font-medium">Price</th>
-                <th className="px-4 py-3 text-right font-medium">Min/Max</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Rate</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Service</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Platform</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Cost</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Price</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Min/Max</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Rate</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -1916,12 +1916,12 @@ function AdminWithdrawals() {
           <table className="w-full text-sm">
             <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Txn</th>
-                <th className="px-4 py-3 text-left font-medium">User</th>
-                <th className="px-4 py-3 text-left font-medium">Destination</th>
-                <th className="px-4 py-3 text-right font-medium">Amount</th>
-                <th className="px-4 py-3 text-left font-medium">Date</th>
-                <th className="px-4 py-3 text-right font-medium">Actions</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Txn</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">User</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Destination</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Amount</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Date</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -2046,14 +2046,14 @@ function AdminApiKeys() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Public ID</th>
-                  <th className="px-4 py-3 text-left font-medium">Name</th>
-                  <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">Permissions</th>
-                  <th className="px-4 py-3 text-left font-medium">IP Allowlist</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Last used</th>
-                  <th className="px-4 py-3 text-right font-medium">Action</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Public ID</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Name</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">User</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Permissions</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">IP Allowlist</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Last used</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -2213,13 +2213,13 @@ function AdminLicenses() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">License key</th>
-                  <th className="px-4 py-3 text-left font-medium">Customer</th>
-                  <th className="px-4 py-3 text-left font-medium">Plan</th>
-                  <th className="px-4 py-3 text-left font-medium">Domain</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Expires</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">License key</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Customer</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Plan</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Domain</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Expires</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -2318,12 +2318,12 @@ function AdminCurrencies() {
           <table className="w-full text-sm">
             <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Code</th>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
-                <th className="px-4 py-3 text-left font-medium">Symbol</th>
-                <th className="px-4 py-3 text-right font-medium">Rate (vs USD)</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Toggle</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Code</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Name</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Symbol</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Rate (vs USD)</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Toggle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -2400,12 +2400,12 @@ function AdminLanguages() {
           <table className="w-full text-sm">
             <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left font-medium">Flag</th>
-                <th className="px-4 py-3 text-left font-medium">Code</th>
-                <th className="px-4 py-3 text-left font-medium">Name</th>
-                <th className="px-4 py-3 text-left font-medium">Native</th>
-                <th className="px-4 py-3 text-left font-medium">Status</th>
-                <th className="px-4 py-3 text-right font-medium">Toggle</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Flag</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Code</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Name</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Native</th>
+                <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                <th scope="col" className="px-4 py-3 text-right font-medium">Toggle</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
@@ -2763,14 +2763,14 @@ function AdminOrders() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Order</th>
-                  <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">Service</th>
-                  <th className="px-4 py-3 text-right font-medium">Qty</th>
-                  <th className="px-4 py-3 text-right font-medium">Total</th>
-                  <th className="px-4 py-3 text-left font-medium">Priority</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Created</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Order</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">User</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Service</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Qty</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Total</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Priority</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Created</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -2840,8 +2840,17 @@ function CreateManualOrderModal({
   onSubmit: (d: any) => Promise<void>;
   loading?: boolean;
 }) {
-  const { data: servicesData } = useServices({ limit: 100 });
-  const services = servicesData?.services ?? [];
+  // U-15 fix: Load more services + add search filter
+  const { data: servicesData } = useServices({ limit: 500 });
+  const [serviceSearch, setServiceSearch] = useState("");
+  const allServices = servicesData?.services ?? [];
+  // Client-side filter (search by name or platform)
+  const services = serviceSearch.trim()
+    ? allServices.filter((s: any) =>
+        s.name.toLowerCase().includes(serviceSearch.toLowerCase()) ||
+        s.platform.toLowerCase().includes(serviceSearch.toLowerCase())
+      ).slice(0, 100)
+    : allServices.slice(0, 100);
   const [form, setForm] = useState({
     userId: "",
     serviceId: "",
@@ -2870,6 +2879,14 @@ function CreateManualOrderModal({
           <Input label="User ID" value={form.userId} onChange={(v) => setForm({ ...form, userId: v })} />
           <label className="block">
             <span className="mb-1 block text-xs font-medium text-muted-foreground">Service</span>
+            {/* U-15 fix: Search input to filter 6382 services */}
+            <input
+              type="text"
+              value={serviceSearch}
+              onChange={(e) => setServiceSearch(e.target.value)}
+              placeholder="Search services by name or platform…"
+              className="mb-2 h-9 w-full rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_3px_rgba(0,82,255,0.12)]"
+            />
             <select
               value={form.serviceId}
               onChange={(e) => setForm({ ...form, serviceId: e.target.value })}
@@ -2925,13 +2942,13 @@ function AdminRefunds() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Txn</th>
-                  <th className="px-4 py-3 text-left font-medium">User</th>
-                  <th className="px-4 py-3 text-left font-medium">Type</th>
-                  <th className="px-4 py-3 text-right font-medium">Amount</th>
-                  <th className="px-4 py-3 text-left font-medium">Method</th>
-                  <th className="px-4 py-3 text-left font-medium">Date</th>
-                  <th className="px-4 py-3 text-right font-medium">Action</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Txn</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">User</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Type</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Amount</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Method</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Date</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -3316,11 +3333,11 @@ function AdminEmailTemplates() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium">Name</th>
-                    <th className="px-4 py-3 text-left font-medium">Key</th>
-                    <th className="px-4 py-3 text-left font-medium">Subject</th>
-                    <th className="px-4 py-3 text-left font-medium">Status</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Name</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Key</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Subject</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">
@@ -3695,13 +3712,13 @@ function AdminCms() {
               <table className="w-full text-sm">
                 <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                   <tr>
-                    <th className="px-4 py-3 text-left font-medium">Title</th>
-                    <th className="px-4 py-3 text-left font-medium">Type</th>
-                    <th className="px-4 py-3 text-left font-medium">Category</th>
-                    <th className="px-4 py-3 text-left font-medium">Status</th>
-                    <th className="px-4 py-3 text-right font-medium">Views</th>
-                    <th className="px-4 py-3 text-left font-medium">Published</th>
-                    <th className="px-4 py-3 text-right font-medium">Actions</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Title</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Type</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Category</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Views</th>
+                    <th scope="col" className="px-4 py-3 text-left font-medium">Published</th>
+                    <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/60">

@@ -235,10 +235,21 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     processedPagesRef.current.clear();
   }, [debouncedSearch]);
 
-  // Infinite scroll via IntersectionObserver
+  // Infinite scroll via IntersectionObserver (F-09: fallback for old browsers)
   useEffect(() => {
     const sentinel = sentinelRef.current;
     if (!sentinel) return;
+    // F-09 fix: fallback to scroll listener if IntersectionObserver not available
+    if (!("IntersectionObserver" in window)) {
+      const handleScroll = () => {
+        const rect = sentinel.getBoundingClientRect();
+        if (rect.top < window.innerHeight + 200 && data?.pagination?.hasMore && !isFetching) {
+          setPage((p) => p + 1);
+        }
+      };
+      (window as Window & typeof globalThis).addEventListener("scroll", handleScroll);
+      return () => (window as Window & typeof globalThis).removeEventListener("scroll", handleScroll);
+    }
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && data?.pagination?.hasMore && !isFetching) {

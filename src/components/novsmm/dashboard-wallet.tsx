@@ -167,12 +167,12 @@ export function DashboardWallet() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-5 py-2.5 text-left font-medium">Txn</th>
-                  <th className="px-5 py-2.5 text-left font-medium">Description</th>
-                  <th className="px-5 py-2.5 text-left font-medium">Type</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Amount</th>
-                  <th className="px-5 py-2.5 text-left font-medium">Status</th>
-                  <th className="px-5 py-2.5 text-right font-medium">Time</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Txn</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Description</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Type</th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">Amount</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Status</th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">Time</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -401,8 +401,10 @@ function TopupModal({ onClose }: { onClose: () => void }) {
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">$</span>
             <input
               type="number"
+              min={1}
+              max={10000}
               value={amount}
-              onChange={(e) => setAmount(Math.max(1, Number(e.target.value)))}
+              onChange={(e) => setAmount(Math.min(10000, Math.max(1, Number(e.target.value))))}
               className="h-12 w-full rounded-xl border border-border bg-background pl-8 pr-4 text-lg font-semibold text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
@@ -511,7 +513,9 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             <input
               type="number"
               value={amount}
-              onChange={(e) => setAmount(Math.max(1, Number(e.target.value)))}
+              min={1}
+              max={10000}
+              onChange={(e) => setAmount(Math.min(10000, Math.max(1, Number(e.target.value))))}
               className="h-12 w-full rounded-xl border border-border bg-background pl-8 pr-4 text-lg font-semibold text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>

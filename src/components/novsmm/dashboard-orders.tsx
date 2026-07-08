@@ -119,16 +119,16 @@ export function DashboardOrders() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Order</th>
-                  <th className="px-4 py-3 text-left font-medium">Service</th>
-                  <th className="px-4 py-3 text-right font-medium">Qty</th>
-                  <th className="px-4 py-3 text-right font-medium">Cost</th>
-                  <th className="px-4 py-3 text-right font-medium">Price</th>
-                  <th className="px-4 py-3 text-left font-medium">Status</th>
-                  <th className="px-4 py-3 text-left font-medium">Progress</th>
-                  <th className="px-4 py-3 text-left font-medium">Provider</th>
-                  <th className="px-4 py-3 text-right font-medium">ETA</th>
-                  <th className="px-4 py-3 text-right font-medium">Actions</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Order</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Service</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Qty</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Cost</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Price</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Progress</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Provider</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">ETA</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
