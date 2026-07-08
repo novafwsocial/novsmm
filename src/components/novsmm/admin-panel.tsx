@@ -3010,7 +3010,13 @@ function AdminSocialAuth() {
           clientSecret: googleClientSecret,
         }),
       });
-      if (!res.ok) throw new Error("Failed to save");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401) {
+          throw new Error("Session expired. Please log out and log back in.");
+        }
+        throw new Error(data.error || `Failed to save (HTTP ${res.status})`);
+      }
       toast({ title: "Google credentials saved", description: "OAuth provider updated successfully." });
       setGoogleClientId("");
       setGoogleClientSecret("");
