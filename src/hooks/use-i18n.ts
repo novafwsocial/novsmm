@@ -4,8 +4,6 @@ import { useCallback, useMemo } from "react";
 import { useSession } from "@/hooks/use-api";
 import {
   getTranslations,
-  normalizeLanguage,
-  type SupportedLang,
   type TranslationKey,
 } from "@/lib/i18n";
 
@@ -18,7 +16,6 @@ import {
  *   3. English ("en") as the universal fallback.
  *
  * Returns:
- *   - `lang`       — the resolved SupportedLang code
  *   - `t(key, fb)` — translation function; falls back to `fb` then to the key
  *   - `tRaw(key)`  — returns the raw translation string (no fallback) — useful
  *                    when you need to know whether a key was actually translated
@@ -32,14 +29,11 @@ import {
 export function useTranslation() {
   const { data: session } = useSession();
 
-  const lang: SupportedLang = useMemo(() => {
+  const lang = useMemo(() => {
     const userLang = (session as any)?.user?.language as string | undefined;
-    if (userLang) {
-      const norm = normalizeLanguage(userLang);
-      if (norm) return norm;
-    }
+    if (userLang) return userLang.toLowerCase().slice(0, 2);
     if (typeof navigator !== "undefined" && navigator.language) {
-      return normalizeLanguage(navigator.language);
+      return navigator.language.toLowerCase().slice(0, 2);
     }
     return "en";
   }, [session]);

@@ -46,6 +46,7 @@ model User {
   loyaltyPoints LoyaltyPoint[]
   achievements  Achievement[]
   smmSubscriptions SmmSubscription[]
+  outboundWebhooks OutboundWebhook[]
   smmChildPanels ChildPanel[]
 }
 
@@ -721,3 +722,26 @@ model CannedReply {
   @@index([category])
   @@index([language])
 }
+
+// ─────────── Outbound Webhooks (user-configured) ───────────
+model OutboundWebhook {
+  id          String   @id @default(cuid())
+  userId      String
+  url         String
+  secret      String
+  events      String   // comma-separated: order.completed,order.failed,etc.
+  isActive    Boolean  @default(true)
+  lastStatus  String?  // last delivery HTTP status
+  lastError   String?  // last error message
+  lastFiredAt DateTime? // last time webhook was triggered
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+// ─────────── Outbound Webhook additional fields ───────────
+// Already defined above, these are referenced in the route

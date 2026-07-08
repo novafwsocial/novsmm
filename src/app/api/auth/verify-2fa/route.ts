@@ -2,9 +2,8 @@ import { NextRequest } from "next/server";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
-import { verify2FAToken } from "@/lib/two-factor";
-import { decrypt2FAPayload } from "@/app/api/me/2fa/setup/route";
-import { encrypt } from "@/lib/crypto-utils";
+import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
+import { encrypt, decryptJSON } from "@/lib/crypto-utils";
 
 /**
  * POST /api/auth/verify-2fa
@@ -52,7 +51,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Decrypt in-memory only.
-  const payload = decrypt2FAPayload(active.value);
+  const payload = decryptJSON(active.value);
   if (!payload) {
     return apiError("2FA setup is corrupted — please disable and re-enable 2FA", 500);
   }

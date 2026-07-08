@@ -133,7 +133,7 @@ async function handlePaymentCompleted(data: any) {
     return;
   }
 
-  let txn = null;
+  let txn: any = null;
   if (paymentId) {
     txn = await db.transaction.findFirst({
       where: { reference: `depay:${paymentId}`, status: "pending" },
@@ -203,7 +203,7 @@ async function handlePaymentFailed(data: any) {
   const txnPublicId: string | undefined =
     data?.metadata?.transaction_public_id ?? data?.reference;
 
-  let txn = null;
+  let txn: any = null;
   if (paymentId) {
     txn = await db.transaction.findFirst({
       where: { reference: `depay:${paymentId}` },
@@ -238,7 +238,7 @@ async function handlePaymentRefunded(data: any) {
   const txnPublicId: string | undefined =
     data?.metadata?.transaction_public_id ?? data?.reference;
 
-  let txn = null;
+  let txn: any = null;
   if (paymentId) {
     txn = await db.transaction.findFirst({
       where: { reference: `depay:${paymentId}`, status: "completed" },

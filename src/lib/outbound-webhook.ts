@@ -84,7 +84,7 @@ async function deliverOutboundWebhooks(
   // Look up every active webhook subscription owned by this user that's
   // subscribed to the fired event.
   const subscriptions = await db.outboundWebhook.findMany({
-    where: { userId, status: "active" },
+    where: { userId, isActive: true },
     select: { id: true, url: true, events: true, secret: true },
   });
 
@@ -149,7 +149,7 @@ async function deliverOutboundWebhooks(
         await db.outboundWebhook.update({
           where: { id: sub.id },
           data: {
-            lastStatus: status ?? 0,
+            lastStatus: String(status ?? 0),
             lastError: errMsg,
             lastFiredAt: new Date(),
           },

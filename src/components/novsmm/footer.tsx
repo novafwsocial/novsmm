@@ -9,6 +9,7 @@ import { Reveal } from "./reveal";
 import { useApp, type DashboardTab } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
 import { StatusPage } from "./status-page";
+import { LegalPages, type LegalPageType } from "./legal-pages";
 
 type FooterLink = {
   label: string;
@@ -22,6 +23,8 @@ type FooterLink = {
   externalUrl?: string;
   /** Open the system status overlay */
   overlay?: "status";
+  /** Open a legal/info page overlay */
+  legalPage?: LegalPageType;
   /** Legal/commercial placeholder → toast */
   placeholder?: boolean;
   /** Custom toast message when placeholder is true */
@@ -59,10 +62,10 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Company",
     links: [
-      { label: "About", placeholder: true },
-      { label: "Careers", placeholder: true },
-      { label: "Press", placeholder: true },
-      { label: "Partners", placeholder: true },
+      { label: "About", legalPage: "about" },
+      { label: "Careers", legalPage: "careers" },
+      { label: "Press", legalPage: "press" },
+      { label: "Partners", legalPage: "partners" },
       { label: "Contact", tab: "tickets" },
       { label: "Status", overlay: "status" },
     ],
@@ -74,18 +77,8 @@ const COLUMNS: FooterColumn[] = [
       { label: "API reference", externalUrl: "/api/docs" },
       { label: "Changelog", externalUrl: "/api/cms?type=blog_post&category=changelog" },
       { label: "Security", anchor: "#security" },
-      {
-        label: "Legal",
-        placeholder: true,
-        placeholderMessage:
-          "Legal docs available soon — contact support for questions.",
-      },
-      {
-        label: "Privacy",
-        placeholder: true,
-        placeholderMessage:
-          "Legal docs available soon — contact support for questions.",
-      },
+      { label: "Legal", legalPage: "legal" },
+      { label: "Privacy", legalPage: "privacy" },
     ],
   },
 ];
@@ -94,6 +87,7 @@ export function Footer() {
   const { setView, setDashboardTab, authed } = useApp();
   const { toast } = useToast();
   const [statusOpen, setStatusOpen] = useState(false);
+  const [legalPageOpen, setLegalPageOpen] = useState<LegalPageType | null>(null);
 
   const showToast = (label: string, message?: string) =>
     toast({
@@ -106,6 +100,10 @@ export function Footer() {
   const handleLink = (link: FooterLink) => {
     if (link.overlay === "status") {
       setStatusOpen(true);
+      return;
+    }
+    if (link.legalPage) {
+      setLegalPageOpen(link.legalPage);
       return;
     }
     if (link.externalUrl) {
@@ -278,25 +276,21 @@ export function Footer() {
               <span>© {new Date().getFullYear()} NOVSMM, Inc.</span>
               <button
                 type="button"
-                onClick={() =>
-                  showToast("Terms", "Legal docs available soon — contact support for questions.")
-                }
+                onClick={() => setLegalPageOpen("terms")}
                 className="hover:text-foreground"
               >
                 Terms
               </button>
               <button
                 type="button"
-                onClick={() =>
-                  showToast("Privacy", "Legal docs available soon — contact support for questions.")
-                }
+                onClick={() => setLegalPageOpen("privacy")}
                 className="hover:text-foreground"
               >
                 Privacy
               </button>
               <button
                 type="button"
-                onClick={() => showToast("Cookies")}
+                onClick={() => setLegalPageOpen("cookies")}
                 className="hover:text-foreground"
               >
                 Cookies
@@ -332,6 +326,7 @@ export function Footer() {
       </div>
 
       {statusOpen && <StatusPage onClose={() => setStatusOpen(false)} />}
+      <LegalPages page={legalPageOpen} onClose={() => setLegalPageOpen(null)} />
     </footer>
   );
 }

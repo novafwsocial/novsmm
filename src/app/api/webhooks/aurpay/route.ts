@@ -146,7 +146,7 @@ async function handlePaymentSucceeded(data: any) {
   }
 
   // Find the pending transaction
-  let txn = null;
+  let txn: any = null;
   if (orderId) {
     txn = await db.transaction.findFirst({
       where: { reference: `aurpay:${orderId}`, status: "pending" },
@@ -223,7 +223,7 @@ async function handlePaymentFailed(data: any) {
   const txnPublicId: string | undefined =
     data?.metadata?.transaction_public_id ?? data?.reference;
 
-  let txn = null;
+  let txn: any = null;
   if (orderId) {
     txn = await db.transaction.findFirst({
       where: { reference: `aurpay:${orderId}` },
@@ -261,7 +261,7 @@ async function handlePaymentRefunded(data: any) {
   const txnPublicId: string | undefined =
     data?.metadata?.transaction_public_id ?? data?.reference;
 
-  let txn = null;
+  let txn: any = null;
   if (orderId) {
     txn = await db.transaction.findFirst({
       where: { reference: `aurpay:${orderId}`, status: "completed" },

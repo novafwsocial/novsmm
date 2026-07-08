@@ -41,6 +41,10 @@
     "prisma",
     "scripts",
     "mini-services",
-    "skills"
+    "skills",
+    "examples",
+    "tool-results",
+    "agent-ctx",
+    "upload"
   ]
 }
