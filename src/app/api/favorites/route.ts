@@ -33,11 +33,11 @@ export async function POST(req: NextRequest) {
   if (error) return error;
   const userId = (session!.user as any).id;
 
+  try {
   const body = await req.json();
   const { serviceId } = body;
-  if (!serviceId) return apiError("Service ID is required", 422);
+  if (!serviceId || typeof serviceId !== "string") return apiError("Service ID is required", 422);
 
-  try {
     const favorite = await db.favorite.create({
       data: { userId, serviceId },
     });
@@ -58,9 +58,13 @@ export async function DELETE(req: NextRequest) {
   const serviceId = searchParams.get("serviceId");
   if (!serviceId) return apiError("Service ID is required", 422);
 
-  await db.favorite.deleteMany({
-    where: { userId, serviceId },
-  });
-
-  return apiOk({ message: "Removed from favorites" });
+  try {
+    await db.favorite.deleteMany({
+      where: { userId, serviceId },
+    });
+    return apiOk({ message: "Removed from favorites" });
+  } catch (e: any) {
+    console.error("[favorites] DELETE error:", e);
+    return apiError("Failed to remove favorite", 500);
+  }
 }

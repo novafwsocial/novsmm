@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { sanitizeFilename } from "@/lib/sanitize";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, readFile } from "fs/promises";
 import { join } from "path";
 import { existsSync } from "fs";
 
@@ -16,46 +16,55 @@ const MAX_SIZE = 5 * 1024 * 1024; // 5MB
  * POST /api/uploads — upload a file (for ticket attachments).
  * Body: multipart/form-data with "file" field
  * Returns the file URL for reference.
+ *
+ * H-2 fix: Files are stored OUTSIDE public/ (in storage/uploads/) and served
+ * via GET /api/uploads/[filename] which requires auth. This prevents
+ * unauthorized access to ticket attachments.
  */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAuth();
   if (error) return error;
   const userId = (session!.user as any).id;
 
-  const formData = await req.formData();
-  const file = formData.get("file") as File;
+  try {
+    const formData = await req.formData();
+    const file = formData.get("file") as File;
 
-  if (!file) return apiError("No file provided", 422);
-  if (!ALLOWED_MIME.includes(file.type)) {
-    return apiError(`File type ${file.type} not allowed. Allowed: images, PDF, text, zip`, 422);
+    if (!file) return apiError("No file provided", 422);
+    if (!ALLOWED_MIME.includes(file.type)) {
+      return apiError(`File type ${file.type} not allowed. Allowed: images, PDF, text, zip`, 422);
+    }
+    if (file.size > MAX_SIZE) {
+      return apiError("File too large. Max 5MB", 422);
+    }
+
+    const safeName = sanitizeFilename(file.name);
+    // H-2 fix: Save to storage/uploads/ (NOT public/uploads/) — auth-required to access
+    const uploadDir = join(process.cwd(), "storage", "uploads", userId);
+
+    if (!existsSync(uploadDir)) {
+      await mkdir(uploadDir, { recursive: true });
+    }
+
+    const filename = `${Date.now()}-${safeName}`;
+    const filepath = join(uploadDir, filename);
+    const bytes = await file.arrayBuffer();
+    await writeFile(filepath, Buffer.from(bytes));
+
+    // URL now points to the auth-checked API route, not a public static file
+    const url = `/api/uploads/${userId}/${filename}`;
+
+    await audit(userId, "upload", "file", null, { filename: safeName, size: file.size, mime: file.type });
+
+    return apiOk({
+      url,
+      filename: safeName,
+      size: file.size,
+      mimeType: file.type,
+      message: "File uploaded successfully",
+    }, 201);
+  } catch (e: any) {
+    console.error("[uploads] POST error:", e);
+    return apiError("Failed to upload file", 500);
   }
-  if (file.size > MAX_SIZE) {
-    return apiError("File too large. Max 5MB", 422);
-  }
-
-  const safeName = sanitizeFilename(file.name);
-  const uploadDir = join(process.cwd(), "public", "uploads", userId);
-
-  // Ensure directory exists
-  if (!existsSync(uploadDir)) {
-    await mkdir(uploadDir, { recursive: true });
-  }
-
-  const filename = `${Date.now()}-${safeName}`;
-  const filepath = join(uploadDir, filename);
-  const bytes = await file.arrayBuffer();
-  await writeFile(filepath, Buffer.from(bytes));
-
-  const url = `/uploads/${userId}/${filename}`;
-
-  // Audit log
-  await audit(userId, "upload", "file", null, { filename: safeName, size: file.size, mime: file.type });
-
-  return apiOk({
-    url,
-    filename: safeName,
-    size: file.size,
-    mimeType: file.type,
-    message: "File uploaded successfully",
-  }, 201);
 }

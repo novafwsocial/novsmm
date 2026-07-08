@@ -30,33 +30,51 @@ export async function POST(req: NextRequest) {
     });
     if (!user) return apiError("User not found", 404);
     if (user.status !== "active") return apiError("Account suspended", 403);
-    if (user.balance < amount) {
-      return apiError(
-        `Insufficient balance. Requested $${amount.toFixed(2)}, available $${user.balance.toFixed(2)}`,
-        402
-      );
-    }
 
     const publicId = await nextPublicId("TX", 8842);
 
-    await db.$transaction([
-      db.user.update({
-        where: { id: userId },
-        data: { balance: { decrement: amount } },
-      }),
-      db.transaction.create({
-        data: {
-          publicId,
-          userId,
-          type: "withdrawal",
-          amount: -amount,
-          description: `Withdrawal to ${method} · ${destination}`,
-          status: "pending",
-          method: method.toLowerCase(),
-          reference: `wd_${Date.now()}`,
-        },
-      }),
-    ]);
+    // H-7 fix: Use conditional updateMany inside transaction to prevent race.
+    // Two concurrent withdrawals can both pass the external balance check
+    // and both debit, driving balance negative. The conditional WHERE
+    // balance >= amount inside the transaction prevents this (same pattern
+    // as /api/orders).
+    let withdrawTxn;
+    try {
+      withdrawTxn = await db.$transaction(async (tx) => {
+        const updated = await tx.user.updateMany({
+          where: { id: userId, balance: { gte: amount } },
+          data: { balance: { decrement: amount } },
+        });
+        if (updated.count === 0) {
+          throw new Error("INSUFFICIENT_BALANCE");
+        }
+
+        return await tx.transaction.create({
+          data: {
+            publicId,
+            userId,
+            type: "withdrawal",
+            amount: -amount,
+            description: `Withdrawal to ${method} · ${destination}`,
+            status: "pending",
+            method: method.toLowerCase(),
+            reference: `wd_${Date.now()}`,
+          },
+        });
+      });
+    } catch (e: any) {
+      if (e.message === "INSUFFICIENT_BALANCE") {
+        const fresh = await db.user.findUnique({
+          where: { id: userId },
+          select: { balance: true },
+        });
+        return apiError(
+          `Insufficient balance. Requested $${amount.toFixed(2)}, available $${(fresh?.balance ?? 0).toFixed(2)}`,
+          402
+        );
+      }
+      throw e;
+    }
 
     await createNotification({
       userId,

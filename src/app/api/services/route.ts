@@ -50,7 +50,9 @@ export async function GET(req: NextRequest) {
         description: true,
         quality: true,
         deliveryTime: true,
-        cost: true,
+        // H-6 fix: Don't expose cost (wholesale price) in public catalog.
+        // Only include it for admin queries (?all=true).
+        ...(all ? { cost: true } : {}),
         price: true,
         minQty: true,
         maxQty: true,

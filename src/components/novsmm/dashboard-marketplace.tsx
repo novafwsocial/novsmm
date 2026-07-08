@@ -460,15 +460,19 @@ function ServiceDetailModal({
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
 
   const handleOrder = async () => {
-    await createOrder.mutateAsync({
-      serviceId: service.id,
-      quantity,
-      link: link || undefined,
-      dripFeed,
-      dripDays: dripFeed ? safeDays : undefined,
-      dripDelay: dripFeed ? dripDelay : undefined,
-    });
-    onClose();
+    try {
+      await createOrder.mutateAsync({
+        serviceId: service.id,
+        quantity,
+        link: link || undefined,
+        dripFeed,
+        dripDays: dripFeed ? safeDays : undefined,
+        dripDelay: dripFeed ? dripDelay : undefined,
+      });
+      onClose();
+    } catch {
+      // Error already handled by onError callback in use-api.ts (toast shown)
+    }
   };
 
   return (
@@ -763,16 +767,20 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
 
   const handleSubmit = async () => {
     if (!allValid || !sufficient) return;
-    await massOrder.mutateAsync({
-      orders: pricedRows
-        .filter((r) => r.valid && r.service)
-        .map((r) => ({
-          serviceId: r.serviceId,
-          link: r.link || undefined,
-          quantity: Number(r.quantity),
-        })),
-    });
-    onClose();
+    try {
+      await massOrder.mutateAsync({
+        orders: pricedRows
+          .filter((r) => r.valid && r.service)
+          .map((r) => ({
+            serviceId: r.serviceId,
+            link: r.link || undefined,
+            quantity: Number(r.quantity),
+          })),
+      });
+      onClose();
+    } catch {
+      // Error already handled by onError callback (toast shown)
+    }
   };
 
   return (
@@ -1089,10 +1097,14 @@ function SellTab() {
 
   const handlePublish = async () => {
     if (!selectedService || price <= 0) return;
-    await createOffer.mutateAsync({ serviceId: selectedService, price });
-    setShowPublish(false);
-    setSelectedService("");
-    setPrice(0);
+    try {
+      await createOffer.mutateAsync({ serviceId: selectedService, price });
+      setShowPublish(false);
+      setSelectedService("");
+      setPrice(0);
+    } catch {
+      // Error already handled by onError callback (toast shown)
+    }
   };
 
   return (

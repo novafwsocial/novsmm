@@ -18,7 +18,9 @@ export async function POST(req: NextRequest) {
   if (error) return error;
   const adminId = (session!.user as any).id;
 
-  const body = await req.json();
+  // H-1 fix: safe JSON parse
+  let body;
+  try { body = await req.json(); } catch { return apiError("Invalid JSON body", 422); }
   const { transactionId, reason } = body;
 
   if (!transactionId) {
