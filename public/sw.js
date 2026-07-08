@@ -62,18 +62,21 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Static assets — cache-first, fallback to network
+  // Static assets — cache-first, fallback to network, fallback to "/" cache
+  // so a missing asset offline doesn't leave the user with a blank page.
   event.respondWith(
     caches.match(request).then((cached) => {
       if (cached) return cached;
-      return fetch(request).then((response) => {
-        // Cache successful responses
-        if (response.status === 200 && response.type === "basic") {
-          const clone = response.clone();
-          caches.open(CACHE).then((cache) => cache.put(request, clone));
-        }
-        return response;
-      });
+      return fetch(request)
+        .then((response) => {
+          // Cache successful responses
+          if (response.status === 200 && response.type === "basic") {
+            const clone = response.clone();
+            caches.open(CACHE).then((cache) => cache.put(request, clone));
+          }
+          return response;
+        })
+        .catch(() => caches.match("/"));
     })
   );
 });

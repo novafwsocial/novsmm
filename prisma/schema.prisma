@@ -130,6 +130,7 @@ model Service {
 
   @@index([platform])
   @@index([status])
+  @@index([status, platform, price])
 }
 
 model Order {
@@ -400,6 +401,7 @@ model Promotion {
 
   @@index([status])
   @@index([serviceId])
+  @@index([status, startsAt, endsAt])
 }
 
 // ─────────── Roles & Permissions ───────────
@@ -446,6 +448,7 @@ model Offer {
   @@index([status])
   @@index([serviceId])
   @@index([userId, status])
+  @@index([status, sales])
 }
 
 // ─────────── Referrals ───────────

@@ -16,6 +16,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 import { useApp } from "./app-store";
+import { useSession } from "@/hooks/use-api";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { cn } from "@/lib/utils";
@@ -47,6 +48,15 @@ const LANGUAGES = [
 
 export function OnboardingScreen() {
   const { setView, signIn } = useApp();
+  const { data: sessionData } = useSession();
+  const user = (sessionData?.user as any) ?? {};
+  const userName = user?.name ?? user?.email ?? "";
+  const userEmail = user?.email ?? "";
+  // Initials for the avatar — falls back to "U" if no name/email.
+  const initials = (user?.name || user?.email || "U")
+    .replace(/[^a-zA-Z0-9]/g, "")
+    .slice(0, 2)
+    .toUpperCase();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
   const [data, setData] = useState({
@@ -140,7 +150,15 @@ export function OnboardingScreen() {
             transition={{ duration: 0.3 }}
           >
               {step === 0 && <WelcomeStep data={data} setData={setData} />}
-              {step === 1 && <ProfileStep data={data} setData={setData} />}
+              {step === 1 && (
+                <ProfileStep
+                  data={data}
+                  setData={setData}
+                  initials={initials}
+                  userName={userName}
+                  userEmail={userEmail}
+                />
+              )}
               {step === 2 && (
                 <CurrencyStep
                   data={data}
@@ -305,7 +323,12 @@ function RoleCard({
   );
 }
 
-function ProfileStep({ setData }: StepProps) {
+function ProfileStep({
+  setData,
+  initials,
+  userName,
+  userEmail,
+}: StepProps & { initials: string; userName: string; userEmail: string }) {
   return (
     <div>
       <StepHeader
@@ -318,7 +341,7 @@ function ProfileStep({ setData }: StepProps) {
           whileHover={{ scale: 1.04 }}
           className="relative flex h-24 w-24 cursor-pointer items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-3xl font-semibold text-primary-foreground nov-shadow-blue"
         >
-          DR
+          {initials || "U"}
           <span className="absolute bottom-0 right-0 flex h-7 w-7 items-center justify-center rounded-full bg-background text-foreground nov-ring">
             <Sparkles className="h-3.5 w-3.5 text-primary" />
           </span>
@@ -328,7 +351,8 @@ function ProfileStep({ setData }: StepProps) {
             Display name
           </label>
           <input
-            defaultValue="Daniela Ríos"
+            defaultValue={userName || ""}
+            placeholder="Your name"
             onChange={(e) =>
               setData((d: any) => ({ ...d, name: e.target.value }))
             }
@@ -337,7 +361,7 @@ function ProfileStep({ setData }: StepProps) {
         </div>
         <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700">
           <ShieldCheck className="h-3.5 w-3.5" />
-          Verified email · daniela@pulsemedia.io
+          Verified email · {userEmail || "—"}
         </div>
       </div>
     </div>

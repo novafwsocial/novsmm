@@ -60,7 +60,8 @@ const CANCEL_WINDOW_MS = 60_000;
 
 /**
  * GET /api/orders — list the authenticated user's orders.
- * Supports ?status= and ?search=
+ * Supports ?status=, ?search=, ?page= (1-based pagination).
+ * `take` stays at 100 per page; clients page through with `page`.
  */
 export async function GET(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -70,6 +71,10 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status");
   const search = searchParams.get("search");
+  // Pagination: 1-based page index, capped at 100 rows per page.
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const take = 100;
+  const skip = (page - 1) * take;
 
   const orders = await db.order.findMany({
     where: {
@@ -87,7 +92,8 @@ export async function GET(req: NextRequest) {
         : {}),
     },
     orderBy: { createdAt: "desc" },
-    take: 100,
+    skip,
+    take,
     select: {
       id: true,
       publicId: true,
@@ -113,7 +119,7 @@ export async function GET(req: NextRequest) {
     },
   });
 
-  return apiOk({ orders });
+  return apiOk({ orders, pagination: { page, limit: take } });
 }
 
 /**
@@ -324,6 +330,15 @@ export async function POST(req: NextRequest) {
 }
 
 /**
+ * Zod schema for the cancel-order PATCH body. Replaces the manual
+ * `if (!orderId || typeof orderId !== "string")` check — Zod gives us
+ * the same validation with better error messages + a single source of truth.
+ */
+const cancelOrderSchema = z.object({
+  orderId: z.string().min(1),
+});
+
+/**
  * PATCH /api/orders — cancel a pending order within 60 seconds of creation.
  * Body: { orderId: string }
  *
@@ -340,10 +355,11 @@ export async function PATCH(req: NextRequest) {
 
   try {
     const body = await req.json();
-    const { orderId } = body;
-    if (!orderId || typeof orderId !== "string") {
-      return apiError("orderId is required", 422);
+    const parsed = cancelOrderSchema.safeParse(body);
+    if (!parsed.success) {
+      return apiError(parsed.error.issues[0]?.message ?? "orderId is required", 422);
     }
+    const { orderId } = parsed.data;
 
     const order = await db.order.findUnique({
       where: { id: orderId },

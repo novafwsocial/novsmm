@@ -23,12 +23,16 @@ export async function GET(req: NextRequest) {
     data = await db.order.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
+      // Cap exports to prevent OOM on users with very large order history.
+      take: 50000,
     });
     headers = ["publicId", "serviceName", "platform", "quantity", "totalPrice", "status", "progress", "createdAt"];
   } else if (type === "transactions") {
     data = await db.transaction.findMany({
       where: { userId },
       orderBy: { createdAt: "desc" },
+      // Cap exports to prevent OOM on users with very large transaction history.
+      take: 50000,
     });
     headers = ["publicId", "type", "amount", "description", "status", "method", "createdAt"];
   } else {

@@ -13,6 +13,19 @@ export function WhatsAppWidget() {
   const [open, setOpen] = useState(false);
   const [number, setNumber] = useState("5215512345678"); // default
   const [message, setMessage] = useState("");
+  // Show the unread badge only on the user's first session (until they open
+  // the chat for the first time). Persisted in localStorage so it doesn't
+  // re-appear on every page load. Uses a lazy initializer (reads localStorage
+  // once at mount) instead of setState-in-effect — avoids cascading renders
+  // and the `react-hooks/set-state-in-effect` lint rule.
+  const [showBadge, setShowBadge] = useState(() => {
+    try {
+      return !localStorage.getItem("novsmm_wa_seen");
+    } catch {
+      // localStorage may be blocked — default to no badge.
+      return false;
+    }
+  });
 
   // Fetch the WhatsApp number from public settings (no auth required)
   useEffect(() => {
@@ -27,6 +40,18 @@ export function WhatsAppWidget() {
         // Use default number if settings can't be loaded
       });
   }, []);
+
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next) {
+      // First open dismisses the unread badge for future visits.
+      setShowBadge(false);
+      try {
+        localStorage.setItem("novsmm_wa_seen", "1");
+      } catch {}
+    }
+  };
 
   const openWhatsApp = () => {
     const text = encodeURIComponent(
@@ -50,7 +75,7 @@ export function WhatsAppWidget() {
         transition={{ delay: 1, type: "spring", stiffness: 200, damping: 15 }}
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.95 }}
-        onClick={() => setOpen((v) => !v)}
+        onClick={toggleOpen}
         className="fixed bottom-5 right-5 z-[80] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-[#25D366]/30 transition-shadow hover:shadow-xl hover:shadow-[#25D366]/40"
         aria-label="Open WhatsApp chat"
       >
@@ -80,8 +105,9 @@ export function WhatsAppWidget() {
           )}
         </AnimatePresence>
 
-        {/* Notification pulse */}
-        {!open && (
+        {/* Notification pulse — only on the user's first visit, dismissed
+            permanently once they open the chat. */}
+        {!open && showBadge && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
             <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">

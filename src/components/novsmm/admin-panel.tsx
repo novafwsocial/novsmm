@@ -507,19 +507,19 @@ function AdminUsers() {
           <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-primary/30 bg-primary/[0.04] px-4 py-3">
             <span className="text-xs font-semibold text-primary">{selected.size} selected</span>
             <div className="ml-auto flex flex-wrap gap-2">
-              <button onClick={() => runBulk("suspend")} disabled={bulkAction.isPending} className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-500/20 disabled:opacity-60">
+              <button onClick={() => runBulk("suspend")} disabled={bulkAction.isPending} className="rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 hover:bg-amber-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">
                 Suspend {selected.size}
               </button>
-              <button onClick={() => runBulk("activate")} disabled={bulkAction.isPending} className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-500/20 disabled:opacity-60">
+              <button onClick={() => runBulk("activate")} disabled={bulkAction.isPending} className="rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">
                 Activate {selected.size}
               </button>
-              <button onClick={() => runBulk("promote")} disabled={bulkAction.isPending} className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 disabled:opacity-60">
+              <button onClick={() => runBulk("promote")} disabled={bulkAction.isPending} className="rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">
                 Promote {selected.size} to admin
               </button>
-              <button onClick={() => runBulk("delete")} disabled={bulkAction.isPending} className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 disabled:opacity-60">
+              <button onClick={() => runBulk("delete")} disabled={bulkAction.isPending} className="rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60">
                 Delete {selected.size}
               </button>
-              <button onClick={() => setSelected(new Set())} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted">
+              <button onClick={() => setSelected(new Set())} className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2">
                 Clear
               </button>
             </div>
@@ -2021,7 +2021,15 @@ function AdminApiKeys() {
                 {newKey}
               </code>
               <button
-                onClick={() => { navigator.clipboard.writeText(newKey); }}
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(newKey);
+                  } catch {
+                    // Clipboard API may be blocked (permissions, non-HTTPS,
+                    // etc.) — user can still select the code above and copy
+                    // manually.
+                  }
+                }}
                 className="rounded-lg bg-background p-2 text-muted-foreground hover:text-foreground"
               >
                 <Copy className="h-4 w-4" />
@@ -2182,7 +2190,17 @@ function AdminLicenses() {
             </div>
             <div className="mt-2 flex items-center gap-2">
               <code className="flex-1 rounded-lg bg-background px-3 py-2 font-mono text-sm font-bold text-foreground">{newLicense}</code>
-              <button onClick={() => navigator.clipboard.writeText(newLicense)} className="rounded-lg bg-background p-2 text-muted-foreground hover:text-foreground">
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(newLicense);
+                  } catch {
+                    // Clipboard API may be blocked — user can still select
+                    // the code above and copy manually.
+                  }
+                }}
+                className="rounded-lg bg-background p-2 text-muted-foreground hover:text-foreground"
+              >
                 <Copy className="h-4 w-4" />
               </button>
             </div>

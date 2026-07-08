@@ -25,6 +25,7 @@ import {
   useSession,
 } from "@/hooks/use-api";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { useToast } from "@/hooks/use-toast";
 import { Reveal } from "./reveal";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export function DashboardTickets() {
   const replyTicket = useReplyTicket();
   const isMobile = useIsMobile();
   const [mobilePane, setMobilePane] = useState<MobilePane>("list");
+  const { toast } = useToast();
 
   // Canned replies are available to admin + support roles only
   const userRole = (sessionData?.user as any)?.role;
@@ -62,10 +64,18 @@ export function DashboardTickets() {
       if (res.ok) {
         setAttachedFile(data);
       } else {
-        alert(data.error || "Upload failed");
+        toast({
+          title: "Upload failed",
+          description: data.error ?? "Please try again.",
+          variant: "destructive",
+        });
       }
     } catch {
-      alert("Upload failed");
+      toast({
+        title: "Upload failed",
+        description: "Please try again or contact support.",
+        variant: "destructive",
+      });
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = "";

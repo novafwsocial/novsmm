@@ -18,6 +18,7 @@ import { useApp } from "./app-store";
 import { Field, PasswordStrength, SocialButton } from "./auth-fields";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
+import { LegalPages, type LegalPageType } from "./legal-pages";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
 
@@ -30,6 +31,7 @@ const LANGUAGES = ["English", "Español", "Português", "Français", "Deutsch"];
 
 export function RegisterScreen() {
   const { setView, setOnboardingStep } = useApp();
+  const [legalPageOpen, setLegalPageOpen] = useState<LegalPageType | null>(null);
   const [form, setForm] = useState({
     name: "",
     username: "",
@@ -290,8 +292,22 @@ export function RegisterScreen() {
 
             <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
               By creating an account you agree to our{" "}
-              <a href="#" className="underline hover:text-foreground">Terms</a> and{" "}
-              <a href="#" className="underline hover:text-foreground">Privacy Policy</a>.
+              <button
+                type="button"
+                onClick={() => setLegalPageOpen("terms")}
+                className="underline transition-colors hover:text-foreground"
+              >
+                Terms
+              </button>{" "}
+              and{" "}
+              <button
+                type="button"
+                onClick={() => setLegalPageOpen("privacy")}
+                className="underline transition-colors hover:text-foreground"
+              >
+                Privacy Policy
+              </button>
+              .
             </p>
           </form>
 
@@ -320,6 +336,8 @@ export function RegisterScreen() {
           </span>
         </div>
       </motion.div>
+
+      <LegalPages page={legalPageOpen} onClose={() => setLegalPageOpen(null)} />
     </motion.div>
   );
 }

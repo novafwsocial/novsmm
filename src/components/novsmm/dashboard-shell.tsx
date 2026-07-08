@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import { useApp, type DashboardTab } from "./app-store";
 import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
+import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { Logo } from "./logo";
 import { Counter } from "./counter";
@@ -68,6 +69,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { data: sessionData } = useSession();
   const { data: notifData } = useNotifications();
   const { data: dashData } = useDashboard();
+  const { toast } = useToast();
   const [statusState, setStatusState] = useState<"operational" | "degraded">("operational");
 
   const openPalette = useCallback(() => {
@@ -146,7 +148,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     } catch (e: any) {
       setReturningToAdmin(false);
       console.error("[impersonate-stop] failed:", e);
-      alert(e?.message ?? "Failed to return to admin account");
+      toast({
+        title: "Failed to return to admin",
+        description: e?.message ?? "Please try again or contact support.",
+        variant: "destructive",
+      });
     }
   };
 
@@ -300,9 +306,10 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 <Logo />
                 <button
                   onClick={() => setMobileOpen(false)}
-                  className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+                  className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                  aria-label="Close menu"
                 >
-                  <X className="h-4 w-4" />
+                  <X className="h-5 w-5" />
                 </button>
               </div>
               <nav className="flex-1 overflow-y-auto px-3 py-3 nov-scroll">
@@ -373,7 +380,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         >
           <button
             onClick={() => setMobileOpen(true)}
-            className="flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted lg:hidden"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:hidden"
             aria-label="Open menu"
           >
             <Menu className="h-5 w-5" />
@@ -423,7 +430,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
           <button
             onClick={() => setDashboardTab("notifications")}
-            className="relative flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            className="relative flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
             aria-label="Notifications"
           >
             <Bell className="h-4 w-4" />
@@ -448,9 +455,19 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             Home
           </button>
 
-          <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 text-xs font-semibold text-primary-foreground flex items-center justify-center">
-            DR
-          </div>
+          {(() => {
+            // Compute avatar initials from the user's name or email instead of
+            // the old hardcoded "DR" — falls back to "U" if neither is set.
+            const initials = (user?.name || user?.email || "U")
+              .replace(/[^a-zA-Z0-9]/g, "")
+              .slice(0, 2)
+              .toUpperCase();
+            return (
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 text-xs font-semibold text-primary-foreground flex items-center justify-center" aria-label={`Account: ${user?.name ?? user?.email ?? "User"}`}>
+                {initials}
+              </div>
+            );
+          })()}
         </header>
 
         {/* Content */}

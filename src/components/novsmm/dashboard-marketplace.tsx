@@ -47,6 +47,7 @@ import {
 } from "@/hooks/use-api";
 import { formatPrice, loadCurrencyRates } from "@/lib/currency-utils";
 import { useApp } from "./app-store";
+import { useToast } from "@/hooks/use-toast";
 import { PlatformLogo, getPlatformEmoji } from "./platform-logo";
 import { cn } from "@/lib/utils";
 
@@ -288,7 +289,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               key={p}
               onClick={() => handlePlatformChange(p)}
               className={cn(
-                "shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors",
+                "min-h-[44px] shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
                 platformFilter === p
                   ? "bg-primary text-primary-foreground"
                   : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
@@ -438,6 +439,8 @@ function ServiceDetailModal({
   const createOrder = useCreateOrder();
   const { data: walletData } = useWallet();
   const { data: sessionData } = useSession();
+  const { setDashboardTab } = useApp();
+  const { toast } = useToast();
   const user = (sessionData?.user as any) ?? {};
   const currency = user?.currency ?? "USD";
   const [quantity, setQuantity] = useState(service.minQty);
@@ -468,6 +471,10 @@ function ServiceDetailModal({
         dripFeed,
         dripDays: dripFeed ? safeDays : undefined,
         dripDelay: dripFeed ? dripDelay : undefined,
+      });
+      toast({
+        title: "Order placed",
+        description: "Your order is now processing",
       });
       onClose();
     } catch {
@@ -674,9 +681,19 @@ function ServiceDetailModal({
         </div>
 
         <button
-          onClick={handleOrder}
-          disabled={createOrder.isPending || !sufficient}
-          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+          onClick={() => {
+            // When the balance is insufficient, the CTA becomes a "top up"
+            // shortcut that closes the modal and switches to the wallet tab
+            // instead of attempting (and failing) the order.
+            if (!sufficient) {
+              onClose();
+              setDashboardTab("wallet");
+              return;
+            }
+            handleOrder();
+          }}
+          disabled={createOrder.isPending}
+          className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 disabled:opacity-60"
         >
           {createOrder.isPending ? (
             <>

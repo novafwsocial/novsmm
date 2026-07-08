@@ -755,9 +755,17 @@ function ReferralsSection() {
   const activeReferrals = stats?.activeReferrals ?? 0;
   const totalEarnings = stats?.totalEarnings ?? data?.totalEarnings ?? 0;
 
-  const copyCode = () => {
-    navigator.clipboard.writeText(shareUrl);
-    toast({ title: "Referral link copied!", description: shareUrl });
+  const copyCode = async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      toast({ title: "Referral link copied!", description: shareUrl });
+    } catch {
+      toast({
+        title: "Couldn't copy",
+        description: "Your browser blocked clipboard access.",
+        variant: "destructive",
+      });
+    }
   };
 
   const shareText = `Únete a NOVSMM y obtén automatización para redes sociales: ${shareUrl}`;

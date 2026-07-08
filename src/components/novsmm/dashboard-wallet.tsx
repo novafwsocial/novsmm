@@ -176,6 +176,13 @@ export function DashboardWallet() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
+                {transactions.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
+                      No transactions yet.
+                    </td>
+                  </tr>
+                )}
                 {transactions.map((t: any, i: number) => (
                   <motion.tr
                     key={t.id}
@@ -252,6 +259,11 @@ function PaymentMethodsList() {
       </div>
       <div className="text-base font-semibold">{methods.length} rails available</div>
       <div className="mt-3 flex flex-col gap-1.5">
+        {methods.length === 0 && (
+          <div className="py-12 text-center text-sm text-muted-foreground">
+            No payment methods configured yet.
+          </div>
+        )}
         {methods.map((m: any) => (
           <div key={m.id} className="flex items-center gap-2.5 rounded-xl border border-border/60 p-2.5 transition-colors hover:bg-muted/30">
             <PaymentLogo name={m.name} size={32} />

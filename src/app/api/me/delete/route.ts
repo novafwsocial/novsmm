@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import bcrypt from "bcryptjs";
 import crypto from "crypto";
+import { z } from "zod";
 
 /**
  * POST /api/me/delete
@@ -28,21 +29,31 @@ export async function POST(req: NextRequest) {
   const userId = user.id;
 
   try {
+    // M-5 fix: Use Zod validation
     const body = await req.json();
-    const { confirmPassword } = body;
-
-    if (!confirmPassword || typeof confirmPassword !== "string") {
-      return apiError("Password confirmation required", 422);
+    const schema = z.object({ confirmPassword: z.string().min(1).max(1024) });
+    const parsed = schema.safeParse(body);
+    if (!parsed.success) {
+      return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
     }
+    const { confirmPassword } = parsed.data;
 
-    // Fetch the user's password hash
+    // Fetch the user's password hash + balance
     const userRecord = await db.user.findUnique({
       where: { id: userId },
-      select: { passwordHash: true, heldBalance: true, email: true, name: true, username: true },
+      select: { passwordHash: true, heldBalance: true, balance: true, email: true, name: true, username: true },
     });
 
     if (!userRecord) {
       return apiError("User not found", 404);
+    }
+
+    // M-4 fix: Block deletion if user has positive balance (prevent fund loss)
+    if (userRecord.balance > 0) {
+      return apiError(
+        `Cannot delete account — you have $${userRecord.balance.toFixed(2)} in your wallet. Please withdraw your funds first.`,
+        422
+      );
     }
 
     // Verify password
