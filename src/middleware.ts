@@ -86,10 +86,13 @@ function addSecurityHeaders(res: NextResponse) {
     "Strict-Transport-Security",
     "max-age=31536000; includeSubDomains; preload"
   );
-  // CSP — allows Tailwind inline styles, Google favicons, WebSocket
+  // CSP — allows Tailwind inline styles, Google fonts, WebSocket.
+  // 'unsafe-eval' removed (C-1 security fix) — not used anywhere in the codebase.
+  // 'unsafe-inline' retained for script-src (Next.js requires it for inline scripts/hydration).
+  // Future improvement: migrate to nonce-based CSP to remove 'unsafe-inline' too.
   res.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss: ws: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss: ws: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
   );
 }
 
@@ -119,6 +122,32 @@ export function middleware(req: NextRequest) {
   if (!pathname.startsWith("/api/")) {
     const res = NextResponse.next();
     addSecurityHeaders(res);
+    return res;
+  }
+
+  // ── M-3: CORS headers for public API v1 (reseller endpoints) ──
+  // Allows resellers to call the API from their own frontends (cross-origin).
+  // Only applied to /api/v1/* and /api/docs — NOT to internal/admin routes.
+  if (pathname.startsWith("/api/v1/") || pathname === "/api/docs") {
+    // Handle CORS preflight (OPTIONS) immediately
+    if (req.method === "OPTIONS") {
+      const res = new NextResponse(null, { status: 204 });
+      res.headers.set("Access-Control-Allow-Origin", "*");
+      res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.headers.set("Access-Control-Max-Age", "86400"); // 24h cache preflight
+      addSecurityHeaders(res);
+      return res;
+    }
+    const res = NextResponse.next();
+    res.headers.set("Access-Control-Allow-Origin", "*");
+    res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+    res.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    addSecurityHeaders(res);
+    // Pass IP to downstream API routes
+    const forwarded = req.headers.get("x-forwarded-for");
+    const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+    res.headers.set("x-client-ip", ip);
     return res;
   }
 

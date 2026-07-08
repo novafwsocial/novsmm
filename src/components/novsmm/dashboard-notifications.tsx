@@ -51,14 +51,22 @@ export function DashboardNotifications() {
 
     let socket: Socket;
 
-    const connectSocket = () => {
-      // NextAuth v4 with JWT strategy stores the token in an httpOnly cookie.
-      // We can't access it from client JS. The notifications service will
-      // allow the connection but per-user room join requires a JWT.
-      // Phase 5 will add a /api/me/ws-token endpoint that returns a short-lived
-      // WS-specific token we can pass here.
-      // For now, connect without auth — the service falls back to global broadcast.
-      socket = io("/?XTransformPort=3003", {
+    const connectSocket = async () => {
+      // M-1 fix: Fetch a short-lived JWT from /api/me/ws-token for WS auth.
+      // The WS service verifies this JWT and joins the user to "user:{userId}" room.
+      // Falls back to unauthenticated connection if the token fetch fails.
+      let wsToken = "";
+      try {
+        const res = await fetch("/api/me/ws-token");
+        if (res.ok) {
+          const data = await res.json();
+          wsToken = data.token || "";
+        }
+      } catch {
+        // Token fetch failed — fall back to unauthenticated
+      }
+
+      socket = io(`/?XTransformPort=3003${wsToken ? `&token=${wsToken}` : ""}`, {
         transports: ["websocket", "polling"],
         reconnection: true,
         reconnectionAttempts: 10,

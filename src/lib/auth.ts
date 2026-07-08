@@ -289,6 +289,40 @@ export const authOptions: NextAuthOptions = {
   pages: {
     signIn: "/",
   },
+  // ── H-1: Explicit cookie security settings ──
+  // Ensures session + CSRF cookies are:
+  //   - httpOnly: not accessible via JavaScript (prevents XSS cookie theft)
+  //   - sameSite: 'lax' (prevents CSRF cross-site cookie submission)
+  //   - secure: true in production (cookies only sent over HTTPS)
+  cookies: {
+    sessionToken: {
+      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.session-token" : "next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    csrfToken: {
+      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.csrf-token" : "next-auth.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+    callbackUrl: {
+      name: process.env.NODE_ENV === "production" ? "__Secure-next-auth.callback-url" : "next-auth.callback-url",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: process.env.NODE_ENV === "production",
+      },
+    },
+  },
   providers,
   callbacks: {
     async jwt({ token, user }) {

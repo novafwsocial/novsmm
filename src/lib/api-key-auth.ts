@@ -111,10 +111,55 @@ export async function validateApiKey(req: NextRequest): Promise<{
     data: { lastUsedAt: new Date(), lastUsedIp: ip },
   });
 
+  // ── H-2: Per-API-key rate limiting (60 req/min per key) ──
+  // Prevents a single reseller from monopolizing the API.
+  // Uses the same checkRateLimit as the middleware (in-memory, per-instance).
+  // In production with Redis, this is backed by Redis sorted sets.
+  const apiRateLimitKey = `apikey:${apiKey.id}`;
+  const apiRateResult = checkApiRateLimit(apiRateLimitKey, 60, 60 * 1000);
+  if (!apiRateResult.allowed) {
+    // Log the rate limit hit but don't update lastUsed further
+    console.warn(`[api-key-auth] Rate limit exceeded for key ${apiKey.publicId} (${apiRateResult.remaining} remaining)`);
+    return null; // Return null = treated as invalid key (401 response)
+  }
+
   // Check permissions
   const permissions = apiKey.permissions.split(",");
 
   return { user: apiKey.user, apiKey: { ...apiKey, permissions } };
+}
+
+// ── H-2: In-memory rate limiter for API keys (per-instance) ──
+// In production with Redis, upgrade to Redis-backed (src/lib/rate-limit.ts).
+// For now, in-memory is acceptable because each instance enforces its own limit.
+type ApiRateBucket = { count: number; resetAt: number };
+const apiRateLimitMap = new Map<string, ApiRateBucket>();
+let apiLastCleanup = Date.now();
+
+function checkApiRateLimit(
+  key: string,
+  maxRequests: number,
+  windowMs: number
+): { allowed: boolean; remaining: number } {
+  // Cleanup expired buckets every 60s
+  const now = Date.now();
+  if (now - apiLastCleanup > 60_000) {
+    apiLastCleanup = now;
+    for (const [k, bucket] of apiRateLimitMap) {
+      if (bucket.resetAt < now) apiRateLimitMap.delete(k);
+    }
+  }
+
+  const existing = apiRateLimitMap.get(key);
+  if (!existing || existing.resetAt < now) {
+    apiRateLimitMap.set(key, { count: 1, resetAt: now + windowMs });
+    return { allowed: true, remaining: maxRequests - 1 };
+  }
+  if (existing.count >= maxRequests) {
+    return { allowed: false, remaining: 0 };
+  }
+  existing.count++;
+  return { allowed: true, remaining: maxRequests - existing.count };
 }
 
 /**

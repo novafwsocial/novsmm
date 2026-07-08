@@ -31,27 +31,40 @@ import { backupLastSuccessGauge } from "@/lib/metrics";
 const INTERNAL_TOKEN = process.env.INTERNAL_API_TOKEN;
 
 export async function POST(req: Request) {
+  // ── H-3: Restrict to localhost / private network IPs ──
+  // This endpoint should only be callable from the backup script on the same
+  // server. Reject any request from a public IP.
+  const clientIp =
+    req.headers.get("x-client-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown";
+
+  // Allow localhost (IPv4 + IPv6) and private network ranges (10.x, 172.16-31.x, 192.168.x)
+  const isLocalhost =
+    clientIp === "unknown" || // Allow unknown (some proxies don't forward)
+    clientIp === "127.0.0.1" ||
+    clientIp === "::1" ||
+    clientIp.startsWith("10.") ||
+    clientIp.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2[0-9]|3[01])\./.test(clientIp);
+
+  if (!isLocalhost) {
+    // Don't reveal that the endpoint exists — return generic 403
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
   // ── Auth ──
+  // H-3: Don't reveal if the token is configured or not — always return 403
   if (!INTERNAL_TOKEN) {
-    // If no token is configured, refuse all calls (fail-closed).
-    return NextResponse.json(
-      { error: "INTERNAL_API_TOKEN not configured on server" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const authHeader = req.headers.get("authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return NextResponse.json(
-      { error: "missing or invalid token" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
   const token = authHeader.slice(7);
   if (token !== INTERNAL_TOKEN) {
-    return NextResponse.json(
-      { error: "missing or invalid token" },
-      { status: 401 }
-    );
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // ── Parse body (optional) ──
