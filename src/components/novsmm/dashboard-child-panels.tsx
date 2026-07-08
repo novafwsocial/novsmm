@@ -108,7 +108,7 @@ export function DashboardChildPanels() {
       .filter((p: any) => p.status === "active")
       .reduce(
         (sum: number, p: any) =>
-          sum + ((p.monthlyFee ?? 0) * (p.markupPercent ?? 0)) / 100,
+          sum + ((p.monthlyFee ?? 0) * (p.markupPercent ?? 50)) / 100,
         0,
       );
     return { active, totalMonthly, markupEarned };
@@ -507,7 +507,7 @@ function CreateChildPanelModal({
   const [name, setName] = useState("");
   const [subdomain, setSubdomain] = useState("");
   const [plan, setPlan] = useState<"reseller" | "agency" | "enterprise">("reseller");
-  const [markupPercent, setMarkupPercent] = useState<number>(20);
+  const [markupPercent, setMarkupPercent] = useState<number>(50);
   const [monthlyDays, setMonthlyDays] = useState<number>(30);
 
   // ── Live cost estimate ──

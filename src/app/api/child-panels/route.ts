@@ -49,7 +49,9 @@ const createChildPanelSchema = z.object({
     .max(30)
     .regex(SUBDOMAIN_RE, "Subdomain must be 3-30 chars, lowercase alphanumeric + hyphens"),
   plan: z.enum(["reseller", "agency", "enterprise"]).default("reseller"),
-  markupPercent: z.number().min(0).max(100).default(20),
+  // Default 50% — child panel owner gets 50% of NOVSMM's profit
+  // (NOVSMM profit = 150% of cost, so child gets 75% of cost, NOVSMM keeps 75% + cost)
+  markupPercent: z.number().min(0).max(100).default(50),
   monthlyDays: z.number().int().min(1).max(365).default(30),
 });
 
