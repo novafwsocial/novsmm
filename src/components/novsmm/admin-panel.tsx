@@ -461,6 +461,17 @@ function AdminUsers() {
 
   const runBulk = (action: "suspend" | "activate" | "promote" | "delete") => {
     if (selected.size === 0) return;
+    // C-2 fix: Confirm destructive bulk actions before executing
+    const actionLabels: Record<string, string> = {
+      suspend: "suspend",
+      activate: "activate",
+      promote: "promote to admin",
+      delete: "DELETE (suspend)",
+    };
+    const verb = actionLabels[action] || action;
+    if (!window.confirm(`Are you sure you want to ${verb} ${selected.size} user(s)? This action cannot be undone.`)) {
+      return;
+    }
     const ids = Array.from(selected);
     bulkAction.mutate(
       { entity: "user", action, ids },
@@ -1692,7 +1703,11 @@ function AdminRoles() {
                 </button>
                 {!r.isSystem && (
                   <button
-                    onClick={() => deleteRole.mutate(r.id)}
+                    onClick={() => {
+                      if (window.confirm(`Delete role "${r.name}"? This will remove all permissions assigned to this role. Users with this role will lose their permissions.`)) {
+                        deleteRole.mutate(r.id);
+                      }
+                    }}
                     className="flex-1 rounded-lg border border-red-500/30 py-1.5 text-xs font-medium text-red-600 transition-colors hover:bg-red-500/5"
                   >
                     <Trash2 className="mr-1 inline h-3 w-3" /> Delete

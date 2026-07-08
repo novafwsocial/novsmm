@@ -237,7 +237,7 @@ function ResetPasswordModal({
  */
 export function AppView({ landing }: { landing: ReactNode }) {
   const { data: session, isLoading } = useSession();
-  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding } = useApp();
+  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding, setOnboardingStep } = useApp();
   const { resetToken, setResetToken } = useUrlParamHandlers();
 
   // Sync auth state with session
@@ -247,6 +247,16 @@ export function AppView({ landing }: { landing: ReactNode }) {
     if (isAuthed !== authed) {
       setAuthed(isAuthed, session?.user as any);
     }
+
+    // C-3 fix: Check if we just registered and need to show onboarding
+    const showOnboarding = typeof window !== "undefined" && sessionStorage.getItem("novsmm_show_onboarding") === "true";
+    if (showOnboarding && isAuthed && view !== "onboarding") {
+      sessionStorage.removeItem("novsmm_show_onboarding");
+      setOnboardingStep(0);
+      setView("onboarding");
+      return;
+    }
+
     // Only auto-redirect to dashboard on the very first load when the user
     // is authed but still on the landing view AND hasn't explicitly chosen
     // to browse the landing page (browsingLanding=false).
@@ -267,7 +277,7 @@ export function AppView({ landing }: { landing: ReactNode }) {
       setView("landing");
       setBrowsingLanding(false);
     }
-  }, [session, isLoading, view, authed, browsingLanding, setAuthed, setAuthLoading, setView, setBrowsingLanding]);
+  }, [session, isLoading, view, authed, browsingLanding, setAuthed, setAuthLoading, setView, setBrowsingLanding, setOnboardingStep]);
 
   const isAuthed = !!session?.user;
 

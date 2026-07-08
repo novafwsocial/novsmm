@@ -62,6 +62,17 @@ export function AdminUsers() {
 
   const runBulk = (action: "suspend" | "activate" | "promote" | "delete") => {
     if (selected.size === 0) return;
+    // C-2 fix: Confirm destructive bulk actions before executing
+    const actionLabels: Record<string, string> = {
+      suspend: "suspend",
+      activate: "activate",
+      promote: "promote to admin",
+      delete: "DELETE (suspend)",
+    };
+    const verb = actionLabels[action] || action;
+    if (!window.confirm(`Are you sure you want to ${verb} ${selected.size} user(s)? This action cannot be undone.`)) {
+      return;
+    }
     const ids = Array.from(selected);
     bulkAction.mutate(
       { entity: "user", action, ids },

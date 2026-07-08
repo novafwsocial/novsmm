@@ -82,17 +82,23 @@ export function RegisterScreen() {
         language: form.language,
       });
 
-      // 2. Auto-login with NextAuth (redirect: true to avoid proxy issues)
-      await signIn("credentials", {
+      // 2. Auto-login with NextAuth (C-3 fix: redirect:false so onboarding shows)
+      const result = await signIn("credentials", {
         email: form.email,
         password: form.password,
-        redirect: true,
+        redirect: false,
         callbackUrl: "/",
       });
 
-      // 3. Go to onboarding
-      setOnboardingStep(0);
-      setView("onboarding");
+      // 3. If login succeeded, set onboarding flag + reload to pick up session
+      if (result && !result.error) {
+        // Set a flag so app-view.tsx knows to show onboarding after reload
+        sessionStorage.setItem("novsmm_show_onboarding", "true");
+        window.location.href = "/";
+      } else {
+        // Login failed after registration — go to login screen
+        setView("login");
+      }
     } catch (e: any) {
       setError(e.message || "Registration failed. Please try again.");
     } finally {
