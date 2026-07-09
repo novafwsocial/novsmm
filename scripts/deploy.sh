@@ -230,11 +230,11 @@ done
 step "STEP 4/7: Migraciones de PostgreSQL"
 
 log "Ejecutando prisma migrate deploy..."
-if docker compose exec -T web bun run prisma migrate deploy 2>&1; then
+if docker compose exec -T web npx prisma migrate deploy 2>&1; then
   ok "Migraciones aplicadas"
 else
   warn "migrate deploy falló, intentando db:push..."
-  docker compose exec -T web bun run db:push 2>&1
+  docker compose exec -T web npx prisma db push 2>&1
   ok "Schema pushado con db:push"
 fi
 DEPLOY_PHASE="migrated"
@@ -253,7 +253,7 @@ if [ "$SEED" = true ]; then
   step "STEP 5/7: Seed de base de datos"
   
   log "Ejecutando seed..."
-  SEED_OUTPUT=$(docker compose exec -T web bun run prisma/seed.ts 2>&1)
+  SEED_OUTPUT=$(docker compose exec -T web npx tsx prisma/seed.ts 2>&1)
   echo "$SEED_OUTPUT" | grep -E "✓|Admin|password|⚠️" | head -10
   
   # Extraer password del admin
@@ -272,7 +272,7 @@ if [ "$MIGRATE_SQLITE" = true ]; then
   
   if [ -f "db/custom.db" ]; then
     log "Ejecutando migración de datos..."
-    SQLITE_DATABASE_URL="file:./db/custom.db" docker compose exec -T -e SQLITE_DATABASE_URL="file:./db/custom.db" web bun run prisma/migrate-sqlite-to-postgres.ts 2>&1 | tail -20
+    SQLITE_DATABASE_URL="file:./db/custom.db" docker compose exec -T -e SQLITE_DATABASE_URL="file:./db/custom.db" web npx tsx prisma/migrate-sqlite-to-postgres.ts 2>&1 | tail -20
     ok "Migración de datos completada"
     
     # Verificar

@@ -1,103 +1,36 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# NOVSMM — Multi-stage Dockerfile
+# NOVSMM — Multi-stage Dockerfile (Node.js, production-ready for 8GB+ VPS)
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: Install dependencies (cached unless package.json changes)
-# Stage 2: Build the Next.js app (standalone output)
-# Stage 3: Production image (minimal, non-root user)
-# ─────────────────────────────────────────────────────────────────────────────
+# Stage 2: Build the Next.js app
+# Stage 3: Production runner (minimal image)
 
 # ── Stage 1: Dependencies ──
-FROM oven/bun:1.1 AS deps
+FROM node:22-slim AS deps
 WORKDIR /app
-
-# Copy only package files for caching
-COPY package.json bun.lock* ./
-COPY mini-services/notifications-service/package.json ./mini-services/notifications-service/package.json
-
-# Install all dependencies (including dev for build)
-RUN bun install --frozen-lockfile
-
-# Install mini-service dependencies
-RUN cd mini-services/notifications-service && bun install --frozen-lockfile
+COPY package.json package-lock.json* ./
+RUN npm install --legacy-peer-deps
 
 # ── Stage 2: Build ──
-FROM oven/bun:1.1 AS builder
+FROM node:22-slim AS builder
 WORKDIR /app
-
-# Copy deps from stage 1
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/mini-services/notifications-service/node_modules ./mini-services/notifications-service/node_modules
-
-# Copy source code
 COPY . .
+RUN npx prisma generate
+RUN NODE_OPTIONS="--max-old-space-size=2048" npx next build
 
-# Disable telemetry during build
-ENV NEXT_TELEMETRY_DISABLED=1
-
-# Generate Prisma client
-RUN bun run db:generate
-
-# Build Next.js (standalone output)
-RUN bun run build
-
-# ── Stage 3: Production ──
-FROM oven/bun:1.1-slim AS runner
+# ── Stage 3: Production runner ──
+FROM node:22-slim AS runner
 WORKDIR /app
-
-# Install curl for healthchecks (slim images don't include it)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends curl ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# Security: run as non-root user
-RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
-
-# Install only production dependencies
-COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile --production
-
-# Copy mini-service deps
-COPY mini-services/notifications-service/package.json ./mini-services/notifications-service/
-RUN cd mini-services/notifications-service && bun install --frozen-lockfile --production
-
-# Copy built Next.js standalone
-COPY --from=builder /app/.next/standalone ./
-COPY --from=builder /app/.next/static ./.next/static
-COPY --from=builder /app/public ./public
-
-# Copy Prisma files (for migrations)
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
-
-# Copy mini-service source
-COPY --from=builder /app/mini-services/notifications-service/index.ts ./mini-services/notifications-service/index.ts
-
-# Copy worker
-COPY --from=builder /app/src/workers ./src/workers
-
-# Copy scripts
-COPY --from=builder /app/scripts ./scripts
-
-# Set environment
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV PORT=3000
-ENV HOSTNAME=0.0.0.0
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
-  CMD curl -f http://localhost:3000/api/health/ready || exit 1
+COPY --from=builder /app/package.json ./package.json
+COPY --from=builder /app/.next ./.next
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.ts ./next.config.ts
 
-# Create uploads directory with correct ownership before switching to non-root user
-RUN mkdir -p /app/uploads && chown -R nextjs:nodejs /app/uploads
-
-# Switch to non-root user
-USER nextjs
-
-# Expose ports
 EXPOSE 3000
-
-# Start command
-CMD ["bun", ".next/standalone/server.js"]
+CMD ["npx", "next", "start", "-p", "3000"]
