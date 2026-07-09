@@ -2561,12 +2561,24 @@ function AdminSettingsTab() {
   const updateSettings = useUpdateSettings();
   const [form, setForm] = useState<Record<string, string>>({});
 
-  // Sync form with fetched settings
+  // ADMIN-FIX-BATCH-2: the list of editable keys used to be hardcoded — that
+  // meant any Setting row added later (by the admin via the API, by the
+  // social-auth flow, or by a future seed migration) was invisible in the UI.
+  // The Setting model only has `key` + `value` (no category/type/description),
+  // so we:
+  //   1. Render every key the API returns.
+  //   2. Group by the prefix before the first "." (platform, fees, limits,
+  //      security, oauth, ...) for visual organisation.
+  //   3. Use a `number` input when the stored value parses as a finite number
+  //      (handles limits.* / fees.* / security.rateLimitPerMinute correctly),
+  //      otherwise text. Encrypted `oauth:*` rows show their raw encrypted
+  //      blob — read-only, since editing ciphertext would corrupt the creds.
+  //   4. Send only changed values via the existing PATCH (preserves the
+  //      "save only what changed" behaviour).
   const settings = data?.settings ?? {};
-  const formValues = Object.keys(form).length > 0 ? form : settings;
+  const formValues = Object.keys(form).length > 0 ? { ...settings, ...form } : settings;
 
   const handleSave = () => {
-    // Only send changed values
     const changes: Record<string, string> = {};
     Object.entries(form).forEach(([k, v]) => {
       if (settings[k] !== v) changes[k] = v;
@@ -2576,41 +2588,88 @@ function AdminSettingsTab() {
     }
   };
 
-  const editableKeys = [
-    { key: "platform.name", label: "Platform name", type: "text" },
-    { key: "platform.whatsapp", label: "WhatsApp number (with country code)", type: "text" },
-    { key: "platform.supportEmail", label: "Support email", type: "email" },
-    { key: "fees.marketplace", label: "Marketplace fee (0.03 = 3%)", type: "text" },
-    { key: "fees.withdrawal", label: "Withdrawal fee (0.01 = 1%)", type: "text" },
-    { key: "limits.minTopup", label: "Minimum top-up ($)", type: "number" },
-    { key: "limits.maxTopup", label: "Maximum top-up ($)", type: "number" },
-    { key: "limits.minWithdrawal", label: "Minimum withdrawal ($)", type: "number" },
-    { key: "security.rateLimitPerMinute", label: "Rate limit (req/min per IP)", type: "number" },
-  ];
+  // Group settings by prefix (the segment before the first ".").
+  // Keys without a dot land in a "General" bucket so nothing is hidden.
+  const groups = useMemo(() => {
+    const map = new Map<string, { key: string; value: string }[]>();
+    const orderedKeys = Object.keys(settings).sort();
+    for (const key of orderedKeys) {
+      const prefix = key.includes(".") ? key.split(".")[0] : "General";
+      if (!map.has(prefix)) map.set(prefix, []);
+      map.get(prefix)!.push({ key, value: settings[key] });
+    }
+    // Sort groups: General last (it usually only catches stragglers).
+    return Array.from(map.entries()).sort((a, b) => {
+      if (a[0] === "General") return 1;
+      if (b[0] === "General") return -1;
+      return a[0].localeCompare(b[0]);
+    });
+  }, [settings]);
+
+  const isNumeric = (v: string) => v !== "" && v !== "-" && Number.isFinite(Number(v));
+  const isEncrypted = (k: string) => k.startsWith("oauth:") || k.startsWith("payments:");
 
   return (
     <Reveal blur>
       <div className="flex flex-col gap-4">
         <div>
           <div className="text-base font-semibold">Platform settings</div>
-          <div className="text-xs text-muted-foreground">Configure platform, fees, limits, and security</div>
-        </div>
-        <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            {editableKeys.map((s) => (
-              <Input
-                key={s.key}
-                label={s.label}
-                type={s.type}
-                value={formValues[s.key] ?? ""}
-                onChange={(v) => setForm({ ...form, [s.key]: v })}
-              />
-            ))}
+          <div className="text-xs text-muted-foreground">
+            All platform settings ({Object.keys(settings).length} keys) — grouped by category.
+            Numeric values use a number input; encrypted credential blobs are read-only.
           </div>
-          <button onClick={handleSave} disabled={updateSettings.isPending} className="mt-5 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
-            {updateSettings.isPending ? "Saving…" : "Save settings"}
-          </button>
         </div>
+        <div className="flex flex-col gap-4">
+          {groups.length === 0 && (
+            <div className="rounded-2xl border border-border/60 bg-background p-6 text-sm text-muted-foreground">
+              No settings found.
+            </div>
+          )}
+          {groups.map(([group, items]) => (
+            <div key={group} className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
+              <div className="mb-3 flex items-center justify-between">
+                <div className="text-sm font-semibold capitalize text-foreground">{group}</div>
+                <div className="text-[11px] text-muted-foreground">{items.length} setting{items.length === 1 ? "" : "s"}</div>
+              </div>
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {items.map((s) => {
+                  const numeric = isNumeric(s.value);
+                  const encrypted = isEncrypted(s.key);
+                  return (
+                    <div key={s.key}>
+                      {encrypted ? (
+                        // Read-only encrypted credential blob — never editable
+                        // from this panel (use the dedicated Social Auth /
+                        // Payments tabs). Displaying it lets the admin verify
+                        // a value exists.
+                        <label className="block">
+                          <span className="mb-1 block text-xs font-medium text-muted-foreground">{s.key}</span>
+                          <input
+                            type="text"
+                            value={formValues[s.key] ?? ""}
+                            readOnly
+                            placeholder="(not set)"
+                            className="h-10 w-full cursor-not-allowed rounded-lg border border-dashed border-border bg-muted/40 px-3 font-mono text-xs text-muted-foreground"
+                          />
+                        </label>
+                      ) : (
+                        <Input
+                          label={s.key}
+                          type={numeric ? "number" : "text"}
+                          value={formValues[s.key] ?? ""}
+                          onChange={(v) => setForm({ ...form, [s.key]: v })}
+                        />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button onClick={handleSave} disabled={updateSettings.isPending} className="mt-1 self-start rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+          {updateSettings.isPending ? "Saving…" : "Save settings"}
+        </button>
       </div>
     </Reveal>
   );
@@ -3278,14 +3337,25 @@ function AdminRefunds() {
   const refund = useRefund();
   const [confirming, setConfirming] = useState<any | null>(null);
   const [reason, setReason] = useState("");
-  const transactions = data?.recentTransactions ?? [];
+  // ADMIN-FIX-BATCH-2: only `topup` and `sale` transactions are refundable
+  // from this panel. Withdrawals/referrals/fees/release/hold/held can't be
+  // reversed here — they need different (or no) flows. The overview endpoint
+  // already returns `status: "completed"` rows, so the only extra filter is
+  // on `type`.
+  const allTransactions = data?.recentTransactions ?? [];
+  const refundable = allTransactions.filter(
+    (t: any) => ["topup", "sale"].includes(t.type) && t.status === "completed"
+  );
 
   return (
     <Reveal blur>
       <div className="flex flex-col gap-4">
         <div>
-          <div className="text-base font-semibold">Refunds · {transactions.length} recent transactions</div>
-          <div className="text-xs text-muted-foreground">Issue a refund for any completed transaction</div>
+          <div className="text-base font-semibold">Refunds · {refundable.length} refundable transactions</div>
+          <div className="text-xs text-muted-foreground">Issue a refund for any completed top-up or sale</div>
+        </div>
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-2.5 text-xs text-amber-800">
+          Showing refundable transactions only (top-ups and sales). Withdrawals, referral bonuses, fees, and existing refunds are excluded.
         </div>
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
           <div className="overflow-x-auto nov-scroll">
@@ -3302,7 +3372,7 @@ function AdminRefunds() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {transactions.map((t: any) => (
+                {refundable.map((t: any) => (
                   <tr key={t.id} className="transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.publicId}</td>
                     <td className="px-4 py-3">
@@ -3325,9 +3395,9 @@ function AdminRefunds() {
                     </td>
                   </tr>
                 ))}
-                {transactions.length === 0 && (
+                {refundable.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No completed transactions</td>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">No refundable transactions</td>
                   </tr>
                 )}
               </tbody>
@@ -3379,36 +3449,133 @@ function AdminRefunds() {
 }
 
 /* ─────────── Social Auth ─────────── */
+// ADMIN-FIX-BATCH-2: previously this panel only handled Google. It now
+// renders a card per supported OAuth provider (google, facebook, github,
+// twitter), each with its own enable/disable toggle, Client ID + Secret
+// inputs, and a read-only redirect URL.
+type SocialAuthProvider = "google" | "facebook" | "github" | "twitter";
+
+const SOCIAL_PROVIDERS: {
+  id: SocialAuthProvider;
+  label: string;
+  redirectUrl: string;
+  glyph: React.ReactNode;
+  idPlaceholder: string;
+  secretPlaceholder: string;
+}[] = [
+  {
+    id: "google",
+    label: "Google",
+    redirectUrl: "https://novsmm.shop/api/auth/callback/google",
+    idPlaceholder: "xxxxxxxxxx.apps.googleusercontent.com",
+    secretPlaceholder: "GOCSPX-xxxxxxxxxxxxx",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.6c2.1-2 3.2-4.9 3.2-7.9z" />
+        <path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.6-2.7c-1 .7-2.3 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.8A11 11 0 0 0 12 23z" />
+        <path fill="#FBBC05" d="M6 14.4a6.6 6.6 0 0 1 0-4.2V7.4H2.3a11 11 0 0 0 0 9.8L6 14.4z" />
+        <path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.3 7.4L6 10.2c.9-2.6 3.2-4.8 6-4.8z" />
+      </svg>
+    ),
+  },
+  {
+    id: "facebook",
+    label: "Facebook",
+    redirectUrl: "https://novsmm.shop/api/auth/callback/facebook",
+    idPlaceholder: "1234567890123456 (App ID)",
+    secretPlaceholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (App Secret)",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6 4.39 10.97 10.13 11.93v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.95h-1.52c-1.49 0-1.96.93-1.96 1.89v2.27h3.33l-.53 3.49h-2.8V24C19.61 23.04 24 18.07 24 12.07z" />
+      </svg>
+    ),
+  },
+  {
+    id: "github",
+    label: "GitHub",
+    redirectUrl: "https://novsmm.shop/api/auth/callback/github",
+    idPlaceholder: "Iv1.1234567890abcdef (Client ID)",
+    secretPlaceholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (Client Secret)",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <path fill="#181717" d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.29 0 .32.21.7.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z" />
+      </svg>
+    ),
+  },
+  {
+    id: "twitter",
+    label: "Twitter / X",
+    redirectUrl: "https://novsmm.shop/api/auth/callback/twitter",
+    idPlaceholder: "YTVk... (API Key / Client ID)",
+    secretPlaceholder: "xxxxxxxxxxxxxxxxxxxxxxxxxxx (API Secret / Client Secret)",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
+        <path fill="#000" d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z" />
+      </svg>
+    ),
+  },
+];
+
 function AdminSocialAuth() {
   const { toast } = useToast();
-  const [googleClientId, setGoogleClientId] = useState("");
-  const [googleClientSecret, setGoogleClientSecret] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [existing, setExisting] = useState<{ google?: { configured: boolean } }>({});
+  // Per-provider form state.
+  const [creds, setCreds] = useState<
+    Record<SocialAuthProvider, { clientId: string; clientSecret: string }>
+  >({
+    google: { clientId: "", clientSecret: "" },
+    facebook: { clientId: "", clientSecret: "" },
+    github: { clientId: "", clientSecret: "" },
+    twitter: { clientId: "", clientSecret: "" },
+  });
+  const [statuses, setStatuses] = useState<
+    Record<SocialAuthProvider, { configured: boolean; source: "db" | "env" | null }>
+  >({
+    google: { configured: false, source: null },
+    facebook: { configured: false, source: null },
+    github: { configured: false, source: null },
+    twitter: { configured: false, source: null },
+  });
+  const [savingProvider, setSavingProvider] = useState<SocialAuthProvider | null>(null);
+  const [removingProvider, setRemovingProvider] = useState<SocialAuthProvider | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<SocialAuthProvider | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/admin/social-auth");
-        if (res.ok) {
-          const data = await res.json();
-          setExisting(data);
-        }
-      } catch {}
-    })();
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/social-auth");
+      if (res.ok) {
+        const data = await res.json();
+        setStatuses({
+          google: data.google ?? { configured: false, source: null },
+          facebook: data.facebook ?? { configured: false, source: null },
+          github: data.github ?? { configured: false, source: null },
+          twitter: data.twitter ?? { configured: false, source: null },
+        });
+      }
+    } catch {
+      // Network error — leave status as-is.
+    }
   }, []);
 
-  const handleSave = async () => {
-    setLoading(true);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const handleSave = async (provider: SocialAuthProvider) => {
+    const { clientId, clientSecret } = creds[provider];
+    if (!clientId || !clientSecret) {
+      toast({
+        title: "Missing credentials",
+        description: "Both Client ID and Client Secret are required.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSavingProvider(provider);
     try {
       const res = await fetch("/api/admin/social-auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          provider: "google",
-          clientId: googleClientId,
-          clientSecret: googleClientSecret,
-        }),
+        body: JSON.stringify({ provider, clientId, clientSecret }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
@@ -3417,14 +3584,41 @@ function AdminSocialAuth() {
         }
         throw new Error(data.error || `Failed to save (HTTP ${res.status})`);
       }
-      toast({ title: "Google credentials saved", description: "OAuth provider updated successfully." });
-      setGoogleClientId("");
-      setGoogleClientSecret("");
-      setExisting({ google: { configured: true } });
+      toast({
+        title: `${SOCIAL_PROVIDERS.find((p) => p.id === provider)!.label} credentials saved`,
+        description: "OAuth provider updated successfully.",
+      });
+      setCreds((c) => ({ ...c, [provider]: { clientId: "", clientSecret: "" } }));
+      await refresh();
     } catch (e: any) {
       toast({ title: "Failed", description: e.message, variant: "destructive" });
     }
-    setLoading(false);
+    setSavingProvider(null);
+  };
+
+  const handleRemove = async (provider: SocialAuthProvider) => {
+    setRemovingProvider(provider);
+    setConfirmRemove(null);
+    try {
+      const res = await fetch("/api/admin/social-auth", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || `Failed to disable (HTTP ${res.status})`);
+      }
+      toast({
+        title: `${SOCIAL_PROVIDERS.find((p) => p.id === provider)!.label} disabled`,
+        description: "Stored credentials have been removed.",
+      });
+      setCreds((c) => ({ ...c, [provider]: { clientId: "", clientSecret: "" } }));
+      await refresh();
+    } catch (e: any) {
+      toast({ title: "Failed", description: e.message, variant: "destructive" });
+    }
+    setRemovingProvider(null);
   };
 
   return (
@@ -3433,77 +3627,178 @@ function AdminSocialAuth() {
         <div>
           <h2 className="text-xl font-semibold">Social Authentication</h2>
           <p className="text-sm text-muted-foreground">
-            Configure OAuth providers for login. Credentials are encrypted with AES-256-GCM.
+            Configure OAuth providers for login. Credentials are encrypted with AES-256-GCM
+            and stored per-provider in the Setting table.
           </p>
         </div>
 
-        <div className="rounded-2xl border border-border/60 bg-background p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50">
-                <svg viewBox="0 0 24 24" className="h-5 w-5" aria-hidden>
-                  <path fill="#4285F4" d="M22.5 12.2c0-.7-.1-1.4-.2-2H12v3.9h5.9a5 5 0 0 1-2.2 3.3v2.7h3.6c2.1-2 3.2-4.9 3.2-7.9z" />
-                  <path fill="#34A853" d="M12 23c2.9 0 5.4-1 7.2-2.6l-3.6-2.7c-1 .7-2.3 1.1-3.6 1.1-2.8 0-5.1-1.9-6-4.4H2.3v2.8A11 11 0 0 0 12 23z" />
-                  <path fill="#FBBC05" d="M6 14.4a6.6 6.6 0 0 1 0-4.2V7.4H2.3a11 11 0 0 0 0 9.8L6 14.4z" />
-                  <path fill="#EA4335" d="M12 5.4c1.6 0 3 .5 4.1 1.6l3.1-3.1A11 11 0 0 0 2.3 7.4L6 10.2c.9-2.6 3.2-4.8 6-4.8z" />
-                </svg>
-              </div>
-              <div>
-                <div className="font-semibold">Google OAuth</div>
-                <div className="text-xs text-muted-foreground">
-                  {existing.google?.configured
-                    ? "✅ Configured — users can sign in with Google"
-                    : "Not configured — users can only use email/password"}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          {SOCIAL_PROVIDERS.map((p) => {
+            const status = statuses[p.id];
+            const isEnv = status.source === "env";
+            return (
+              <div key={p.id} className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
+                <div className="mb-4 flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50">
+                      {p.glyph}
+                    </div>
+                    <div>
+                      <div className="font-semibold">{p.label} OAuth</div>
+                      <div className="text-xs text-muted-foreground">
+                        {status.configured
+                          ? `✅ Configured${isEnv ? " (via env var)" : ""} — users can sign in with ${p.label}`
+                          : `Not configured — users can only use email/password`}
+                      </div>
+                    </div>
+                  </div>
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      status.configured
+                        ? "bg-emerald-500/10 text-emerald-700"
+                        : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {status.configured ? "Enabled" : "Disabled"}
+                  </span>
+                </div>
+
+                <div className="flex flex-col gap-3">
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      {p.label} Client ID
+                    </label>
+                    <input
+                      type="text"
+                      value={creds[p.id].clientId}
+                      onChange={(e) =>
+                        setCreds((c) => ({
+                          ...c,
+                          [p.id]: { ...c[p.id], clientId: e.target.value },
+                        }))
+                      }
+                      placeholder={p.idPlaceholder}
+                      className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      {p.label} Client Secret
+                    </label>
+                    <input
+                      type="password"
+                      value={creds[p.id].clientSecret}
+                      onChange={(e) =>
+                        setCreds((c) => ({
+                          ...c,
+                          [p.id]: { ...c[p.id], clientSecret: e.target.value },
+                        }))
+                      }
+                      placeholder={p.secretPlaceholder}
+                      className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                      Redirect URL (read-only)
+                    </label>
+                    <div className="flex h-10 items-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 px-3">
+                      <code className="flex-1 truncate font-mono text-[11px] text-muted-foreground">
+                        {p.redirectUrl}
+                      </code>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          try {
+                            await navigator.clipboard.writeText(p.redirectUrl);
+                            toast({ title: "Redirect URL copied" });
+                          } catch {
+                            // Clipboard blocked — user can select manually.
+                          }
+                        }}
+                        className="shrink-0 rounded-md p-1 text-muted-foreground hover:text-foreground"
+                        aria-label={`Copy ${p.label} redirect URL`}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 pt-1">
+                    <button
+                      onClick={() => handleSave(p.id)}
+                      disabled={
+                        savingProvider === p.id ||
+                        (!creds[p.id].clientId && !creds[p.id].clientSecret)
+                      }
+                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                    >
+                      {savingProvider === p.id
+                        ? "Saving..."
+                        : status.configured
+                        ? "Update credentials"
+                        : "Save & enable"}
+                    </button>
+                    {status.configured && (
+                      <button
+                        onClick={() => setConfirmRemove(p.id)}
+                        disabled={removingProvider === p.id || isEnv}
+                        title={
+                          isEnv
+                            ? "Configured via environment variable — remove the env var to disable."
+                            : "Remove stored credentials"
+                        }
+                        className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-red-500/40 bg-red-500/5 px-4 text-sm font-medium text-red-700 disabled:opacity-50"
+                      >
+                        {removingProvider === p.id ? "Removing…" : "Disable"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <strong>Setup:</strong> create an OAuth app at the provider&rsquo;s developer
+                  console, add <code className="font-mono">{p.redirectUrl}</code> as an authorized
+                  redirect URI, then paste the Client ID + Secret above.
                 </div>
               </div>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-3">
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Google Client ID
-              </label>
-              <input
-                type="text"
-                value={googleClientId}
-                onChange={(e) => setGoogleClientId(e.target.value)}
-                placeholder="xxxxxxxxxx.apps.googleusercontent.com"
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-                Google Client Secret
-              </label>
-              <input
-                type="password"
-                value={googleClientSecret}
-                onChange={(e) => setGoogleClientSecret(e.target.value)}
-                placeholder="GOCSPX-xxxxxxxxxxxxx"
-                className="h-10 w-full rounded-xl border border-border bg-background px-3 text-sm"
-              />
-            </div>
-            <button
-              onClick={handleSave}
-              disabled={loading || (!googleClientId && !googleClientSecret)}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
-            >
-              {loading ? "Saving..." : "Save Google credentials"}
-            </button>
-          </div>
-
-          <div className="mt-4 rounded-xl bg-muted/30 p-3 text-xs text-muted-foreground">
-            <strong>Setup instructions:</strong>
-            <ol className="mt-1 list-decimal pl-4 space-y-0.5">
-              <li>Go to Google Cloud Console</li>
-              <li>Create OAuth 2.0 Client ID (Web application)</li>
-              <li>Add authorized redirect URI</li>
-              <li>Copy Client ID + Client Secret here</li>
-            </ol>
-          </div>
+            );
+          })}
         </div>
       </div>
+
+      {confirmRemove && (
+        <AlertDialog
+          open
+          onOpenChange={(o) => {
+            if (!o) setConfirmRemove(null);
+          }}
+        >
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>
+                Disable {SOCIAL_PROVIDERS.find((p) => p.id === confirmRemove)!.label} sign-in?
+              </AlertDialogTitle>
+              <AlertDialogDescription>
+                This deletes the stored credentials. Users currently signed in via this provider
+                will keep their session, but new sign-in attempts will fail until you re-configure
+                it. This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => handleRemove(confirmRemove)}
+                className="bg-red-600 text-white hover:bg-red-700"
+              >
+                Disable provider
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
     </Reveal>
   );
 }

@@ -137,3 +137,41 @@ export const updateLanguageSchema = z.object({
   status: z.enum(["active", "disabled"]).optional(),
   sortOrder: z.number().int().min(0).optional(),
 }).strict();
+
+// ── License schemas ──
+// ADMIN-FIX-BATCH-2: the License model comment lists the supported plans as
+// `reseller | agency | enterprise | white_label` (default "reseller"). The
+// admin UI issue-modal uses the same 4 values. We now enforce this server-side
+// so a stray client (or a future API consumer) can't persist an unknown plan
+// string into the DB — which would later render as a blank plan chip in the
+// licenses table.
+//
+// NOTE: the task brief suggested `["starter", "pro", "business", "enterprise"]`,
+// but grepping the codebase showed those values aren't used anywhere — the
+// actual values are the four above. Per the brief ("Use the actual values you
+// find. If they're different, use those.") we use the schema/UI values.
+export const LICENSE_PLANS = ["reseller", "agency", "enterprise", "white_label"] as const;
+export type LicensePlan = (typeof LICENSE_PLANS)[number];
+
+export const createLicenseSchema = z.object({
+  customerName: z.string().min(1, "Customer name is required"),
+  customerEmail: z.string().email("Invalid email address"),
+  customerId: z.string().optional().nullable(),
+  plan: z.enum(LICENSE_PLANS).default("reseller"),
+  domain: z.string().optional().nullable(),
+  ipAllowlist: z.string().optional().nullable(),
+  maxUsers: z.number().int().positive().default(1),
+  maxOrders: z.number().int().positive().default(10000),
+  expiresAt: z.string().optional().nullable(),
+}).strict();
+
+export const updateLicenseSchema = z.object({
+  id: z.string().min(1, "License ID required"),
+  action: z.enum(["suspend", "revoke", "activate"]).optional(),
+  plan: z.enum(LICENSE_PLANS).optional(),
+  domain: z.string().nullable().optional(),
+  ipAllowlist: z.string().nullable().optional(),
+  maxUsers: z.number().int().positive().optional(),
+  maxOrders: z.number().int().positive().optional(),
+  expiresAt: z.string().nullable().optional(),
+}).strict();

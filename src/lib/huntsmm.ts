@@ -141,3 +141,50 @@ export function extractProviderServiceId(serviceName: string): number | null {
   if (match) return parseInt(match[1]);
   return null;
 }
+
+/**
+ * ADMIN-FIX-BATCH-2: Fetch the full service catalog from HuntSMM.
+ *
+ * Used by the admin "Sync now" action (`POST /api/admin/providers/[id]/sync`)
+ * to refresh the Service table against the upstream provider's catalog. The
+ * returned objects are the raw HuntSMM service rows:
+ *   { service, name, category, description, rate, min, max, refill, ... }
+ *
+ * Throws on HTTP / network / parse errors so the caller can mark the provider
+ * as `degraded` and surface the message in the audit log.
+ *
+ * @param apiKey   HuntSMM API key (from Provider.apiKey).
+ * @param apiUrl   Optional override — defaults to the canonical HuntSMM URL.
+ */
+export async function getHuntSmmServices(
+  apiKey: string,
+  apiUrl: string = HUNTSMM_API_URL
+): Promise<any[]> {
+  if (!apiKey) {
+    throw new Error("Provider API key not configured");
+  }
+
+  const res = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ key: apiKey, action: "services" }),
+    signal: AbortSignal.timeout(30000),
+  });
+
+  if (!res.ok) {
+    throw new Error(`HuntSMM API returned ${res.status} ${res.statusText}`);
+  }
+
+  const data = await res.json();
+
+  // HuntSMM returns `{ error: "..." }` on auth/permission failures.
+  if (data && typeof data === "object" && typeof data.error === "string") {
+    throw new Error(`HuntSMM API error: ${data.error}`);
+  }
+
+  if (!Array.isArray(data)) {
+    throw new Error("HuntSMM API returned an unexpected (non-array) payload");
+  }
+
+  return data;
+}

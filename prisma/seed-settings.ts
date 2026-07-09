@@ -33,12 +33,17 @@ export async function seedSettings() {
   console.log(`  ✓ ${currencies.length} currencies`);
 
   // ── Languages ──
+  // ADMIN-FIX-BATCH-2: German ("de") was removed from the seed because the
+  // i18n pack in src/lib/i18n.ts has zero German translations (well below the
+  // 80% threshold). Shipping a language row with no UI strings would force
+  // every label to fall back to English — confusing for end users who pick
+  // "Deutsch" from the language selector. Re-adding German requires shipping
+  // a complete `de` translation object first.
   const languages = [
     { code: "en", name: "English", nativeName: "English", flag: "🇺🇸", sortOrder: 1 },
     { code: "es", name: "Spanish", nativeName: "Español", flag: "🇲🇽", sortOrder: 2 },
     { code: "pt", name: "Portuguese", nativeName: "Português", flag: "🇧🇷", sortOrder: 3 },
     { code: "fr", name: "French", nativeName: "Français", flag: "🇫🇷", sortOrder: 4 },
-    { code: "de", name: "German", nativeName: "Deutsch", flag: "🇩🇪", sortOrder: 5 },
   ];
   for (const l of languages) {
     await db.language.upsert({
@@ -47,7 +52,10 @@ export async function seedSettings() {
       create: l,
     });
   }
-  console.log(`  ✓ ${languages.length} languages`);
+  // Cleanup: drop any previously-seeded German row so re-seeding converges
+  // to the 4 supported languages.
+  await db.language.deleteMany({ where: { code: "de" } });
+  console.log(`  ✓ ${languages.length} languages (German removed — no i18n pack)`);
 
   // ── Settings ──
   const settings = [

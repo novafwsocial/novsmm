@@ -3,7 +3,10 @@
  * Each language has a set of translation keys for common UI strings.
  * Missing keys fall back to English.
  *
- * Languages: en, es, pt, fr, de
+ * Languages: en, es, pt, fr
+ *
+ * ADMIN-FIX-BATCH-2: German ("de") was removed because no translation pack
+ * exists for it. Re-add only when a complete `de` translation object ships.
  */
 
 export type TranslationKey =

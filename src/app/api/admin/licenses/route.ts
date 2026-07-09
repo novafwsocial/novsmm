@@ -9,6 +9,11 @@ import {
   decryptLicenseKey,
 } from "@/lib/license";
 import { createNotification, notifyAdmins } from "@/lib/notify";
+import {
+  createLicenseSchema,
+  updateLicenseSchema,
+  LICENSE_PLANS,
+} from "@/lib/validations";
 
 /**
  * GET /api/admin/licenses — list all licenses (admin view).
@@ -46,13 +51,37 @@ export async function GET() {
 /**
  * POST /api/admin/licenses — issue a new license.
  * Generates a unique license key, encrypts it, stores hash.
+ *
+ * ADMIN-FIX-BATCH-2: now validates the body with `createLicenseSchema`
+ * (Zod). The `plan` field is constrained to the canonical enum
+ * `["reseller", "agency", "enterprise", "white_label"]` — anything else
+ * returns 422 with a clear message instead of persisting an unknown value.
  */
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireAdmin();
+  const { user, error } = await requireAdmin();
   if (error) return error;
-  const adminId = (session!.user as any).id;
+  const adminId = user!.id;
 
-  const body = await req.json();
+  // H-1 fix: safe JSON parse
+  let body;
+  try { body = await req.json(); } catch { return apiError("Invalid JSON body", 422); }
+
+  // Validate + coerce with Zod. `safeParse` lets us craft a friendlier 422
+  // message for the common "bad plan" case.
+  const parsed = createLicenseSchema.safeParse(body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    // Surface the plan enum values explicitly when the user sent an
+    // unsupported plan — the generic Zod message would just say
+    // "Invalid literal value, expected 'reseller'".
+    if (issue.path[0] === "plan") {
+      return apiError(
+        `Invalid plan. Must be one of: ${LICENSE_PLANS.join(", ")}`,
+        422
+      );
+    }
+    return apiError(issue.message, 422);
+  }
   const {
     customerName,
     customerEmail,
@@ -63,11 +92,7 @@ export async function POST(req: NextRequest) {
     maxUsers,
     maxOrders,
     expiresAt,
-  } = body;
-
-  if (!customerName || !customerEmail) {
-    return apiError("Customer name and email are required", 422);
-  }
+  } = parsed.data;
 
   // Generate the key
   const licenseKey = generateLicenseKey();
@@ -88,12 +113,12 @@ export async function POST(req: NextRequest) {
       customerName,
       customerEmail: customerEmail.toLowerCase(),
       customerId: customerId || null,
-      plan: plan ?? "reseller",
+      plan,
       status: "active",
       domain: domain || null,
       ipAllowlist: ipAllowlist || null,
-      maxUsers: maxUsers ?? 1,
-      maxOrders: maxOrders ?? 10000,
+      maxUsers,
+      maxOrders,
       expiresAt: expiresAt ? new Date(expiresAt) : null,
     },
   });
@@ -142,15 +167,35 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * PATCH /api/admin/licenses — update license status (suspend/revoke/activate).
+ * PATCH /api/admin/licenses — update license status (suspend/revoke/activate)
+ * or any editable field (plan, domain, ipAllowlist, maxUsers, maxOrders,
+ * expiresAt).
+ *
+ * ADMIN-FIX-BATCH-2: now validates the body with `updateLicenseSchema`
+ * (Zod). The `plan` field (if provided) must be one of the canonical enum
+ * values, else 422.
  */
 export async function PATCH(req: NextRequest) {
-  const { session, error } = await requireAdmin();
+  const { user, error } = await requireAdmin();
   if (error) return error;
-  const adminId = (session!.user as any).id;
+  const adminId = user!.id;
 
-  const body = await req.json();
-  const { id, action, ...data } = body;
+  let body;
+  try { body = await req.json(); } catch { return apiError("Invalid JSON body", 422); }
+
+  const parsed = updateLicenseSchema.safeParse(body);
+  if (!parsed.success) {
+    const issue = parsed.error.issues[0];
+    if (issue.path[0] === "plan") {
+      return apiError(
+        `Invalid plan. Must be one of: ${LICENSE_PLANS.join(", ")}`,
+        422
+      );
+    }
+    return apiError(issue.message, 422);
+  }
+
+  const { id, action, ...data } = parsed.data;
 
   if (!id) return apiError("License ID required", 422);
 
@@ -158,6 +203,7 @@ export async function PATCH(req: NextRequest) {
   if (action === "suspend") updateData.status = "suspended";
   else if (action === "revoke") updateData.status = "revoked";
   else if (action === "activate") updateData.status = "active";
+  if (data.plan !== undefined) updateData.plan = data.plan;
   if (data.domain !== undefined) updateData.domain = data.domain;
   if (data.ipAllowlist !== undefined) updateData.ipAllowlist = data.ipAllowlist;
   if (data.maxUsers !== undefined) updateData.maxUsers = data.maxUsers;
