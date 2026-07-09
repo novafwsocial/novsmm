@@ -9989,3 +9989,149 @@ Stage Summary:
 - **Files created (1):** `src/app/api/webhooks/paypal/route.ts`.
 - **Files deleted (5):** `src/lib/aurpay.ts`, `src/lib/depay.ts`, `src/app/api/webhooks/aurpay/route.ts` (+ folder), `src/app/api/webhooks/depay/route.ts` (+ folder), `public/aurpay-logo.png`.
 - **Issues encountered**: initial seed with `update: {}` left existing methods with stale sortOrders (PayPal and Stripe both ended up at sortOrder 1 because the upsert was a no-op on update). Fixed by populating the `update` payload with all canonical fields so the seed is now idempotent and converges to the intended sort order.
+
+---
+Task ID: ADMIN-AUDIT-1
+Agent: Explore
+Task: Comprehensive admin panel sync audit
+
+Work Log:
+- Read /home/z/my-project/worklog.md (9,991 lines) for full project history — most recent task is PAYMENT-CLEANUP-1 (lines 9912-9991) which converged payment methods to 5 canonical entries.
+- Read prisma/seed.ts (265 lines) — primary seed script. Creates admin, demo user, 4 generic Providers (Provider-01..04), 12 services, 5 payment methods (post-cleanup), sample orders/transactions/notifications/tickets.
+- Read prisma/seed-settings.ts — seeds 9 currencies, 5 languages, 9 platform settings. SEPARATE script, not invoked by seed.ts.
+- Read prisma/seed-roles.ts — seeds 7 roles (admin, supervisor, support, moderator, reseller, agency, user) with permission matrix. SEPARATE script, not invoked by seed.ts.
+- Read prisma/seed-services.ts — augments the 12 seeded services with description/quality/deliveryTime/category. SEPARATE script, not invoked by seed.ts.
+- Read prisma/sync-huntsmm.ts (172 lines) — DESTRUCTIVE script: deletes ALL providers + ALL services, then creates one "HuntSMM" provider + imports the real HuntSMM catalog with 30% markup. Not wired into package.json scripts.
+- Read src/lib/huntsmm.ts (143 lines) — HuntSMM API client. Hardcoded URL `https://huntsmm.com/api/v2`. Reads HUNTSMM_API_KEY from env (NOT from Provider.apiKey DB field). Exports placeHuntSMMOrder, checkHuntSMMOrderStatus, checkHuntSMMBalance, extractProviderServiceId.
+- Read src/lib/provider-failover.ts (215 lines) — multi-provider failover that's HARDWIRED to call placeHuntSMMOrder() regardless of which Provider row is being used. Ignores Provider.apiUrl/apiKey from DB entirely.
+- Read src/lib/margins.ts — confirms HuntSMM as canonical cost source (cost × 2.5 = direct sale price).
+- Read src/lib/i18n.ts — has translation packs for 4 languages only (en, es, pt, fr). NO German (de) pack despite de being seeded.
+- Read src/components/novsmm/admin-panel.tsx (4,016 lines, 21 admin tabs) — full audit of all section components.
+- Read src/components/novsmm/dashboard-data.ts — has stale hardcoded ADMIN_PROVIDERS array (Provider-01..04) that's no longer used by the live admin panel but still imported by other demo components.
+- Read all 35 admin API routes in src/app/api/admin/ — confirmed CRUD coverage per section.
+- Read all relevant schema models in prisma/schema.prisma (Provider, Service, Order, PaymentMethod, Currency, Language, Promotion, Coupon, Role, License, ApiKey, EmailTemplate, CmsContent, WebhookLog, OutboundWebhook, Setting, ServiceProvider).
+- Cross-referenced admin UI hook calls (src/hooks/use-api.ts) against actual API routes to find dangling endpoints.
+
+Stage Summary:
+- **Total sections audited:** 16 (Providers, Payment Methods, Services, Currencies, Languages, Promotions/Coupons, API Keys, Licenses, Webhooks, Refunds, Withdrawals, Email Templates, CMS, Settings, Roles, Social Auth).
+- **Sections fully synced:** 6 (API Keys, Licenses, Refunds, Withdrawals, Roles, Email Templates).
+- **Sections with issues:** 10 (Providers, Payment Methods, Services, Currencies, Languages, Promotions, Coupons, Webhooks, CMS, Settings, Social Auth).
+- **Total stale items / mismatches found:** 19 distinct issues (see full report below).
+
+### CRITICAL findings
+1. **Providers seed is stale** — `prisma/seed.ts` creates 4 generic fake providers (Provider-01 → smmapi.io/v2, Provider-02 → boostpanel.dev/api, Provider-03 → justsmm.net/api, Provider-04 → royalpanel.com/api). The user's actual production provider is **HuntSMM** (`https://huntsmm.com/api/v2`, implemented in `src/lib/huntsmm.ts`). The admin panel displays whatever is in the DB, so after `bun prisma/seed.ts` the admin sees the 4 fake providers — NOT HuntSMM. This is the root cause of the user's complaint ("tiene los que principalmente tenían y no el que yo implemente después").
+2. **`prisma/sync-huntsmm.ts` exists but is orphaned** — it wipes ALL providers and creates one HuntSMM row, but (a) it's not in package.json scripts, (b) it's destructive (`deleteMany({})` on Service + Provider), (c) running `seed.ts` afterwards would re-add Provider-01..04 alongside HuntSMM, leaving the admin panel with 5 providers.
+3. **`src/lib/provider-failover.ts` ignores the Provider DB row** — even when the admin picks a provider from the UI, the failover logic always calls `placeHuntSMMOrder()` (hardcoded). So multi-provider support is fake — only HuntSMM is actually called regardless of which provider row is "mapped" to a service.
+4. **`src/components/novsmm/dashboard-data.ts` exports stale `ADMIN_PROVIDERS`** — hardcoded `Provider-01..04` entries with `services: 84/72/48/92`, `cost: $1.2K/mo`, etc. (lines 121-126). Still importable by other components.
+5. **`src/app/api/admin/overview/route.ts` has hardcoded "Provider sync (P-03) — degraded"** in the `health` array (lines 114-118). References the old generic provider naming. Always shows degraded even when there's no P-03 provider in the DB.
+
+### HIGH findings
+6. **No `/api/admin/payment-methods/test` route exists** — the admin UI's `ConfigureCredentialsModal` calls `useTestPaymentMethod()` which POSTs to `/api/admin/payment-methods/test`, but the route folder only contains `route.ts` (no `test/route.ts`). The "Test connection" button 404s.
+7. **Stripe credentials modal is wrong** — `credentialFields` map in `admin-panel.tsx` (lines 1370-1387) defines PayPal, Mercado Pago, NowPayments, and a generic `{apiKey, apiSecret}` fallback. Stripe is NOT in the map, so it falls through to the generic apiKey/apiSecret form. But Stripe actually uses **env vars** (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — there's no DB-driven Stripe config. The UI will let admins type credentials that go nowhere.
+8. **Coupons admin UI is missing** — `/api/admin/coupons/route.ts` implements full CRUD (GET/POST/PATCH), `/api/coupons/validate/route.ts` exists for public use, the schema has a `Coupon` model, the roles permission grid lists `coupon` as a resource — but the admin panel's `ADMIN_NAV` array (admin-panel.tsx lines 123-145) has NO "Coupons" tab. Admins have no UI to create or manage coupons.
+9. **Outbound webhooks not surfaced in admin UI** — `/api/admin/webhooks/outbound/route.ts` exists with full CRUD + admin `?all=1` listing, the schema has `OutboundWebhook` model, but the admin panel's "Webhooks" tab (`AdminWebhooks` component) only displays inbound `WebhookLog` entries (payment provider delivery history). The nav label "Webhooks" + page heading "Webhook logs" is misleading.
+10. **`prisma/seed.ts` doesn't call the other 3 seed scripts** — `seed-settings.ts` (currencies, languages, settings), `seed-roles.ts` (7 roles + permissions), and `seed-services.ts` (service description/quality enrichment) are each standalone scripts. Running `bun prisma/seed.ts` alone leaves the DB without currencies, languages, settings, or roles — so the admin panel's Currencies / Languages / Settings / Roles tabs would all be empty until each script is manually invoked.
+11. **`sync-huntsmm.ts` is destructive** — line 73-74: `db.service.deleteMany({})` + `db.provider.deleteMany({})` on every run. Should be upsert-based to avoid wiping out admin edits on re-sync.
+
+### MEDIUM findings
+12. **Languages seed has a German entry with no translation pack** — `seed-settings.ts` seeds 5 languages (en, es, pt, fr, de), but `src/lib/i18n.ts` only defines translation packs for 4 (`en`, `es`, `pt`, `fr`). If an admin enables `de` and a user picks German, the UI falls back to English strings. Either add a `de` pack or remove `de` from the seed.
+13. **`/api/admin/providers/[id]/sync` is a fake** — the sync route (lines 41-49) just `setTimeout(50-250ms)` to simulate latency, then updates the provider's `latency` + `status` fields. Never actually calls the provider's API. The admin UI's "Sync" affordance (if any) gives false confidence.
+14. **`AdminSettingsTab` editable keys are hardcoded** — `editableKeys` array (admin-panel.tsx lines 2521-2531) lists exactly 9 keys. If a new setting is added via the API (e.g. `oauth:google` from the social-auth flow, or any custom key), it won't appear in the admin UI even though `GET /api/admin/settings` returns it. Only the 9 hardcoded keys are editable.
+15. **Social Auth API hardcodes Google-only** — `social-auth/route.ts` line 52 returns 422 for any `provider !== "google"`. The admin UI's variable naming (`googleClientId`, `googleClientSecret`) implies single-provider support, but the route name `provider` and the schema (settings key `oauth:<provider>`) suggest multi-provider was intended. Either expand to GitHub/Facebook/Apple or rename to make Google-only explicit.
+16. **`AdminRefunds` shows ALL recent transactions, not just refundable ones** — pulls `recentTransactions` from the overview endpoint (which returns last 25 completed txns of any type). Refunding a `withdrawal` or `referral` txn would silently debit the user's balance (the refund logic does `txn.amount > 0 ? decrement : increment`). Should filter to `type: { in: ["topup", "sale"] }`.
+17. **`seed.ts` payment-method cleanup runs on every seed** — lines 130-134 delete 5 obsolete names ("Aurora Pay", "Crypto", "Bank transfer", "AurPay", "DePay") every time. This is correct idempotent behavior but is dead code now that PAYMENT-CLEANUP-1 has finished — the names will never reappear. Harmless but worth noting.
+
+### LOW findings
+18. **`dashboard-data.ts:ADMIN_SERVICES` and `ADMIN_USERS` and `TOPUP_METHODS` are stale demo data** — exported but no longer consumed by the live admin panel (which fetches from APIs). Still used by some landing-page demo components. `TOPUP_METHODS` (line 145) only lists PayPal, Mercado Pago, NowPayments — missing Stripe and Manual. Should either be removed or kept in sync with the canonical 5 methods.
+19. **`AdminLicenses` create modal offers `white_label` plan option** — admin-panel.tsx line 2276 — but the License schema's `plan` field has no enum constraint and `seed-roles.ts` doesn't define a `white_label` role. The plan label is purely cosmetic but should be validated against a canonical list.
+
+### Final Action Plan (priority order)
+
+1. **CRITICAL — Fix Providers seed mismatch with HuntSMM** (root cause of user complaint):
+   - Replace the 4 generic providers in `prisma/seed.ts` with a single HuntSMM provider row: `{ name: "HuntSMM", apiUrl: "https://huntsmm.com/api/v2", status: "healthy", latency: 0 }`.
+   - Make `seed.ts` idempotent: also `deleteMany({ where: { name: { in: ["Provider-01","Provider-02","Provider-03","Provider-04"] } } })` after the upsert.
+   - Rebind the 12 seeded services' `providerIdx` to point at the single HuntSMM provider.
+   - Decide whether `sync-huntsmm.ts` stays (one-off catalog import) or gets merged into seed.ts. Either way, document the run order in package.json (`"seed:all": "bun prisma/seed.ts && bun prisma/seed-settings.ts && bun prisma/seed-roles.ts && bun prisma/seed-services.ts"`).
+
+2. **CRITICAL — Make `provider-failover.ts` actually use the Provider DB row**:
+   - Refactor `placeHuntSMMOrder` → `placeProviderOrder(provider, serviceId, link, qty)` that reads `provider.apiUrl` + `provider.apiKey` from the DB.
+   - Currently the failover always calls HuntSMM regardless of which provider is "mapped" — multi-provider is theater.
+
+3. **CRITICAL — Remove stale hardcoded provider references**:
+   - Delete `ADMIN_PROVIDERS` from `src/components/novsmm/dashboard-data.ts` (lines 121-126) or replace with HuntSMM-only.
+   - Remove the hardcoded `"Provider sync (P-03) — degraded"` entry from `src/app/api/admin/overview/route.ts` health array (lines 114-118). Either drop it or derive from the real Provider table.
+
+4. **HIGH — Add missing `/api/admin/payment-methods/test` route** OR remove the "Test connection" button from the credential modal. The button currently 404s on click.
+
+5. **HIGH — Fix Stripe credentials modal**:
+   - Either add Stripe-specific field definitions (publishableKey, secretKey, webhookSecret) AND wire `src/lib/stripe.ts` to read from DB-instead-of-env — OR add a Stripe-specific help panel explaining that Stripe uses env vars and link to the deployment docs (matching the Manual method's pattern).
+
+6. **HIGH — Add Coupons tab to the admin panel**:
+   - Add `{ id: "coupons", label: "Coupons", icon: Ticket }` to `ADMIN_NAV`.
+   - Add `AdminCoupons` component that lists, creates, and disables coupons via the existing `/api/admin/coupons` endpoints. Mirror the `AdminPromotions` layout.
+
+7. **HIGH — Add Outbound Webhooks admin view** OR rename the existing "Webhooks" tab to "Webhook Logs":
+   - Either add a sub-section for outbound webhook subscriptions (CRUD via `/api/admin/webhooks/outbound?all=1`) or change the tab label to "Webhook Logs" to match what it actually shows.
+
+8. **HIGH — Consolidate seed scripts**: Make `prisma/seed.ts` call `seed-settings.ts`, `seed-roles.ts`, `seed-services.ts`, and `seedEmailTemplates()` so a single `bun prisma/seed.ts` produces a fully populated admin panel. Wire as `npm run seed` in package.json.
+
+9. **MEDIUM — Add a German translation pack** to `src/lib/i18n.ts` OR remove `de` from `seed-settings.ts` languages array. Right now enabling German gives users English copy.
+
+10. **MEDIUM — Make `/api/admin/providers/[id]/sync` actually call the provider's API** (or rename the route to `/ping` to reflect that it only measures latency). Currently the admin gets a false-positive "synced" message.
+
+11. **MEDIUM — Filter `AdminRefunds` to refundable transaction types** (`type: { in: ["topup", "sale"] }`) OR add a `refundable` flag to the overview response. Refunding a withdrawal or referral txn currently silently adjusts the user's balance in the wrong direction.
+
+12. **MEDIUM — Make `AdminSettingsTab` editable-keys list dynamic** (read from `GET /api/admin/settings` keys, not from a hardcoded array). New settings added by other features (oauth:google, future plugin keys) would then be visible/editable.
+
+13. **LOW — Sync `dashboard-data.ts:TOPUP_METHODS`** with the canonical 5 methods, or delete the export if no longer used by demo components.
+
+14. **LOW — Validate License `plan`** against an enum (`reseller | agency | enterprise | white_label`) in the schema or API.
+
+### Section-by-section status table
+
+| # | Section | Seed | Admin UI | API routes | Status |
+|---|---|---|---|---|---|
+| 1 | Providers | ❌ stale (generic Provider-01..04, not HuntSMM) | ✅ dynamic | ✅ + fake sync | CRITICAL |
+| 2 | Payment Methods | ✅ 5 canonical (post-cleanup) | ⚠️ Test button 404s, Stripe fields wrong | ✅ (missing /test) | HIGH |
+| 3 | Services | ⚠️ 12 demo services in seed.ts, enrichment in separate seed-services.ts | ✅ | ✅ | MEDIUM |
+| 4 | Currencies | ⚠️ only via separate seed-settings.ts | ✅ | ✅ | MEDIUM |
+| 5 | Languages | ⚠️ only via separate seed-settings.ts; de has no translation pack | ✅ | ✅ | MEDIUM |
+| 6 | Promotions | ✅ no seed (runtime-managed) | ✅ | ✅ | OK |
+| 6b | Coupons | ✅ no seed | ❌ NO UI TAB | ✅ | HIGH |
+| 7 | API Keys | ✅ no seed (runtime-managed) | ✅ | ✅ | OK |
+| 8 | Licenses | ✅ no seed (runtime-managed) | ✅ | ✅ | OK |
+| 9 | Webhooks (inbound logs) | ✅ no seed (runtime) | ✅ | ✅ | OK |
+| 9b | Webhooks (outbound subs) | ✅ no seed | ❌ NOT SURFACED in UI | ✅ | HIGH |
+| 10 | Refunds | ✅ no seed | ⚠️ shows all txns not just refundable | ✅ | MEDIUM |
+| 11 | Withdrawals | ✅ no seed (runtime) | ✅ | ✅ | OK |
+| 12 | Email Templates | ⚠️ lazy-seeded on first GET | ✅ | ✅ | OK (lazy seed works) |
+| 13 | CMS | ✅ no seed | ✅ | ✅ | OK |
+| 14 | Settings | ⚠️ only via separate seed-settings.ts | ⚠️ hardcoded editable keys | ✅ | MEDIUM |
+| 15 | Roles | ⚠️ only via separate seed-roles.ts | ✅ | ✅ | MEDIUM |
+| 16 | Social Auth | ✅ no seed | ⚠️ Google-only, variable names suggest multi | ⚠️ Google-only hardcoded | MEDIUM |
+
+### Files examined
+
+- `prisma/seed.ts` (265 lines)
+- `prisma/seed-settings.ts` (76 lines)
+- `prisma/seed-roles.ts` (119 lines)
+- `prisma/seed-services.ts` (117 lines)
+- `prisma/sync-huntsmm.ts` (173 lines)
+- `prisma/schema.prisma` (753 lines, all 32 models)
+- `src/components/novsmm/admin-panel.tsx` (4,016 lines, 21 tabs)
+- `src/components/novsmm/dashboard-data.ts` (150 lines)
+- `src/lib/huntsmm.ts` (143 lines)
+- `src/lib/provider-failover.ts` (215 lines)
+- `src/lib/margins.ts` (75 lines)
+- `src/lib/email-templates.ts` (143 lines)
+- `src/lib/i18n.ts` (292 lines)
+- `src/hooks/use-api.ts` (1,108+ lines, partial)
+- All 35 files in `src/app/api/admin/**`
+- `src/app/api/payment-methods/route.ts`
+- `src/app/api/public/languages/route.ts`, `src/app/api/public/currencies/route.ts`
+- `src/app/api/coupons/validate/route.ts`
+- `package.json` (only `db:push`, `db:generate`, `db:migrate`, `db:reset` — NO `seed` script)
+
+### No code changes made (audit-only task)
+
+This was a read-only audit per task spec. No files were modified.
