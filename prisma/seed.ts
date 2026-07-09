@@ -55,35 +55,61 @@ async function main() {
   console.log(`    ⚠️  Generated demo password: ${userPasswordPlain}`);
 
   // ── Providers ──
+  // Single canonical provider — HuntSMM (https://huntsmm.com/api/v2).
+  // The previous seed created 4 generic fake providers (Provider-01..04 with
+  // smmapi.io / boostpanel.dev / justsmm.net / royalpanel.com URLs) which
+  // did not match the actual provider integrated in src/lib/huntsmm.ts.
+  // We now seed only HuntSMM, and the cleanup block below deletes any
+  // leftover rows from previous seeds so the admin panel always converges
+  // to a single, real provider.
+  const providerSeed = [
+    {
+      name: "HuntSMM",
+      apiUrl: "https://huntsmm.com/api/v2",
+      apiKey: process.env.HUNTSMM_API_KEY || "demo-key",
+      status: "healthy",
+      latency: 0,
+    },
+  ];
   const providers = await Promise.all(
-    [
-      { name: "Provider-01", apiUrl: "https://smmapi.io/v2", status: "healthy", latency: 142 },
-      { name: "Provider-02", apiUrl: "https://boostpanel.dev/api", status: "healthy", latency: 98 },
-      { name: "Provider-03", apiUrl: "https://justsmm.net/api", status: "degraded", latency: 240 },
-      { name: "Provider-04", apiUrl: "https://royalpanel.com/api", status: "healthy", latency: 88 },
-    ].map((p) =>
+    providerSeed.map((p) =>
       db.provider.upsert({
         where: { name: p.name },
-        update: {},
+        update: {
+          // Keep apiUrl + apiKey in sync with env on every seed run so a
+          // changed HUNTSMM_API_KEY is reflected without a re-sync.
+          apiUrl: p.apiUrl,
+          apiKey: p.apiKey,
+        },
         create: p,
       })
     )
   );
-  console.log(`  ✓ ${providers.length} providers`);
+  console.log(`  ✓ ${providers.length} provider (HuntSMM)`);
+
+  // Cleanup obsolete fake providers (ADMIN-FIX-BATCH-1)
+  const obsoleteProviders = ["Provider-01", "Provider-02", "Provider-03", "Provider-04"];
+  for (const name of obsoleteProviders) {
+    await db.provider.deleteMany({ where: { name } });
+  }
+  console.log(`  ✓ Removed obsolete fake providers (${obsoleteProviders.length})`);
 
   // ── Services ──
+  // All services are bound to the single HuntSMM provider (providerIdx: 0).
+  // The previous seed distributed services across 4 fake providers (idx 0..3)
+  // — collapsed to idx 0 since only HuntSMM exists now.
   const services = [
-    { name: "Instagram · Followers HQ", platform: "Instagram", cost: 0.84, price: 2.4, minQty: 50, maxQty: 100000, rate: "1.2K/d", providerIdx: 3 },
-    { name: "Instagram · Likes", platform: "Instagram", cost: 1.4, price: 3.6, minQty: 50, maxQty: 50000, rate: "2.4K/d", providerIdx: 3 },
-    { name: "Instagram · Reels Views", platform: "Instagram", cost: 2.8, price: 6.9, minQty: 100, maxQty: 1000000, rate: "5.1K/d", providerIdx: 1 },
-    { name: "TikTok · Views (1M)", platform: "TikTok", cost: 3.2, price: 7.8, minQty: 100, maxQty: 5000000, rate: "3.4K/d", providerIdx: 1 },
+    { name: "Instagram · Followers HQ", platform: "Instagram", cost: 0.84, price: 2.4, minQty: 50, maxQty: 100000, rate: "1.2K/d", providerIdx: 0 },
+    { name: "Instagram · Likes", platform: "Instagram", cost: 1.4, price: 3.6, minQty: 50, maxQty: 50000, rate: "2.4K/d", providerIdx: 0 },
+    { name: "Instagram · Reels Views", platform: "Instagram", cost: 2.8, price: 6.9, minQty: 100, maxQty: 1000000, rate: "5.1K/d", providerIdx: 0 },
+    { name: "TikTok · Views (1M)", platform: "TikTok", cost: 3.2, price: 7.8, minQty: 100, maxQty: 5000000, rate: "3.4K/d", providerIdx: 0 },
     { name: "TikTok · Followers", platform: "TikTok", cost: 4.5, price: 10.5, minQty: 50, maxQty: 100000, rate: "880/d", providerIdx: 0 },
-    { name: "YouTube · Watch hours", platform: "YouTube", cost: 11.0, price: 24.0, minQty: 1000, maxQty: 50000, rate: "420/d", providerIdx: 2 },
-    { name: "YouTube · Subscribers", platform: "YouTube", cost: 8.5, price: 18.0, minQty: 50, maxQty: 10000, rate: "340/d", providerIdx: 2 },
-    { name: "Spotify · Plays", platform: "Spotify", cost: 6.5, price: 14.9, minQty: 500, maxQty: 500000, rate: "820/d", providerIdx: 2 },
+    { name: "YouTube · Watch hours", platform: "YouTube", cost: 11.0, price: 24.0, minQty: 1000, maxQty: 50000, rate: "420/d", providerIdx: 0 },
+    { name: "YouTube · Subscribers", platform: "YouTube", cost: 8.5, price: 18.0, minQty: 50, maxQty: 10000, rate: "340/d", providerIdx: 0 },
+    { name: "Spotify · Plays", platform: "Spotify", cost: 6.5, price: 14.9, minQty: 500, maxQty: 500000, rate: "820/d", providerIdx: 0 },
     { name: "Telegram · Members", platform: "Telegram", cost: 9.0, price: 19.5, minQty: 100, maxQty: 20000, rate: "260/d", providerIdx: 0 },
-    { name: "X · Followers", platform: "X", cost: 4.2, price: 9.8, minQty: 50, maxQty: 50000, rate: "198/d", providerIdx: 1 },
-    { name: "Twitch · Live viewers", platform: "Twitch", cost: 2.1, price: 5.4, minQty: 50, maxQty: 5000, rate: "120/d", providerIdx: 3 },
+    { name: "X · Followers", platform: "X", cost: 4.2, price: 9.8, minQty: 50, maxQty: 50000, rate: "198/d", providerIdx: 0 },
+    { name: "Twitch · Live viewers", platform: "Twitch", cost: 2.1, price: 5.4, minQty: 50, maxQty: 5000, rate: "120/d", providerIdx: 0 },
     { name: "Discord · Members", platform: "Discord", cost: 3.8, price: 8.4, minQty: 50, maxQty: 20000, rate: "180/d", providerIdx: 0 },
   ];
   for (const s of services) {
@@ -247,6 +273,30 @@ async function main() {
     });
     console.log(`  ✓ 2 sample tickets`);
   }
+
+  // ── Run other seed scripts (ADMIN-FIX-BATCH-1) ──
+  // Previously a user had to run `tsx prisma/seed-settings.ts`,
+  // `tsx prisma/seed-roles.ts`, and `tsx prisma/seed-services.ts` manually
+  // after `seed.ts` to get currencies / languages / settings / roles /
+  // service metadata. Now `bun run seed` (or `tsx prisma/seed.ts`) does it
+  // all in one go. Each script is idempotent + skips its own auto-run when
+  // imported (see the `isMainModule` guard at the bottom of each file).
+  console.log("\n────────────────────────────────────────");
+  console.log("Running seed-settings (currencies, languages, settings)...");
+  await import("./seed-settings").then((m) => m.seedSettings());
+
+  console.log("\nRunning seed-roles (7 roles + permission matrix)...");
+  await import("./seed-roles").then((m) => m.seedRoles());
+
+  console.log("\nRunning seed-services (descriptions / quality / delivery)...");
+  await import("./seed-services").then((m) => m.seedServices());
+
+  console.log("\nRunning seedEmailTemplates (default email templates)...");
+  // seedEmailTemplates lives in src/lib (not prisma/) and is the canonical
+  // default-template seed used by the app boot path too — call it directly.
+  const { seedEmailTemplates } = await import("../src/lib/email-templates");
+  await seedEmailTemplates();
+  console.log("  ✓ Default email templates seeded (skipped if already present)");
 
   console.log("\n✅ Seed complete!");
   console.log("\n📋 Credentials (generated fresh this run — see above for actual values):");

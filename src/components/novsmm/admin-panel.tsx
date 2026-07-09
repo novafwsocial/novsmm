@@ -46,6 +46,7 @@ import {
   Eye,
   Save,
   ExternalLink,
+  Ticket,
 } from "lucide-react";
 import {
   AreaChart,
@@ -67,6 +68,10 @@ import {
   useAdminProviders,
   useAdminPaymentMethods,
   useAdminPromotions,
+  useAdminCoupons,
+  useCreateCoupon,
+  useUpdateCoupon,
+  useDeleteCoupon,
   useCreateService,
   useUpdateService,
   useDeleteService,
@@ -128,13 +133,17 @@ const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
   { id: "providers", label: "Providers", icon: Server },
   { id: "payments", label: "Payments", icon: CreditCard },
   { id: "promotions", label: "Promotions", icon: Megaphone },
+  { id: "coupons", label: "Coupons", icon: Ticket },
   { id: "withdrawals", label: "Withdrawals", icon: ArrowUpRight },
   { id: "refunds", label: "Refunds", icon: RotateCcw },
   { id: "apiKeys", label: "API Keys", icon: FileKey },
   { id: "licenses", label: "Licenses", icon: KeyRound },
   { id: "currencies", label: "Currencies", icon: DollarSign },
   { id: "languages", label: "Languages", icon: Languages },
-  { id: "webhooks", label: "Webhooks", icon: Webhook },
+  // ADMIN-FIX-BATCH-1: renamed "Webhooks" → "Webhook Logs" — the panel only
+  // shows inbound WebhookLog rows. Outbound webhooks (OutboundWebhook model +
+  // /api/admin/webhooks/outbound route) are managed via the API for now.
+  { id: "webhooks", label: "Webhook Logs", icon: Webhook },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "security", label: "Security", icon: Lock },
   { id: "roles", label: "Roles", icon: ShieldCheck },
@@ -213,6 +222,7 @@ export function AdminPanel() {
           {adminTab === "providers" && <AdminProviders />}
           {adminTab === "payments" && <AdminPayments />}
           {adminTab === "promotions" && <AdminPromotions />}
+          {adminTab === "coupons" && <AdminCoupons />}
           {adminTab === "withdrawals" && <AdminWithdrawals />}
           {adminTab === "refunds" && <AdminRefunds />}
           {adminTab === "apiKeys" && <AdminApiKeys />}
@@ -1368,6 +1378,10 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
 
   // Define credential fields per payment method
   const credentialFields: Record<string, { key: string; label: string; type?: string; placeholder?: string }[]> = {
+    Stripe: [
+      { key: "secretKey", label: "Secret Key", placeholder: "sk_live_... or sk_test_..." },
+      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
+    ],
     PayPal: [
       { key: "clientId", label: "Client ID", placeholder: "AY..." },
       { key: "clientSecret", label: "Client Secret", placeholder: "EL..." },
@@ -1388,6 +1402,8 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
 
   // Manual payment has no credentials — just a note
   const isManual = method.name === "Manual";
+  // Stripe has its own help panel — fields + help
+  const isStripe = method.name === "Stripe";
 
   const fields = credentialFields[method.name] ?? [
     { key: "apiKey", label: "API Key", placeholder: "" },
@@ -1474,6 +1490,41 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
             </div>
           ) : (
             <>
+              {isStripe && (
+                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-4">
+                  <div className="flex items-center gap-2 text-sm font-semibold text-violet-700">
+                    <CreditCard className="h-4 w-4" />
+                    Stripe — API keys & webhook
+                  </div>
+                  <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-violet-700/80">
+                    <li>
+                      Get your API keys at{" "}
+                      <a
+                        href="https://dashboard.stripe.com/apikeys"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="font-medium underline underline-offset-2 hover:text-violet-900"
+                      >
+                        dashboard.stripe.com/apikeys
+                      </a>
+                      .
+                    </li>
+                    <li>
+                      Required fields: <strong>Secret Key</strong> (<code>sk_live_…</code> or <code>sk_test_…</code>) and <strong>Webhook Secret</strong> (<code>whsec_…</code>).
+                    </li>
+                    <li>
+                      Webhook URL to configure in Stripe:&nbsp;
+                      <code className="break-all">https://novsmm.shop/api/webhooks/stripe</code>
+                    </li>
+                    <li>
+                      Subscribe to these events:&nbsp;
+                      <code>checkout.session.completed</code>,&nbsp;
+                      <code>payment_intent.payment_failed</code>,&nbsp;
+                      <code>charge.refunded</code>.
+                    </li>
+                  </ol>
+                </div>
+              )}
               {fields.map((field) => (
                 <label key={field.key} className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
@@ -2466,6 +2517,13 @@ function AdminWebhooks() {
           <div className="text-base font-semibold">Webhook logs · {webhooks.length}</div>
           <div className="text-xs text-muted-foreground">Payment provider webhook delivery history</div>
         </div>
+        {/* ADMIN-FIX-BATCH-1: clarify scope — outbound webhooks (notifications
+            sent to child panels) are managed via the /api/admin/webhooks/outbound
+            API and are not yet surfaced here. */}
+        <div className="rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 text-xs text-foreground/80">
+          <strong>Inbound webhook logs</strong> from payment providers. Outbound webhooks (notifications sent to child panels) are managed via the API at{" "}
+          <code className="rounded bg-muted/60 px-1.5 py-0.5 font-mono text-[11px]">/api/admin/webhooks/outbound</code>.
+        </div>
         <div className="grid grid-cols-1 gap-3">
           {webhooks.map((w: any) => (
             <div key={w.id} className="rounded-2xl border border-border/60 bg-background p-4">
@@ -2731,6 +2789,298 @@ function PromotionModal({
           {loading ? "Saving…" : mode === "create" ? "Create promotion" : "Save changes"}
         </button>
         <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────── Coupons (ADMIN-FIX-BATCH-1) ─────────── */
+function AdminCoupons() {
+  const { data } = useAdminCoupons();
+  const createCoupon = useCreateCoupon();
+  const updateCoupon = useUpdateCoupon();
+  const deleteCoupon = useDeleteCoupon();
+  const [showCreate, setShowCreate] = useState(false);
+  const [editing, setEditing] = useState<any | null>(null);
+  // Confirmation dialog state for delete
+  const [pendingDelete, setPendingDelete] = useState<any | null>(null);
+  const coupons = data?.coupons ?? [];
+
+  const confirmDelete = async () => {
+    if (!pendingDelete) return;
+    try {
+      await deleteCoupon.mutateAsync(pendingDelete.id);
+    } catch {
+      // toast is fired by the hook's onError
+    } finally {
+      setPendingDelete(null);
+    }
+  };
+
+  return (
+    <Reveal blur>
+      <div className="flex flex-col gap-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-base font-semibold">Coupons · {coupons.length}</div>
+            <div className="text-xs text-muted-foreground">
+              Discount codes redeemed at checkout
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCreate(true)}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+          >
+            <Plus className="h-3.5 w-3.5" /> Create coupon
+          </button>
+        </div>
+
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+          <div className="overflow-x-auto nov-scroll">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Code</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Type</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Value</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Usage</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Expires</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {coupons.map((c: any) => (
+                  <tr key={c.id} className="transition-colors hover:bg-muted/30">
+                    <td className="px-4 py-3">
+                      <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-xs font-semibold text-foreground">
+                        {c.code}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-xs capitalize text-muted-foreground">{c.type}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
+                      {c.type === "percent" ? `${c.value}%` : `$${c.value.toFixed(2)}`}
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">
+                      {c.usedCount} / {c.maxUses}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
+                      {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                          c.status === "active"
+                            ? "bg-emerald-500/10 text-emerald-700"
+                            : c.status === "expired"
+                              ? "bg-amber-500/10 text-amber-700"
+                              : "bg-muted text-muted-foreground"
+                        )}
+                      >
+                        {c.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setEditing(c)}
+                          className="rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11px] font-medium text-amber-700 hover:bg-amber-500/20"
+                          aria-label={`Edit ${c.code}`}
+                        >
+                          <Pencil className="h-3 w-3" />
+                        </button>
+                        <button
+                          onClick={() => setPendingDelete(c)}
+                          className="rounded-lg bg-red-500/10 px-2.5 py-1.5 text-[11px] font-medium text-red-700 hover:bg-red-500/20"
+                          aria-label={`Delete ${c.code}`}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {coupons.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                      No coupons yet — click “Create coupon” to add the first one.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {showCreate && (
+        <CouponModal
+          mode="create"
+          onClose={() => setShowCreate(false)}
+          onSubmit={async (d) => {
+            await createCoupon.mutateAsync(d);
+            setShowCreate(false);
+          }}
+          loading={createCoupon.isPending}
+        />
+      )}
+      {editing && (
+        <CouponModal
+          mode="edit"
+          coupon={editing}
+          onClose={() => setEditing(null)}
+          onSubmit={async (d) => {
+            await updateCoupon.mutateAsync({ id: editing.id, ...d });
+            setEditing(null);
+          }}
+          loading={updateCoupon.isPending}
+        />
+      )}
+
+      <AlertDialog open={!!pendingDelete} onOpenChange={(o) => !o && setPendingDelete(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete coupon?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This permanently deletes <span className="font-mono font-semibold">{pendingDelete?.code}</span>.
+              {pendingDelete && pendingDelete.usedCount > 0 && (
+                <> It has been used {pendingDelete.usedCount} time(s) — audit history will be lost. Consider disabling it instead.</>
+              )}
+              {" "}This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-red-600 text-white hover:bg-red-700"
+            >
+              {deleteCoupon.isPending ? "Deleting…" : "Delete coupon"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Reveal>
+  );
+}
+
+/** Coupon create/edit modal — fields mirror the Coupon schema. */
+function CouponModal({
+  mode,
+  coupon,
+  onClose,
+  onSubmit,
+  loading,
+}: {
+  mode: "create" | "edit";
+  coupon?: any;
+  onClose: () => void;
+  onSubmit: (d: any) => Promise<void>;
+  loading?: boolean;
+}) {
+  // Convert ISO → yyyy-MM-ddTHH:mm for datetime-local inputs.
+  const toLocal = (iso?: string | null) => {
+    if (!iso) return "";
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  };
+
+  const [form, setForm] = useState({
+    code: coupon?.code ?? "",
+    type: coupon?.type ?? "percent",
+    value: coupon?.value ?? 10,
+    maxUses: coupon?.maxUses ?? 100,
+    expiresAt: toLocal(coupon?.expiresAt),
+    status: coupon?.status ?? "active",
+  });
+
+  const submit = async () => {
+    if (!form.code.trim() || form.value <= 0) return;
+    const payload: Record<string, unknown> = {
+      type: form.type,
+      value: Number(form.value),
+      maxUses: Number(form.maxUses),
+      // Empty string → null (no expiry). The PATCH schema accepts both.
+      expiresAt: form.expiresAt ? new Date(form.expiresAt).toISOString() : null,
+    };
+    if (mode === "create") {
+      payload.code = form.code.trim().toUpperCase();
+    }
+    if (mode === "edit") {
+      payload.status = form.status;
+    }
+    await onSubmit(payload);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+        <div className="text-base font-semibold">{mode === "create" ? "Create coupon" : "Edit coupon"}</div>
+        <div className="mt-4 flex flex-col gap-3">
+          <Input
+            label="Code"
+            value={form.code}
+            onChange={(v) => setForm({ ...form, code: v.toUpperCase() })}
+            // Code is immutable post-create — disable when editing.
+            // (Changing it would break already-distributed codes.)
+          />
+          {form.code && (
+            <p className="text-[11px] text-muted-foreground">
+              Customers enter this code at checkout to apply the discount.
+            </p>
+          )}
+          <SelectField
+            label="Type"
+            value={form.type}
+            onChange={(v) => setForm({ ...form, type: v })}
+            options={[
+              { value: "percent", label: "Percentage (% off)" },
+              { value: "fixed", label: "Fixed amount ($ off)" },
+            ]}
+          />
+          <Input
+            label={form.type === "percent" ? "Value (% off)" : "Value ($ off)"}
+            type="number"
+            value={String(form.value)}
+            onChange={(v) => setForm({ ...form, value: Number(v) })}
+          />
+          <Input
+            label="Max uses"
+            type="number"
+            value={String(form.maxUses)}
+            onChange={(v) => setForm({ ...form, maxUses: Number(v) })}
+          />
+          <Input
+            label="Expires at (leave empty for no expiry)"
+            type="datetime-local"
+            value={form.expiresAt}
+            onChange={(v) => setForm({ ...form, expiresAt: v })}
+          />
+          {mode === "edit" && (
+            <SelectField
+              label="Status"
+              value={form.status}
+              onChange={(v) => setForm({ ...form, status: v })}
+              options={[
+                { value: "active", label: "Active" },
+                { value: "disabled", label: "Disabled" },
+                { value: "expired", label: "Expired" },
+              ]}
+            />
+          )}
+        </div>
+        <button
+          onClick={submit}
+          disabled={loading || !form.code.trim() || form.value <= 0}
+          className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+        >
+          {loading ? "Saving…" : mode === "create" ? "Create coupon" : "Save changes"}
+        </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">
+          Cancel
+        </button>
       </div>
     </div>
   );

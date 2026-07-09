@@ -1,8 +1,15 @@
 import { db } from "../src/lib/db";
 
-async function main() {
+/**
+ * Seed roles and permissions.
+ *
+ * ADMIN-FIX-BATCH-1: refactored to export `seedRoles()` so the main
+ * `prisma/seed.ts` script can call it as part of a unified seed. Idempotent —
+ * existing roles get their description/color refreshed, permissions are
+ * upserted. Auto-runs only when invoked directly (not when imported).
+ */
+export async function seedRoles() {
   console.log("🎭 Seeding roles and permissions...");
-
   const roles = [
     {
       name: "admin",
@@ -110,9 +117,13 @@ async function main() {
     console.log(`  ✓ Role: ${roleData.name} (${Object.keys(permissions).length} permissions)`);
   }
 
-  console.log(`\n✅ ${roles.length} roles seeded!`);
+  console.log(`✅ ${roles.length} roles seeded!`);
 }
 
-main()
-  .catch((e) => { console.error(e); process.exit(1); })
-  .finally(async () => { await db.$disconnect(); });
+// Auto-run only when invoked directly (not when imported by seed.ts).
+const isMainModule = process.argv[1]?.includes("seed-roles");
+if (isMainModule) {
+  seedRoles()
+    .catch((e) => { console.error(e); process.exit(1); })
+    .finally(async () => { await db.$disconnect(); });
+}

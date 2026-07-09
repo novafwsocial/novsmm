@@ -1,6 +1,15 @@
 import { db } from "../src/lib/db";
 
-async function main() {
+/**
+ * Augment the demo services with full description / quality / deliveryTime /
+ * category metadata. Idempotent — re-running just re-applies the metadata.
+ *
+ * ADMIN-FIX-BATCH-1: refactored to export `seedServices()` so the main
+ * `prisma/seed.ts` script can call it as part of a unified seed. Skips
+ * services that don't exist in the DB yet (run after the demo services are
+ * upserted). Auto-runs only when invoked directly (not when imported).
+ */
+export async function seedServices() {
   console.log("🌱 Updating services with full details...");
 
   const serviceDetails = [
@@ -103,14 +112,18 @@ async function main() {
     console.log(`  ✓ Updated: ${s.name}`);
   }
 
-  console.log("\n✅ Service details updated!");
+  console.log("✅ Service details updated!");
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await db.$disconnect();
-  });
+// Auto-run only when invoked directly (not when imported by seed.ts).
+const isMainModule = process.argv[1]?.includes("seed-services");
+if (isMainModule) {
+  seedServices()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await db.$disconnect();
+    });
+}

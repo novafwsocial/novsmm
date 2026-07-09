@@ -942,6 +942,47 @@ export function useUpdatePromotion() {
   });
 }
 
+// ── Admin: Coupons ──
+// ADMIN-FIX-BATCH-1: coupon CRUD endpoints live at /api/admin/coupons.
+// PATCH is body-driven ({ id, status }) — no [id] subroute exists.
+// DELETE is body-driven too (see useDeleteCoupon below).
+export function useAdminCoupons() {
+  return useQuery({
+    queryKey: ["admin-coupons"],
+    queryFn: () => api.get<{ coupons: any[] }>("/api/admin/coupons"),
+  });
+}
+export function useCreateCoupon() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.post("/api/admin/coupons", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-coupons"] }); toast({ title: "Coupon created" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useUpdateCoupon() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (data: any) => api.patch("/api/admin/coupons", data),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-coupons"] }); toast({ title: "Coupon updated" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+export function useDeleteCoupon() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    // The /api/admin/coupons route has no [id] subroute — DELETE is also
+    // body-driven ({ id }). Server-side handler matches by body.id.
+    mutationFn: (id: string) =>
+      api.delete("/api/admin/coupons", { id } as any),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["admin-coupons"] }); toast({ title: "Coupon deleted" }); },
+    onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
 // ── Admin: Search + Bulk ──
 export function useAdminSearch(q: string) {
   return useQuery({

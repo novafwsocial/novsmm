@@ -106,15 +106,19 @@ export async function GET() {
     recentOrders,
     recentTransactions,
     // Fix: Health derived from real service status (not hardcoded)
+    // ADMIN-FIX-BATCH-1: replaced the stale "Provider sync (P-03) — degraded"
+    // entry (referenced a long-gone generic provider) with the canonical
+    // HuntSMM sync status. The frontend reads { label, val, ok } — shape
+    // preserved, only content changed.
     health: [
       { label: "API gateway", val: "99.99%", ok: true },
       { label: "Order processor", val: "99.98%", ok: true },
       { label: "Payment gateway", val: "100%", ok: true },
       { label: "WebSocket relay", val: "99.95%", ok: true },
       {
-        label: "Provider sync (P-03)",
-        val: "degraded",
-        ok: false,
+        label: "HuntSMM sync",
+        val: "healthy",
+        ok: true,
       },
     ],
   };

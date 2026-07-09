@@ -1,6 +1,14 @@
 import { db } from "../src/lib/db";
 
-async function main() {
+/**
+ * Seed currencies, languages, and platform settings.
+ *
+ * ADMIN-FIX-BATCH-1: refactored to export `seedSettings()` so the main
+ * `prisma/seed.ts` script can call it as part of a unified seed. The
+ * function is idempotent — re-running upserts without overwriting existing
+ * rows. Auto-runs only when invoked directly (not when imported).
+ */
+export async function seedSettings() {
   console.log("🌱 Seeding currencies, languages, and settings...");
 
   // ── Currencies ──
@@ -62,14 +70,18 @@ async function main() {
   }
   console.log(`  ✓ ${settings.length} settings`);
 
-  console.log("\n✅ Seed complete!");
+  console.log("✅ Settings seed complete!");
 }
 
-main()
-  .catch((e) => {
-    console.error(e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await db.$disconnect();
-  });
+// Auto-run only when invoked directly (not when imported by seed.ts).
+const isMainModule = process.argv[1]?.includes("seed-settings");
+if (isMainModule) {
+  seedSettings()
+    .catch((e) => {
+      console.error(e);
+      process.exit(1);
+    })
+    .finally(async () => {
+      await db.$disconnect();
+    });
+}

@@ -46,17 +46,78 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** PATCH /api/admin/coupons — disable/enable a coupon */
+/** PATCH /api/admin/coupons — update one or more fields on a coupon.
+ *
+ * ADMIN-FIX-BATCH-1: previously only `status` was updatable. Now any of
+ * { type, value, maxUses, expiresAt, status } can be patched (code is
+ * immutable post-create — changing it would break already-distributed codes).
+ *
+ * Body: { id: string, ...fieldsToUpdate }
+ */
+const updateSchema = z.object({
+  id: z.string(),
+  type: z.enum(["percent", "fixed"]).optional(),
+  value: z.number().positive().optional(),
+  maxUses: z.number().int().positive().optional(),
+  expiresAt: z.string().nullable().optional(),
+  status: z.enum(["active", "disabled", "expired"]).optional(),
+});
+
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAdmin();
   if (error) return error;
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { id, status } = body;
+  const parsed = updateSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
+  }
+
+  const { id, expiresAt, ...rest } = parsed.data;
   if (!id) return apiError("ID required", 422);
 
-  const coupon = await db.coupon.update({ where: { id }, data: { status } });
-  await audit(adminId, "update", "coupon", id, { status });
-  return apiOk({ coupon });
+  // Normalize expiresAt: accept ISO string, null (clear), or omit.
+  const data: Record<string, unknown> = { ...rest };
+  if (expiresAt !== undefined) {
+    data.expiresAt = expiresAt ? new Date(expiresAt) : null;
+  }
+
+  try {
+    const coupon = await db.coupon.update({ where: { id }, data });
+    await audit(adminId, "update", "coupon", id, Object.keys(data));
+    return apiOk({ coupon });
+  } catch (e: any) {
+    if (e.code === "P2025") return apiError("Coupon not found", 404);
+    return apiError("Failed to update coupon", 500);
+  }
+}
+
+/** DELETE /api/admin/coupons — hard-delete a coupon by id.
+ *
+ * ADMIN-FIX-BATCH-1: the admin UI exposes a "delete" affordance with a
+ * confirmation dialog. The route lives on the same path (no [id] subroute),
+ * so the coupon id is sent in the request body: `{ id }`.
+ *
+ * Soft-disable (PATCH status=disabled) is preferred for coupons that have
+ * already been used — hard-delete loses audit history. Reserve DELETE for
+ * coupons with usedCount === 0 or for cleanup.
+ */
+export async function DELETE(req: NextRequest) {
+  const { session, error } = await requireAdmin();
+  if (error) return error;
+  const adminId = (session!.user as any).id;
+
+  const body = await req.json().catch(() => ({}));
+  const { id } = body ?? {};
+  if (!id) return apiError("ID required", 422);
+
+  try {
+    const coupon = await db.coupon.delete({ where: { id } });
+    await audit(adminId, "delete", "coupon", id, { code: coupon.code });
+    return apiOk({ message: "Coupon deleted" });
+  } catch (e: any) {
+    if (e.code === "P2025") return apiError("Coupon not found", 404);
+    return apiError("Failed to delete coupon", 500);
+  }
 }

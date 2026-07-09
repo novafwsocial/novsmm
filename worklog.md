@@ -10135,3 +10135,88 @@ Stage Summary:
 ### No code changes made (audit-only task)
 
 This was a read-only audit per task spec. No files were modified.
+
+---
+Task ID: ADMIN-FIX-BATCH-1
+Agent: full-stack-developer
+Task: Apply 8 fixes (3 critical + 5 high) to sync admin panel with implementation
+
+Work Log:
+- Read worklog audit (ADMIN-AUDIT-1) + all relevant source files (seed.ts,
+  sync-huntsmm.ts, schema.prisma Provider/Service/Coupon/ServiceProvider,
+  provider-failover.ts, huntsmm.ts, dashboard-data.ts, admin overview route,
+  admin-panel.tsx sections, use-api.ts, api-client.ts, payment-methods
+  route, coupons route, wallet/topup route, stripe.ts, seed-settings.ts,
+  seed-roles.ts, seed-services.ts, email-templates.ts, package.json).
+- CRITICAL FIX 1: Replaced 4 fake providers (Provider-01..04 with
+  smmapi.io / boostpanel.dev / justsmm.net / royalpanel.com URLs) with a
+  single HuntSMM provider row in prisma/seed.ts. Used the actual schema
+  fields (apiUrl, apiKey, status="healthy", latency=0) — the task spec's
+  balance/currency/syncEnabled/lastSyncAt don't exist on the Provider model.
+  Added a cleanup loop that deleteMany()s the 4 obsolete names. Re-bound
+  all 12 demo services' providerIdx to 0 (HuntSMM only).
+- CRITICAL FIX 2: Refactored src/lib/provider-failover.ts to dispatch by
+  provider.apiUrl via a new placeOrderWithProvider() helper. huntsmm.com →
+  existing placeHuntSMMOrder() (preserved). Any other apiUrl → throws
+  "Provider X (apiUrl) not supported yet". Wrapped each call in try/catch
+  so an unsupported provider doesn't break the failover chain. Legacy
+  single-provider path now reads the oldest DB provider instead of
+  hardcoding "HuntSMM". Imported Provider type from @prisma/client.
+- CRITICAL FIX 3: Replaced ADMIN_PROVIDERS in dashboard-data.ts with a
+  single HuntSMM-only entry + comment. Synced TOPUP_METHODS to the 5
+  canonical methods (Stripe, PayPal, Mercado Pago, NowPayments, Manual).
+  Replaced the stale "Provider sync (P-03) — degraded" health entry in
+  /api/admin/overview/route.ts with "HuntSMM sync — healthy" (preserved
+  the {label, val, ok} shape the frontend expects).
+- HIGH FIX 4: Created /api/admin/payment-methods/test/route.ts. POST
+  endpoint with two modes ({ methodId } for saved creds, { method,
+  credentials } for ad-hoc). Pings: Stripe accounts.retrieve, PayPal
+  oauth2/token, Mercado Pago users/me, NowPayments /v1/balance, Manual
+  always-OK. Returns { ok, method, message, details? }. Accepts both
+  lowercase slugs and pretty PaymentMethod.name strings. requireAdmin
+  guarded.
+- HIGH FIX 5: Added Stripe to credentialFields map (secretKey +
+  webhookSecret) and a violet help panel above the form fields in
+  ConfigureCredentialsModal. Help panel links to
+  dashboard.stripe.com/apikeys, lists required fields, shows webhook URL
+  (https://novsmm.shop/api/webhooks/stripe), and the 3 events to subscribe
+  to (checkout.session.completed, payment_intent.payment_failed,
+  charge.refunded).
+- HIGH FIX 6: Added "coupons" to AdminTab union type, added
+  { id: "coupons", label: "Coupons", icon: Ticket } to ADMIN_NAV (imported
+  Ticket from lucide-react), wired adminTab === "coupons" → <AdminCoupons />.
+  Built AdminCoupons (table list, create button, edit/delete per row with
+  AlertDialog confirmation) and CouponModal (code/type/value/maxUses/
+  expiresAt/status). Added useAdminCoupons/useCreateCoupon/useUpdateCoupon/
+  useDeleteCoupon hooks. Extended PATCH on /api/admin/coupons/route.ts to
+  accept more fields + added a new DELETE handler (body-driven { id }).
+  Extended api.delete in src/lib/api-client.ts to accept an optional body.
+  Note: Coupon schema has no `minOrder` field, so that field from the task
+  spec was omitted.
+- HIGH FIX 7: Renamed "Webhooks" → "Webhook Logs" in ADMIN_NAV. Added a
+  small info panel at the top of AdminWebhooks clarifying scope (inbound
+  logs only; outbound managed via API).
+- HIGH FIX 8: Refactored seed-settings.ts, seed-roles.ts, seed-services.ts
+  to export their main function (seedSettings/seedRoles/seedServices) with
+  an isMainModule guard so they auto-run only when invoked directly (not
+  when imported by seed.ts). Updated prisma/seed.ts to call all four
+  (seed-settings, seed-roles, seed-services, seedEmailTemplates from
+  src/lib/email-templates.ts) at the end of main(). Added "seed":
+  "npx tsx prisma/seed.ts" to package.json (used npx to match the existing
+  worker scripts — tsx isn't a direct dep).
+- Ran `bun run lint` → 0 errors, 3 warnings (all pre-existing, unrelated
+  to this batch). Dev server log shows clean compilation + requests
+  succeeding.
+
+Stage Summary:
+- Files modified (13): prisma/seed.ts, prisma/seed-settings.ts,
+  prisma/seed-roles.ts, prisma/seed-services.ts, src/lib/provider-failover.ts,
+  src/components/novsmm/dashboard-data.ts, src/app/api/admin/overview/route.ts,
+  src/components/novsmm/admin-panel.tsx, src/components/novsmm/app-store.ts,
+  src/hooks/use-api.ts, src/lib/api-client.ts,
+  src/app/api/admin/coupons/route.ts, package.json.
+- Files created (1): src/app/api/admin/payment-methods/test/route.ts.
+- Lint: PASS (0 errors).
+- All 8 fixes complete. Medium/low audit findings (German translation pack,
+  fake provider sync route, AdminRefunds filter, AdminSettingsTab dynamic
+  keys, License plan enum) were out of scope for this batch.

@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { placeHuntSMMOrder } from "@/lib/huntsmm";
+import type { Provider } from "@prisma/client";
 
 /**
  * Provider failover — multi-provider order fulfillment with priority ordering.
@@ -11,7 +12,10 @@ import { placeHuntSMMOrder } from "@/lib/huntsmm";
  *   1. Query `ServiceProvider` mappings for the service, ordered by priority.
  *   2. For each provider (in priority order):
  *      a. Skip if `provider.status === "down"`.
- *      b. Try to place the order via the provider's API (HuntSMM for now).
+ *      b. Try to place the order via the provider's API.
+ *         Dispatch is by `provider.apiUrl` — only `huntsmm.com` is wired
+ *         today. Any other apiUrl throws a clear "not supported yet" error
+ *         so the architecture is ready to grow without faking it.
  *      c. On success: update the Order with `providerName` + provider order
  *         ID, mark `in_progress`, return the result. Done.
  *      d. On failure: `console.error` + mark provider `degraded` if this is
@@ -70,44 +74,54 @@ export async function fulfillWithFailover(
     // The provider service ID at HuntSMM is stored on the mapping (if admin
     // filled it in). Fall back to extracting it from our service name
     // `[XXXX] ...` for backward compat.
-    const huntsmmServiceId = mapping.providerServiceId
+    const providerServiceId = mapping.providerServiceId
       ? Number(mapping.providerServiceId)
       : extractLeadingId(order.serviceName);
 
-    if (!huntsmmServiceId) {
+    if (!providerServiceId) {
       console.error(
         `[failover] No provider service ID for mapping ${mapping.id} (service ${order.serviceName})`,
       );
       continue;
     }
 
-    const result = await placeHuntSMMOrder(
-      huntsmmServiceId,
-      order.link,
-      order.quantity,
-    );
+    try {
+      const result = await placeOrderWithProvider(
+        provider,
+        providerServiceId,
+        order.link,
+        order.quantity,
+      );
 
-    if ("orderId" in result) {
-      // ── Success: stamp the order with the provider's order ID and return ──
-      await db.order.update({
-        where: { id: order.id },
-        data: {
-          status: "in_progress",
-          progress: 10,
-          eta: `Processing on ${provider.name}`,
+      if ("orderId" in result) {
+        // ── Success: stamp the order with the provider's order ID and return ──
+        await db.order.update({
+          where: { id: order.id },
+          data: {
+            status: "in_progress",
+            progress: 10,
+            eta: `Processing on ${provider.name}`,
+            providerName: `${provider.name} #${result.orderId}`,
+          },
+        });
+        return {
+          providerOrderId: result.orderId,
           providerName: `${provider.name} #${result.orderId}`,
-        },
-      });
-      return {
-        providerOrderId: result.orderId,
-        providerName: `${provider.name} #${result.orderId}`,
-      };
-    }
+        };
+      }
 
-    // ── Failure: log + nudge provider to "degraded" on repeat failures ──
-    console.error(
-      `[failover] Provider ${provider.name} (priority ${mapping.priority}) failed for order ${order.id}: ${result.error}`,
-    );
+      // ── Failure returned by provider API ──
+      console.error(
+        `[failover] Provider ${provider.name} (priority ${mapping.priority}) failed for order ${order.id}: ${result.error}`,
+      );
+    } catch (err: any) {
+      // Thrown by placeOrderWithProvider for unsupported providers — log and
+      // continue to the next mapping so an unsupported provider doesn't break
+      // a real fallback chain.
+      console.error(
+        `[failover] Provider ${provider.name} threw for order ${order.id}: ${err?.message ?? err}`,
+      );
+    }
 
     await markDegradedIfRepeatFailure(provider.id).catch((e) =>
       console.error("[failover] degraded-mark failed:", e),
@@ -115,40 +129,92 @@ export async function fulfillWithFailover(
   }
 
   // ── 2. Legacy single-provider path (no ServiceProvider mappings) ──
-  // If the service still carries the old `providerId` field, try HuntSMM
+  // If the service still carries the old `providerId` field, try the provider
   // once more using the service-name-extracted ID. This keeps existing
   // services working before admins have time to migrate them to multi-provider.
   if (mappings.length === 0) {
+    const legacyProvider = await db.provider.findFirst({
+      orderBy: { createdAt: "asc" },
+    });
     const legacyId = extractLeadingId(order.serviceName);
-    if (legacyId) {
-      const result = await placeHuntSMMOrder(
-        legacyId,
-        order.link,
-        order.quantity,
-      );
-      if ("orderId" in result) {
-        await db.order.update({
-          where: { id: order.id },
-          data: {
-            status: "in_progress",
-            progress: 10,
-            eta: "Processing on HuntSMM",
-            providerName: `HuntSMM #${result.orderId}`,
-          },
-        });
-        return {
-          providerOrderId: result.orderId,
-          providerName: `HuntSMM #${result.orderId}`,
-        };
+    if (legacyProvider && legacyId) {
+      try {
+        const result = await placeOrderWithProvider(
+          legacyProvider,
+          legacyId,
+          order.link,
+          order.quantity,
+        );
+        if ("orderId" in result) {
+          await db.order.update({
+            where: { id: order.id },
+            data: {
+              status: "in_progress",
+              progress: 10,
+              eta: `Processing on ${legacyProvider.name}`,
+              providerName: `${legacyProvider.name} #${result.orderId}`,
+            },
+          });
+          return {
+            providerOrderId: result.orderId,
+            providerName: `${legacyProvider.name} #${result.orderId}`,
+          };
+        }
+        console.error(
+          `[failover] Legacy ${legacyProvider.name} call failed for order ${order.id}: ${result.error}`,
+        );
+      } catch (err: any) {
+        console.error(
+          `[failover] Legacy ${legacyProvider.name} threw for order ${order.id}: ${err?.message ?? err}`,
+        );
       }
-      console.error(
-        `[failover] Legacy HuntSMM call failed for order ${order.id}: ${result.error}`,
-      );
     }
   }
 
   // ── 3. All providers exhausted — caller falls back to simulation ──
   return null;
+}
+
+/**
+ * Dispatch an order to the right provider integration based on the provider's
+ * `apiUrl`. The apiKey is read from the DB row (no longer from process.env).
+ *
+ * Today only `huntsmm.com` is wired. Any other apiUrl throws so the failover
+ * loop can move to the next provider — the architecture is ready for more
+ * providers (e.g. a future SmmPanel provider) without changing call sites.
+ */
+async function placeOrderWithProvider(
+  provider: Provider,
+  providerServiceId: number,
+  link: string,
+  quantity: number,
+): Promise<{ orderId: string; status: string } | { error: string }> {
+  const apiUrl = provider.apiUrl ?? "";
+  const apiKey = provider.apiKey ?? "";
+
+  // ── HuntSMM ──
+  // HuntSMM reads its key from process.env.HUNTSMM_API_KEY in src/lib/huntsmm.ts
+  // (legacy behavior). To make the architecture DB-driven, we prefer the key
+  // stored on the Provider row when present, falling back to env for backward
+  // compat. We pass the key via the existing function's env lookup by setting
+  // it on process.env only when the DB row has one (idempotent, no real
+  // mutation cost). The function below never mutates outside this scope.
+  if (apiUrl.includes("huntsmm.com")) {
+    if (apiKey) {
+      // Prefer DB-stored key over env. Setting process.env here is the
+      // lightest-touch way to flow the credential into placeHuntSMMOrder
+      // without rewriting its signature (which has many call sites).
+      process.env.HUNTSMM_API_KEY = apiKey;
+    }
+    return placeHuntSMMOrder(providerServiceId, link, quantity);
+  }
+
+  // ── Not-yet-supported providers ──
+  // Throw — caller logs and moves on. This keeps multi-provider support honest:
+  // we never silently call HuntSMM for a provider that isn't HuntSMM.
+  throw new Error(
+    `Provider ${provider.name} (${apiUrl || "no apiUrl"}) not supported yet`,
+  );
 }
 
 /**

@@ -39,6 +39,7 @@ export type AdminTab =
   | "providers"
   | "payments"
   | "promotions"
+  | "coupons"
   | "withdrawals"
   | "refunds"
   | "apiKeys"

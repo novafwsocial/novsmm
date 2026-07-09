@@ -118,11 +118,20 @@ export const ADMIN_USERS = [
   { id: "U-1007", name: "Elena Petrova", email: "elena@verge.media", role: "Agency", balance: 15400.0, status: "active", orders: 9820, joined: "Sep 2024" },
 ];
 
+// NOTE: This is demo data only — the live admin panel reads from
+// /api/admin/providers (DB-backed). HuntSMM is the only canonical provider
+// since ADMIN-FIX-BATCH-1. If you need provider stats in the admin UI, hit
+// the API rather than importing this constant.
 export const ADMIN_PROVIDERS = [
-  { id: "P-01", name: "Provider-01", api: "smmapi.io", latency: 142, status: "healthy", services: 84, cost: "$1.2K/mo" },
-  { id: "P-02", name: "Provider-02", api: "boostpanel.dev", latency: 98, status: "healthy", services: 72, cost: "$980/mo" },
-  { id: "P-03", name: "Provider-03", api: "justsmm.net", latency: 240, status: "degraded", services: 48, cost: "$640/mo" },
-  { id: "P-04", name: "Provider-04", api: "royalpanel.com", latency: 88, status: "healthy", services: 92, cost: "$1.4K/mo" },
+  {
+    id: "p1",
+    name: "HuntSMM",
+    status: "healthy" as const,
+    services: 6382,
+    sync: "2 min ago",
+    success: 99.8,
+    balance: 247.83,
+  },
 ];
 
 export const ADMIN_SERVICES = [
@@ -143,7 +152,9 @@ export const ROLES = [
 ];
 
 export const TOPUP_METHODS = [
-  { name: "PayPal", glyph: "P", tone: "from-blue-500/15 to-blue-500/5 text-blue-700", time: "Instant", fee: "3.49% + $0.49", currencies: "USD, EUR, GBP, +25" },
-  { name: "Mercado Pago", glyph: "M", tone: "from-cyan-500/15 to-cyan-500/5 text-cyan-700", time: "Instant", fee: "3.99%", currencies: "BRL, MXN, ARS, +6" },
-  { name: "NowPayments", glyph: "N", tone: "from-emerald-500/15 to-emerald-500/5 text-emerald-700", time: "~5 min", fee: "0.5% - 1% (crypto)", currencies: "BTC, ETH, USDT, USDC, +100 cryptos" },
+  { id: "stripe", name: "Stripe", share: 42, trend: "up", color: "from-violet-500 to-violet-400" },
+  { id: "paypal", name: "PayPal", share: 28, trend: "up", color: "from-blue-500 to-blue-400" },
+  { id: "mercadopago", name: "Mercado Pago", share: 18, trend: "up", color: "from-cyan-500 to-cyan-400" },
+  { id: "nowpayments", name: "NowPayments", share: 8, trend: "up", color: "from-amber-500 to-amber-400" },
+  { id: "manual", name: "Manual", share: 4, trend: "stable", color: "from-rose-500 to-rose-400" },
 ];
