@@ -1,16 +1,18 @@
-// NOVSMM — schema (SQLite dev + PostgreSQL production ready)
-// SQLite-compatible: no native enums (use String), no @db.Decimal (use Float),
-// no @db.VarChar (ignored on SQLite).
-// Json type works on both: SQLite stores as TEXT, PostgreSQL stores as JSONB.
-// For full PostgreSQL schema with native enums + Decimal + VarChar, see
-// prisma/schema.postgres.prisma
+// NOVSMM — schema (PostgreSQL production)
+// This schema uses portable Prisma types (String, Float, Json) that work
+// across SQLite and PostgreSQL. The provider is set to "postgresql" for
+// production deployments. For development with SQLite, change provider to
+// "sqlite" and use a file-based DATABASE_URL.
+// Json type: PostgreSQL stores as JSONB.
+// For a more strict PostgreSQL schema with native enums + Decimal + VarChar,
+// see prisma/schema.postgres.prisma
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
