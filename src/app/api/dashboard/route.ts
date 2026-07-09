@@ -1,6 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiOk } from "@/lib/api-utils";
+import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 
 /** GET /api/dashboard — aggregate data for the dashboard home tab.
  *
@@ -8,6 +9,9 @@ import { requireAuth, apiOk } from "@/lib/api-utils";
  *  - range: "7d" | "30d" | "90d" (default "30d") — controls revenue series
  *           window. Other stats (balance, active/completed counts, recent
  *           orders) are always all-time / live.
+ *
+ * Fix: Redis cache (15s TTL) to reduce DB load on frequent dashboard polling.
+ * Cache is per-user + per-range. Invalidated on order/wallet mutations.
  */
 export async function GET(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -15,6 +19,14 @@ export async function GET(req: NextRequest) {
   const userId = (session!.user as any).id;
 
   const rangeParam = new URL(req.url).searchParams.get("range") ?? "30d";
+
+  // Fix: Check Redis cache first (15s TTL — short enough for near-real-time,
+  // long enough to deduplicate rapid polling from multiple components)
+  const cacheKey = `dashboard:${userId}:${rangeParam}`;
+  const cached = await cacheGet<any>(cacheKey);
+  if (cached) {
+    return apiOk(cached);
+  }
   const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
   const days = RANGE_DAYS[rangeParam] ?? 30;
 
@@ -107,7 +119,7 @@ export async function GET(req: NextRequest) {
   // useDashboard() call) continue to receive a sensible value.
   const revenueMonth = revenueRange;
 
-  return apiOk({
+  const responseData = {
     user,
     stats: {
       balance: user?.balance ?? 0,
@@ -125,5 +137,10 @@ export async function GET(req: NextRequest) {
     series,
     recentOrders,
     recentNotifications: recentNotifs,
-  });
+  };
+
+  // Fix: Cache for 15 seconds
+  await cacheSet(cacheKey, responseData, 15);
+
+  return apiOk(responseData);
 }

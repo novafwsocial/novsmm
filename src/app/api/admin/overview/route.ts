@@ -1,10 +1,22 @@
 import { db } from "@/lib/db";
 import { requireAdmin, apiOk } from "@/lib/api-utils";
+import { cacheGet, cacheSet } from "@/lib/cache";
 
-/** GET /api/admin/overview — platform-wide stats. */
+/** GET /api/admin/overview — platform-wide stats.
+ *
+ * Fix: Redis cache (30s TTL) — admin overview is expensive (7+ queries)
+ * and polled frequently by the admin dashboard.
+ */
 export async function GET() {
   const { error } = await requireAdmin();
   if (error) return error;
+
+  // Fix: Check cache first (30s TTL)
+  const cacheKey = "admin:overview";
+  const cached = await cacheGet<any>(cacheKey);
+  if (cached) {
+    return apiOk(cached);
+  }
 
   const now = new Date();
   const yesterday = new Date(now.getTime() - 24 * 60 * 60 * 1000);
