@@ -21,16 +21,17 @@ import { nextPublicId } from "@/lib/ids";
  *  • Mercado Pago    → if creds.accessToken    → create MP preference,
  *                                                 return { provider, checkoutUrl }
  *                      else                    → sandbox
- *  • Crypto (USDT)   → if creds.walletAddress  → return { provider, address, network,
- *                                                          amount, expectedConfirmations }
+ *  • NowPayments     → if creds.apiKey            → create NowPayments invoice,
+ *                                                          return { provider, checkoutUrl }
  *                      else                    → sandbox
- *  • Legacy methods /
- *    Bank transfer   → always sandbox (simulated)
+ *  • Manual          → always pending — user contacts support via WhatsApp,
+ *                                                 admin credits manually after payment
+ *  • Unconfigured methods → sandbox (simulated)
  *
- * For external checkout providers (PayPal / Mercado Pago), the wallet is NOT
- * credited here — the provider's webhook handles that when payment confirms.
- * For Crypto, an off-chain confirmation worker (or manual admin verification)
- * credits the balance once the expected confirmations are seen.
+ * For external checkout providers (PayPal / Mercado Pago / NowPayments),
+ * the wallet is NOT credited here — the provider's webhook handles that when
+ * payment confirms. For Manual, an admin manually credits the balance after
+ * confirming payment via WhatsApp/Zelle/Wire.
  *
  * Backward compatibility: the previous Stripe PaymentIntent response shape
  * (with `clientSecret` + `paymentIntentId`) is preserved.
@@ -160,20 +161,34 @@ export async function POST(req: NextRequest) {
     }
 
     // ── 2. PayPal ──
+    // The webhook at /api/webhooks/paypal will verify the signature via
+    // PayPal's verify-webhook-signature API and credit the wallet on
+    // PAYMENT.CAPTURE.COMPLETED. We pass the txn publicId as the order's
+    // custom_id so the webhook can reconcile.
     if (pm.name === "PayPal" && creds?.clientId && creds?.clientSecret) {
       try {
-        const checkoutUrl = await createPaypalOrder({
+        const paypalResult = await createPaypalOrder({
           clientId: creds.clientId,
           clientSecret: creds.clientSecret,
           amount,
+          reference: txn.publicId,
           returnUrl: `${origin}/?topup=success`,
           cancelUrl: `${origin}/?topup=cancelled`,
         });
-        if (checkoutUrl) {
+        if (paypalResult?.checkoutUrl && paypalResult?.orderId) {
+          // Persist the PayPal order id for webhook reconciliation
+          await db.transaction.update({
+            where: { id: txn.id },
+            data: {
+              reference: `paypal:${paypalResult.orderId}`,
+              description: `Top-up via PayPal (pending order ${paypalResult.orderId})`,
+            },
+          });
           // Do NOT credit — the PayPal webhook will confirm & credit.
           return apiOk({
             provider: "paypal",
-            checkoutUrl,
+            checkoutUrl: paypalResult.checkoutUrl,
+            orderId: paypalResult.orderId,
             transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
             message: "Redirect to PayPal to complete payment.",
           });
@@ -239,34 +254,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 4. Crypto (USDT) ──
-    if (pm.name === "Crypto" && creds?.walletAddress) {
-      const network = creds.network || "TRC20";
-      const expectedConfirmations = Number(creds.expectedConfirmations ?? 3);
-      // Do NOT credit — an off-chain verification worker (or admin) credits
-      // once the expected confirmations are observed on-chain.
-      await db.transaction.update({
-        where: { id: txn.id },
-        data: {
-          reference: `crypto:${network}:${creds.walletAddress}`,
-          description: `Top-up via Crypto (${network}) — awaiting ${expectedConfirmations} confirmations`,
-        },
-      });
-      return apiOk({
-        provider: "crypto",
-        address: creds.walletAddress,
-        network,
-        amount,
-        expectedConfirmations,
-        transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
-        message: `Send exactly $${amount.toFixed(2)} USDT to the address above on the ${network} network.`,
-      });
-    }
-
     // ── 4. NowPayments ──
-    // NowPayments is a cryptocurrency payment gateway that accepts 100+ cryptos
-    // (BTC, ETH, USDT, USDC, DAI, etc.) with automatic conversion.
-    // Sends a POST request to the NowPayments API with the API key, amount,
+    // NowPayments is the crypto gateway (replaces the legacy "Crypto" method).
+    // It accepts 100+ cryptos (BTC, ETH, USDT, USDC, DAI, etc.) with automatic
+    // conversion. Sends a POST request to the NowPayments API with the API key,
+    // amount,
     // currency, and redirect URLs. NowPayments returns a hosted invoice URL
     // that the browser redirects to. The IPN webhook credits the balance
     // after payment confirmation.
@@ -328,47 +320,54 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // ── 5. Manual Payment ──
-    // User contacts support via WhatsApp to arrange a manual credit.
-    // The transaction stays "pending" until an admin manually credits it
-    // via the admin panel. We return a WhatsApp link so the user can
-    // contact us immediately.
+    // ── 5. Manual payment (WhatsApp / Zelle / Wire) ──
+    // User contacts support via WhatsApp (or pays via Zelle/Wire) to arrange
+    // a manual credit. The transaction stays "pending" until an admin
+    // manually credits it via the admin panel after confirming payment.
+    // We return a WhatsApp deep link pre-filled with the reference number so
+    // the user can contact us immediately.
     if (pm.name === "Manual") {
       // Fetch WhatsApp number from settings (fallback to default)
       const waSetting = await db.setting.findUnique({ where: { key: "platform.whatsapp" } });
       const whatsappNumber = waSetting?.value ?? "5215512345678";
 
-      const message = `Hello NOVSMM team, I'd like to manually top up $${amount.toFixed(2)} USD to my wallet (transaction ${txn.publicId}). Please assist me with the payment instructions.`;
+      const message = `Hello NOVSMM team, I'd like to manually top up $${amount.toFixed(2)} USD to my wallet (reference ${txn.publicId}). Please assist me with the payment instructions (WhatsApp / Zelle / Wire).`;
       const waUrl = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(message)}`;
 
+      // Create pending transaction — user must contact support to complete
       await db.transaction.update({
         where: { id: txn.id },
         data: {
+          status: "pending",
           reference: `manual:${txn.publicId}`,
-          description: `Manual top-up — awaiting user to contact support via WhatsApp`,
+          description: `Manual top-up request — contact support via WhatsApp with reference ${txn.publicId}`,
         },
       });
 
-      // Notify admins about the manual top-up request
+      // Notify the user about the pending request
       await createNotification({
         userId,
         type: "recharge",
         title: "Manual top-up requested",
-        message: `User requested a manual top-up of $${amount.toFixed(2)}. Transaction ${txn.publicId} is pending. Check admin panel to credit manually after receiving payment.`,
+        message: `Your manual top-up of $${amount.toFixed(2)} is pending. Reference ${txn.publicId}. Send the payment via WhatsApp/Zelle/Wire and provide this reference number to our team.`,
         amount,
         severity: "info",
       });
 
       return apiOk({
         provider: "manual",
+        reference: txn.publicId,
         whatsappUrl: waUrl,
         transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
-        message: "Contact us via WhatsApp to complete your manual payment. Your balance will be credited by our team after payment confirmation.",
+        message: "Manual top-up request created. Contact us via WhatsApp to complete the payment.",
+        instructions: "Send the payment via WhatsApp/Zelle/Wire and provide this reference number to our team.",
       });
     }
 
-    // ── 6. Legacy methods / Bank transfer / Crypto / unconfigured methods → sandbox ──
-    // (Simulated gateway — credits balance immediately)
+    // ── 6. Unconfigured methods (sandbox fallback) ──
+    // Simulated gateway — credits balance immediately. Used when a real
+    // payment method is selected but no credentials are configured (e.g.
+    // Stripe without a secretKey, PayPal without clientId/clientSecret).
     const paymentResult = await processPayment(pm, amount, txn.reference ?? "");
 
     if (!paymentResult.success) {
@@ -460,15 +459,22 @@ async function processPayment(
 
 /**
  * Create a PayPal order via the v2 checkout API.
- * Returns the approve URL the buyer should be redirected to.
+ * Returns the approve URL the buyer should be redirected to AND the order id
+ * (which we persist in txn.reference as `paypal:<orderId>` so the webhook can
+ * reconcile the payment).
+ *
+ * The `reference` (txn publicId) is sent as `custom_id` on the purchase unit.
+ * PayPal echoes `custom_id` back in webhook payloads (resource.custom_id),
+ * which is how /api/webhooks/paypal finds the transaction to credit.
  */
 async function createPaypalOrder(params: {
   clientId: string;
   clientSecret: string;
   amount: number;
+  reference: string;
   returnUrl: string;
   cancelUrl: string;
-}): Promise<string | null> {
+}): Promise<{ checkoutUrl: string; orderId: string } | null> {
   const auth = Buffer.from(`${params.clientId}:${params.clientSecret}`).toString("base64");
   const res = await fetch("https://api-m.paypal.com/v2/checkout/orders", {
     method: "POST",
@@ -482,6 +488,7 @@ async function createPaypalOrder(params: {
         {
           amount: { currency_code: "USD", value: params.amount.toFixed(2) },
           description: "NOVSMM wallet top-up",
+          custom_id: params.reference,
         },
       ],
       application_context: {
@@ -501,7 +508,9 @@ async function createPaypalOrder(params: {
 
   const data: any = await res.json();
   const approveLink = data.links?.find((l: any) => l.rel === "approve")?.href;
-  return approveLink ?? null;
+  const orderId: string | undefined = data.id;
+  if (!approveLink || !orderId) return null;
+  return { checkoutUrl: approveLink, orderId };
 }
 
 /**

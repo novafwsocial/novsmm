@@ -9907,3 +9907,85 @@ Work Log:
 ### Fixes applied: 18/18 (all)
 
 All fixes are minimal — each change is the smallest possible diff that addresses the audit finding. No existing functionality was broken. Patterns from the codebase were reused (e.g. try/catch + toast fallback pattern from `dashboard-home.tsx` for clipboard, LegalPages overlay pattern from `footer.tsx` for register-screen.tsx, pagination pattern from `api/admin/users/route.ts` for orders GET).
+
+---
+Task ID: PAYMENT-CLEANUP-1
+Agent: full-stack-developer (Z.ai Code)
+Task: Clean up payment methods to 5 final methods (Stripe, PayPal, Mercado Pago, NowPayments, Manual) — remove Aurora Pay, Crypto (generic), Bank transfer, AurPay, DePay.
+
+Work Log:
+
+### Investigation
+- Read `worklog.md` to understand project history (NOVSMM SaaS landing page + dashboard, full payment system already in place).
+- Reviewed existing files: `prisma/seed.ts`, `src/components/novsmm/dashboard-wallet.tsx`, `src/components/novsmm/payments.tsx`, `src/components/novsmm/payment-logo.tsx`, `src/app/api/webhooks/mercadopago/route.ts` (pattern reference), `src/app/api/wallet/topup/route.ts`, `src/app/api/webhooks/aurpay/route.ts`, `src/app/api/webhooks/depay/route.ts`.
+- Grepped the codebase for `Aurora Pay|AurPay|DePay|Bank transfer` — found references in 7 files (lib/aurpay.ts, lib/depay.ts, dashboard-wallet.tsx, faq-section.tsx, topup/route.ts comments, webhooks/aurpay, webhooks/depay).
+
+### Files modified
+
+1. **`prisma/seed.ts`** — Replaced the `paymentMethods` array (was 6 entries incl. Aurora Pay, Crypto, Bank transfer) with the final 5 methods: Stripe, PayPal, Mercado Pago, NowPayments, Manual (with the exact glyphs/tones/fees/currencies/sortOrders from the spec). Added cleanup block after the upsert loop that `deleteMany`s the 5 obsolete methods (["Aurora Pay", "Crypto", "Bank transfer", "AurPay", "DePay"]). Also changed `update: {}` → `update: { glyph, tone, settleTime, fee, currencies, sortOrder }` so re-running the seed converges to the canonical sort order even on existing rows (otherwise PayPal/Stripe ended up both at sortOrder 1 because the upsert was a no-op on update).
+
+2. **`src/components/novsmm/dashboard-wallet.tsx`** — Updated the Withdraw modal `<select>` to drop "Bank transfer (legacy)" and add "Stripe" and "Manual (WhatsApp / Zelle / Wire)" options alongside the existing PayPal, Mercado Pago, NowPayments. Updated the de-duplication filter so DB-driven `<option>`s are only appended for methods not already in the static list (now: PayPal, Mercado Pago, NowPayments, Stripe, Manual). Removed the dead `result?.provider === "crypto"` branch in `TopupModal.handleSubmit` (the topup route no longer emits that provider — NowPayments replaced it). Kept `useState("PayPal")` defaults on both Topup + Withdraw modals per spec.
+
+3. **`src/components/novsmm/payments.tsx`** — Replaced the `PROVIDERS` array (was 4 entries: PayPal, Mercado Pago, NowPayments, Manual) with the 5-entry version adding Stripe at the top with the spec's exact methods/currencies/settlement/security/coverage/note. Updated the footer stat `<Stat value={...4...} label="Payment gateways" />` → `5`. Also updated the SectionHeading description to mention Stripe explicitly ("NOVSMM routes every transaction through Stripe, PayPal, Mercado Pago, NowPayments (crypto), or manual settlement…").
+
+4. **`src/components/novsmm/faq-section.tsx`** — Replaced the obsolete "Bank transfers: SEPA, SPEI, PIX, ACH" FAQ answer with "Manual settlement: WhatsApp, Zelle, or wire transfer for high-ticket top-ups > $500 — contact our team for instructions and zero-fee credits." Reflects the new Manual method instead of the removed Bank transfer.
+
+5. **`src/app/api/wallet/topup/route.ts`** — Five changes:
+   - Updated the JSDoc dispatch table at the top: removed "Bank transfer" line, added NowPayments + Manual lines, replaced the "Crypto" final paragraph with a Manual paragraph.
+   - PayPal block: now passes `txn.publicId` as `custom_id` on the PayPal order's purchase_units, persists `paypal:<orderId>` in `txn.reference` for webhook reconciliation, returns `orderId` in the response. Added comment pointing to `/api/webhooks/paypal`.
+   - Manual block (section 5): rewrote with new comment header "Manual payment (WhatsApp / Zelle / Wire)", now explicitly sets `status: "pending"` + description `Manual top-up request — contact support via WhatsApp with reference ${publicId}`, returns both `reference` and `whatsappUrl` + `instructions` so the frontend can either follow the spec's minimal contract OR continue using the WhatsApp deep-link (kept the deep link for backward compat with `dashboard-wallet.tsx`).
+   - Removed the dead `if (pm.name === "Crypto" && creds?.walletAddress)` block (the legacy generic-crypto path) — NowPayments fully replaces it.
+   - Renamed the legacy fallback comment from "Legacy methods / Bank transfer / Crypto / unconfigured methods → sandbox" to "Unconfigured methods (sandbox fallback)".
+
+6. **`prisma/seed.ts`** — (covered above; single file but two distinct edits).
+
+### Files created
+
+7. **`src/app/api/webhooks/paypal/route.ts`** — New PayPal webhook handler modeled after the mercadopago webhook pattern but using PayPal's signature verification API. Flow:
+   - Reads raw body, parses JSON (logs to webhookLog even on parse failure).
+   - Looks up the `PayPal` PaymentMethod, decrypts `config` to get `clientId` / `clientSecret` / `webhookId`. Fail-closed if any are missing.
+   - Reads PayPal's transmission headers (`paypal-transmission-id`, `-time`, `-sig`, `-cert-url`, `-auth-algo`).
+   - Creates a `webhookLog` row with status "received".
+   - Fetches a PayPal access token via `POST /v1/oauth2/token` (client_credentials grant, Basic auth).
+   - Calls `POST /v1/notifications/verify-webhook-signature` with the headers + `webhook_id` + the raw event. If `verification_status !== "SUCCESS"` → marks webhookLog "rejected" + returns 200 (so PayPal doesn't retry).
+   - Dispatches on `event_type`:
+     - `PAYMENT.CAPTURE.COMPLETED` → `handleCaptureCompleted`: extracts `resource.custom_id` (= our publicId, with fallbacks to supplementary_data + order_id), looks up the pending transaction by `publicId` first, then `paypal:<orderId>` reference, then `paypal:<captureId>` reference. If found and still pending: credits the wallet atomically (`db.$transaction` with `transaction.update` + `user.update` balance/lifetimeEarnings increment), sends a success notification (sendEmail: true), writes an audit log.
+     - `PAYMENT.CAPTURE.DENIED` → `handleCaptureDenied`: looks up the pending transaction by the same fallbacks, marks it `failed`, sends a warning notification.
+   - **Always returns 200 OK** (never non-2xx) — PayPal retries webhooks that don't return 2xx, which would cause duplicate processing. All errors are logged via webhookLog.
+   - `GET /api/webhooks/paypal` returns the webhook URL + setup note for the admin dashboard (mirrors the aurpay/depay pattern).
+
+### Files deleted
+
+8. **`src/lib/aurpay.ts`** — AURPay gateway client (createAurpayOrder, verifyAurpayWebhook, AurpayCredentials interface). Removed.
+9. **`src/lib/depay.ts`** — DePay gateway client (createDepayPayment, verifyDepayWebhook, DepayCredentials interface). Removed.
+10. **`src/app/api/webhooks/aurpay/route.ts`** (entire `aurpay/` folder) — AURPay webhook handler. Removed.
+11. **`src/app/api/webhooks/depay/route.ts`** (entire `depay/` folder) — DePay webhook handler. Removed.
+12. **`public/aurpay-logo.png`** — AURPay brand logo asset. Removed.
+
+### Verification
+
+- **`bun run lint`**: 0 errors, 3 pre-existing warnings (`scripts/load-test.js` default export, `dashboard-shell.tsx` ARIA combobox x2 — all unrelated to this task).
+- **`bunx tsx prisma/seed.ts`**: ran successfully. Output: `✓ 5 payment methods (removed 5 obsolete)`. Existing admin/user accounts were NOT modified (upsert with `update: { ... }` only touches the payment-method fields on existing rows; user upserts still use `update: {}` so passwords are unchanged).
+- **`GET /api/payment-methods`** (live, post-seed): returns exactly 5 methods in the correct order:
+  1. Stripe (sortOrder 1)
+  2. PayPal (sortOrder 2)
+  3. Mercado Pago (sortOrder 3)
+  4. NowPayments (sortOrder 4)
+  5. Manual (sortOrder 5)
+- **`GET /api/webhooks/paypal`** (live): HTTP 200, returns `{"provider":"paypal","webhookUrl":"http://localhost:3000/api/webhooks/paypal","note":"Configure this URL in your PayPal developer dashboard under Apps & Credentials → Webhooks."}`. Compiled cleanly on first request (588ms) then served from cache (18ms).
+- **`GET /`** (live): HTTP 200 — landing page renders without errors.
+- **`grep -rn "Aurora Pay|AurPay|DePay|Bank transfer" src/`**: 0 matches (all references removed).
+- **`grep` for legacy `pm.name === "Crypto"` and `provider === "crypto"`**: 0 matches (dead code removed).
+- **dev.log**: no compilation errors after the edits.
+
+Stage Summary:
+- **Final 5 payment methods are now canonical**: Stripe (cards), PayPal (wallet), Mercado Pago (LATAM), NowPayments (crypto), Manual (WhatsApp/Zelle/Wire).
+- **Database cleaned**: re-running the seed deletes Aurora Pay, Crypto, Bank transfer, AurPay, DePay and converges existing methods to the correct sort order (1-5).
+- **PayPal webhook is wired end-to-end**: topup creates a PayPal order with `custom_id = txn.publicId` and persists `paypal:<orderId>` in the txn reference; the webhook verifies the signature via PayPal's verify-webhook-signature API, looks up the pending txn by custom_id (with reference fallbacks), credits the wallet atomically, sends a notification, and always returns 200 to stop retries.
+- **Manual method is fully functional**: topup creates a pending transaction with a WhatsApp deep link, returns the reference + instructions, and notifies the user. Frontend's `dashboard-wallet.tsx` `TopupModal` opens WhatsApp via `result.whatsappUrl`.
+- **All obsolete references removed**: no remaining code paths reference Aurora Pay, AurPay, DePay, Bank transfer, or the generic "Crypto" payment method. The legacy aurpay/depay webhook folders, lib files, and brand logo asset are deleted.
+- **Lint: 0 errors.**
+- **Files modified (5):** `prisma/seed.ts`, `src/components/novsmm/dashboard-wallet.tsx`, `src/components/novsmm/payments.tsx`, `src/components/novsmm/faq-section.tsx`, `src/app/api/wallet/topup/route.ts`.
+- **Files created (1):** `src/app/api/webhooks/paypal/route.ts`.
+- **Files deleted (5):** `src/lib/aurpay.ts`, `src/lib/depay.ts`, `src/app/api/webhooks/aurpay/route.ts` (+ folder), `src/app/api/webhooks/depay/route.ts` (+ folder), `public/aurpay-logo.png`.
+- **Issues encountered**: initial seed with `update: {}` left existing methods with stale sortOrders (PayPal and Stripe both ended up at sortOrder 1 because the upsert was a no-op on update). Fixed by populating the `update` payload with all canonical fields so the seed is now idempotent and converges to the intended sort order.

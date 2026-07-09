@@ -116,8 +116,9 @@ const FAQS: FAQ[] = [
             KYC for orders under $1,000.
           </li>
           <li>
-            <strong>Bank transfers:</strong> SEPA, SPEI (Mexico), PIX (Brazil),
-            ACH (US) for top-ups &gt; $500.
+            <strong>Manual settlement:</strong> WhatsApp, Zelle, or wire
+            transfer for high-ticket top-ups &gt; $500 — contact our team for
+            instructions and zero-fee credits.
           </li>
           <li>
             <strong>Reseller credit:</strong> wholesale clients can request

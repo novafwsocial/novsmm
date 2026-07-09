@@ -351,15 +351,6 @@ function TopupModal({ onClose }: { onClose: () => void }) {
         window.location.href = result.checkoutUrl;
         return;
       }
-      // ── Crypto ──
-      if (result?.provider === "crypto" && result?.address) {
-        toast({
-          title: "Send your USDT",
-          description: `Send $${amount.toFixed(2)} USDT to ${result.address} on ${result.network}. Balance credited after ${result.expectedConfirmations} confirmations.`,
-        });
-        onClose();
-        return;
-      }
       // ── Sandbox (no real credentials configured) ──
       if (result?.provider === "sandbox") {
         toast({
@@ -532,10 +523,15 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             <option value="PayPal">PayPal</option>
             <option value="Mercado Pago">Mercado Pago</option>
             <option value="NowPayments">NowPayments (Crypto)</option>
-            <option value="Bank transfer">Bank transfer (legacy)</option>
+            <option value="Stripe">Stripe</option>
+            <option value="Manual">Manual (WhatsApp / Zelle / Wire)</option>
             <option value="Wise">Wise</option>
             {methods.map((m: any) => (
-              m.name !== "PayPal" && m.name !== "Mercado Pago" && m.name !== "NowPayments" && m.name !== "Bank transfer" && (
+              m.name !== "PayPal" &&
+              m.name !== "Mercado Pago" &&
+              m.name !== "NowPayments" &&
+              m.name !== "Stripe" &&
+              m.name !== "Manual" && (
                 <option key={m.id} value={m.name}>{m.name}</option>
               )
             ))}

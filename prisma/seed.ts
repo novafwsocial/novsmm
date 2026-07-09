@@ -100,22 +100,39 @@ async function main() {
   console.log(`  ✓ ${services.length} services`);
 
   // ── Payment methods ──
+  // Final 5 methods (PAYMENT-CLEANUP-1): Stripe, PayPal, Mercado Pago,
+  // NowPayments (crypto), Manual (WhatsApp/Zelle/Wire).
+  // Removed: Aurora Pay, Crypto (generic), Bank transfer, AurPay, DePay.
   const paymentMethods = [
     { name: "Stripe", glyph: "S", tone: "from-violet-500/15 to-violet-500/5 text-violet-700", settleTime: "Instant", fee: "2.9% + $0.30", currencies: "USD, EUR, GBP, +135", sortOrder: 1 },
     { name: "PayPal", glyph: "P", tone: "from-blue-500/15 to-blue-500/5 text-blue-700", settleTime: "Instant", fee: "3.49% + $0.49", currencies: "USD, EUR, GBP, +25", sortOrder: 2 },
     { name: "Mercado Pago", glyph: "M", tone: "from-cyan-500/15 to-cyan-500/5 text-cyan-700", settleTime: "Instant", fee: "3.99%", currencies: "BRL, MXN, ARS, +6", sortOrder: 3 },
-    { name: "Aurora Pay", glyph: "A", tone: "from-emerald-500/15 to-emerald-500/5 text-emerald-700", settleTime: "~5 min", fee: "1.5%", currencies: "USD, EUR, INR", sortOrder: 4 },
-    { name: "Crypto", glyph: "₿", tone: "from-amber-500/15 to-amber-500/5 text-amber-700", settleTime: "~3 min", fee: "0% · no chargebacks", currencies: "BTC, ETH, USDT, USDC", sortOrder: 5 },
-    { name: "Bank transfer", glyph: "W", tone: "from-rose-500/15 to-rose-500/5 text-rose-700", settleTime: "T+1", fee: "$0.50 fixed", currencies: "Local rails · 53", sortOrder: 6 },
+    { name: "NowPayments", glyph: "₿", tone: "from-amber-500/15 to-amber-500/5 text-amber-700", settleTime: "~3 min", fee: "0% · no chargebacks", currencies: "BTC, ETH, USDT, USDC", sortOrder: 4 },
+    { name: "Manual", glyph: "W", tone: "from-rose-500/15 to-rose-500/5 text-rose-700", settleTime: "1-24h", fee: "0% · contact team", currencies: "WhatsApp, Zelle, Wire", sortOrder: 5 },
   ];
   for (const pm of paymentMethods) {
     await db.paymentMethod.upsert({
       where: { name: pm.name },
-      update: {},
+      update: {
+        // Keep sort order + metadata in sync with the canonical list above
+        // so re-running the seed always converges to the intended state.
+        glyph: pm.glyph,
+        tone: pm.tone,
+        settleTime: pm.settleTime,
+        fee: pm.fee,
+        currencies: pm.currencies,
+        sortOrder: pm.sortOrder,
+      },
       create: pm,
     });
   }
-  console.log(`  ✓ ${paymentMethods.length} payment methods`);
+
+  // Cleanup obsolete payment methods (PAYMENT-CLEANUP-1)
+  const obsoleteMethods = ["Aurora Pay", "Crypto", "Bank transfer", "AurPay", "DePay"];
+  for (const name of obsoleteMethods) {
+    await db.paymentMethod.deleteMany({ where: { name } });
+  }
+  console.log(`  ✓ ${paymentMethods.length} payment methods (removed ${obsoleteMethods.length} obsolete)`);
 
   // ── Sample orders for demo user ──
   const existingOrders = await db.order.count({ where: { userId: user.id } });
