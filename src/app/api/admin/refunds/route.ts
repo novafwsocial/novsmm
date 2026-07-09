@@ -40,19 +40,13 @@ export async function POST(req: NextRequest) {
     return apiError("Transaction already failed/refunded", 422);
   }
 
-  // If it's a Stripe payment, create a real refund
-  if (txn.method === "stripe" && txn.reference?.startsWith("pi_")) {
-    const stripeRefund = await createRefund(txn.reference).catch(() => null);
-    if (!stripeRefund) {
-      return apiError("Failed to process Stripe refund. Check STRIPE_SECRET_KEY.", 500);
-    }
-  }
+  // Fix: Process DB refund FIRST, then Stripe refund AFTER DB commit.
+  // This prevents orphaned Stripe refunds if the DB transaction fails.
+  // If Stripe refund fails after DB commit, log for manual reconciliation.
 
-  // Reverse the transaction in DB
   const refundAmount = Math.abs(txn.amount);
 
-  // Compute the refund TX public ID BEFORE the $transaction([...]) call —
-  // nextPublicId() runs its own atomic Prisma transaction internally.
+  // Compute the refund TX public ID BEFORE the $transaction([...]) call
   const refundTxPublicId = await nextPublicId("TX-REFUND", 0);
 
   await db.$transaction([
@@ -67,8 +61,8 @@ export async function POST(req: NextRequest) {
       where: { id: txn.userId },
       data: {
         balance: txn.amount > 0
-          ? { decrement: refundAmount } // was a credit, now deduct
-          : { increment: refundAmount }, // was a debit, now credit back
+          ? { decrement: refundAmount }
+          : { increment: refundAmount },
       },
     }),
     // Create a refund transaction record
@@ -76,7 +70,7 @@ export async function POST(req: NextRequest) {
       data: {
         publicId: refundTxPublicId,
         userId: txn.userId,
-        type: "fee", // using fee type for refunds
+        type: "fee",
         amount: txn.amount > 0 ? -refundAmount : refundAmount,
         description: `Refund for ${txn.publicId}${reason ? ` — ${reason}` : ""}`,
         status: "completed",
@@ -85,6 +79,30 @@ export async function POST(req: NextRequest) {
       },
     }),
   ]);
+
+  // Fix: Process Stripe refund AFTER successful DB commit.
+  // If this fails, the DB is correct (refund recorded) but Stripe still
+  // has the charge. Log for manual reconciliation.
+  if (txn.method === "stripe" && txn.reference?.startsWith("pi_")) {
+    const stripeRefund = await createRefund(txn.reference).catch((err: any) => {
+      console.error("[refunds] Stripe refund FAILED after DB commit — manual reconciliation needed:", {
+        transactionId: txn.id,
+        reference: txn.reference,
+        error: err?.message,
+      });
+      return null;
+    });
+    if (!stripeRefund) {
+      // DB refund succeeded but Stripe refund failed — don't return error
+      // (the user's balance is already correct). Log for admin follow-up.
+      await audit(adminId, "refund_stripe_failed", "transaction", transactionId, {
+        amount: refundAmount,
+        reason,
+        user: txn.user.email,
+        note: "DB refund succeeded but Stripe refund failed — manual reconciliation needed",
+      });
+    }
+  }
 
   // Notify the user
   await createNotification({
