@@ -12,8 +12,8 @@
 # USAGE:
 #   1. Copy .env.example to .env and fill in real values
 #   2. docker compose up -d
-#   3. docker compose exec web bun run prisma migrate deploy
-#   4. docker compose exec web bun run prisma/seed.ts
+#   3. docker compose exec -T web npx prisma migrate deploy
+#   4. docker compose exec web npx tsx prisma/seed.ts
 #
 # SCALING:
 #   - web: docker compose up -d --scale web=3
@@ -99,7 +99,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["bun", "run", "worker:prod"]
+    command: ["npx", "tsx", "src/workers/worker.ts"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?connection_limit=10&pool_timeout=20
@@ -112,9 +112,8 @@ services:
         condition: service_healthy
     volumes:
       - uploads:/app/uploads
-    # Worker has no HTTP server — override the web HEALTHCHECK
     healthcheck:
-      test: ["CMD-SHELL", "bun -e \"process.exit(0)\" || exit 1"]
+      test: ["CMD-SHELL", "node -e \"process.exit(0)\" || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

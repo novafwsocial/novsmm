@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
-    "worker": "bun --hot src/workers/worker.ts",
-    "worker:prod": "bun src/workers/worker.ts",
+    "worker": "npx tsx --watch src/workers/worker.ts",
+    "worker:prod": "npx tsx src/workers/worker.ts",
     "build": "next build",
     "start": "next start -p 3000",
     "lint": "eslint .",
