@@ -12,8 +12,8 @@
 # USAGE:
 #   1. Copy .env.example to .env and fill in real values
 #   2. docker compose up -d
-#   3. docker compose exec web bun run prisma migrate deploy
-#   4. docker compose exec web bun run prisma/seed.ts
+#   3. docker compose exec -T web npx prisma migrate deploy
+#   4. docker compose exec web npx tsx prisma/seed.ts
 #
 # SCALING:
 #   - web: docker compose up -d --scale web=3
@@ -99,7 +99,7 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["node", "src/workers/worker.js"]
+    command: ["npx", "tsx", "src/workers/worker.ts"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?connection_limit=10&pool_timeout=20
