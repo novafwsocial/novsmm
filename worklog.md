@@ -11176,3 +11176,136 @@ Packages installed: None — `next-auth` and `@auth/core` were already in
 package.json. The Facebook, GitHub, and Twitter providers ship with
 `next-auth` out of the box (verified: node_modules/next-auth/providers/
 contains facebook.js, github.js, twitter.js). No new dependencies needed.
+
+---
+Task ID: OWASP-AUDIT-1
+Agent: Explore
+Task: OWASP Top 10 (2021) comprehensive security audit
+
+Work Log:
+
+Read /home/z/my-project/worklog.md (11178 lines) to understand prior
+context: PAYMENT-CLEANUP-1, ADMIN-FIX-BATCH-1/2, BROAD-SYNC-AUDIT-1 +
+BROAD-FIX-BATCH-1 (the 19-issue broad sync audit that consolidated PWA
+manifest, wired all 4 OAuth providers, unified the domain to novsmm.shop,
+fixed ISO language codes, removed dead code, hardened CSP for payment
+providers).
+
+Files examined (security-relevant only — full list in OWASP_AUDIT_REPORT.md):
+- src/lib/api-utils.ts (requireAuth/requireAdmin/audit helpers)
+- src/lib/auth.ts (NextAuth config, JWT, 2FA enforcement, brute-force lockout,
+  impersonation provider, dynamic OAuth providers)
+- src/lib/crypto-utils.ts (AES-256-GCM encrypt/decrypt for credentials)
+- src/lib/api-key-auth.ts (API key validation: bcrypt + SHA-256 lookupHash)
+- src/lib/two-factor.ts (TOTP via otplib, AES-encrypted secrets, bcrypt-hashed
+  backup codes)
+- src/lib/stripe.ts (runtime credential override pattern, fail-closed webhook
+  verification)
+- src/lib/nowpayments.ts (HMAC-SHA256 webhook verification, AES-encrypted creds)
+- src/lib/outbound-webhook.ts (HMAC-signed outbound dispatcher, SSRF guard)
+- src/lib/sanitize.ts (HTML/email/URL/filename sanitizers)
+- src/lib/validations.ts (Zod schemas for all routes)
+- src/middleware.ts (rate limits, CSRF Origin check, security headers, CSP)
+- src/app/error.tsx (global error page)
+- next.config.ts (typescript.ignoreBuildErrors: true, poweredByHeader: false)
+- .env.example (no real secrets — all placeholders)
+- All 4 webhook routes: stripe, paypal, nowpayments, mercadopago
+- All v1 API routes: orders, balance, services, refill, refill_status, cancel,
+  status
+- Admin routes: users, users/adjust-balance, refunds, withdrawals, bulk,
+  impersonate, api-keys, payment-methods, payment-methods/test, social-auth,
+  webhooks, webhooks/outbound, notifications, search, logs
+- User routes: me/* (route, password, delete, 2fa/setup/verify/disable, sessions,
+  ws-token), wallet/* (route, topup, withdraw), orders/* (route, mass, repeat,
+  refill), tickets, child-panels/[id], subscriptions/[id], referrals,
+  coupons/validate, uploads, uploads/[userId]/[filename], export, analytics
+- Public/unauth routes verified legitimate: cms, payment-methods, public/*,
+  status, status/history, version, docs, health/live, health/ready, health/db,
+  internal/backup-status, metrics
+- prisma/schema.prisma (skimmed — race-safe patterns confirmed, stale comments
+  already fixed in BROAD-FIX-BATCH-1)
+- package.json + bun audit (45 vulns: 20 HIGH, 20 MOD, 5 LOW)
+
+Audit commands run:
+- find src/app/api -name route.ts | sort (108 routes total)
+- comm -23 to find routes without any auth usage (27 routes — all verified
+  legitimate: NextAuth handler, public auth flows, public APIs, health checks,
+  webhooks, docs, status)
+- grep for requireAuth|requireAdmin|requireApiKey|getServerSession (80 routes
+  use one of these — 100% of routes that need auth have it)
+- grep for child_process / execSync / spawnSync (0 matches — no command exec)
+- grep for queryRaw / executeRaw (2 matches — both `SELECT 1` in health checks,
+  parameterized via tagged template literal — no injection risk)
+- grep for JSON.parse (22 call sites — most on DB-stored Setting values, all
+  internal sources — flagged sparse-metadata issue, not injection)
+- grep for fetch( / axios / http.get / https.get (many — most go to
+  hardcoded provider URLs; the only user-URL fetch is outbound-webhook.ts —
+  flagged as SSRF)
+- grep for hardcoded secrets sk_live|sk_test|ghp_|AKIA|password= (no real
+  secrets — only doc references and masked audit logs)
+- grep for NEXTAUTH_SECRET|LICENSE_ENCRYPTION_KEY (no hardcoded values;
+  .env.example uses placeholders; .env not in repo)
+- bun audit (45 vulnerabilities, full list in OWASP_AUDIT_REPORT.md A06-1)
+
+Stage Summary:
+
+27 findings total. Full report at /home/z/my-project/OWASP_AUDIT_REPORT.md.
+
+Breakdown: 3 P0 / 9 P1 / 10 P2 / 5 P3. Overall risk: HIGH (block production
+until the 3 P0 issues are fixed).
+
+Top 3 P0 (critical, block launch):
+1. A04-1: Wallet top-up sandbox fallback grants FREE wallet credit for any
+   unconfigured payment method. src/app/api/wallet/topup/route.ts:367-431.
+   The `processPayment()` simulator credits the balance immediately when none
+   of the 5 dispatch branches (Stripe/PayPal/MP/NP/Manual) match. Attacker
+   selects an unconfigured method → real wallet credit, no payment.
+2. A06-1: Next.js 16.1.1 has 17 known CVEs (per `bun audit`) including 6
+   HIGH-severity middleware-bypass CVEs (GHSA-26hh, 492v, 267c, 36qx, etc.)
+   that directly undermine the CSRF/Origin check + rate limits in
+   src/middleware.ts. Fix: `bun update next@^16.2.5`.
+3. (P1, but flagged in the Top-10 list): A10-1 outbound-webhook SSRF allows
+   DNS rebinding to 169.254.169.254 (AWS metadata) — currently only blocked
+   at registration time, not at fetch time, and the blocklist misses cloud
+   metadata IPs.
+
+Top 9 P1 (high):
+- A01-1: /api/metrics is unauthenticated when METRICS_BASIC_AUTH env unset
+- A02-1: OAuth secrets mirrored to process.env (thread-unsafe, plaintext in
+  process memory)
+- A04-2: PATCH /api/admin/users can change balance directly with no
+  Transaction record (silent financial manipulation)
+- A04-3: 2FA flow split across 2 contradictory implementations — backup
+  codes are unusable, users with lost TOTP are permanently locked out
+- A05-1: typescript.ignoreBuildErrors: true ships type-unsafe code
+- A07-1: JWT sessions not invalidated on password change/reset/account
+  deletion — stolen-cookie attacker persists access
+- A10-1: Outbound-webhook SSRF (DNS rebinding + cloud-metadata IP not blocked
+  + redirect-chain not blocked)
+- (P1 in the Top-10 list — see full report)
+
+Notable strong-security areas (verified clean):
+- All admin routes call requireAdmin() (grep -L confirmed 0 missing)
+- All v1 API routes call requireApiKey() (6 routes checked)
+- IDOR protections on all [id] routes (child-panels, subscriptions, uploads,
+  tickets, orders) — single 404 for not-found and not-yours
+- Race-safe balance operations (conditional updateMany WHERE balance >= amount
+  inside $transaction) on orders, withdrawals, mass orders, child panels,
+  admin adjust-balance — PostgreSQL MVCC-safe
+- All 4 payment webhooks fail-closed on missing signature/secret
+- AES-256-GCM at rest for payment credentials, 2FA secrets, child-panel API
+  keys
+- API keys: bcrypt + SHA-256 lookupHash (no plaintext stored)
+- Cookie security: httpOnly + sameSite=lax + secure in prod + __Secure- prefix
+- CSRF Origin check in middleware (Bearer-auth requests exempted safely)
+- No raw SQL injection (only `SELECT 1` health checks, parameterized)
+- No command execution (zero child_process imports)
+- Sanitization utilities applied to user inputs
+- File uploads stored outside public/, served via auth-checked route with
+  ownership verification
+- Audit log captures IP + User-Agent on every call; 30+ routes write audit
+  entries
+
+No code was modified. Full audit report with file:line references, impacts,
+and concrete fixes for all 27 findings is at:
+/home/z/my-project/OWASP_AUDIT_REPORT.md
