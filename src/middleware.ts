@@ -321,6 +321,19 @@ export function middleware(req: NextRequest) {
 
   const res = NextResponse.next();
   addSecurityHeaders(res);
+
+  // CRITICAL: Never cache auth/session endpoints — they must be per-session.
+  // Without this, Cloudflare might cache /api/auth/csrf or /api/auth/session,
+  // breaking login (401 errors) because the CSRF token doesn't match.
+  if (pathname.startsWith("/api/auth/")) {
+    res.headers.set(
+      "Cache-Control",
+      "no-store, no-cache, must-revalidate, proxy-revalidate"
+    );
+    res.headers.set("Pragma", "no-cache");
+    res.headers.set("Expires", "0");
+  }
+
   // Pass IP to downstream API routes via header
   res.headers.set("x-client-ip", ip);
   return res;

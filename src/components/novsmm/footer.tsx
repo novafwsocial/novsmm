@@ -78,7 +78,6 @@ const COLUMNS: FooterColumn[] = [
       { label: "Changelog", externalUrl: "/api/cms?type=blog_post&category=changelog" },
       { label: "Security", anchor: "#security" },
       { label: "Legal", legalPage: "legal" },
-      { label: "Privacy", legalPage: "privacy" },
     ],
   },
 ];

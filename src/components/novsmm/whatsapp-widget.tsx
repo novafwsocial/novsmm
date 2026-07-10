@@ -76,7 +76,7 @@ export function WhatsAppWidget() {
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.95 }}
         onClick={toggleOpen}
-        className="fixed bottom-5 right-5 z-[80] flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-[#25D366]/30 transition-shadow hover:shadow-xl hover:shadow-[#25D366]/40"
+        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-[#25D366]/30 transition-shadow hover:shadow-xl hover:shadow-[#25D366]/40"
         aria-label="Open WhatsApp chat"
       >
         <AnimatePresence mode="wait">
@@ -125,7 +125,7 @@ export function WhatsAppWidget() {
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-24 right-5 z-[80] w-[min(340px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-background nov-ring-lg"
+            className="fixed bottom-24 right-5 z-40 w-[min(340px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-background nov-ring-lg"
           >
             {/* Header */}
             <div className="flex items-center gap-3 bg-[#25D366] p-4 text-white">
