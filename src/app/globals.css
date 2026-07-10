@@ -347,6 +347,9 @@ img, video, canvas, svg {
    ─────────────────────────────────────────────────────────────
    Replaced framer-motion with pure CSS keyframes for the hero.
    GPU-composited (transform + opacity), zero JS overhead.
+
+   On mobile (max-width: 768px), entry animations are DISABLED —
+   content appears instantly for fastest perceived load.
    ───────────────────────────────────────────────────────────── */
 
 @keyframes heroFadeUp {
@@ -384,9 +387,27 @@ img, video, canvas, svg {
   to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
+/* MOBILE: Disable entry animations for instant content display.
+   Only keep navbar/menu animations (they're fast and don't block content). */
+@media (max-width: 768px) {
+  [style*="heroFadeUp"],
+  [style*="heroFadeBlur"],
+  [style*="heroFadeUpBlur"],
+  [style*="chipIn"],
+  [style*="heroFade"] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
 /* Respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .hero-fade-up, .hero-fade-blur, .hero-fade-up-blur {
+  [style*="heroFade"],
+  [style*="navbarIn"],
+  [style*="mobileMenuIn"],
+  [style*="chipIn"] {
     animation: none !important;
     opacity: 1 !important;
     transform: none !important;

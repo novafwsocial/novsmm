@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import dynamic from "next/dynamic";
 import {
   ArrowRight,
   Play,
@@ -13,17 +12,11 @@ import {
 } from "lucide-react";
 import { Magnetic } from "./magnetic";
 import { Counter } from "./counter";
+import { HeroDashboard } from "./hero-dashboard";
 import { useApp } from "./app-store";
 
-// PERF: HeroDashboard loads recharts (~400KB) — lazy-load it so the hero
-// renders instantly with a lightweight placeholder, then the dashboard
-// preview fades in once the chart library is loaded.
-const HeroDashboard = dynamic(() => import("./hero-dashboard").then(m => ({ default: m.HeroDashboard })), {
-  loading: () => (
-    <div className="aspect-[16/10] w-full animate-pulse rounded-[20px] border border-border/40 bg-muted/30" />
-  ),
-  ssr: false, // recharts is client-only, don't SSR it
-});
+// PERF: HeroDashboard now uses lightweight SVG (no recharts) — can load
+// directly without dynamic import. SSR-enabled for instant render.
 
 export function Hero() {
   const { setView } = useApp();

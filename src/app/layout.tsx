@@ -10,12 +10,16 @@ const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500", "600", "700"], // only needed weights (not all 9)
+  preload: true,
 });
 
 const jetbrainsMono = JetBrains_Mono({
   variable: "--font-mono",
   subsets: ["latin"],
   display: "swap",
+  weight: ["400", "500"], // only needed weights
+  preload: false, // mono font is rare, don't preload
 });
 
 export const viewport: Viewport = {
