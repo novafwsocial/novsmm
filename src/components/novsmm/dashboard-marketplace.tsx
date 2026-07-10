@@ -183,6 +183,11 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [page, setPage] = useState(1);
   const [allServices, setAllServices] = useState<any[]>([]);
+  // PERF: Limit cards per platform to avoid rendering 6,382 DOM nodes at once.
+  // "Show more" button under each platform reveals additional 30.
+  const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, number>>({});
+  const INITIAL_CARDS_PER_PLATFORM = 30;
+  const LOAD_MORE_INCREMENT = 30;
   const sentinelRef = useRef<HTMLDivElement>(null);
   const { data: sessionData } = useSession();
   const user = (sessionData?.user as any) ?? {};
@@ -194,6 +199,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
       setDebouncedSearch(search);
       setPage(1);
       setAllServices([]);
+      setExpandedPlatforms({}); // reset card limits
     }, 400);
     return () => clearTimeout(t);
   }, [search]);
@@ -203,6 +209,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     setPlatformFilter(p);
     setPage(1);
     setAllServices([]);
+    setExpandedPlatforms({}); // reset card limits
     processedPagesRef.current.clear();
   };
 
@@ -340,7 +347,11 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
         </div>
       ) : (
         <>
-          {Object.entries(grouped).map(([platform, svcs]) => (
+          {Object.entries(grouped).map(([platform, svcs]) => {
+            const limit = expandedPlatforms[platform] ?? INITIAL_CARDS_PER_PLATFORM;
+            const visible = svcs.slice(0, limit);
+            const hiddenCount = svcs.length - visible.length;
+            return (
             <div key={platform} className="flex flex-col gap-3">
               <div className="flex items-center gap-2">
                 <PlatformLogo platform={platform} size={28} />
@@ -349,7 +360,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                 </h3>
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {svcs.map((s) => (
+                {visible.map((s) => (
                   <ServiceCard
                     key={s.id}
                     service={s}
@@ -358,8 +369,17 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                   />
                 ))}
               </div>
+              {hiddenCount > 0 && (
+                <button
+                  onClick={() => setExpandedPlatforms(p => ({ ...p, [platform]: limit + LOAD_MORE_INCREMENT }))}
+                  className="mx-auto mt-2 rounded-full border border-border px-5 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+                >
+                  Show {Math.min(LOAD_MORE_INCREMENT, hiddenCount)} more in {platform} ({hiddenCount} hidden)
+                </button>
+              )}
             </div>
-          ))}
+            );
+          })}
 
           {/* Infinite scroll sentinel */}
           <div ref={sentinelRef} className="flex h-20 items-center justify-center">
