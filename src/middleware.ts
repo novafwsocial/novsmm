@@ -164,6 +164,17 @@ export function middleware(req: NextRequest) {
   if (!pathname.startsWith("/api/")) {
     const res = NextResponse.next();
     addSecurityHeaders(res);
+
+    // PERF: Cache HTML pages at Cloudflare edge for 60s (s-maxage).
+    // Stale-while-revalidate allows serving cached content while fetching fresh.
+    // Only applies to GET requests for HTML pages (not assets, not API).
+    if (req.method === "GET" && !pathname.startsWith("/_next/")) {
+      res.headers.set(
+        "Cache-Control",
+        "public, s-maxage=60, stale-while-revalidate=300"
+      );
+    }
+
     return res;
   }
 
