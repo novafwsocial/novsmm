@@ -1,11 +1,10 @@
 "use client";
 
-import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
 import { ArrowUpRight } from "lucide-react";
 import { PLATFORMS, type Platform } from "./platforms";
 import { PlatformLogo } from "./platform-logo";
 import { SectionHeading } from "./section-heading";
-import { Reveal, RevealStagger, RevealItem } from "./reveal";
+import { Reveal } from "./reveal";
 
 export function Services() {
   return (
@@ -22,17 +21,14 @@ export function Services() {
           description="From follower growth to watch-time, NOVSMM orchestrates 6,300+ services across the platforms your audience actually lives on — powered by HuntSMM."
         />
 
-        <RevealStagger
-          stagger={0.05}
-          className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"
-        >
-          {PLATFORMS.map((p) => (
-            <RevealItem key={p.name} blur>
+        <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+          {PLATFORMS.map((p, i) => (
+            <Reveal key={p.name} delay={i * 0.05}>
               <ServiceCard platform={p} />
-            </RevealItem>
+            </Reveal>
           ))}
           {/* Aggregate card */}
-          <RevealItem blur>
+          <Reveal delay={PLATFORMS.length * 0.05}>
             <div className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-dashed border-border bg-muted/30 p-5 transition-colors hover:border-primary/40">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -47,36 +43,22 @@ export function Services() {
                 </div>
               </div>
             </div>
-          </RevealItem>
-        </RevealStagger>
+          </Reveal>
+        </div>
       </div>
     </section>
   );
 }
 
 function ServiceCard({ platform }: { platform: Platform }) {
-  // pointer-follow glow
-  const mx = useMotionValue(50);
-  const my = useMotionValue(50);
-  const background = useMotionTemplate`radial-gradient(220px circle at ${mx}% ${my}%, rgba(0, 82, 255, 0.08), transparent 60%)`;
-
-  const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    mx.set(((e.clientX - r.left) / r.width) * 100);
-    my.set(((e.clientY - r.top) / r.height) * 100);
-  };
-
   return (
-    <motion.div
-      onMouseMove={handleMove}
-      whileHover={{ y: -4 }}
-      transition={{ type: "spring", stiffness: 300, damping: 22 }}
-      className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-background p-5 transition-shadow hover:nov-ring-lg"
+    <div
+      className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-background p-5 transition-all duration-300 hover:-translate-y-1 hover:nov-ring-lg"
     >
-      <motion.div
+      {/* Hover glow — CSS-only, no JS tracking */}
+      <div
         aria-hidden
-        style={{ background }}
-        className="pointer-events-none absolute inset-0 opacity-0 transition-opacity duration-300 group-hover:opacity-100"
+        className="pointer-events-none absolute inset-0 bg-gradient-to-br from-primary/[0.04] to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100"
       />
       <div className="relative flex items-start justify-between">
         <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-border/60 bg-muted/50 transition-colors group-hover:border-primary/30">
@@ -94,6 +76,6 @@ function ServiceCard({ platform }: { platform: Platform }) {
           {platform.blurb}
         </p>
       </div>
-    </motion.div>
+    </div>
   );
 }

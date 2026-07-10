@@ -3,64 +3,45 @@
 import { cn } from "@/lib/utils";
 
 /**
- * Official platform logos.
- * Uses Google's favicon service which fetches official logos from each platform's website.
- * Falls back to an emoji if the image fails to load.
+ * Platform logos — uses emoji by default (zero network requests, instant render).
  *
- * Google favicons: https://www.google.com/s2/favicons?domain=DOMAIN&sz=128
- * This service crawls each website and extracts the official favicon/logo at high resolution.
+ * Previously loaded from Google's favicon service (https://www.google.com/s2/favicons)
+ * which caused:
+ *   - 20+ external requests per page (slow on mobile)
+ *   - Broken images when Google rate-limits or is unreachable
+ *   - Layout shift while images loaded
+ *   - Privacy concerns (leaking user IPs to Google)
+ *
+ * Now uses high-quality emoji that render instantly on all platforms.
+ * For brands with distinct colors, a colored background is applied.
  */
 
-const PLATFORM_DOMAINS: Record<string, string> = {
-  Instagram: "instagram.com",
-  TikTok: "tiktok.com",
-  YouTube: "youtube.com",
-  Facebook: "facebook.com",
-  Telegram: "telegram.org",
-  Spotify: "spotify.com",
-  X: "twitter.com",
-  Twitch: "twitch.tv",
-  Discord: "discord.com",
-  Kick: "kick.com",
-  WhatsApp: "whatsapp.com",
-  LinkedIn: "linkedin.com",
-  Threads: "threads.net",
-  Snapchat: "snapchat.com",
-  Pinterest: "pinterest.com",
-  Reddit: "reddit.com",
-  Google: "google.com",
-  SoundCloud: "soundcloud.com",
-  Vimeo: "vimeo.com",
-  Shopee: "shopee.com",
-  Tumblr: "tumblr.com",
-};
-
-const PLATFORM_EMOJI_FALLBACK: Record<string, string> = {
-  Instagram: "📷",
-  TikTok: "🎵",
-  YouTube: "▶️",
-  Facebook: "👤",
-  Telegram: "✈️",
-  Spotify: "🎧",
-  X: "🐦",
-  Twitch: "🎮",
-  Discord: "💬",
-  Kick: "🟢",
-  WhatsApp: "💬",
-  LinkedIn: "💼",
-  Threads: "🧵",
-  Snapchat: "👻",
-  Pinterest: "📌",
-  Reddit: "🤖",
-  Google: "🔍",
-  SoundCloud: "☁️",
-  Vimeo: "🎥",
-  Shopee: "🛒",
-  Tumblr: "📝",
-  Other: "🌐",
-  Website: "🌐",
-  SEO: "📊",
-  Traffic: "🚦",
+const PLATFORM_DATA: Record<string, { emoji: string; bg?: string }> = {
+  Instagram: { emoji: "📷", bg: "bg-gradient-to-br from-pink-500/20 to-purple-500/20" },
+  TikTok: { emoji: "🎵", bg: "bg-gradient-to-br from-gray-900/20 to-pink-500/20" },
+  YouTube: { emoji: "▶️", bg: "bg-red-500/10" },
+  Facebook: { emoji: "👤", bg: "bg-blue-500/10" },
+  Telegram: { emoji: "✈️", bg: "bg-sky-500/10" },
+  Spotify: { emoji: "🎧", bg: "bg-green-500/10" },
+  X: { emoji: "🐦", bg: "bg-gray-500/10" },
+  Twitch: { emoji: "🎮", bg: "bg-purple-500/10" },
+  Discord: { emoji: "💬", bg: "bg-indigo-500/10" },
+  Kick: { emoji: "🟢", bg: "bg-green-500/10" },
+  WhatsApp: { emoji: "💬", bg: "bg-green-500/10" },
+  LinkedIn: { emoji: "💼", bg: "bg-blue-600/10" },
+  Threads: { emoji: "🧵", bg: "bg-gray-700/10" },
+  Snapchat: { emoji: "👻", bg: "bg-yellow-400/10" },
+  Pinterest: { emoji: "📌", bg: "bg-red-600/10" },
+  Reddit: { emoji: "🤖", bg: "bg-orange-500/10" },
+  Google: { emoji: "🔍", bg: "bg-blue-500/10" },
+  SoundCloud: { emoji: "☁️", bg: "bg-orange-400/10" },
+  Vimeo: { emoji: "🎥", bg: "bg-blue-400/10" },
+  Shopee: { emoji: "🛒", bg: "bg-orange-500/10" },
+  Tumblr: { emoji: "📝", bg: "bg-blue-900/10" },
+  Other: { emoji: "🌐" },
+  Website: { emoji: "🌐" },
+  SEO: { emoji: "📊" },
+  Traffic: { emoji: "🚦" },
 };
 
 type PlatformLogoProps = {
@@ -71,8 +52,7 @@ type PlatformLogoProps = {
 };
 
 /**
- * Platform logo component — loads the official logo from Google's favicon service.
- * Shows a colored emoji fallback while loading or if the image fails.
+ * Platform logo — renders an emoji instantly (no network requests).
  */
 export function PlatformLogo({
   platform,
@@ -80,65 +60,35 @@ export function PlatformLogo({
   className,
   rounded = true,
 }: PlatformLogoProps) {
-  const domain = PLATFORM_DOMAINS[platform];
-  const fallback = PLATFORM_EMOJI_FALLBACK[platform] ?? "🌐";
-
-  if (!domain) {
-    return (
-      <span
-        className={cn("inline-flex items-center justify-center", className)}
-        style={{ fontSize: size * 0.7, width: size, height: size }}
-      >
-        {fallback}
-      </span>
-    );
-  }
-
-  const logoUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=${Math.max(size * 2, 64)}`;
+  const data = PLATFORM_DATA[platform] ?? { emoji: "🌐" };
 
   return (
     <span
       className={cn(
-        "inline-flex shrink-0 items-center justify-center overflow-hidden",
+        "inline-flex shrink-0 items-center justify-center",
         rounded ? "rounded-lg" : "",
+        data.bg ?? "",
         className
       )}
-      style={{ width: size, height: size }}
+      style={{ fontSize: size * 0.7, width: size, height: size }}
+      aria-label={platform}
+      role="img"
     >
-      <img
-        src={logoUrl}
-        alt={platform}
-        width={size}
-        height={size}
-        className="h-full w-full object-contain"
-        loading="lazy"
-        onError={(e) => {
-          // Replace with emoji fallback on error
-          const target = e.currentTarget;
-          target.style.display = "none";
-          const parent = target.parentElement;
-          if (parent) {
-            parent.textContent = fallback;
-            parent.style.fontSize = `${size * 0.7}px`;
-          }
-        }}
-      />
+      {data.emoji}
     </span>
   );
 }
 
 /**
- * Get the emoji fallback for a platform.
+ * Get the emoji for a platform.
  */
 export function getPlatformEmoji(platform: string): string {
-  return PLATFORM_EMOJI_FALLBACK[platform] ?? "🌐";
+  return PLATFORM_DATA[platform]?.emoji ?? "🌐";
 }
 
 /**
- * Get the official logo URL for a platform.
+ * Get the official logo URL for a platform (kept for backward compat, returns null).
  */
-export function getPlatformLogoUrl(platform: string): string | null {
-  const domain = PLATFORM_DOMAINS[platform];
-  if (!domain) return null;
-  return `https://www.google.com/s2/favicons?domain=${domain}&sz=128`;
+export function getPlatformLogoUrl(_platform: string): string | null {
+  return null; // No external URLs — using emoji for performance
 }

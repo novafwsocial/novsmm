@@ -1,22 +1,17 @@
 "use client";
 
 import { cn } from "@/lib/utils";
-import Image from "next/image";
 
 /**
- * Official payment method logos.
+ * Payment method logos — uses branded gradient pills with glyphs.
  *
- * Uses the real brand logos downloaded from each provider's official website
- * (served from /public/payment-logos/). Each logo is a high-resolution PNG
- * or SVG that faithfully reproduces the provider's brand mark.
+ * Previously loaded SVG files from /payment-logos/ which caused:
+ *   - Broken images when files weren't served correctly
+ *   - Layout shift while loading
+ *   - Additional HTTP requests
  *
- * Logos are loaded via Next.js <Image> for:
- *  - Automatic optimization (WebP/AVIF when supported)
- *  - Lazy loading
- *  - Prevent layout shift (width/height set)
- *  - CDN caching
- *
- * Falls back to a gradient pill with a glyph if a logo file is missing.
+ * Now uses styled gradient pills with brand-colored backgrounds and
+ * the provider's initial(s). Renders instantly, zero network requests.
  */
 
 type PaymentLogoProps = {
@@ -25,69 +20,35 @@ type PaymentLogoProps = {
   className?: string;
 };
 
-// Map payment method names to their logo file in /public/payment-logos/
-const LOGO_FILES: Record<string, string> = {
-  PayPal: "/payment-logos/paypal.svg",
-  "Mercado Pago": "/payment-logos/mercadopago.svg",
-  NowPayments: "/payment-logos/nowpayments.svg",
-  Manual: "/payment-logos/whatsapp.svg",
-};
-
-// Fallback glyphs (first letter) for methods without a logo file
-const PAYMENT_GLYPHS: Record<string, string> = {
-  PayPal: "P",
-  "Mercado Pago": "MP",
-  NowPayments: "N",
-  Manual: "M",
-};
-
-// Background colors for the logo container (matches each brand's identity)
-const LOGO_BG: Record<string, string> = {
-  PayPal: "bg-white",
-  "Mercado Pago": "bg-white",
-  NowPayments: "bg-white",
-  Manual: "bg-white",
+// Brand colors and glyphs for each payment method
+const PAYMENT_BRAND: Record<string, { glyph: string; bg: string; text: string }> = {
+  PayPal: { glyph: "P", bg: "bg-blue-500", text: "text-white" },
+  "Mercado Pago": { glyph: "MP", bg: "bg-cyan-500", text: "text-white" },
+  NowPayments: { glyph: "₿", bg: "bg-amber-500", text: "text-white" },
+  Manual: { glyph: "W", bg: "bg-green-500", text: "text-white" },
+  Stripe: { glyph: "S", bg: "bg-violet-600", text: "text-white" },
 };
 
 /**
- * Payment method logo — renders the official brand logo from /public/payment-logos/.
- * Falls back to a gradient pill with a glyph if the logo file is missing.
+ * Payment method logo — renders a branded gradient pill instantly.
  */
 export function PaymentLogo({ name, size = 32, className }: PaymentLogoProps) {
-  const logoFile = LOGO_FILES[name];
-  const glyph = PAYMENT_GLYPHS[name] ?? name.charAt(0).toUpperCase();
-  const bg = LOGO_BG[name] ?? "bg-muted/50";
+  const brand = PAYMENT_BRAND[name];
+  const glyph = brand?.glyph ?? name.charAt(0).toUpperCase();
+  const bg = brand?.bg ?? "bg-gradient-to-br from-primary to-primary/70";
+  const text = brand?.text ?? "text-primary-foreground";
 
-  if (logoFile) {
-    return (
-      <span
-        className={cn(
-          "inline-flex shrink-0 items-center justify-center overflow-hidden rounded-lg",
-          bg,
-          className
-        )}
-        style={{ width: size, height: size }}
-      >
-        <Image
-          src={logoFile}
-          alt={name}
-          width={size}
-          height={size}
-          className="h-full w-full object-contain p-1"
-          unoptimized
-        />
-      </span>
-    );
-  }
-
-  // Fallback: gradient pill with first letter
   return (
     <span
       className={cn(
-        "inline-flex items-center justify-center rounded-lg bg-gradient-to-br from-primary/15 to-primary/5 font-semibold text-primary",
+        "inline-flex shrink-0 items-center justify-center rounded-lg font-bold",
+        bg,
+        text,
         className
       )}
       style={{ width: size, height: size, fontSize: size * 0.4 }}
+      aria-label={name}
+      role="img"
     >
       {glyph}
     </span>
@@ -98,5 +59,5 @@ export function PaymentLogo({ name, size = 32, className }: PaymentLogoProps) {
  * Get the glyph fallback for a payment method.
  */
 export function getPaymentGlyph(name: string): string {
-  return PAYMENT_GLYPHS[name] ?? name.charAt(0).toUpperCase();
+  return PAYMENT_BRAND[name]?.glyph ?? name.charAt(0).toUpperCase();
 }
