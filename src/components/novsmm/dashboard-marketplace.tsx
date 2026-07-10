@@ -241,13 +241,20 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     if (!sentinel) return;
     // F-09 fix: fallback to scroll listener if IntersectionObserver not available
     if (!("IntersectionObserver" in window)) {
+      let ticking = false;
       const handleScroll = () => {
-        const rect = sentinel.getBoundingClientRect();
-        if (rect.top < window.innerHeight + 200 && data?.pagination?.hasMore && !isFetching) {
-          setPage((p) => p + 1);
-        }
+        if (ticking) return;
+        ticking = true;
+        requestAnimationFrame(() => {
+          const rect = sentinel.getBoundingClientRect();
+          if (rect.top < window.innerHeight + 200 && data?.pagination?.hasMore && !isFetching) {
+            setPage((p) => p + 1);
+          }
+          ticking = false;
+        });
       };
-      (window as Window & typeof globalThis).addEventListener("scroll", handleScroll);
+      // PERFORMANCE: passive listener — doesn't block scroll
+      (window as Window & typeof globalThis).addEventListener("scroll", handleScroll, { passive: true });
       return () => (window as Window & typeof globalThis).removeEventListener("scroll", handleScroll);
     }
     const observer = new IntersectionObserver(
