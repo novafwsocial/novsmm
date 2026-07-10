@@ -1,6 +1,15 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { apiError, apiOk } from "@/lib/api-utils";
+import crypto from "crypto";
+
+/**
+ * Hash a verification token with SHA-256 for lookup.
+ * SECURITY (OWASP A02-3, P2): never look up by plaintext token.
+ */
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
 
 /**
  * POST /api/auth/verify-email
@@ -16,8 +25,10 @@ export async function POST(req: NextRequest) {
       return apiError("Token is required", 422);
     }
 
+    // SECURITY (OWASP A02-3, P2): look up by HASH of token, not plaintext.
+    const tokenHash = hashToken(token);
     const verificationToken = await db.verificationToken.findUnique({
-      where: { token },
+      where: { token: tokenHash },
     });
 
     if (!verificationToken) {
@@ -25,7 +36,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (verificationToken.expires < new Date()) {
-      await db.verificationToken.delete({ where: { token } });
+      await db.verificationToken.delete({ where: { token: tokenHash } });
       return apiError("Token has expired. Please request a new verification link.", 400);
     }
 
@@ -44,8 +55,8 @@ export async function POST(req: NextRequest) {
       data: { emailVerified: new Date() },
     });
 
-    // Delete the used token
-    await db.verificationToken.delete({ where: { token } });
+    // Delete the used token (by hash, not plaintext)
+    await db.verificationToken.delete({ where: { token: tokenHash } });
 
     return apiOk({ message: "Email verified successfully!" });
   } catch (e: any) {

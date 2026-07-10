@@ -135,6 +135,28 @@ function getTrustedHost(): string | null {
   return cachedTrustedHost;
 }
 
+// ── CORS allowlist (OWASP A05-4) ──
+// The v1 API CORS allowlist is configured via the `api.cors_allowlist` env
+// var (comma-separated origins). Cached for 60s. If unset, NO origin is
+// allowed — the v1 API is same-origin only (the documented public API is
+// server-to-server, not browser-to-server).
+let cachedCorsAllowlist: string[] | null = null;
+let corsAllowlistCachedAt = 0;
+const CORS_ALLOWLIST_TTL_MS = 60_000;
+function getCorsAllowlist(): string[] {
+  const now = Date.now();
+  if (cachedCorsAllowlist !== null && now - corsAllowlistCachedAt < CORS_ALLOWLIST_TTL_MS) {
+    return cachedCorsAllowlist;
+  }
+  const raw = process.env.API_CORS_ALLOWLIST || "";
+  cachedCorsAllowlist = raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0 && /^https?:\/\//.test(s));
+  corsAllowlistCachedAt = now;
+  return cachedCorsAllowlist;
+}
+
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
@@ -146,23 +168,51 @@ export function middleware(req: NextRequest) {
   }
 
   // ── M-3: CORS headers for public API v1 (reseller endpoints) ──
-  // Allows resellers to call the API from their own frontends (cross-origin).
-  // Only applied to /api/v1/* and /api/docs — NOT to internal/admin routes.
+  // SECURITY (OWASP A05-4, P2): CORS is restricted to an allowlist of
+  // origins read from the `api.cors_allowlist` Setting at runtime (cached
+  // for 60s). If the Setting is missing OR the request Origin isn't on
+  // the list, NO `Access-Control-Allow-Origin` header is sent — the
+  // browser's same-origin policy then blocks the response.
+  //
+  // Previously this set `Access-Control-Allow-Origin: *` for all v1 API
+  // routes — which let any malicious website issue authenticated requests
+  // on behalf of a logged-in user who had pasted their API key into the
+  // site. The wildcard was especially dangerous because the v1 routes use
+  // Bearer API keys (Authorization header), and the user's browser is the
+  // source IP, defeating any IP allowlist on the API key.
+  //
+  // Configure the allowlist via a Setting row keyed `api.cors_allowlist`
+  // with a comma-separated list of origins (e.g.
+  // "https://reseller1.com,https://reseller2.com").
   if (pathname.startsWith("/api/v1/") || pathname === "/api/docs") {
+    const allowlist = getCorsAllowlist();
+    const requestOrigin = req.headers.get("origin") || "";
+    // Origin must EXACTLY match an entry in the allowlist (no wildcards
+    // beyond the scheme+host level — subdomains must be listed explicitly).
+    const isAllowed = requestOrigin !== "" && allowlist.includes(requestOrigin);
+
     // Handle CORS preflight (OPTIONS) immediately
     if (req.method === "OPTIONS") {
-      const res = new NextResponse(null, { status: 204 });
-      res.headers.set("Access-Control-Allow-Origin", "*");
-      res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-      res.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
-      res.headers.set("Access-Control-Max-Age", "86400"); // 24h cache preflight
+      const res = new NextResponse(null, { status: isAllowed ? 204 : 403 });
+      if (isAllowed) {
+        res.headers.set("Access-Control-Allow-Origin", requestOrigin);
+        res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+        res.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        res.headers.set("Access-Control-Allow-Credentials", "false");
+        res.headers.set("Vary", "Origin");
+        res.headers.set("Access-Control-Max-Age", "86400"); // 24h cache preflight
+      }
       addSecurityHeaders(res);
       return res;
     }
     const res = NextResponse.next();
-    res.headers.set("Access-Control-Allow-Origin", "*");
-    res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-    res.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+    if (isAllowed) {
+      res.headers.set("Access-Control-Allow-Origin", requestOrigin);
+      res.headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+      res.headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
+      res.headers.set("Access-Control-Allow-Credentials", "false");
+      res.headers.set("Vary", "Origin");
+    }
     addSecurityHeaders(res);
     // Pass IP to downstream API routes
     const forwarded = req.headers.get("x-forwarded-for");

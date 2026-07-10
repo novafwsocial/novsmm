@@ -1,9 +1,9 @@
-// NOVSMM — schema (PostgreSQL production)
+// NOVSMM — schema (portable, dev = SQLite, prod = PostgreSQL)
 // This schema uses portable Prisma types (String, Float, Json) that work
-// across SQLite and PostgreSQL. The provider is set to "postgresql" for
-// production deployments. For development with SQLite, change provider to
-// "sqlite" and use a file-based DATABASE_URL.
-// Json type: PostgreSQL stores as JSONB.
+// across SQLite and PostgreSQL. The provider is set to "sqlite" for the
+// sandbox/dev environment. Production deployments should override with
+// the `postgresql` provider via the schema.postgres.prisma file.
+// Json type: PostgreSQL stores as JSONB; SQLite stores as TEXT.
 // For a more strict PostgreSQL schema with native enums + Decimal + VarChar,
 // see prisma/schema.postgres.prisma
 
@@ -12,7 +12,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -33,6 +33,14 @@ model User {
   balance       Float     @default(0)
   heldBalance   Float     @default(0)
   lifetimeEarnings Float  @default(0)
+  // SECURITY (OWASP A07-1 + A04-5, P1/P2): timestamp of the last password
+  // change, password reset, OR account deletion-trigger. The NextAuth `jwt`
+  // callback compares `token.iat` (issued-at, in seconds) against this
+  // timestamp — if the token was issued before this timestamp, the session
+  // is treated as stale and the user must re-authenticate. This closes the
+  // "stolen-session-cookie persists after password rotation" hole.
+  // Also bumped on 2FA enable/disable and account self-deletion.
+  passwordChangedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
@@ -85,6 +93,14 @@ model Session {
 
 model VerificationToken {
   identifier String
+  // SECURITY (OWASP A02-3, P2): the `token` column stores a SHA-256 HASH of
+  // the actual reset-token, never the plaintext. The user-supplied token
+  // (from the email link) is hashed on lookup so anyone with read access
+  // to the DB (DBA, backup snapshot, replica, SQL injection) can't recover
+  // valid reset tokens and take over accounts. Same pattern as ApiKey.
+  //
+  // The `@@unique([identifier, token])` constraint still holds — the hash
+  // is still unique per (identifier, token) pair.
   token      String   @unique
   expires    DateTime
 

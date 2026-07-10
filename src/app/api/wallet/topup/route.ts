@@ -13,22 +13,22 @@ import { nextPublicId } from "@/lib/ids";
  *
  * Dispatch logic per payment method:
  *
- *  • Stripe          → if creds.secretKey set  → real PaymentIntent (returns clientSecret)
- *                      else                    → sandbox (credit immediately)
+ *  • Stripe          → if creds.secretKey set  → real Checkout Session (returns checkoutUrl)
  *  • PayPal          → if creds.clientId + clientSecret → create PayPal order,
  *                                                          return { provider, checkoutUrl }
- *                      else                    → sandbox
  *  • Mercado Pago    → if creds.accessToken    → create MP preference,
  *                                                 return { provider, checkoutUrl }
- *                      else                    → sandbox
  *  • NowPayments     → if creds.apiKey            → create NowPayments invoice,
  *                                                          return { provider, checkoutUrl }
- *                      else                    → sandbox
  *  • Manual          → always pending — user contacts support via WhatsApp,
  *                                                 admin credits manually after payment
- *  • Unconfigured methods → sandbox (simulated)
  *
- * For external checkout providers (PayPal / Mercado Pago / NowPayments),
+ * SECURITY (OWASP A04-1): There is NO sandbox fallback. Any payment method
+ * that doesn't match one of the 5 branches above (or whose credentials are
+ * missing/undecryptable) is rejected with HTTP 422. The wallet is NEVER
+ * credited without a real payment confirmation (webhook or admin approval).
+ *
+ * For external checkout providers (Stripe / PayPal / Mercado Pago / NowPayments),
  * the wallet is NOT credited here — the provider's webhook handles that when
  * payment confirms. For Manual, an admin manually credits the balance after
  * confirming payment via WhatsApp/Zelle/Wire.
@@ -364,63 +364,36 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // ── 6. Unconfigured methods (sandbox fallback) ──
-    // Simulated gateway — credits balance immediately. Used when a real
-    // payment method is selected but no credentials are configured (e.g.
-    // Stripe without a secretKey, PayPal without clientId/clientSecret).
-    const paymentResult = await processPayment(pm, amount, txn.reference ?? "");
+    // ── 6. Unconfigured / unknown payment method ──
+    // SECURITY FIX (OWASP A04-1, P0): Previously this fell back to a sandbox
+    // simulator that credited the user's balance with NO real payment — a
+    // free-money tap. Any payment method that didn't match one of the 5
+    // explicit branches above, OR a known method whose credentials were
+    // missing/failed to decrypt, would land here and grant free credit.
+    //
+    // Now we fail-closed: mark the transaction failed and return an error
+    // instructing the user to contact support. There is NO path that credits
+    // the wallet without going through a real payment provider webhook (or
+    // admin manual approval for the Manual method).
+    await db.transaction.update({
+      where: { id: txn.id },
+      data: {
+        status: "failed",
+        description: `Top-up failed — payment method "${pm.name}" not properly configured.`,
+      },
+    });
 
-    if (!paymentResult.success) {
-      await db.transaction.update({
-        where: { id: txn.id },
-        data: { status: "failed" },
-      });
-      await createNotification({
-        userId,
-        type: "recharge",
-        title: "Payment failed",
-        message: `Your top-up of $${amount.toFixed(2)} via ${pm.name} could not be processed.`,
-        severity: "warning",
-        sendEmail: true,
-      });
-      return apiError("Payment failed. Please try a different method.", 402);
-    }
-
-    // ── Sandbox success: credit balance atomically ──
-    await db.$transaction([
-      db.transaction.update({
-        where: { id: txn.id },
-        data: {
-          status: "completed",
-          reference: paymentResult.reference,
-        },
-      }),
-      db.user.update({
-        where: { id: userId },
-        data: {
-          balance: { increment: amount },
-          lifetimeEarnings: { increment: amount },
-        },
-      }),
-    ]);
-
-    await createNotification({
-      userId,
-      type: "recharge",
-      title: "Wallet topped up 💰",
-      message: `$${amount.toFixed(2)} credited via ${pm.name}. New balance available immediately.`,
+    await audit(userId, "create", "transaction", txn.id, {
+      type: "topup_failed",
       amount,
-      severity: "success",
-      sendEmail: true,
+      method: pm.name,
+      reason: "no_matching_payment_branch",
     });
 
-    await audit(userId, "create", "transaction", txn.id, { type: "topup", amount, method: pm.name, sandbox: true });
-
-    return apiOk({
-      transaction: await db.transaction.findUnique({ where: { id: txn.id } }),
-      provider: "sandbox",
-      message: "Top-up successful",
-    });
+    return apiError(
+      `Payment method "${pm.name}" is not properly configured. Please contact support or choose another payment method.`,
+      422
+    );
   } catch (e: any) {
     console.error("[wallet/topup] error:", e);
     return apiError("Top-up failed", 500);
@@ -429,28 +402,6 @@ export async function POST(req: NextRequest) {
     // to prevent credential leakage between requests
     clearStripeCredentials();
   }
-}
-
-/**
- * Sandbox payment processor — simulates a gateway with 1.5s delay + 99.5%
- * success rate. Used when no real credentials are configured.
- */
-async function processPayment(
-  pm: { name: string; config: unknown },
-  amount: number,
-  reference: string
-): Promise<{ success: boolean; reference: string }> {
-  await new Promise((r) => setTimeout(r, 1500));
-
-  // 0.5% random failure for realism
-  if (Math.random() < 0.005) {
-    return { success: false, reference };
-  }
-
-  return {
-    success: true,
-    reference: `${reference}_confirmed`,
-  };
 }
 
 // ────────────────────────────────────────────────────────────────────────────

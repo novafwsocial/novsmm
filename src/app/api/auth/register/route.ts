@@ -72,12 +72,18 @@ export async function POST(req: NextRequest) {
     });
 
     // Generate email verification token
+    // SECURITY (OWASP A02-3, P2): store the SHA-256 HASH of the token in
+    // the DB, not the plaintext. The plaintext is only sent via email.
     const crypto = await import("crypto");
     const verifyToken = crypto.randomBytes(32).toString("hex");
+    const verifyTokenHash = crypto
+      .createHash("sha256")
+      .update(verifyToken, "utf8")
+      .digest("hex");
     await db.verificationToken.create({
       data: {
         identifier: email.toLowerCase(),
-        token: verifyToken,
+        token: verifyTokenHash,
         expires: new Date(Date.now() + 24 * 60 * 60 * 1000), // 24h
       },
     });

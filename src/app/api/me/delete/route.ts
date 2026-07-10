@@ -81,6 +81,11 @@ export async function POST(req: NextRequest) {
     const anonymizedUsername = `deleted_${timestamp}`;
     const randomPasswordHash = await bcrypt.hash(crypto.randomBytes(32).toString("hex"), 12);
 
+    // SECURITY (OWASP A04-5 + A07-1, P2): bump `passwordChangedAt` to "now"
+    // when anonymizing. The NextAuth `jwt` callback in auth.ts kills any
+    // session token whose `iat` predates this timestamp — so the deleted
+    // user's existing JWT cookie (still in their browser) immediately
+    // stops working, instead of remaining valid until its 30-day TTL.
     await db.user.update({
       where: { id: userId },
       data: {
@@ -95,6 +100,7 @@ export async function POST(req: NextRequest) {
         country: "",
         currency: "",
         language: "",
+        passwordChangedAt: new Date(),
       },
     });
 
@@ -114,11 +120,12 @@ export async function POST(req: NextRequest) {
       originalEmail: userRecord.email,
       originalUsername: userRecord.username,
       anonymizedEmail,
+      sessionRevoked: true,
     });
 
     return apiOk({
       success: true,
-      message: "Account deleted. Your personal data has been anonymized. Financial records retained for audit.",
+      message: "Account deleted. Your personal data has been anonymized. Financial records retained for audit. All sessions have been revoked.",
     });
   } catch (e: any) {
     console.error("[me/delete] error:", e);

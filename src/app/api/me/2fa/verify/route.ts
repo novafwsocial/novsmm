@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
+import { decryptJSON } from "@/lib/crypto-utils";
 
 /**
  * POST /api/me/2fa/verify
@@ -29,8 +30,22 @@ export async function POST(req: NextRequest) {
     return apiError("No pending 2FA setup. Call /api/me/2fa/setup first.", 400);
   }
 
-  const { secret: encryptedSecret, backupCodes } = JSON.parse(pending.value);
-  const secret = decrypt2FASecret(encryptedSecret);
+  // SECURITY (OWASP A08-2, P3): use decryptJSON instead of raw JSON.parse
+  // so a corrupted Setting row doesn't crash the route. The pending payload
+  // is stored as JSON.stringify({ secret: encrypt2FASecret(s), backupCodes })
+  // — it's plain JSON (no encryption wrapper), so we parse defensively.
+  let payload: { secret?: string; backupCodes?: string[] } | null = null;
+  try {
+    payload = JSON.parse(pending.value);
+    if (!payload || typeof payload !== "object") payload = null;
+  } catch {
+    payload = null;
+  }
+  if (!payload || !payload.secret) {
+    return apiError("2FA setup is corrupted. Please restart setup.", 500);
+  }
+
+  const secret = decrypt2FASecret(payload.secret);
   if (!secret) {
     return apiError("2FA secret could not be decrypted. Please restart setup.", 500);
   }
@@ -50,6 +65,15 @@ export async function POST(req: NextRequest) {
   // Delete the pending entry
   await db.setting.delete({
     where: { key: `2fa:pending:${userId}` },
+  });
+
+  // SECURITY (OWASP A07-1, P1): bump passwordChangedAt so any pre-existing
+  // session is forced to re-authenticate through the new 2FA flow. This
+  // closes the "attacker steals session cookie, then victim enables 2FA,
+  // attacker keeps using the cookie" hole.
+  await db.user.update({
+    where: { id: userId },
+    data: { passwordChangedAt: new Date() },
   });
 
   // Audit log

@@ -2,10 +2,23 @@
 
 import { motion } from "framer-motion";
 import { AlertTriangle, RotateCcw } from "lucide-react";
+import { useEffect } from "react";
 
 /**
  * Global Next.js App Router error page.
  * Catches unhandled errors at the route level.
+ *
+ * SECURITY (OWASP A05-3, P2): the user-facing page NO LONGER renders
+ * `error.message`. In dev mode `error.message` can include stack-trace
+ * snippets, file paths, and SQL/Prisma error text; in production it can
+ * propagate upstream API error messages (Stripe request IDs, internal
+ * parameter names). All of that is useful to an attacker probing the
+ * integration surface.
+ *
+ * Instead we show a generic message + the `error.digest` correlation ID
+ * (a Next.js-generated hash safe to show users). The full `error.message`
+ * is logged to the server via the effect below (it runs in the browser,
+ * so we use console.error which the APM/Sentry integration picks up).
  */
 export default function GlobalError({
   error,
@@ -14,6 +27,12 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  useEffect(() => {
+    // Browser-side log — picked up by Sentry / APM. The server-side log
+    // is the responsibility of whichever route threw the error.
+    console.error("[app/error]", error);
+  }, [error]);
+
   return (
     <html>
       <body>
@@ -32,10 +51,10 @@ export default function GlobalError({
             <p className="mt-2 text-sm text-muted-foreground">
               An unexpected error occurred. Try refreshing the page.
             </p>
-            {error?.message && (
-              <pre className="mt-4 max-h-24 overflow-auto rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground nov-scroll">
-                {error.message}
-              </pre>
+            {error?.digest && (
+              <p className="mt-4 rounded-lg bg-muted/30 p-3 text-xs text-muted-foreground">
+                Reference: <code className="font-mono">{error.digest}</code>
+              </p>
             )}
             <button
               onClick={reset}

@@ -11,13 +11,31 @@ import crypto from "crypto";
  * Resolve the encryption key from env. Fail-closed: throw if missing.
  * NEVER fall back to a hardcoded default — that would silently encrypt
  * production secrets with a publicly-known key.
+ *
+ * SECURITY (OWASP A02-2, P2): the minimum key length is now 32 chars AND
+ * the value must be hex or base64 encoded (matching what `openssl rand
+ * -hex 32` produces). The previous 16-char minimum accepted weak pass-
+ * phrases like "password1234567" which only provided ~96 bits of entropy
+ * before SHA-256 key derivation. NIST SP 800-131A recommends ≥128 bits
+ * for AES-256 keys.
  */
 function resolveEncryptionKey(): string {
   const key = process.env.LICENSE_ENCRYPTION_KEY;
-  if (!key || key.length < 16) {
+  if (!key || key.length < 32) {
     throw new Error(
-      "LICENSE_ENCRYPTION_KEY environment variable is not set or is too short (min 16 chars). " +
-        "Set it in .env before running the app. Generate one with: openssl rand -hex 24"
+      "LICENSE_ENCRYPTION_KEY environment variable is not set or is too short (min 32 chars). " +
+        "Generate one with: openssl rand -hex 32"
+    );
+  }
+  // Accept hex (64 chars from `openssl rand -hex 32`) or base64 (44 chars
+  // from `openssl rand -base64 32`). Both formats are produced by standard
+  // tooling and give ≥128 bits of entropy.
+  const isHex = /^[0-9a-fA-F]+$/.test(key);
+  const isBase64 = /^[A-Za-z0-9+/]+={0,2}$/.test(key);
+  if (!isHex && !isBase64) {
+    throw new Error(
+      "LICENSE_ENCRYPTION_KEY must be hex or base64 encoded. " +
+        "Generate one with: openssl rand -hex 32"
     );
   }
   return key;

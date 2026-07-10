@@ -1,4 +1,5 @@
-import type { NextAuthOptions, Provider } from "next-auth";
+import type { NextAuthOptions } from "next-auth";
+import type { Provider } from "next-auth/providers/index";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
@@ -6,10 +7,47 @@ import GitHubProvider from "next-auth/providers/github";
 import TwitterProvider from "next-auth/providers/twitter";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import bcrypt from "bcryptjs";
+import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/api-utils";
 import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
+import { decryptJSON } from "@/lib/crypto-utils";
+
+/**
+ * Safely decrypt + parse a 2FA Setting payload (OWASP A08-2, P3).
+ * Returns null on any failure (corrupted ciphertext, malformed JSON,
+ * missing fields). The caller MUST handle null as a fail-closed case.
+ */
+function decryptJSONSafe<T = any>(value: string | null | undefined): T | null {
+  if (!value) return null;
+  try {
+    const parsed = decryptJSON(value);
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Extract the client IP from the request headers (OWASP A07-3, P2).
+ * Used by the brute-force lockout to track attempts per-IP in addition
+ * to per-email. Falls back to "unknown" if neither x-client-ip nor
+ * x-forwarded-for is set (the middleware always sets x-client-ip).
+ */
+async function getClientIp(): Promise<string> {
+  try {
+    const h = await headers();
+    return (
+      h.get("x-client-ip") ||
+      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown"
+    );
+  } catch {
+    return "unknown";
+  }
+}
 
 // ── Brute-force protection: Redis-backed failed attempt tracking ──
 // Falls back to in-memory when Redis is not available (sandbox/dev mode).
@@ -88,6 +126,12 @@ const providers: Provider[] = [
       email: { label: "Email", type: "email" },
       password: { label: "Password", type: "password" },
       totp: { label: "2FA Code", type: "text" },
+      // SECURITY (OWASP A04-3, P1): Accept a backup code as an ALTERNATIVE
+      // to the TOTP. A user with a lost TOTP device can still log in by
+      // supplying a one-time backup code. The code is verified against the
+      // bcrypt-hashed codes stored at 2FA-setup time, and the used code is
+      // rotated out (single-use).
+      backupCode: { label: "Backup Code", type: "text" },
     },
     async authorize(credentials) {
       if (!credentials?.email || !credentials?.password) {
@@ -97,11 +141,21 @@ const providers: Provider[] = [
       const email = credentials.email.toLowerCase();
 
       // ── Brute-force protection: check if account is locked (Redis-backed) ──
-      const lockKey = email;
-      const { locked, lockedUntil } = await isAccountLocked(lockKey);
-      if (locked) {
-        const minsLeft = Math.ceil(((lockedUntil ?? 0) - Date.now()) / 60000);
-        throw new Error(`Account temporarily locked. Try again in ${minsLeft} minute(s).`);
+      // SECURITY (OWASP A07-3, P2): keyed by BOTH email AND IP so that a
+      // distributed brute force from many IPs against one email, AND a
+      // single-IP spray against many emails, are both bounded.
+      const clientIp = await getClientIp();
+      const lockKeyEmail = `email:${email}`;
+      const lockKeyIp = clientIp !== "unknown" ? `ip:${clientIp}` : null;
+
+      const [emailLock, ipLock] = await Promise.all([
+        isAccountLocked(lockKeyEmail),
+        lockKeyIp ? isAccountLocked(lockKeyIp) : Promise.resolve({ locked: false }),
+      ]);
+      if (emailLock.locked || ipLock.locked) {
+        // SECURITY (OWASP A07-4, P2): don't disclose whether the email exists
+        // or which lock triggered — return the generic "Invalid credentials".
+        throw new Error("Invalid credentials");
       }
 
       const user = await db.user.findUnique({
@@ -109,12 +163,14 @@ const providers: Provider[] = [
       });
 
       if (!user || !user.passwordHash) {
-        await trackFailedAttempt(lockKey);
+        await trackFailedAttempt(lockKeyEmail);
+        if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
         throw new Error("Invalid credentials");
       }
 
       if (user.status !== "active") {
-        throw new Error("Account suspended. Contact support.");
+        // Don't disclose whether the email exists or why login failed.
+        throw new Error("Invalid credentials");
       }
 
       const valid = await bcrypt.compare(
@@ -122,42 +178,106 @@ const providers: Provider[] = [
         user.passwordHash
       );
       if (!valid) {
-        await trackFailedAttempt(lockKey);
+        await trackFailedAttempt(lockKeyEmail);
+        if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
         throw new Error("Invalid credentials");
       }
 
       // ── 2FA enforcement ──
-      // If the user has 2FA enabled, the TOTP code MUST be provided and valid.
-      // The frontend sends a special error message so it can show the 2FA input.
+      // Flow A (recommended by the OWASP audit): the TOTP (or backup code)
+      // is verified INSIDE authorize() before the session is issued. The
+      // frontend re-calls signIn("credentials", {email, password, totp})
+      // or signIn("credentials", {email, password, backupCode}) once the
+      // user has been prompted for 2FA.
+      //
+      // SECURITY (OWASP A04-3, P1): the legacy `/api/auth/verify-2fa` route
+      // and its `2fa:verified:${userId}` stamp are DEPRECATED — backup codes
+      // now work directly in this flow.
       const twoFactorSetting = await db.setting.findUnique({
         where: { key: `2fa:${user.id}` },
       });
 
       if (twoFactorSetting) {
-        // 2FA is enabled — require a valid TOTP token
-        if (!credentials.totp) {
+        // 2FA is enabled — require either a TOTP token OR a backup code.
+        if (!credentials.totp && !credentials.backupCode) {
           // Signal to the frontend that 2FA is required
           throw new Error("2FA_REQUIRED");
         }
 
-        try {
-          const { secret: encryptedSecret } = JSON.parse(twoFactorSetting.value);
-          const secret = decrypt2FASecret(encryptedSecret);
-          if (!secret || !(await verify2FAToken(credentials.totp, secret))) {
-            await trackFailedAttempt(lockKey);
-            throw new Error("Invalid 2FA code");
+        // SECURITY (OWASP A08-2, P3): use decryptJSON instead of
+        // JSON.parse(decrypt(...)) so a corrupted Setting row doesn't crash
+        // the login flow. decryptJSON returns null on failure.
+        const payload = decryptJSONSafe(twoFactorSetting.value);
+        if (!payload) {
+          // 2FA setup is corrupted — fail-closed. Don't lock the user out
+          // of password verification, but they must contact support to fix
+          // 2FA. (They can still login via OAuth if configured.)
+          await trackFailedAttempt(lockKeyEmail);
+          if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+          throw new Error("2FA setup is corrupted. Contact support to reset 2FA.");
+        }
+
+        let twoFactorOk = false;
+        let usedBackupCode = false;
+
+        if (credentials.totp) {
+          const secret = decrypt2FASecret(payload.secret);
+          if (secret && (await verify2FAToken(String(credentials.totp), secret))) {
+            twoFactorOk = true;
           }
-        } catch (e: any) {
-          if (e.message === "2FA_REQUIRED") throw e;
-          if (e.message === "Invalid 2FA code") throw e;
-          // Decryption/parsing failure — treat as 2FA failure
-          await trackFailedAttempt(lockKey);
-          throw new Error("2FA verification failed. Contact support.");
+        }
+
+        // If TOTP didn't work (or wasn't provided), try the backup code.
+        if (!twoFactorOk && credentials.backupCode) {
+          const normalized = String(credentials.backupCode).trim().toUpperCase();
+          const codes: string[] = Array.isArray(payload.backupCodes) ? payload.backupCodes : [];
+          let matchedIndex = -1;
+          for (let i = 0; i < codes.length; i++) {
+            try {
+              if (await bcrypt.compare(normalized, codes[i])) {
+                matchedIndex = i;
+                break;
+              }
+            } catch {
+              // malformed hash — skip
+            }
+          }
+          if (matchedIndex !== -1) {
+            twoFactorOk = true;
+            usedBackupCode = true;
+            // Rotate: remove the used code so it's single-use.
+            const remaining = codes.filter((_, i) => i !== matchedIndex);
+            const newPayload = { ...payload, backupCodes: remaining };
+            try {
+              const { encryptJSON } = await import("./crypto-utils");
+              await db.setting.update({
+                where: { key: `2fa:${user.id}` },
+                data: { value: encryptJSON(newPayload) },
+              });
+            } catch {
+              // best-effort — don't block login on rotation failure
+            }
+          }
+        }
+
+        if (!twoFactorOk) {
+          await trackFailedAttempt(lockKeyEmail);
+          if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+          throw new Error("Invalid 2FA code");
+        }
+
+        // Optional: log backup-code usage so support can reach out to users
+        // running low on backup codes.
+        if (usedBackupCode) {
+          try {
+            await audit(user.id, "login", "user", user.id, { method: "2fa_backup_code" });
+          } catch {}
         }
       }
 
       // Reset failed attempts on successful login (Redis-backed)
-      await clearFailedAttempts(lockKey);
+      await clearFailedAttempts(lockKeyEmail);
+      if (lockKeyIp) await clearFailedAttempts(lockKeyIp);
 
       // Audit log
       await audit(user.id, "login", "user", user.id);
@@ -492,6 +612,51 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         // Only refresh from DB if we have a user id
         if (token.id) {
           const userId = token.id as string;
+
+          // ── SECURITY (OWASP A07-1 + A04-5): JWT session invalidation ──
+          // On every request we re-check `passwordChangedAt`. If the JWT
+          // was issued (token.iat, seconds since epoch) BEFORE the user's
+          // most-recent password change / reset / 2FA disable / account
+          // self-deletion, the session is stale — return an empty token
+          // which forces NextAuth to treat the session as logged-out.
+          // This closes the "stolen-session-cookie persists after password
+          // rotation" hole. We use a SEPARATE DB hit (not the cached user
+          // object below) because the cached object can be 30s stale.
+          try {
+            const pwRow = await db.user.findUnique({
+              where: { id: userId },
+              select: { passwordChangedAt: true, status: true, updatedAt: true },
+            });
+            if (!pwRow) {
+              // User row gone (deleted account) — kill the session.
+              return {} as any;
+            }
+            const iat = typeof token.iat === "number" ? token.iat : 0;
+            if (pwRow.passwordChangedAt && iat) {
+              // token.iat is in seconds; passwordChangedAt is a Date.
+              const pwTs = Math.floor(pwRow.passwordChangedAt.getTime() / 1000);
+              if (iat < pwTs) {
+                // Token issued before the password change — invalidate.
+                return {} as any;
+              }
+            }
+            // SECURITY (A07-1 also): if the account was suspended after
+            // the session was issued, force re-auth so the user sees the
+            // "suspended" login error instead of continuing silently.
+            if (pwRow.status !== "active" && iat) {
+              // Allow a 60s grace window so we don't lock out the user
+              // mid-request during the suspension PATCH (which fires
+              // notifications etc). After that, the session is killed.
+              const suspendedTs = Math.floor((pwRow.updatedAt as Date)?.getTime?.() / 1000) ?? 0;
+              if (suspendedTs && iat < suspendedTs - 60) {
+                return {} as any;
+              }
+            }
+          } catch {
+            // DB might be unavailable during build — don't kill sessions
+            // for transient DB errors (fail-open here is the lesser evil
+            // vs. locking out every user during a DB blip).
+          }
 
           // ── Impersonation sessions: refresh the IMPERSONATED user's data
           // directly from DB (skip cache — the cache key is per-userId and

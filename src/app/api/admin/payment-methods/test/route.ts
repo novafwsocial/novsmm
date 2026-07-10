@@ -147,7 +147,11 @@ async function testStripe(
         message: "Stripe client could not be initialized.",
       };
     }
-    const account = await stripe.accounts.retrieve();
+    // Stripe SDK v22 requires the account id to be passed (use 'self' for
+    // the authenticated account) or no argument and the SDK retrieves the
+    // currently-authenticated account. The TS types require at least one
+    // argument; pass "self" explicitly which is the documented default.
+    const account = await stripe.accounts.retrieve("self");
     return {
       ok: true,
       method: "stripe",

@@ -1,7 +1,11 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
-import { generateWebhookSecret, DEFAULT_EVENTS } from "@/lib/outbound-webhook";
+import {
+  generateWebhookSecret,
+  DEFAULT_EVENTS,
+  validateUrlSafe,
+} from "@/lib/outbound-webhook";
 import { z } from "zod";
 
 /**
@@ -17,6 +21,11 @@ import { z } from "zod";
  *
  * Auth: session-based (requireAuth). Admins can list/delete across
  * users via the ?all=1 / ?userId= query params.
+ *
+ * SECURITY (OWASP A10-1): SSRF check is performed at registration time
+ * AND at delivery time (in `outbound-webhook.ts`). The registration check
+ * is synchronous and uses `validateUrlSafe()` which resolves DNS and
+ * checks every resolved IP against the blocklist.
  */
 
 const createSchema = z.object({
@@ -86,12 +95,18 @@ export async function POST(req: NextRequest) {
       return apiError("At least one event must be specified", 422);
     }
 
-    // Basic SSRF guard: reject localhost / private IP ranges. (This is
-    // a defence-in-depth check — production should also egress-filter
-    // at the network layer.)
-    if (isPrivateOrLoopback(url)) {
+    // SECURITY (OWASP A10-1, P0): SSRF guard — synchronous check at
+    // registration time. The same check runs again at delivery time
+    // (in `outbound-webhook.ts` → `safeFetch`) to defeat DNS rebinding.
+    // Both checks resolve DNS and verify ALL resolved IPs against a
+    // comprehensive blocklist (loopback, private, CGNAT, link-local
+    // incl. AWS metadata 169.254.169.254, IPv6 ULA/link-local, IPv4-
+    // mapped IPv6, 0.0.0.0/8, etc.).
+    try {
+      await validateUrlSafe(url);
+    } catch (e: any) {
       return apiError(
-        "Webhook URL must be a publicly reachable address (localhost/private IPs not allowed).",
+        e?.message ?? "Webhook URL failed SSRF validation.",
         422,
       );
     }
@@ -156,37 +171,4 @@ export async function DELETE(req: NextRequest) {
   await db.outboundWebhook.delete({ where: { id } });
 
   return apiOk({ message: "Webhook deleted" });
-}
-
-/**
- * Returns true if the URL points at localhost or a private/loopback
- * IP range. Used as an SSRF defence.
- */
-function isPrivateOrLoopback(url: string): boolean {
-  try {
-    const u = new URL(url);
-    const host = u.hostname.toLowerCase();
-    if (host === "localhost" || host === "127.0.0.1" || host === "::1") {
-      return true;
-    }
-    // Block common private IP ranges (10.x, 172.16-31.x, 192.168.x).
-    if (
-      /^\d+\.\d+\.\d+\.\d+$/.test(host) ||
-      /^[0-9a-f:]+$/i.test(host)
-    ) {
-      const parts = host.split(".").map(Number);
-      if (
-        parts.length === 4 &&
-        (parts[0] === 10 ||
-          (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) ||
-          (parts[0] === 192 && parts[1] === 168) ||
-          parts[0] === 127)
-      ) {
-        return true;
-      }
-    }
-    return false;
-  } catch {
-    return true; // Invalid URL — treat as blocked.
-  }
 }

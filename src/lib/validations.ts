@@ -1,6 +1,20 @@
 import { z } from "zod";
 
 // ── Auth schemas ──
+
+// SECURITY (OWASP A07-2, P2): strong password policy — ≥8 chars AND at
+// least 3 of 4 character classes (uppercase, lowercase, digit, special).
+// Applied to registration, password-change, and password-reset.
+export const strongPasswordSchema = z
+  .string()
+  .min(8, "Password must be at least 8 characters")
+  .max(1024, "Password is too long")
+  .refine((pw) => /[A-Z]/.test(pw), "Password must contain an uppercase letter")
+  .refine((pw) => /[a-z]/.test(pw), "Password must contain a lowercase letter")
+  .refine((pw) => /[0-9]/.test(pw), "Password must contain a digit")
+  .refine((pw) => /[^A-Za-z0-9]/.test(pw), "Password must contain a special character")
+  .refine((pw) => !/(.)\1{2,}/.test(pw), "Password must not contain 3+ repeated characters");
+
 export const registerSchema = z.object({
   name: z.string().min(2, "Name must be at least 2 characters"),
   username: z
@@ -8,7 +22,7 @@ export const registerSchema = z.object({
     .min(3, "Username must be at least 3 characters")
     .regex(/^[a-zA-Z0-9_]+$/, "Only letters, numbers, and underscores"),
   email: z.string().email("Invalid email address"),
-  password: z.string().min(8, "Password must be at least 8 characters"),
+  password: strongPasswordSchema,
   confirm: z.string(),
   country: z.string().default("Mexico"),
   currency: z.string().default("USD"),
@@ -91,8 +105,12 @@ export const updateUserSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "reseller", "agency", "admin"]).optional(),
   status: z.enum(["active", "suspended", "pending"]).optional(),
-  balance: z.number().optional(),
-});
+  // SECURITY (OWASP A04-2, P1): `balance` is intentionally NOT accepted here.
+  // All balance changes must go through the dedicated /api/admin/users/adjust-balance
+  // endpoint, which creates a Transaction row (audit trail), requires a `reason`,
+  // and uses a race-safe $transaction. Allowing balance edits via the generic
+  // PATCH route would permit silent financial manipulation with no audit trail.
+}).strict();
 
 // ── Admin PATCH schemas (strict — reject unknown fields) ──
 // All updateable fields are optional (PATCH = partial update);

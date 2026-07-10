@@ -132,11 +132,43 @@ export async function POST(req: NextRequest) {
         return apiOk({ received: true, status: payment.status });
       }
 
+      // SECURITY (OWASP A08-1, P2): MP's HMAC signature only covers `data.id`
+      // + `ts` — NOT the rest of the payload (status, amount, payer). If
+      // MP_WEBHOOK_SECRET ever leaks, an attacker could forge a webhook with
+      // an arbitrary data.id pointing to ANYONE'S approved MP payment and
+      // trick us into crediting whichever NOVSMM transaction matches that
+      // paymentId as `reference`.
+      //
+      // Defense-in-depth: verify that the MP payment's `external_reference`
+      // field matches the NOVSMM transaction's `publicId`. This binds the
+      // MP-side payment to OUR internal transaction ID — set as
+      // `external_reference` when the MP preference is created in
+      // wallet/topup/route.ts. If external_reference is missing or doesn't
+      // match, refuse to credit.
+      //
+      // (Currently the MP preference is created without external_reference —
+      // we still verify it IF MP returns one; otherwise we fall back to the
+      // reference-match behavior. The credit condition becomes: approved
+      // AND (external_reference missing OR external_reference matches txn.publicId).)
+      const externalReference = payment.external_reference ?? "";
+
       // Find transaction by reference (paymentId)
       const txn = await db.transaction.findFirst({
         where: { reference: paymentId },
       });
       if (txn && txn.status === "pending") {
+        // If MP returned an external_reference, it MUST match the txn publicId.
+        if (externalReference && externalReference !== txn.publicId) {
+          await db.webhookLog.update({
+            where: { id: log.id },
+            data: {
+              status: "rejected",
+              error: `external_reference mismatch (expected ${txn.publicId}, got ${externalReference})`,
+            },
+          });
+          return apiError("Webhook rejected — external_reference mismatch", 403);
+        }
+
         await db.$transaction([
           db.transaction.update({
             where: { id: txn.id },

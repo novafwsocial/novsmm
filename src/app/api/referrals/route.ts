@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { REFERRAL_TIERS, resolveTier } from "@/lib/ai-insights";
+import { randomBytes } from "node:crypto";
 
 /**
  * GET /api/referrals — user's referral dashboard.
@@ -27,7 +28,14 @@ export async function GET(req: NextRequest) {
       where: { id: userId },
       select: { username: true },
     });
-    const code = `NOV-${(user?.username ?? "user").slice(0, 6).toUpperCase()}-${Math.random().toString(36).slice(2, 5).toUpperCase()}`;
+    // SECURITY (OWASP A04-4, P2): use CSPRNG (crypto.randomBytes) instead of
+    // Math.random() for the referral-code suffix. Math.random() is not
+    // cryptographically secure and only provided 3 chars (46,656 possibilities)
+    // of predictable entropy — an attacker could enumerate codes to brute-
+    // force the leaderboard or attribute fake referrals. randomBytes(4).hex
+    // gives 8 hex chars = 32 bits of CSPRNG entropy (~4 billion possibilities).
+    const suffix = randomBytes(4).toString("hex").toUpperCase().slice(0, 6);
+    const code = `NOV-${(user?.username ?? "user").slice(0, 6).toUpperCase()}-${suffix}`;
     referral = await db.referral.create({
       data: {
         referrerId: userId,

@@ -110,13 +110,15 @@ export async function POST(req: NextRequest) {
     create: { key: `oauth:${provider}`, value: encryptedConfig },
   });
 
-  // Also mirror into process.env at runtime so any code path that reads
-  // process.env (e.g. the legacy Google check, or NextAuth's auto-config
-  // for the default providers) picks up the new creds immediately without
-  // a server restart.
-  const [idVar, secretVar] = ENV_PROVIDER_VARS[provider];
-  process.env[idVar] = clientId;
-  process.env[secretVar] = clientSecret;
+  // SECURITY (OWASP A02-1, P1): Do NOT mirror credentials into process.env.
+  // Previously this route mutated process.env.GOOGLE_CLIENT_ID etc., which:
+  //   1. Stored plaintext secrets in process memory for the process lifetime.
+  //   2. Was thread-unsafe (visible to all concurrent requests).
+  //   3. Was local to one instance (broke multi-instance deploys).
+  //   4. Bypassed the encrypted-DB storage in the legacy getGoogleOAuthConfig()
+  //      fallback in auth.ts.
+  // The dynamic getDynamicAuthOptions() in auth.ts reads from the DB on every
+  // request — the env mutation was unnecessary. We rely on that path now.
 
   await audit(user!.id, "update", "setting", `oauth:${provider}`, { provider });
 
@@ -147,10 +149,7 @@ export async function DELETE(req: NextRequest) {
 
   await db.setting.deleteMany({ where: { key: `oauth:${provider}` } });
 
-  // Clear the runtime env override too (no-op if it was never set).
-  const [idVar, secretVar] = ENV_PROVIDER_VARS[provider];
-  delete process.env[idVar];
-  delete process.env[secretVar];
+  // SECURITY (OWASP A02-1, P1): No process.env to clear — we never mirror.
 
   await audit(user!.id, "delete", "setting", `oauth:${provider}`, { provider });
 

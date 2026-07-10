@@ -74,20 +74,20 @@ export async function GET() {
 
 /**
  * PATCH /api/me — update the current user's profile.
- * Supports: name, country, currency, language, role, notificationPreferences
+ * Supports: name, country, currency, language, notificationPreferences.
+ *
+ * SECURITY (OWASP A01-3, P3): `role` is INTENTIONALLY NOT accepted here.
+ * Previously a logged-in user could PATCH /api/me with {role: "agency"}
+ * and immediately gain agency-tier features. Role changes should go
+ * through PATCH /api/admin/users (admin-only). Downgrade flow can be
+ * added later as a separate POST /api/me/downgrade-role endpoint with
+ * explicit confirmation if needed.
  */
 const updateProfileSchema = z.object({
   name: z.string().min(2).optional(),
   country: z.string().optional(),
   currency: z.string().optional(), // currency code: USD, MXN, EUR...
   language: z.string().optional(), // language code: en, es, pt...
-  // BROAD-FIX-BATCH-1: the previous enum ["reseller","agency","creator","enterprise"]
-  // included "creator" and "enterprise" which don't exist anywhere else in
-  // the codebase (the User.role schema comment lists user | reseller | agency
-  // | admin, and admin self-edit is already blocked by an explicit role check
-  // below). Aligned to the canonical User.role values. "user" is included
-  // so a reseller/agency can downgrade themselves back to a plain user.
-  role: z.enum(["user", "reseller", "agency"]).optional(),
   notificationPreferences: z
     .object({
       email: z.boolean().optional(),
@@ -98,7 +98,7 @@ const updateProfileSchema = z.object({
       marketing: z.boolean().optional(),
     })
     .optional(),
-});
+}).strict(); // reject unknown fields (incl. `role`)
 
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -137,22 +137,22 @@ export async function PATCH(req: NextRequest) {
       updateData.language = parsed.data.language;
     }
 
-    // Role updates — admins cannot self-elevate (defense in depth)
-    if (parsed.data.role !== undefined) {
-      if (currentRole === "admin") {
-        return apiError("Admins cannot change their role", 403);
-      }
-      updateData.role = parsed.data.role;
-    }
+    // SECURITY (A01-3): no role change allowed via this endpoint.
+    // Role changes are admin-only via PATCH /api/admin/users.
 
     // Notification preferences — stored in Setting table (not on User)
     if (parsed.data.notificationPreferences !== undefined) {
       const existingPrefs = await db.setting.findUnique({
         where: { key: `notif_prefs:${userId}` },
       });
-      const currentPrefs = existingPrefs
-        ? JSON.parse(existingPrefs.value || "{}")
-        : {};
+      let currentPrefs: Record<string, boolean> = {};
+      if (existingPrefs) {
+        try {
+          currentPrefs = JSON.parse(existingPrefs.value || "{}");
+        } catch {
+          currentPrefs = {};
+        }
+      }
       const mergedPrefs = { ...currentPrefs, ...parsed.data.notificationPreferences };
       await db.setting.upsert({
         where: { key: `notif_prefs:${userId}` },

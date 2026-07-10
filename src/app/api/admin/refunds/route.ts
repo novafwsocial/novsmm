@@ -4,6 +4,7 @@ import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 import { createRefund } from "@/lib/stripe";
 import { nextPublicId } from "@/lib/ids";
+import { raiseSecurityAlert } from "@/lib/security-alert";
 
 /**
  * POST /api/admin/refunds — process a refund for a transaction.
@@ -117,6 +118,23 @@ export async function POST(req: NextRequest) {
 
   // Audit log
   await audit(adminId, "refund", "transaction", transactionId, { amount: refundAmount, reason, user: txn.user.email });
+
+  // SECURITY (OWASP A09-2, P3): raise an alert for high-value refunds (>$500)
+  // — useful for spotting slow-compromise attacks where small refunds escalate.
+  if (refundAmount > 500) {
+    void raiseSecurityAlert({
+      type: "refund_amount_high",
+      severity: "warning",
+      message: `High-value refund of $${refundAmount.toFixed(2)} processed for user ${txn.user.email} (txn ${txn.publicId}).`,
+      userId: txn.userId,
+      metadata: {
+        amount: refundAmount,
+        transactionId,
+        adminId,
+        reason,
+      },
+    }).catch(() => {});
+  }
 
   return apiOk({ message: "Refund processed successfully" });
 }

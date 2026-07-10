@@ -12,9 +12,14 @@ import { apiOk, apiError } from "@/lib/api-utils";
  * Used by k8s/docker readinessProbe — if this fails, the container is removed
  * from the load balancer (but NOT restarted).
  *
- * Response:
- *   200: { status: "ready" | "degraded", checks: { database, redis } }
- *   503: { error: "Not ready", details: { ... } }
+ * SECURITY (OWASP A05-2, P2): the PUBLIC response is intentionally MINIMAL.
+ * DB error messages (which can leak connection-string structure, private DB
+ * IPs, Postgres version) and detailed memory figures (which help attackers
+ * time memory-exhaustion DoS) are now logged server-side only. The HTTP
+ * response contains only `{ status: "ready" | "not_ready" }`.
+ *
+ * Operators who need the detailed `checks` object should consult the server
+ * logs (or use `/api/metrics` which requires Basic Auth).
  */
 export async function GET() {
   const start = Date.now();
@@ -27,7 +32,10 @@ export async function GET() {
     await db.$queryRaw`SELECT 1`;
     checks.database = { healthy: true, latencyMs: Date.now() - dbStart };
   } catch (e: any) {
-    checks.database = { healthy: false, error: e.message };
+    // Log the full error server-side — it can include connection-string
+    // structure / DB IP / version info that we don't want to leak.
+    console.error("[health/ready] database check failed:", e?.message ?? e);
+    checks.database = { healthy: false, error: "database_unreachable" };
     allHealthy = false;
   }
 
@@ -40,38 +48,41 @@ export async function GET() {
         const pong = await redis.ping();
         checks.redis = { healthy: pong === "PONG", latencyMs: Date.now() - redisStart };
       } else {
-        checks.redis = { healthy: false, error: "Redis not connected" };
+        checks.redis = { healthy: false, error: "redis_not_connected" };
       }
     } else {
       // Redis not configured — this is fine (sandbox/dev mode)
-      checks.redis = { healthy: true, error: "not configured (in-memory mode)" };
+      checks.redis = { healthy: true, error: "not_configured" };
     }
   } catch (e: any) {
-    checks.redis = { healthy: false, error: e.message };
+    console.warn("[health/ready] redis check failed:", e?.message ?? e);
+    checks.redis = { healthy: false, error: "redis_unreachable" };
     // Redis being down is NOT critical — mark as degraded but still return 200
   }
 
-  // ── Memory check ──
+  // ── Memory check (logged only — not in response) ──
   const memUsage = process.memoryUsage();
+  const memHealthy = memUsage.heapUsed < memUsage.heapTotal * 0.95;
   checks.memory = {
-    healthy: memUsage.heapUsed < memUsage.heapTotal * 0.95, // <95% heap usage
-    heapUsedMB: Math.round(memUsage.heapUsed / 1024 / 1024),
-    heapTotalMB: Math.round(memUsage.heapTotal / 1024 / 1024),
-    rssMB: Math.round(memUsage.rss / 1024 / 1024),
+    healthy: memHealthy,
+    // Omit the actual heap/rss numbers — they leak capacity info.
   };
+  if (!memHealthy) {
+    console.warn(
+      `[health/ready] high memory usage: heap=${Math.round(memUsage.heapUsed / 1024 / 1024)}MB/${Math.round(memUsage.heapTotal / 1024 / 1024)}MB rss=${Math.round(memUsage.rss / 1024 / 1024)}MB`,
+    );
+  }
 
-  const status = allHealthy ? "ready" : "not_ready";
-  const response = {
-    status,
-    checks,
-    uptime: Math.floor(process.uptime()),
-    timestamp: new Date().toISOString(),
-    totalLatencyMs: Date.now() - start,
-  };
+  // Log the full detailed checks object server-side for operators.
+  console.info(
+    `[health/ready] status=${allHealthy ? "ready" : "not_ready"} totalLatencyMs=${Date.now() - start}`,
+    { checks },
+  );
 
+  // ── Public response: minimal, no internals ──
   if (!allHealthy) {
     return apiError("Service not ready", 503);
   }
 
-  return apiOk(response);
+  return apiOk({ status: "ready" });
 }

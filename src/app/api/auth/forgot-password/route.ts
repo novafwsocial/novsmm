@@ -6,6 +6,18 @@ import { sanitizeEmail } from "@/lib/sanitize";
 import crypto from "crypto";
 
 /**
+ * Hash a verification token with SHA-256 before storing or looking up.
+ *
+ * SECURITY (OWASP A02-3, P2): we never store the plaintext reset token
+ * in the DB. The user-supplied token (from the email link) is hashed on
+ * lookup, so anyone with read access to the DB (DBA, backup snapshot,
+ * replica, SQL injection) can't recover valid tokens.
+ */
+function hashToken(token: string): string {
+  return crypto.createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+/**
  * POST /api/auth/forgot-password
  * Generates a reset token, stores it in VerificationToken, sends email.
  */
@@ -33,14 +45,15 @@ export async function POST(req: NextRequest) {
       where: { identifier: email },
     });
 
-    // Generate a secure token
+    // Generate a secure token (plaintext — only sent via email, never stored)
     const token = crypto.randomBytes(32).toString("hex");
     const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
 
+    // Store the SHA-256 HASH of the token, not the plaintext.
     await db.verificationToken.create({
       data: {
         identifier: email,
-        token,
+        token: hashToken(token),
         expires,
       },
     });

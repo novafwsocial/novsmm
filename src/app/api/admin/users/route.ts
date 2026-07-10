@@ -59,7 +59,12 @@ export async function GET(req: NextRequest) {
   });
 }
 
-/** PATCH /api/admin/users — update role, status, balance. */
+/** PATCH /api/admin/users — update role or status only.
+ *
+ * SECURITY (OWASP A04-2, P1): `balance` is intentionally NOT accepted.
+ * All balance changes must go through /api/admin/users/adjust-balance
+ * (which creates a Transaction audit row + requires a `reason`).
+ */
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAdmin();
   if (error) return error;
@@ -71,9 +76,9 @@ export async function PATCH(req: NextRequest) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
-  const { id, role, status, balance } = parsed.data;
+  const { id, role, status } = parsed.data;
 
-  const user = await db.user.findUnique({ where: { id }, select: { balance: true, status: true } });
+  const user = await db.user.findUnique({ where: { id }, select: { status: true } });
   if (!user) return apiError("User not found", 404);
 
   const updateData: any = {};
@@ -93,11 +98,14 @@ export async function PATCH(req: NextRequest) {
       sendEmail: true,
     });
   }
-  if (balance !== undefined) updateData.balance = balance;
+
+  if (Object.keys(updateData).length === 0) {
+    return apiError("No updatable fields supplied (only `role` and `status` are accepted; balance changes must go through /api/admin/users/adjust-balance).", 422);
+  }
 
   const updated = await db.user.update({ where: { id }, data: updateData });
 
-  await audit(adminId, "update", "user", id, { role, status, balance });
+  await audit(adminId, "update", "user", id, { role, status });
 
   return apiOk({ user: updated });
 }
