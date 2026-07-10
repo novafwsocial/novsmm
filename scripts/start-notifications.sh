@@ -39,6 +39,13 @@ if [ ! -d "$NOTIFICATIONS_DIR/node_modules" ]; then
   echo "📋 Installing dependencies..."
   cd "$NOTIFICATIONS_DIR"
   npm install 2>&1 | tail -3
+else
+  # Ensure tsx is installed (added in latest version)
+  if [ ! -d "$NOTIFICATIONS_DIR/node_modules/tsx" ]; then
+    echo "📋 Installing tsx dependency..."
+    cd "$NOTIFICATIONS_DIR"
+    npm install 2>&1 | tail -3
+  fi
 fi
 
 # Step 4: Generate secret if not in .env
@@ -58,7 +65,10 @@ fi
 # Step 5: Start with PM2
 echo "🚀 Starting notifications service with PM2..."
 cd "$NOTIFICATIONS_DIR"
-pm2 start "bun run dev" --name novsmm-notifications --cwd "$NOTIFICATIONS_DIR"
+# Delete old errored process if exists
+pm2 delete novsmm-notifications 2>/dev/null || true
+# Use npm run dev (works with both node and bun installations)
+pm2 start "npm run dev" --name novsmm-notifications --cwd "$NOTIFICATIONS_DIR"
 pm2 save
 
 # Step 6: Verify

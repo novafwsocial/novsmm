@@ -5,12 +5,13 @@
   "type": "module",
   "description": "NOVSMM real-time notifications WebSocket mini-service (Socket.IO on port 3003)",
   "scripts": {
-    "dev": "bun --hot index.ts",
-    "start": "bun index.ts"
+    "dev": "node --import tsx index.ts",
+    "start": "node --import tsx index.ts"
   },
   "dependencies": {
     "@socket.io/redis-adapter": "^8.3.0",
     "ioredis": "^5.11.1",
-    "socket.io": "^4.8.3"
+    "socket.io": "^4.8.3",
+    "tsx": "^4.19.0"
   }
 }
