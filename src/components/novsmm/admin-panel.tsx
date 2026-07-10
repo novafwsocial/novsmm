@@ -155,6 +155,9 @@ const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
 
 export function AdminPanel() {
   const { adminTab, setAdminTab } = useApp();
+  // PERF: fetch overview for the real-time user count in the admin header
+  const { data: overviewData } = useAdminOverview();
+  const totalUsers = overviewData?.stats?.totalUsers ?? 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -178,7 +181,9 @@ export function AdminPanel() {
               <span className="nov-pulse-dot absolute inline-flex h-2 w-2 rounded-full bg-emerald-500" />
               <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
             </span>
-            <span className="text-xs font-medium text-foreground">Real-time · 184,500 users</span>
+            <span className="text-xs font-medium text-foreground">
+              Real-time · {totalUsers.toLocaleString()} users
+            </span>
           </div>
         </div>
       </Reveal>
