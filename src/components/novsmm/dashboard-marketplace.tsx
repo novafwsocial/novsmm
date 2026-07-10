@@ -237,10 +237,11 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     });
   }, [data, page]);
 
-  // Reset processed pages when debounced search changes
+  // Reset processed pages when debounced search OR platform filter changes
   useEffect(() => {
     processedPagesRef.current.clear();
-  }, [debouncedSearch]);
+    setAllServices([]); // clear existing services so the new filter takes effect
+  }, [debouncedSearch, platformFilter]);
 
   // Infinite scroll via IntersectionObserver (F-09: fallback for old browsers)
   useEffect(() => {
