@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
+import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {
   Users,
   DollarSign,
@@ -60,25 +61,17 @@ export function AffiliateSection() {
   const { setView, setDashboardTab, authed } = useApp();
   const [stats, setStats] = useState<StatusStats>(DEFAULT_STATS);
 
+  // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
+  // a single /api/status request via useCachedFetch.
+  const statusData = useCachedFetch<any>("/api/status");
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled && d?.stats) {
-          setStats({
-            totalUsers: d.stats.totalUsers ?? DEFAULT_STATS.totalUsers,
-            totalRevenue: d.stats.totalRevenue ?? DEFAULT_STATS.totalRevenue,
-          });
-        }
-      })
-      .catch(() => {
-        /* keep defaults */
+    if (statusData?.stats) {
+      setStats({
+        totalUsers: statusData.stats.totalUsers ?? DEFAULT_STATS.totalUsers,
+        totalRevenue: statusData.stats.totalRevenue ?? DEFAULT_STATS.totalRevenue,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    }
+  }, [statusData]);
 
   // Estimated total commission paid out — assume ~10% of all-time revenue routed
   // back to affiliates as commission, capped to a believable number.

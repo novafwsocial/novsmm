@@ -14,6 +14,7 @@ import { Magnetic } from "./magnetic";
 import { Counter } from "./counter";
 import { HeroDashboard } from "./hero-dashboard";
 import { useApp } from "./app-store";
+import { useCachedFetch } from "@/hooks/use-cached-fetch";
 
 // PERF: HeroDashboard now uses lightweight SVG (no recharts) — can load
 // directly without dynamic import. SSR-enabled for instant render.
@@ -24,23 +25,15 @@ export function Hero() {
 
   // Live orders/min — fetched from /api/status (public). Falls back to 1200
   // if the request fails so the eyebrow never renders empty.
+  // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
+  // a single /api/status request via useCachedFetch.
+  const statusData = useCachedFetch<any>("/api/status");
   const [ordersPerMin, setOrdersPerMin] = useState(1200);
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled && d?.stats?.ordersPerMin) {
-          setOrdersPerMin(d.stats.ordersPerMin);
-        }
-      })
-      .catch(() => {
-        /* keep default */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (statusData?.stats?.ordersPerMin) {
+      setOrdersPerMin(statusData.stats.ordersPerMin);
+    }
+  }, [statusData]);
 
   return (
     <section

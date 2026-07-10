@@ -2,6 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
+import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {
   BarChart,
   Bar,
@@ -42,30 +43,22 @@ const DEFAULTS: StatsPayload = {
 };
 
 function useStatusStats(): StatsPayload {
+  // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
+  // a single /api/status request via useCachedFetch.
+  const statusData = useCachedFetch<any>("/api/status");
   const [stats, setStats] = useState<StatsPayload>(DEFAULTS);
   useEffect(() => {
-    let cancelled = false;
-    fetch("/api/status")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => {
-        if (!cancelled && d?.stats) {
-          setStats({
-            totalUsers: d.stats.totalUsers ?? DEFAULTS.totalUsers,
-            orders24h: d.stats.orders24h ?? DEFAULTS.orders24h,
-            activeServices: d.stats.activeServices ?? DEFAULTS.activeServices,
-            totalOrders: d.stats.totalOrders ?? DEFAULTS.totalOrders,
-            totalRevenue: d.stats.totalRevenue ?? DEFAULTS.totalRevenue,
-            ordersPerMin: d.stats.ordersPerMin ?? DEFAULTS.ordersPerMin,
-          });
-        }
-      })
-      .catch(() => {
-        /* keep defaults */
+    if (statusData?.stats) {
+      setStats({
+        totalUsers: statusData.stats.totalUsers ?? DEFAULTS.totalUsers,
+        orders24h: statusData.stats.orders24h ?? DEFAULTS.orders24h,
+        activeServices: statusData.stats.activeServices ?? DEFAULTS.activeServices,
+        totalOrders: statusData.stats.totalOrders ?? DEFAULTS.totalOrders,
+        totalRevenue: statusData.stats.totalRevenue ?? DEFAULTS.totalRevenue,
+        ordersPerMin: statusData.stats.ordersPerMin ?? DEFAULTS.ordersPerMin,
       });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    }
+  }, [statusData]);
   return stats;
 }
 
