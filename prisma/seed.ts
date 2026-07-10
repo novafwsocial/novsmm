@@ -12,17 +12,19 @@ async function main() {
   const adminPasswordPlain = crypto.randomBytes(12).toString("base64url").slice(0, 16);
   const adminPassword = await bcrypt.hash(adminPasswordPlain, 12);
   const admin = await db.user.upsert({
-    where: { email: "admin@novsmm.io" },
+    where: { email: "admin@novsmm.shop" },
     update: {},
     create: {
-      email: "admin@novsmm.io",
+      email: "admin@novsmm.shop",
       username: "admin",
       name: "NOVSMM Admin",
       passwordHash: adminPassword,
       role: "admin",
       country: "United States",
       currency: "USD",
-      language: "English",
+      // BROAD-FIX-BATCH-1: store ISO code (en) — matches the User.language
+      // schema comment and useTranslation's `.slice(0,2)` resolution.
+      language: "en",
       balance: 50000,
       status: "active",
     },
@@ -44,7 +46,8 @@ async function main() {
       role: "reseller",
       country: "Mexico",
       currency: "USD",
-      language: "English",
+      // BROAD-FIX-BATCH-1: store ISO code (es) — Daniela is based in Mexico.
+      language: "es",
       balance: 8420.5,
       heldBalance: 1280.25,
       lifetimeEarnings: 92480.5,
@@ -207,7 +210,7 @@ async function main() {
     const txnData = [
       { type: "topup", amount: 500, description: "Top-up via Stripe •••• 4242", method: "stripe", reference: "pi_3OkL2m" },
       { type: "sale", amount: 2.4, description: "Order #A-10432 — Instagram Followers", method: "balance", reference: "A-10432" },
-      { type: "withdrawal", amount: -1200, description: "Withdrawal to Wise · EUR", method: "wise", reference: "wse_8841" },
+      { type: "withdrawal", amount: -1200, description: "Withdrawal to PayPal · EUR", method: "paypal", reference: "wse_8841" },
       { type: "sale", amount: 24.0, description: "Order #A-10430 — YouTube Watch hours", method: "balance", reference: "A-10430" },
       { type: "referral", amount: 5.0, description: "Referral bonus · @marcus", method: "balance" },
     ];
@@ -300,7 +303,7 @@ async function main() {
 
   console.log("\n✅ Seed complete!");
   console.log("\n📋 Credentials (generated fresh this run — see above for actual values):");
-  console.log("  Admin: admin@novsmm.io / <see generated password above>");
+  console.log("  Admin: admin@novsmm.shop / <see generated password above>");
   console.log("  User:  daniela@pulsemedia.io / <see generated password above>");
   console.log("\n⚠️  Change the admin password immediately after first login.");
 }

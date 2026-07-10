@@ -51,7 +51,7 @@ export interface InvoiceInput {
 /** Default NOVSMM issuer details — can be overridden per-call. */
 const DEFAULT_ISSUER = {
   name: "NOVSMM",
-  email: "billing@novsmm.io",
+  email: "billing@novsmm.shop",
   address: "NOVSMM Inc. · Remote-first · LATAM",
 };
 

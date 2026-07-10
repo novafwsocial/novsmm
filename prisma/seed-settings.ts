@@ -61,7 +61,7 @@ export async function seedSettings() {
   const settings = [
     { key: "platform.name", value: "NOVSMM" },
     { key: "platform.whatsapp", value: "5215512345678" }, // WhatsApp number for live chat
-    { key: "platform.supportEmail", value: "support@novsmm.io" },
+    { key: "platform.supportEmail", value: "support@novsmm.shop" },
     { key: "fees.marketplace", value: "0.03" }, // 3% marketplace fee
     { key: "fees.withdrawal", value: "0.01" }, // 1% withdrawal fee
     { key: "limits.minTopup", value: "10" },

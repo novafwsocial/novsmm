@@ -8,27 +8,60 @@
  *
  * The SW is registered only in production (see sw-register.tsx) to avoid
  * caching issues during development.
+ *
+ * BROAD-FIX-BATCH-1: added a cache-versioning strategy. The CACHE_VERSION
+ * constant is bumped on every deploy (the build step can rewrite this file
+ * to inject a content-hash version). On activate, any cache key that isn't
+ * the current version is deleted — so users get the fresh app shell on the
+ * first navigation after a deploy instead of stale content from the
+ * previous version.
+ *
+ * The previous single "novsmm-v1" cache was hardcoded and never bumped, so
+ * new deploys could leave users with a stale app shell until they manually
+ * cleared the SW cache.
  */
 
-const CACHE = "novsmm-v1";
+// Bumped on each deploy. The build pipeline can rewrite this to a content
+// hash (e.g. `novsmm-<git-sha>`) to force a cache refresh on every change.
+// Manual bump is also fine for small deploys.
+const CACHE_VERSION = "novsmm-v2";
+const CACHE = CACHE_VERSION;
 const APP_SHELL = ["/", "/icon.png"];
+
+// Track whether this is the first install vs an upgrade.
+let isFirstInstall = true;
 
 // Install — pre-cache the app shell
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) => cache.addAll(APP_SHELL).catch(() => {}))
   );
+  // skipWaiting() so the new SW takes over immediately on the next navigation,
+  // rather than waiting for all tabs to close.
   self.skipWaiting();
 });
 
-// Activate — clean up old caches
+// Activate — clean up old caches (any cache whose key isn't the current
+// CACHE_VERSION). This is the cache-versioning strategy: when CACHE_VERSION
+// is bumped (either manually or by the build pipeline), the old cache is
+// evicted on the next activation so users get the fresh app shell.
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+      Promise.all(
+        keys
+          .filter((k) => k !== CACHE && k.startsWith("novsmm-"))
+          .map((k) => {
+            console.log(`[sw] evicting stale cache: ${k}`);
+            return caches.delete(k);
+          })
+      )
     )
   );
+  // clients.claim() so the new SW controls the current tab immediately
+  // (rather than waiting for the next navigation).
   self.clients.claim();
+  isFirstInstall = false;
 });
 
 // Fetch — routing strategy

@@ -86,13 +86,33 @@ function addSecurityHeaders(res: NextResponse) {
     "Strict-Transport-Security",
     "max-age=31536000; includeSubDomains; preload"
   );
-  // CSP — allows Tailwind inline styles, Google fonts, WebSocket.
+  // CSP — allows Tailwind inline styles, Google fonts, WebSocket, and the
+  // canonical payment-provider domains.
+  //
+  // BROAD-FIX-BATCH-1: added explicit entries for the 4 hosted-checkout
+  // payment providers (Stripe, PayPal, Mercado Pago, NowPayments) so that
+  // any future client-side SDK / iframe embed (e.g. Stripe Elements, PayPal
+  // Smart Buttons) is not blocked by the CSP. The current checkout flow is
+  // hosted (redirect to the provider's domain), so these entries are
+  // forward-compatible rather than strictly required today — but adding them
+  // now prevents a "CSP blocked the script" surprise when a provider SDK
+  // is introduced.
+  //
   // 'unsafe-eval' removed (C-1 security fix) — not used anywhere in the codebase.
   // 'unsafe-inline' retained for script-src (Next.js requires it for inline scripts/hydration).
   // Future improvement: migrate to nonce-based CSP to remove 'unsafe-inline' too.
   res.headers.set(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss: ws: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self';"
+    "default-src 'self'; " +
+      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com; " +
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+      "img-src 'self' data: https: blob:; " +
+      "font-src 'self' data: https://fonts.gstatic.com; " +
+      "connect-src 'self' wss: ws: https: https://api.stripe.com https://www.paypal.com https://api.mercadopago.com https://api.nowpayments.io; " +
+      "frame-src https://js.stripe.com https://www.paypal.com https://hooks.stripe.com; " +
+      "frame-ancestors 'none'; " +
+      "base-uri 'self'; " +
+      "form-action 'self' https://www.paypal.com;"
   );
 }
 

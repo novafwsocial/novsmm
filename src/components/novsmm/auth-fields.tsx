@@ -227,20 +227,31 @@ function scorePassword(pw: string): {
 }
 
 /**
- * Google login button — premium with brand glyph + label.
+ * Social login button — premium with brand glyph + label.
  *
- * Google is the only social login enabled on this platform.
- * Renders as a full-width button with the official Google "G" mark.
+ * BROAD-FIX-BATCH-1: previously this component only rendered a Google button
+ * (the only OAuth provider wired up in auth.ts). The admin social-auth panel
+ * (ADMIN-FIX-BATCH-2) supports Google + Facebook + GitHub + Twitter, so this
+ * component now renders a button for any of those providers. The login and
+ * register screens fetch the list of configured providers from
+ * /api/auth/social-providers and render one SocialButton per configured
+ * provider — unconfigured providers are hidden so users never click a button
+ * that fails.
+ *
+ * The button is full-width with the official provider glyph.
  */
+export type SocialProviderId = "google" | "facebook" | "github" | "twitter";
+
 export function SocialButton({
+  provider,
   onClick,
-  label = "Continue with Google",
   loading = false,
 }: {
+  provider: SocialProviderId;
   onClick?: () => void;
-  label?: string;
   loading?: boolean;
 }) {
+  const meta = PROVIDER_META[provider];
   return (
     <motion.button
       type="button"
@@ -251,11 +262,54 @@ export function SocialButton({
       transition={{ type: "spring", stiffness: 400, damping: 20 }}
       className="flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-background text-sm font-medium text-foreground transition-colors hover:bg-muted/50 disabled:opacity-60"
     >
-      <GoogleGlyph />
-      <span>{loading ? "Redirecting…" : label}</span>
+      {meta.glyph}
+      <span>{loading ? "Redirecting…" : `Continue with ${meta.label}`}</span>
     </motion.button>
   );
 }
+
+const PROVIDER_META: Record<
+  SocialProviderId,
+  { label: string; glyph: ReactNode }
+> = {
+  google: {
+    label: "Google",
+    glyph: <GoogleGlyph />,
+  },
+  facebook: {
+    label: "Facebook",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+        <path
+          fill="#1877F2"
+          d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07c0 6 4.39 10.97 10.13 11.93v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.69.24 2.69.24v2.95h-1.52c-1.49 0-1.96.93-1.96 1.89v2.27h3.33l-.53 3.49h-2.8V24C19.61 23.04 24 18.07 24 12.07z"
+        />
+      </svg>
+    ),
+  },
+  github: {
+    label: "GitHub",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+        <path
+          fill="#181717"
+          d="M12 .5C5.37.5 0 5.87 0 12.5c0 5.3 3.44 9.8 8.21 11.39.6.11.82-.26.82-.58 0-.29-.01-1.04-.02-2.05-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.34-1.76-1.34-1.76-1.09-.74.08-.73.08-.73 1.21.09 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.5 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.34-5.47-5.95 0-1.31.47-2.39 1.24-3.23-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23a11.5 11.5 0 0 1 6 0c2.29-1.55 3.3-1.23 3.3-1.23.66 1.66.24 2.88.12 3.18.77.84 1.24 1.92 1.24 3.23 0 4.62-2.81 5.64-5.49 5.94.43.37.81 1.1.81 2.22 0 1.6-.01 2.89-.01 3.29 0 .32.21.7.83.58A12 12 0 0 0 24 12.5C24 5.87 18.63.5 12 .5z"
+        />
+      </svg>
+    ),
+  },
+  twitter: {
+    label: "Twitter / X",
+    glyph: (
+      <svg viewBox="0 0 24 24" className="h-4 w-4" aria-hidden>
+        <path
+          fill="#000"
+          d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.66l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231zm-1.161 17.52h1.833L7.084 4.126H5.117l11.966 15.644z"
+        />
+      </svg>
+    ),
+  },
+};
 
 function GoogleGlyph() {
   return (

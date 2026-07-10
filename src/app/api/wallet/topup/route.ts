@@ -535,12 +535,12 @@ async function createMercadoPagoPreference(params: {
       const parsed = new URL(url);
       // MP requires HTTPS — if not HTTPS, return a placeholder
       if (parsed.protocol !== "https:") {
-        return "https://novsmm.com/topup/success";
+        return "https://novsmm.shop/topup/success";
       }
       // Remove query params (some cause validation errors)
       return `${parsed.origin}${parsed.pathname}`;
     } catch {
-      return "https://novsmm.com/topup/success";
+      return "https://novsmm.shop/topup/success";
     }
   };
 

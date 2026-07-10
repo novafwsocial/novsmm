@@ -520,21 +520,29 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             onChange={(e) => setMethod(e.target.value)}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           >
+            {/* BROAD-FIX-BATCH-1: removed the hardcoded "Wise" option (Wise was
+                dropped from the canonical 5 payment methods in
+                PAYMENT-CLEANUP-1). The dropdown now renders exactly the 5
+                canonical methods + any additional active methods the admin
+                has configured (fetched via usePaymentMethods). The previous
+                broken JSX-in-`map` (returning `false` for matching methods,
+                which React renders as nothing) is replaced with a clean
+                `.filter(...).map(...)` so every option is a real <option>. */}
+            <option value="Stripe">Stripe</option>
             <option value="PayPal">PayPal</option>
             <option value="Mercado Pago">Mercado Pago</option>
             <option value="NowPayments">NowPayments (Crypto)</option>
-            <option value="Stripe">Stripe</option>
             <option value="Manual">Manual (WhatsApp / Zelle / Wire)</option>
-            <option value="Wise">Wise</option>
-            {methods.map((m: any) => (
-              m.name !== "PayPal" &&
-              m.name !== "Mercado Pago" &&
-              m.name !== "NowPayments" &&
-              m.name !== "Stripe" &&
-              m.name !== "Manual" && (
-                <option key={m.id} value={m.name}>{m.name}</option>
+            {methods
+              .filter(
+                (m: any) =>
+                  !["Stripe", "PayPal", "Mercado Pago", "NowPayments", "Manual"].includes(m.name)
               )
-            ))}
+              .map((m: any) => (
+                <option key={m.id} value={m.name}>
+                  {m.name}
+                </option>
+              ))}
           </select>
         </div>
 

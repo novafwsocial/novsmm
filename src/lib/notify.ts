@@ -98,7 +98,7 @@ export async function createNotification(input: NotifInput) {
  *   SMTP_PORT=587
  *   SMTP_USER=...
  *   SMTP_PASS=...
- *   EMAIL_FROM="NOVSMM <noreply@novsmm.io>"
+ *   EMAIL_FROM="NOVSMM <noreply@novsmm.shop>"
  */
 export async function sendEmail(opts: {
   to: string;
@@ -112,7 +112,7 @@ export async function sendEmail(opts: {
     // Sandbox mode — log the email
     console.log(`\n📧 [EMAIL · sandbox] ────────────────────`);
     console.log(`  To:      ${opts.to}`);
-    console.log(`  From:    ${EMAIL_FROM ?? "noreply@novsmm.io"}`);
+    console.log(`  From:    ${EMAIL_FROM ?? "noreply@novsmm.shop"}`);
     console.log(`  Subject: ${opts.subject}`);
     console.log(`  Body:    ${opts.text.slice(0, 200)}...`);
     console.log(`  ────────────────────────────────────────\n`);
@@ -129,7 +129,7 @@ export async function sendEmail(opts: {
   });
 
   const info = await transporter.sendMail({
-    from: EMAIL_FROM ?? "NOVSMM <noreply@novsmm.io>",
+    from: EMAIL_FROM ?? "NOVSMM <noreply@novsmm.shop>",
     to: opts.to,
     subject: opts.subject,
     text: opts.text,

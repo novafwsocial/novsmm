@@ -184,7 +184,7 @@ model Transaction {
   amount      Float    // positive = credit, negative = debit
   description String
   status      String   @default("completed") // pending | completed | failed
-  method      String?  // stripe | paypal | crypto | wise | manual
+  method      String?  // stripe | paypal | mercadopago | nowpayments | manual (BROAD-FIX-BATCH-1: canonical 5 methods)
   reference   String?  // external txn id / payment intent
   orderId     String?
   createdAt   DateTime @default(now())
@@ -360,7 +360,7 @@ model Currency {
 // ─────────── Languages (admin-managed) ───────────
 model Language {
   id        String  @id @default(cuid())
-  code      String  @unique // en, es, pt, fr, de
+  code      String  @unique // en, es, pt, fr (BROAD-FIX-BATCH-1: de removed — no i18n pack)
   name      String
   nativeName String
   flag      String  @default("🌍")
@@ -375,7 +375,7 @@ model Language {
 // ─────────── Webhook logs (payment providers) ───────────
 model WebhookLog {
   id        String   @id @default(cuid())
-  provider  String   // stripe | mercadopago | paypal | aurora | manual
+  provider  String   // stripe | paypal | mercadopago | nowpayments | manual (BROAD-FIX-BATCH-1: aurora → nowpayments)
   eventType String   // payment.intent.succeeded, etc.
   payload   String   // raw JSON body
   signature String?
@@ -521,7 +521,7 @@ model PaymentIntent {
   userId          String
   amount          Float
   currency        String   @default("USD")
-  method          String   // stripe | mercadopago | paypal | aurora | manual
+  method          String   // stripe | paypal | mercadopago | nowpayments | manual (BROAD-FIX-BATCH-1: aurora → nowpayments)
   providerIntentId String? // stripe payment_intent_id, MP preference_id
   status          String   @default("pending") // pending | succeeded | failed | refunded
   description     String?
@@ -642,7 +642,7 @@ model ChildPanel {
   publicId        String   @unique // CP-XXXXX style
   userId          String  // owner (the reseller who purchased)
   name            String  // panel display name
-  subdomain       String  @unique // e.g. "acme" → acme.novsmm.com
+  subdomain       String  @unique // e.g. "acme" → acme.novsmm.shop
   apiKey          String  // encrypted API key for the child panel to call parent API
   apiKeyHash      String  @unique // bcrypt hash for lookup
   lookupHash      String? @unique // SHA-256 for O(1) lookup

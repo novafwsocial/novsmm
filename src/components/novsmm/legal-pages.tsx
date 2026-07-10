@@ -56,7 +56,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
               <div className="text-xs text-muted-foreground">Social platforms</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-              <div className="text-2xl font-bold text-foreground">4</div>
+              <div className="text-2xl font-bold text-foreground">5</div>
               <div className="text-xs text-muted-foreground">Payment gateways</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
@@ -96,8 +96,8 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">Headquarters</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             NOVSMM, Inc. is incorporated as a digital services company. For legal inquiries,
-            contact <a href="mailto:legal@novsmm.com" className="text-primary hover:underline">legal@novsmm.com</a>.
-            For business partnerships, contact <a href="mailto:partners@novsmm.com" className="text-primary hover:underline">partners@novsmm.com</a>.
+            contact <a href="mailto:legal@novsmm.shop" className="text-primary hover:underline">legal@novsmm.shop</a>.
+            For business partnerships, contact <a href="mailto:partners@novsmm.shop" className="text-primary hover:underline">partners@novsmm.shop</a>.
           </p>
         </section>
       </div>
@@ -194,7 +194,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
         <section>
           <p className="text-sm text-muted-foreground">
             To apply, send your GitHub profile and a brief note about what you'd build to{" "}
-            <a href="mailto:careers@novsmm.com" className="text-primary hover:underline">careers@novsmm.com</a>.
+            <a href="mailto:careers@novsmm.shop" className="text-primary hover:underline">careers@novsmm.shop</a>.
             No CVs, no cover letters — just code and ideas.
           </p>
         </section>
@@ -270,7 +270,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">Media contact</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             For press inquiries, interviews, or product demos, contact{" "}
-            <a href="mailto:press@novsmm.com" className="text-primary hover:underline">press@novsmm.com</a>.
+            <a href="mailto:press@novsmm.shop" className="text-primary hover:underline">press@novsmm.shop</a>.
             Response time: within 24 hours.
           </p>
         </section>
@@ -354,7 +354,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
         <section>
           <p className="text-sm text-muted-foreground">
             To apply for the partner program, contact{" "}
-            <a href="mailto:partners@novsmm.com" className="text-primary hover:underline">partners@novsmm.com</a>{" "}
+            <a href="mailto:partners@novsmm.shop" className="text-primary hover:underline">partners@novsmm.shop</a>{" "}
             with your business details and intended use case.
           </p>
         </section>
@@ -372,8 +372,8 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <div className="mt-3 rounded-xl border border-border/60 bg-muted/20 p-4 text-sm text-muted-foreground">
             <div><span className="font-medium text-foreground">Legal name:</span> NOVSMM, Inc.</div>
             <div className="mt-1"><span className="font-medium text-foreground">Type:</span> Digital services company</div>
-            <div className="mt-1"><span className="font-medium text-foreground">Registered address:</span> Available upon request to legal@novsmm.com</div>
-            <div className="mt-1"><span className="font-medium text-foreground">Contact email:</span> <a href="mailto:legal@novsmm.com" className="text-primary hover:underline">legal@novsmm.com</a></div>
+            <div className="mt-1"><span className="font-medium text-foreground">Registered address:</span> Available upon request to legal@novsmm.shop</div>
+            <div className="mt-1"><span className="font-medium text-foreground">Contact email:</span> <a href="mailto:legal@novsmm.shop" className="text-primary hover:underline">legal@novsmm.shop</a></div>
           </div>
         </section>
 
@@ -406,7 +406,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
         <section>
           <h2 className="text-xl font-semibold text-foreground">Law enforcement</h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Law enforcement requests should be directed to <a href="mailto:legal@novsmm.com" className="text-primary hover:underline">legal@novsmm.com</a>.
+            Law enforcement requests should be directed to <a href="mailto:legal@novsmm.shop" className="text-primary hover:underline">legal@novsmm.shop</a>.
             We comply with valid legal process (court orders, subpoenas) within the jurisdiction
             where the company is registered. We do not voluntarily share user data without legal
             process.
@@ -494,7 +494,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <strong className="text-foreground">Right to erasure:</strong> Self-service account deletion via Dashboard → Profile → Danger Zone. Personal data is anonymized; financial records are retained for audit.</li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <strong className="text-foreground">Right to rectification:</strong> Update your profile data via Dashboard → Profile</li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <strong className="text-foreground">Right to data portability:</strong> Export your orders and transactions as CSV via Dashboard</li>
-            <li className="flex items-start gap-2"><span className="text-primary">▸</span> <strong className="text-foreground">Right to object:</strong> Contact privacy@novsmm.com to object to specific data processing</li>
+            <li className="flex items-start gap-2"><span className="text-primary">▸</span> <strong className="text-foreground">Right to object:</strong> Contact privacy@novsmm.shop to object to specific data processing</li>
           </ul>
         </section>
 
@@ -513,7 +513,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">6. Contact</h2>
           <p className="mt-2 text-sm text-muted-foreground">
             For privacy questions or data requests, contact{" "}
-            <a href="mailto:privacy@novsmm.com" className="text-primary hover:underline">privacy@novsmm.com</a>.
+            <a href="mailto:privacy@novsmm.shop" className="text-primary hover:underline">privacy@novsmm.shop</a>.
             We respond within 72 hours.
           </p>
         </section>
@@ -585,11 +585,20 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
         <section>
           <h2 className="text-xl font-semibold text-foreground">5. Payments & wallet</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            Wallet top-ups are processed via Stripe, PayPal, Mercado Pago, or NowPayments (crypto).
-            Top-ups are credited to your wallet after the payment provider confirms the transaction.
-            Crypto payments require 1-3 on-chain confirmations. The minimum withdrawal amount is
-            $10. Withdrawals are processed within 48 hours. NOVSMM charges no deposit fees;
-            payment provider fees (typically 2.9-3.99%) are deducted from the top-up amount.
+            {/* BROAD-FIX-BATCH-1: added Manual to the methods list and bumped
+                the minimum withdrawal from $10 to $50 to match the
+                `limits.minWithdrawal: "50"` seed setting. The previous $10
+                copy was inconsistent with both the seed and the FAQ's $50
+                referral-payout floor. */}
+            Wallet top-ups are processed via Stripe, PayPal, Mercado Pago,
+            NowPayments (crypto), or Manual (WhatsApp / Zelle / Wire).
+            Top-ups are credited to your wallet after the payment provider
+            confirms the transaction. Crypto payments require 1-3 on-chain
+            confirmations; Manual top-ups are credited by an admin after
+            payment confirmation. The minimum withdrawal amount is $50.
+            Withdrawals are processed within 48 hours. NOVSMM charges no
+            deposit fees; payment provider fees (typically 2.9-3.99%) are
+            deducted from the top-up amount.
           </p>
         </section>
 
@@ -808,7 +817,7 @@ export function LegalPages({
             <div className="mt-8 border-t border-border/40 pt-6 text-center">
               <p className="text-xs text-muted-foreground">
                 © 2026 NOVSMM, Inc. · Questions? Contact{" "}
-                <a href="mailto:support@novsmm.com" className="text-primary hover:underline">support@novsmm.com</a>
+                <a href="mailto:support@novsmm.shop" className="text-primary hover:underline">support@novsmm.shop</a>
               </p>
             </div>
           </motion.div>

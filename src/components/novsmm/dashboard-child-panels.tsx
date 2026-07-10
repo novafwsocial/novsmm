@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
  * White-label sub-panels for the reseller business. The user purchases a
  * child panel (reseller $49/mo / agency $149/mo / enterprise $499/mo) — a
  * subdomain + API key are auto-provisioned. The child panel runs the same
- * NOVSMM UI on a subdomain (e.g. `acme.novsmm.com`), uses the parent's
+ * NOVSMM UI on a subdomain (e.g. `acme.novsmm.shop`), uses the parent's
  * catalog and fulfils via the parent's providers. The parent earns a margin
  * on every order placed through the child panel (markupPercent over parent
  * prices).
@@ -307,12 +307,12 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
         <div className="rounded-lg bg-muted/40 px-3 py-2">
           <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Subdomain</div>
           <a
-            href={`https://${p.subdomain}.novsmm.com`}
+            href={`https://${p.subdomain}.novsmm.shop`}
             target="_blank"
             rel="noreferrer"
             className="mt-0.5 inline-flex items-center gap-1 font-medium text-primary hover:underline"
           >
-            {p.subdomain}.novsmm.com
+            {p.subdomain}.novsmm.shop
             <ExternalLink className="h-3 w-3" />
           </a>
         </div>
@@ -444,12 +444,12 @@ function CreatedKeyBanner({
             Save this API key now — it won&apos;t be shown again. Your panel is
             live at{" "}
             <a
-              href={`https://${panel.subdomain}.novsmm.com`}
+              href={`https://${panel.subdomain}.novsmm.shop`}
               target="_blank"
               rel="noreferrer"
               className="font-medium text-primary hover:underline"
             >
-              {panel.subdomain}.novsmm.com
+              {panel.subdomain}.novsmm.shop
             </a>
             .
           </p>
@@ -605,7 +605,7 @@ function CreateChildPanelModal({
                 className="h-full flex-1 bg-transparent text-foreground focus:outline-none"
               />
               <span className="rounded-md bg-muted/60 px-2 py-1 text-[11px] text-muted-foreground">
-                .novsmm.com
+                .novsmm.shop
               </span>
             </div>
           </div>
@@ -763,7 +763,13 @@ function EditChildPanelModal({
 }) {
   const updateMutation = useUpdateChildPanel();
   const [name, setName] = useState(panel.name);
-  const [markupPercent, setMarkupPercent] = useState<number>(panel.markupPercent ?? 20);
+  // BROAD-FIX-BATCH-1: aligned the fallback default with the Create modal
+  // (50%). The previous `?? 20` would reset the slider to 20% when reopening
+  // the Edit modal of a freshly-created panel (which defaults to 50% in the
+  // Create modal) — confusing UX. `panel.markupPercent` is normally set from
+  // the DB so the fallback only fires for legacy rows; 50% matches the
+  // Create modal's default.
+  const [markupPercent, setMarkupPercent] = useState<number>(panel.markupPercent ?? 50);
 
   const valid = name.trim().length >= 1 && name.trim().length <= 50 && markupPercent >= 0 && markupPercent <= 100;
 
@@ -803,7 +809,7 @@ function EditChildPanelModal({
           <div>
             <h2 className="text-base font-semibold text-foreground">Edit {panel.publicId}</h2>
             <p className="text-xs text-muted-foreground">
-              {panel.subdomain}.novsmm.com
+              {panel.subdomain}.novsmm.shop
             </p>
           </div>
         </div>

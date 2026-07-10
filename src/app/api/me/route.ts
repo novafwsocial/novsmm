@@ -81,7 +81,13 @@ const updateProfileSchema = z.object({
   country: z.string().optional(),
   currency: z.string().optional(), // currency code: USD, MXN, EUR...
   language: z.string().optional(), // language code: en, es, pt...
-  role: z.enum(["reseller", "agency", "creator", "enterprise"]).optional(),
+  // BROAD-FIX-BATCH-1: the previous enum ["reseller","agency","creator","enterprise"]
+  // included "creator" and "enterprise" which don't exist anywhere else in
+  // the codebase (the User.role schema comment lists user | reseller | agency
+  // | admin, and admin self-edit is already blocked by an explicit role check
+  // below). Aligned to the canonical User.role values. "user" is included
+  // so a reseller/agency can downgrade themselves back to a plain user.
+  role: z.enum(["user", "reseller", "agency"]).optional(),
   notificationPreferences: z
     .object({
       email: z.boolean().optional(),

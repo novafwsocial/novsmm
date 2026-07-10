@@ -31,7 +31,11 @@ const FLOW = [
   {
     icon: Users,
     title: "Buyer checkout",
-    desc: "Customers buy at your retail price across 12+ gateways.",
+    // BROAD-FIX-BATCH-1: the previous "12+ gateways" copy was inflated —
+    // NOVSMM ships exactly 5 canonical payment methods (Stripe, PayPal,
+    // Mercado Pago, NowPayments, Manual). Aligned to match reality so the
+    // landing page doesn't over-promise.
+    desc: "Customers buy at your retail price across 5 gateways.",
     chip: "retail",
   },
   {

@@ -18,7 +18,10 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const viewport: Viewport = {
-  themeColor: "#0a0a0a",
+  // BROAD-FIX-BATCH-1: aligned with the canonical PWA manifest theme_color
+  // (#0052ff — NOVSMM electric blue). The previous #0a0a0a conflicted with
+  // the manifest's #ffffff and the brand's primary action color.
+  themeColor: "#0052ff",
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,

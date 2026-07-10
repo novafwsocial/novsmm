@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import {
   Mail,
@@ -15,7 +15,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { useApp } from "./app-store";
-import { Field, PasswordStrength, SocialButton } from "./auth-fields";
+import { Field, PasswordStrength, SocialButton, type SocialProviderId } from "./auth-fields";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { LegalPages, type LegalPageType } from "./legal-pages";
@@ -27,7 +27,52 @@ const COUNTRIES = [
   "Chile", "Peru", "United Kingdom", "Germany", "France", "India", "Japan",
 ];
 const CURRENCIES = ["USD", "EUR", "MXN", "BRL", "ARS", "COP", "GBP", "INR"];
-const LANGUAGES = ["English", "Español", "Português", "Français", "Deutsch"];
+
+// BROAD-FIX-BATCH-1: language options now use ISO codes (en/es/pt/fr) as the
+// `value` (which is what gets sent to /api/auth/register and stored on the
+// User row), with the display label shown to the user. The previous version
+// used display names ("Português", "Español") as the value, which broke
+// Portuguese users — `useTranslation` does `.slice(0,2)` on the stored value,
+// and `"Português".slice(0,2)` === "po" (not "pt"), so Portuguese users
+// silently fell back to English.
+//
+// "Deutsch" (de) was removed because no German translation pack exists in
+// src/lib/i18n.ts (ADMIN-FIX-BATCH-2 removed the German seed row for the
+// same reason). Re-add only when a complete `de` translation object ships.
+const LANGUAGES: { code: string; label: string }[] = [
+  { code: "en", label: "English" },
+  { code: "es", label: "Español" },
+  { code: "pt", label: "Português" },
+  { code: "fr", label: "Français" },
+];
+
+/**
+ * BROAD-FIX-BATCH-1: fetch the list of OAuth providers configured by the
+ * admin so we can render the right "Sign up with X" buttons. Mirrors the
+ * login screen's `useConfiguredSocialProviders` hook.
+ */
+function useConfiguredSocialProviders() {
+  const [providers, setProviders] = useState<SocialProviderId[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ providers: string[] }>("/api/auth/social-providers")
+      .then((data) => {
+        if (cancelled) return;
+        const valid = (data?.providers ?? []).filter((p) =>
+          ["google", "facebook", "github", "twitter"].includes(p)
+        ) as SocialProviderId[];
+        setProviders(valid);
+      })
+      .catch(() => {
+        // Network/DB error — leave providers empty (no social buttons shown).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return providers;
+}
 
 export function RegisterScreen() {
   const { setView, setOnboardingStep } = useApp();
@@ -40,11 +85,12 @@ export function RegisterScreen() {
     confirm: "",
     country: "Mexico",
     currency: "USD",
-    language: "English",
+    language: "en",
   });
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [socialLoading, setSocialLoading] = useState<SocialProviderId | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const socialProviders = useConfiguredSocialProviders();
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(form.email);
   const usernameValid = /^[a-zA-Z0-9_]{3,}$/.test(form.username);
@@ -57,12 +103,12 @@ export function RegisterScreen() {
   const update = (k: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) =>
     setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const handleGoogle = async () => {
-    setGoogleLoading(true);
+  const handleSocial = async (provider: SocialProviderId) => {
+    setSocialLoading(provider);
     setError(null);
-    // signIn redirects to Google's consent screen, then back to "/".
+    // signIn redirects to the provider's consent screen, then back to "/".
     // NextAuth + PrismaAdapter will create the user account on first login.
-    await signIn("google", { callbackUrl: "/" });
+    await signIn(provider, { callbackUrl: "/" });
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -150,20 +196,29 @@ export function RegisterScreen() {
           </div>
 
           <div className="my-6">
-            <SocialButton
-              onClick={handleGoogle}
-              loading={googleLoading}
-              label="Sign up with Google"
-            />
+            {socialProviders.length > 0 && (
+              <div className="flex flex-col gap-2.5">
+                {socialProviders.map((p) => (
+                  <SocialButton
+                    key={p}
+                    provider={p}
+                    onClick={() => handleSocial(p)}
+                    loading={socialLoading === p}
+                  />
+                ))}
+              </div>
+            )}
           </div>
 
-          <div className="mb-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              or sign up with email
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
+          {socialProviders.length > 0 && (
+            <div className="mb-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                or sign up with email
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
 
           {error && (
             <motion.div
@@ -261,7 +316,8 @@ export function RegisterScreen() {
                 label="Language"
                 value={form.language}
                 onChange={update("language")}
-                options={LANGUAGES}
+                options={LANGUAGES.map((l) => l.code)}
+                optionLabels={LANGUAGES.map((l) => l.label)}
               />
             </div>
 
@@ -348,12 +404,17 @@ function SelectField({
   value,
   onChange,
   options,
+  optionLabels,
 }: {
   label: string;
   icon?: React.ReactNode;
   value: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   options: string[];
+  // Optional display labels — when provided, the dropdown shows optionLabels[i]
+  // for options[i]. Used by the Language dropdown where the value is the ISO
+  // code ("pt") but the user should see the native name ("Português").
+  optionLabels?: string[];
 }) {
   return (
     <label className="block">
@@ -367,9 +428,9 @@ function SelectField({
           onChange={onChange}
           className="h-11 w-full appearance-none bg-transparent text-sm text-foreground focus:outline-none"
         >
-          {options.map((o) => (
+          {options.map((o, i) => (
             <option key={o} value={o}>
-              {o}
+              {optionLabels?.[i] ?? o}
             </option>
           ))}
         </select>

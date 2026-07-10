@@ -208,14 +208,14 @@ export async function GET() {
     ],
     examples: {
       curl: {
-        services: 'curl -H "Authorization: Bearer nvsk_live_xxx" https://api.novsmm.com/api/v1/services',
-        placeOrder: 'curl -X POST -H "Authorization: Bearer nvsk_live_xxx" -H "Content-Type: application/json" -d \'{"service":"abc123","link":"https://instagram.com/post","quantity":1000}\' https://api.novsmm.com/api/v1/orders',
-        orderStatus: 'curl -H "Authorization: Bearer nvsk_live_xxx" "https://api.novsmm.com/api/v1/status?order=A-10432"',
-        multiStatus: 'curl -H "Authorization: Bearer nvsk_live_xxx" "https://api.novsmm.com/api/v1/status?orders=A-10432,A-10433"',
-        balance: 'curl -H "Authorization: Bearer nvsk_live_xxx" https://api.novsmm.com/api/v1/balance',
-        cancel: 'curl -X POST -H "Authorization: Bearer nvsk_live_xxx" -H "Content-Type: application/json" -d \'{"order":"A-10432"}\' https://api.novsmm.com/api/v1/cancel',
-        refill: 'curl -X POST -H "Authorization: Bearer nvsk_live_xxx" -H "Content-Type: application/json" -d \'{"order":"A-10432"}\' https://api.novsmm.com/api/v1/refill',
-        refillStatus: 'curl -H "Authorization: Bearer nvsk_live_xxx" "https://api.novsmm.com/api/v1/refill_status?refill=T-100"',
+        services: 'curl -H "Authorization: Bearer nvsk_live_xxx" https://api.novsmm.shop/api/v1/services',
+        placeOrder: 'curl -X POST -H "Authorization: Bearer nvsk_live_xxx" -H "Content-Type: application/json" -d \'{"service":"abc123","link":"https://instagram.com/post","quantity":1000}\' https://api.novsmm.shop/api/v1/orders',
+        orderStatus: 'curl -H "Authorization: Bearer nvsk_live_xxx" "https://api.novsmm.shop/api/v1/status?order=A-10432"',
+        multiStatus: 'curl -H "Authorization: Bearer nvsk_live_xxx" "https://api.novsmm.shop/api/v1/status?orders=A-10432,A-10433"',
+        balance: 'curl -H "Authorization: Bearer nvsk_live_xxx" https://api.novsmm.shop/api/v1/balance',
+        cancel: 'curl -X POST -H "Authorization: Bearer nvsk_live_xxx" -H "Content-Type: application/json" -d \'{"order":"A-10432"}\' https://api.novsmm.shop/api/v1/cancel',
+        refill: 'curl -X POST -H "Authorization: Bearer nvsk_live_xxx" -H "Content-Type: application/json" -d \'{"order":"A-10432"}\' https://api.novsmm.shop/api/v1/refill',
+        refillStatus: 'curl -H "Authorization: Bearer nvsk_live_xxx" "https://api.novsmm.shop/api/v1/refill_status?refill=T-100"',
       },
     },
     rateLimits: {

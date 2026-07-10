@@ -50,7 +50,7 @@ const FEATURES = [
 ];
 
 const REQUEST_SAMPLE = `# Place an order via API
-curl -X POST https://api.novsmm.com/api/v1/orders \\
+curl -X POST https://api.novsmm.shop/api/v1/orders \\
   -H "Authorization: Bearer nvsk_live_xxx" \\
   -H "Content-Type: application/json" \\
   -d '{"service":"abc123","link":"https://instagram.com/post","quantity":1000}'`;

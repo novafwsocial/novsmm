@@ -1,15 +1,47 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import { Mail, Lock, ArrowRight, ArrowLeft, Sparkles, Loader2, X, CheckCircle2, Shield } from "lucide-react";
 import { useApp } from "./app-store";
-import { Field, SocialButton } from "./auth-fields";
+import { Field, SocialButton, type SocialProviderId } from "./auth-fields";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { api } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+
+/**
+ * BROAD-FIX-BATCH-1: fetch the list of OAuth providers that the admin has
+ * configured (via env vars or the admin panel). We render one
+ * "Continue with X" button per configured provider — unconfigured providers
+ * are hidden so users never click a button that fails.
+ *
+ * Falls back to ["google"] if the request fails (e.g. during build), which
+ * is a safe no-op since the Google button just triggers a redirect.
+ */
+function useConfiguredSocialProviders() {
+  const [providers, setProviders] = useState<SocialProviderId[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    api
+      .get<{ providers: string[] }>("/api/auth/social-providers")
+      .then((data) => {
+        if (cancelled) return;
+        const valid = (data?.providers ?? []).filter((p) =>
+          ["google", "facebook", "github", "twitter"].includes(p)
+        ) as SocialProviderId[];
+        setProviders(valid);
+      })
+      .catch(() => {
+        // Network/DB error — leave providers empty (no social buttons shown).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+  return providers;
+}
 
 function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
@@ -133,6 +165,9 @@ export function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showForgot, setShowForgot] = useState(false);
+  // BROAD-FIX-BATCH-1: render a button per configured OAuth provider.
+  const socialProviders = useConfiguredSocialProviders();
+  const [socialLoading, setSocialLoading] = useState<SocialProviderId | null>(null);
 
   const emailValid = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email);
   const pwValid = password.length >= 1;
@@ -190,8 +225,8 @@ export function LoginScreen() {
     }
   };
 
-  const handleSocial = async (provider: string) => {
-    setLoading(true);
+  const handleSocial = async (provider: SocialProviderId) => {
+    setSocialLoading(provider);
     setError(null);
     await signIn(provider, { callbackUrl: "/" });
   };
@@ -237,22 +272,31 @@ export function LoginScreen() {
             </p>
           </div>
 
-          {/* Social */}
-          <div className="mt-7">
-            <SocialButton
-              onClick={() => handleSocial("google")}
-              loading={loading}
-              label="Continue with Google"
-            />
-          </div>
+          {/* Social — render one button per configured OAuth provider. */}
+          {socialProviders.length > 0 && (
+            <div className="mt-7 flex flex-col gap-2.5">
+              {socialProviders.map((p) => (
+                <SocialButton
+                  key={p}
+                  provider={p}
+                  onClick={() => handleSocial(p)}
+                  loading={socialLoading === p}
+                />
+              ))}
+            </div>
+          )}
 
-          <div className="my-6 flex items-center gap-3">
-            <div className="h-px flex-1 bg-border" />
-            <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              or continue with email
-            </span>
-            <div className="h-px flex-1 bg-border" />
-          </div>
+          {socialProviders.length > 0 && (
+            <div className="my-6 flex items-center gap-3">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
+                or continue with email
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+          )}
+
+          {socialProviders.length === 0 && <div className="mt-7" />}
 
           {error && (
             <motion.div

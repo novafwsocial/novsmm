@@ -64,7 +64,10 @@ export function DashboardProfile() {
     name: edits.name ?? user.name ?? "",
     country: edits.country ?? user.country ?? "Mexico",
     currency: edits.currency ?? user.currency ?? "USD",
-    language: edits.language ?? user.language ?? "English",
+    // BROAD-FIX-BATCH-1: default to ISO code "en" (not "English") so the
+    // PATCH /api/me validation passes — the Language table only has ISO
+    // code rows (en/es/pt/fr).
+    language: edits.language ?? user.language ?? "en",
   };
 
   const setField = (key: string, value: string) => {

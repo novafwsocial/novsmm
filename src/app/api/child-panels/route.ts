@@ -16,7 +16,7 @@ import { encrypt } from "@/lib/crypto-utils";
  *
  * When a user purchases a child panel, a subdomain + API key are
  * auto-provisioned. The child panel runs the same NOVSMM UI on a subdomain
- * (e.g. `acme.novsmm.com`), uses the parent's catalog and fulfils via the
+ * (e.g. `acme.novsmm.shop`), uses the parent's catalog and fulfils via the
  * parent's providers. The parent (the reseller) earns a margin on every order
  * placed through the child panel (markupPercent over parent prices).
  *
@@ -218,7 +218,7 @@ export async function POST(req: NextRequest) {
       userId,
       type: "system",
       title: `Child panel ${publicId} provisioned 🚀`,
-      message: `${name} → https://${normalizedSub}.novsmm.com · ${plan} plan · ${monthlyDays} days · $${totalCost.toFixed(2)} debited.`,
+      message: `${name} → https://${normalizedSub}.novsmm.shop · ${plan} plan · ${monthlyDays} days · $${totalCost.toFixed(2)} debited.`,
       amount: -totalCost,
       severity: "success",
       sendEmail: true,

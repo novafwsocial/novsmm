@@ -2,24 +2,39 @@ import type { MetadataRoute } from "next";
 
 /**
  * PWA Manifest — served at /manifest.webmanifest by Next.js.
- * Allows the app to be installed as a standalone app on mobile/desktop.
+ *
+ * BROAD-FIX-BATCH-1: consolidated from the previous duplicate
+ * `public/manifest.json` (which had a conflicting name, theme_color, and
+ * icon set). This file is now the single source of truth for the
+ * installable PWA metadata.
+ *
+ * Branding:
+ *   - name / short_name: "NOVSMM"
+ *   - theme_color: #0052ff (electric blue — NOVSMM primary brand color)
+ *   - background_color: #ffffff (pure white — matches the landing page)
+ *   - icons: 192, 512, and a maskable variant (all from /icon.png)
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "NOVSMM — SMM Panel Platform",
+    name: "NOVSMM",
     short_name: "NOVSMM",
     description: "Infrastructure for social media marketing at scale",
     start_url: "/",
+    scope: "/",
     display: "standalone",
-    background_color: "#0a0a0a",
-    theme_color: "#0a0a0a",
+    display_override: ["standalone", "minimal-ui"],
     orientation: "portrait-primary",
+    background_color: "#ffffff",
+    theme_color: "#0052ff",
+    lang: "en",
+    dir: "ltr",
+    categories: ["business", "productivity", "social", "marketing", "finance"],
     icons: [
       { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      { src: "/icon.png", sizes: "any", type: "image/png", purpose: "maskable" },
+      { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
-    categories: ["business", "productivity", "social"],
     shortcuts: [
       {
         name: "Dashboard",

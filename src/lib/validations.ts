@@ -12,7 +12,11 @@ export const registerSchema = z.object({
   confirm: z.string(),
   country: z.string().default("Mexico"),
   currency: z.string().default("USD"),
-  language: z.string().default("English"),
+  // BROAD-FIX-BATCH-1: language must be an ISO code (en/es/pt/fr), NOT the
+  // display name. The previous default "English" caused `useTranslation` to
+  // do `"English".slice(0,2)` = "en" (worked by coincidence) but
+  // "Português".slice(0,2) = "po" (broken — fell back to English).
+  language: z.string().default("en"),
 }).refine((d) => d.password === d.confirm, {
   message: "Passwords don't match",
   path: ["confirm"],

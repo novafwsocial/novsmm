@@ -275,8 +275,11 @@ const FAQS: FAQ[] = [
             user&apos;s order is marked <strong>Completed</strong>.
           </li>
           <li>
+            {/* BROAD-FIX-BATCH-1: minimum payout aligned with the canonical
+                limits.minWithdrawal seed setting ($50). The previous $5 was
+                inconsistent with both the seed and the legal Terms copy. */}
             Withdraw commissions anytime via the standard wallet-withdrawal
-            flow; minimum payout is $5.
+            flow; minimum payout is $50.
           </li>
           <li>
             Resellers on Wholesale plans earn a{" "}
@@ -416,10 +419,10 @@ const FAQS: FAQ[] = [
         <p>
           For security disclosures or questions, email{" "}
           <a
-            href="mailto:security@novsmm.io"
+            href="mailto:security@novsmm.shop"
             className="font-medium text-foreground underline-offset-2 hover:underline"
           >
-            security@novsmm.io
+            security@novsmm.shop
           </a>
           .
         </p>

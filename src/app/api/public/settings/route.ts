@@ -30,7 +30,7 @@ export async function GET() {
   const response = apiOk({
     siteName: map["platform.siteName"] ?? "NOVSMM",
     whatsappNumber: map["platform.whatsapp"] ?? "5215512345678",
-    supportEmail: map["platform.supportEmail"] ?? "support@novsmm.io",
+    supportEmail: map["platform.supportEmail"] ?? "support@novsmm.shop",
     currencies,
     languages,
   });

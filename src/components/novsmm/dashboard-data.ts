@@ -36,31 +36,12 @@ export const MARKETPLACE_BREAKDOWN = [
 
 export type OrderStatus = "processing" | "in_progress" | "completed" | "partial" | "pending";
 
-export const ORDERS: {
-  id: string;
-  service: string;
-  platform: string;
-  qty: number;
-  cost: number;
-  price: number;
-  status: OrderStatus;
-  progress: number;
-  provider: string;
-  eta: string;
-  date: string;
-  flag: string;
-}[] = [
-  { id: "A-10432", service: "Followers HQ", platform: "Instagram", qty: 1000, cost: 0.84, price: 2.4, status: "in_progress", progress: 64, provider: "Provider-04", eta: "2m", date: "Just now", flag: "🇲🇽" },
-  { id: "A-10431", service: "Views (1M)", platform: "TikTok", qty: 1000000, cost: 3.2, price: 7.8, status: "processing", progress: 8, provider: "Provider-02", eta: "5m", date: "1m ago", flag: "🇧🇷" },
-  { id: "A-10430", service: "Watch hours", platform: "YouTube", qty: 4000, cost: 11.0, price: 24.0, status: "completed", progress: 100, provider: "Provider-07", eta: "—", date: "12m ago", flag: "🇺🇸" },
-  { id: "A-10429", service: "Plays", platform: "Spotify", qty: 5000, cost: 6.5, price: 14.9, status: "completed", progress: 100, provider: "Provider-03", eta: "—", date: "28m ago", flag: "🇪🇸" },
-  { id: "A-10428", service: "Members", platform: "Telegram", qty: 500, cost: 9.0, price: 19.5, status: "partial", progress: 72, provider: "Provider-01", eta: "8m", date: "44m ago", flag: "🇮🇳" },
-  { id: "A-10427", service: "Followers", platform: "X", qty: 2000, cost: 4.2, price: 9.8, status: "in_progress", progress: 41, provider: "Provider-05", eta: "6m", date: "1h ago", flag: "🇬🇧" },
-  { id: "A-10426", service: "Live viewers", platform: "Twitch", qty: 100, cost: 2.1, price: 5.4, status: "pending", progress: 0, provider: "Provider-06", eta: "12m", date: "1h ago", flag: "🇨🇦" },
-  { id: "A-10425", service: "Likes", platform: "Instagram", qty: 2500, cost: 1.4, price: 3.6, status: "completed", progress: 100, provider: "Provider-04", eta: "—", date: "2h ago", flag: "🇲🇽" },
-  { id: "A-10424", service: "Reels views", platform: "Instagram", qty: 10000, cost: 2.8, price: 6.9, status: "completed", progress: 100, provider: "Provider-02", eta: "—", date: "3h ago", flag: "🇦🇷" },
-  { id: "A-10423", service: "Followers", platform: "Facebook", qty: 800, cost: 3.2, price: 7.2, status: "completed", progress: 100, provider: "Provider-01", eta: "—", date: "5h ago", flag: "🇨🇴" },
-];
+// BROAD-FIX-BATCH-1: the previous `ORDERS` mock array (10 fake orders that
+// referenced the long-removed "Provider-01".."Provider-07" fake provider
+// names) was dead code — only the `OrderStatus` type above is imported
+// elsewhere (by dashboard-orders.tsx). The mock was a sync hazard: grepping
+// the codebase for stale provider names would surface these even though no
+// runtime code uses them. Removed.
 
 export const MARKETPLACE_OFFERS = [
   { svc: "Instagram · Followers HQ", cost: 0.84, price: 2.4, margin: 186, sales: 1240, trend: "+12" },
@@ -74,7 +55,7 @@ export const MARKETPLACE_OFFERS = [
 export const WALLET_TXNS = [
   { id: "TX-8842", type: "sale", desc: "Order #A-10432 — Instagram Followers", amount: 2.4, time: "Just now", status: "completed" },
   { id: "TX-8841", type: "topup", desc: "Top-up via Stripe •••• 4242", amount: 500, time: "2h ago", status: "completed" },
-  { id: "TX-8840", type: "withdrawal", desc: "Withdrawal to Wise · EUR", amount: -1200, time: "5h ago", status: "completed" },
+  { id: "TX-8840", type: "withdrawal", desc: "Withdrawal to PayPal · EUR", amount: -1200, time: "5h ago", status: "completed" },
   { id: "TX-8839", type: "sale", desc: "Order #A-10430 — YouTube Watch hours", amount: 24.0, time: "12m ago", status: "completed" },
   { id: "TX-8838", type: "fee", desc: "Marketplace fee · 3%", amount: -0.42, time: "Just now", status: "completed" },
   { id: "TX-8837", type: "referral", desc: "Referral bonus · @marcus", amount: 5.0, time: "1d ago", status: "completed" },
