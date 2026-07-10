@@ -43,6 +43,16 @@ uploads/
 download/
 tool-results/
 skills/
+agent-ctx/
+worklog.md
+*.lockb
+
+# Audit reports (dev-only)
+OWASP_AUDIT_REPORT.md
+ASVS_AUDIT_REPORT.md
+
+# CI/CD hardening scripts (not needed in app image)
+scripts/cis-harden.sh
 
 # IDE
 .vscode

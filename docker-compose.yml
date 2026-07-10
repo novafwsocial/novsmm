@@ -22,20 +22,33 @@
 # ─────────────────────────────────────────────────────────────────────────────
 
 services:
-  # ── PostgreSQL Database ──
+  # ── PostgreSQL Database (CIS-hardened) ──
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
     init: true
+    # CIS Docker 5.3: Drop ALL capabilities, no new privileges
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # CIS: Resource limits (prevent OOM cascades)
+    mem_limit: 512m
+    cpus: 1.0
+    # CIS: Read-only root filesystem (writes go to volumes)
+    read_only: false  # PostgreSQL needs to write to data dir
+    tmpfs:
+      - /tmp:size=64m
+      - /run:size=16m
+      - /var/run/postgresql:size=16m
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-novsmm}
       POSTGRES_USER: ${POSTGRES_USER:-novsmm}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      # CIS PostgreSQL: Disable dangerous defaults
+      POSTGRES_INITDB_ARGS: "--auth-local=scram-sha-256 --auth-host=scram-sha-256"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups  # Mount for backup scripts
     # No ports exposed — services communicate via Docker network
-    # Use `docker compose exec postgres psql ...` for direct access
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-novsmm} -d ${POSTGRES_DB:-novsmm}"]
       interval: 10s
@@ -44,16 +57,36 @@ services:
     networks:
       - novsmm-network
 
-  # ── Redis (cache + rate limit + queues) ──
+  # ── Redis (CIS-hardened) ──
   redis:
     image: redis:7-alpine
     restart: unless-stopped
     init: true
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+    # CIS Docker 5.3: Drop ALL capabilities, no new privileges
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # CIS: Resource limits
+    mem_limit: 300m
+    cpus: 0.5
+    # CIS: Read-only root filesystem
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m
+    # CIS Redis: Disable dangerous commands, require auth, rename commands
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --requirepass ${REDIS_PASSWORD:?Set REDIS_PASSWORD in .env}
+      --rename-command FLUSHDB ""
+      --rename-command FLUSHALL ""
+      --rename-command CONFIG ""
+      --rename-command DEBUG ""
+      --rename-command SHUTDOWN ""
+      --loglevel warning
     volumes:
       - redis_data:/data
-    # No ports exposed — services communicate via Docker network
-    # Use `docker compose exec redis redis-cli ...` for direct access
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
@@ -62,13 +95,24 @@ services:
     networks:
       - novsmm-network
 
-  # ── Next.js Web App ──
+  # ── Next.js Web App (CIS-hardened) ──
   web:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
     init: true
+    # CIS Docker 5.3: Drop ALL capabilities (app doesn't need any)
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # CIS: Resource limits (web is the heaviest service)
+    mem_limit: 1g
+    cpus: 2.0
+    # CIS: Read-only root filesystem (writes go to volumes + tmpfs)
+    read_only: true
+    tmpfs:
+      - /tmp:size=128m
+      - /app/.next/cache:size=128m
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?connection_limit=10&pool_timeout=20
@@ -81,7 +125,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - uploads:/app/uploads
+      - uploads:/app/storage/uploads
     ports:
       - "127.0.0.1:3000:3000"  # Only accessible via nginx
     healthcheck:
@@ -93,13 +137,22 @@ services:
     networks:
       - novsmm-network
 
-  # ── BullMQ Worker (background jobs) ──
+  # ── BullMQ Worker (CIS-hardened) ──
   worker:
     build:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["npx", "tsx", "src/workers/worker.ts"]
+    command: ["node", "node_modules/.bin/tsx", "src/workers/worker.ts"]
+    # CIS Docker 5.3: Drop ALL capabilities
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    # CIS: Resource limits (worker is lighter than web)
+    mem_limit: 512m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
     env_file: .env
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-novsmm}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-novsmm}?connection_limit=10&pool_timeout=20
@@ -111,7 +164,7 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - uploads:/app/uploads
+      - uploads:/app/storage/uploads
     healthcheck:
       test: ["CMD-SHELL", "node -e \"process.exit(0)\" || exit 1"]
       interval: 30s
