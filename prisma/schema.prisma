@@ -1,8 +1,8 @@
-// NOVSMM — schema (portable, dev = SQLite, prod = PostgreSQL)
+// NOVSMM — schema (PostgreSQL production)
 // This schema uses portable Prisma types (String, Float, Json) that work
-// across SQLite and PostgreSQL. The provider is set to "sqlite" for the
-// sandbox/dev environment. Production deployments should override with
-// the `postgresql` provider via the schema.postgres.prisma file.
+// across SQLite and PostgreSQL. The provider is set to "postgresql" for
+// production deployments. For local dev with SQLite, change provider to
+// "sqlite" and use a file-based DATABASE_URL.
 // Json type: PostgreSQL stores as JSONB; SQLite stores as TEXT.
 // For a more strict PostgreSQL schema with native enums + Decimal + VarChar,
 // see prisma/schema.postgres.prisma
@@ -12,7 +12,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
