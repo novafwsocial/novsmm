@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X, ArrowRight } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
@@ -22,18 +21,26 @@ export function Navbar() {
   const { setView } = useApp();
 
   useEffect(() => {
-    const onScroll = () => setScrolled(window.scrollY > 24);
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        setScrolled(window.scrollY > 24);
+        ticking = false;
+      });
+    };
     onScroll();
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
   return (
-    <motion.header
-      initial={{ y: -20, opacity: 0 }}
-      animate={{ y: 0, opacity: 1 }}
-      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+    <header
       className="fixed inset-x-0 top-0 z-50 flex justify-center px-4 pt-3 sm:pt-4"
+      style={{
+        animation: "navbarIn 0.7s cubic-bezier(0.16, 1, 0.3, 1)",
+      }}
     >
       <nav
         className={cn(
@@ -78,53 +85,51 @@ export function Navbar() {
           className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground lg:hidden"
           onClick={() => setOpen((v) => !v)}
           aria-label="Toggle menu"
+          aria-expanded={open}
         >
           {open ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
       </nav>
 
-      <AnimatePresence>
-        {open && (
-          <motion.div
-            initial={{ opacity: 0, y: -8 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -8 }}
-            transition={{ duration: 0.25 }}
-            className="absolute left-4 right-4 top-[68px] z-50 origin-top rounded-3xl border border-border/60 bg-background/95 p-3 backdrop-blur-xl lg:hidden"
-          >
-            {NAV_LINKS.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="block rounded-2xl px-4 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-muted"
-              >
-                {l.label}
-              </a>
-            ))}
-            <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3">
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  setView("login");
-                }}
-                className="rounded-2xl px-4 py-3 text-left text-base font-medium text-foreground/80"
-              >
-                Sign in
-              </button>
-              <button
-                onClick={() => {
-                  setOpen(false);
-                  setView("register");
-                }}
-                className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
-              >
-                Start free
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </motion.header>
+      {open && (
+        <div
+          className="absolute left-4 right-4 top-[68px] z-50 origin-top rounded-3xl border border-border/60 bg-background/95 p-3 backdrop-blur-xl lg:hidden"
+          style={{
+            animation: "mobileMenuIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
+          }}
+        >
+          {NAV_LINKS.map((l) => (
+            <a
+              key={l.href}
+              href={l.href}
+              onClick={() => setOpen(false)}
+              className="block rounded-2xl px-4 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-muted"
+            >
+              {l.label}
+            </a>
+          ))}
+          <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3">
+            <button
+              onClick={() => {
+                setOpen(false);
+                setView("login");
+              }}
+              className="rounded-2xl px-4 py-3 text-left text-base font-medium text-foreground/80"
+            >
+              Sign in
+            </button>
+            <button
+              onClick={() => {
+                setOpen(false);
+                setView("register");
+              }}
+              className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
+            >
+              Start free
+            </button>
+          </div>
+        </div>
+      )}
+    </header>
   );
 }

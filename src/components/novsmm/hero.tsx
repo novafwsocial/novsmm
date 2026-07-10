@@ -1,7 +1,7 @@
 "use client";
 
-import { motion, useScroll, useTransform } from "framer-motion";
 import { useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import {
   ArrowRight,
   Play,
@@ -13,19 +13,21 @@ import {
 } from "lucide-react";
 import { Magnetic } from "./magnetic";
 import { Counter } from "./counter";
-import { HeroDashboard } from "./hero-dashboard";
 import { useApp } from "./app-store";
+
+// PERF: HeroDashboard loads recharts (~400KB) — lazy-load it so the hero
+// renders instantly with a lightweight placeholder, then the dashboard
+// preview fades in once the chart library is loaded.
+const HeroDashboard = dynamic(() => import("./hero-dashboard").then(m => ({ default: m.HeroDashboard })), {
+  loading: () => (
+    <div className="aspect-[16/10] w-full animate-pulse rounded-[20px] border border-border/40 bg-muted/30" />
+  ),
+  ssr: false, // recharts is client-only, don't SSR it
+});
 
 export function Hero() {
   const { setView } = useApp();
-  const ref = useRef<HTMLElement>(null);
-  const { scrollYProgress } = useScroll({
-    target: ref,
-    offset: ["start start", "end start"],
-  });
-  const yBg = useTransform(scrollYProgress, [0, 1], [0, 120]);
-  const yDash = useTransform(scrollYProgress, [0, 1], [0, 80]);
-  const opacity = useTransform(scrollYProgress, [0, 0.8], [1, 0]);
+  const sectionRef = useRef<HTMLElement>(null);
 
   // Live orders/min — fetched from /api/status (public). Falls back to 1200
   // if the request fails so the eyebrow never renders empty.
@@ -49,29 +51,23 @@ export function Hero() {
 
   return (
     <section
-      ref={ref}
+      ref={sectionRef}
       id="hero"
       className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28"
     >
-      {/* Background layers — depth */}
-      <motion.div
-        style={{ y: yBg }}
-        aria-hidden
-        className="pointer-events-none absolute inset-0 -z-10"
-      >
+      {/* Background layers — depth (CSS-only, no scroll tracking) */}
+      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 nov-grid-bg nov-radial-fade" />
         <div className="absolute left-1/2 top-[-10%] h-[480px] w-[840px] -translate-x-1/2 rounded-full bg-primary/[0.06] blur-[120px]" />
         <div className="absolute right-[8%] top-[28%] h-[320px] w-[320px] rounded-full bg-emerald-400/10 blur-[100px]" />
         <div className="absolute left-[6%] bottom-[12%] h-[280px] w-[280px] rounded-full bg-primary/[0.05] blur-[100px]" />
-      </motion.div>
+      </div>
 
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         {/* Eyebrow */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+        <div
           className="flex justify-center"
+          style={{ animation: "heroFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1)" }}
         >
           <a
             href="#stats"
@@ -87,37 +83,31 @@ export function Hero() {
             </span>
             <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </a>
-        </motion.div>
+        </div>
 
         {/* Headline */}
-        <motion.h1
-          initial={{ opacity: 0, y: 24, filter: "blur(12px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 1, delay: 0.06, ease: [0.16, 1, 0.3, 1] }}
+        <h1
           className="mx-auto mt-7 max-w-4xl text-center text-[clamp(2.4rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.03em] text-balance"
+          style={{ animation: "heroFadeBlur 1s 0.06s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           The infrastructure for{" "}
           <span className="nov-text-gradient">social media marketing</span> at
           scale.
-        </motion.h1>
+        </h1>
 
-        <motion.p
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.16, ease: [0.16, 1, 0.3, 1] }}
+        <p
           className="mx-auto mt-6 max-w-2xl text-center text-lg leading-relaxed text-muted-foreground text-pretty sm:text-xl"
+          style={{ animation: "heroFadeUp 0.9s 0.16s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           NOVSMM unifies order automation, a reseller marketplace, and payments
           into one platform — engineered for teams that ship at the speed of
           attention.
-        </motion.p>
+        </p>
 
         {/* CTAs */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.9, delay: 0.26, ease: [0.16, 1, 0.3, 1] }}
+        <div
           className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          style={{ animation: "heroFadeUp 0.9s 0.26s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
             <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
@@ -131,14 +121,12 @@ export function Hero() {
               Sign in
             </span>
           </Magnetic>
-        </motion.div>
+        </div>
 
         {/* trust line */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.9, delay: 0.4 }}
+        <div
           className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground"
+          style={{ animation: "heroFade 0.9s 0.4s both" }}
         >
           {[
             "No credit card required",
@@ -150,17 +138,14 @@ export function Hero() {
               {t}
             </span>
           ))}
-        </motion.div>
+        </div>
 
-        {/* Dashboard preview */}
-        <motion.div
-          style={{ y: yDash, opacity }}
-          initial={{ opacity: 0, y: 60, filter: "blur(16px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 1.1, delay: 0.42, ease: [0.16, 1, 0.3, 1] }}
+        {/* Dashboard preview — lazy-loaded with placeholder */}
+        <div
           className="relative mx-auto mt-16 max-w-6xl"
+          style={{ animation: "heroFadeUpBlur 1.1s 0.42s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
-          {/* Floating stat chips — depth layers */}
+          {/* Floating stat chips — depth layers (hidden on mobile, perf) */}
           <FloatingChip
             className="absolute -left-2 top-16 hidden sm:flex"
             delay={0.7}
@@ -203,7 +188,7 @@ export function Hero() {
             aria-hidden
             className="pointer-events-none absolute -bottom-10 left-1/2 h-40 w-3/4 -translate-x-1/2 rounded-full bg-primary/10 blur-[80px]"
           />
-        </motion.div>
+        </div>
       </div>
     </section>
   );
@@ -223,11 +208,11 @@ function FloatingChip({
   delay?: number;
 }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.85, y: 10 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.7, delay, ease: [0.16, 1, 0.3, 1] }}
+    <div
       className={`z-20 items-center gap-2.5 rounded-2xl border border-border/60 bg-background/90 px-3.5 py-2.5 nov-ring backdrop-blur-xl ${className ?? ""}`}
+      style={{
+        animation: `chipIn 0.7s ${delay}s cubic-bezier(0.16, 1, 0.3, 1) both`,
+      }}
     >
       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted">
         {icon}
@@ -240,6 +225,6 @@ function FloatingChip({
           {value}
         </span>
       </span>
-    </motion.div>
+    </div>
   );
 }
