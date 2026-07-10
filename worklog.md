@@ -10433,3 +10433,485 @@ Fixes not completed:
 - None — all 6 fixes are complete. The audit's only remaining items were the
   High-severity ones already closed by ADMIN-FIX-BATCH-1, plus minor/cosmetic issues
   outside the scope of this batch.
+
+---
+Task ID: BROAD-SYNC-AUDIT-1
+Agent: Explore
+Task: Broad sync audit of user-facing areas (outside admin panel)
+
+Work Log:
+
+Files examined (read-only audit — no code was modified):
+
+### User Dashboard
+- src/components/novsmm/dashboard-shell.tsx (930 lines — sidebar, topbar, command palette)
+- src/components/novsmm/dashboard-data.ts (mock data; ADMIN_PROVIDERS already fixed in Batch-1)
+- src/components/novsmm/dashboard-home.tsx
+- src/components/novsmm/dashboard-wallet.tsx (TopupModal, WithdrawModal, PaymentMethodsList)
+- src/components/novsmm/dashboard-orders.tsx (filters, table, detail drawer)
+- src/components/novsmm/dashboard-marketplace.tsx (Buy/Sell/History tabs + MassOrderModal)
+- src/components/novsmm/dashboard-child-panels.tsx (855 lines — Create/Cancel/Edit/KeyBanner)
+- src/components/novsmm/dashboard-subscriptions.tsx (638 lines — Create/Pause/Resume/Cancel)
+- src/components/novsmm/dashboard-notifications.tsx (WebSocket + filter chips)
+- src/components/novsmm/dashboard-tickets.tsx (824 lines)
+- src/components/novsmm/dashboard-profile.tsx (1297 lines)
+- src/components/novsmm/dashboard-analytics.tsx
+- src/components/novsmm/app-store.ts
+- src/hooks/use-api.ts (1149 lines)
+- src/hooks/use-i18n.ts
+- src/components/novsmm/payment-logo.tsx
+- src/components/novsmm/platforms.tsx
+
+### Public Pages
+- src/app/page.tsx
+- src/app/layout.tsx
+- src/app/manifest.ts
+- src/components/novsmm/hero.tsx
+- src/components/novsmm/services.tsx
+- src/components/novsmm/marketplace.tsx (landing version)
+- src/components/novsmm/payments.tsx (5 provider cards)
+- src/components/novsmm/stats.tsx
+- src/components/novsmm/plans.tsx (NOT rendered on landing — dead code)
+- src/components/novsmm/footer.tsx
+- src/components/novsmm/navbar.tsx
+- src/components/novsmm/login-screen.tsx
+- src/components/novsmm/register-screen.tsx
+- src/components/novsmm/auth-fields.tsx (SocialButton — Google only)
+- src/components/novsmm/faq-section.tsx
+- src/components/novsmm/api-docs-section.tsx
+- src/components/novsmm/affiliate-section.tsx
+- src/components/novsmm/legal-pages.tsx (820 lines)
+- src/components/novsmm/legal-modal.tsx (494 lines — DEAD CODE, no imports)
+- src/components/novsmm/sw-register.tsx
+
+### API Routes (user-facing)
+- src/app/api/wallet/route.ts
+- src/app/api/wallet/topup/route.ts (5-method dispatch)
+- src/app/api/wallet/withdraw/route.ts
+- src/app/api/orders/route.ts (POST + PATCH cancel)
+- src/app/api/orders/refill/route.ts (session-auth refill)
+- src/app/api/orders/repeat/route.ts
+- src/app/api/orders/mass/route.ts
+- src/app/api/subscriptions/route.ts
+- src/app/api/subscriptions/[id]/route.ts
+- src/app/api/child-panels/route.ts
+- src/app/api/child-panels/[id]/route.ts
+- src/app/api/offers/route.ts
+- src/app/api/tickets/route.ts
+- src/app/api/notifications/route.ts
+- src/app/api/payment-methods/route.ts (public)
+- src/app/api/services/route.ts
+- src/app/api/dashboard/route.ts
+- src/app/api/status/route.ts
+- src/app/api/me/route.ts
+- src/app/api/me/2fa/setup/route.ts
+- src/app/api/referrals/route.ts
+- src/app/api/public/settings/route.ts
+- src/app/api/public/languages/route.ts
+- src/app/api/public/currencies/route.ts
+- src/app/api/public/offers/route.ts
+
+### API v1 (Reseller)
+- src/app/api/v1/balance/route.ts
+- src/app/api/v1/orders/route.ts
+- src/app/api/v1/services/route.ts
+- src/app/api/v1/status/route.ts
+- src/app/api/v1/cancel/route.ts
+- src/app/api/v1/refill/route.ts
+- src/app/api/v1/refill_status/route.ts
+- src/app/api/docs/route.ts
+
+### Lib
+- src/lib/notify.ts
+- src/lib/email-templates.ts
+- src/lib/i18n.ts (en/es/pt/fr — 49 keys each)
+- src/lib/auth.ts
+- src/lib/validations.ts
+- src/lib/huntsmm.ts
+- src/lib/provider-failover.ts
+- src/lib/smm-subscriptions.ts
+- src/lib/invoice-html.ts
+- src/middleware.ts
+
+### PWA + Public Assets
+- public/manifest.json (DIFFERENT from src/app/manifest.ts)
+- public/sw.js
+- public/payment-logos/ (4 of 5 — missing Stripe)
+
+### Config
+- next.config.ts
+- tsconfig.json
+- package.json
+- prisma/schema.prisma
+- prisma/seed.ts
+- prisma/seed-settings.ts
+- prisma/seed-services.ts
+
+Stage Summary:
+
+Areas audited: 16
+Areas fully synced: 7  (Wallet/topup dispatch, Orders + Refill + Cancel, Notifications, Email templates, Middleware CSRF/rate-limit/CSP, Service worker, Auth)
+Areas with issues: 9
+Total issues found: 19
+
+# NOVSMM Broad Sync Audit (Outside Admin Panel)
+
+## Summary
+- Areas audited: 16
+- Areas fully synced: 7
+- Areas with issues: 9
+- Total issues found: 19
+
+## Area 1: User Dashboard
+### Status: ⚠️ Issues
+### Findings:
+- `src/components/novsmm/dashboard-data.ts` lines 53–62: `ORDERS` mock array still references OLD fake providers "Provider-01".."Provider-07". ADMIN-FIX-BATCH-1 only updated `ADMIN_PROVIDERS` and `TOPUP_METHODS` — the `ORDERS` constant (which is dead code — only the `OrderStatus` type is imported elsewhere) was not cleaned up. Anyone grepping the codebase will find stale provider names.
+- `src/components/novsmm/dashboard-wallet.tsx` WithdrawModal (lines 517–538): the `<select>` for method has a logic bug — `methods.map((m) => (m.name !== "PayPal" && ...))` returns `false` for the existing methods, which React renders as nothing for those iterations but the JSX-in-array pattern is fragile. The hardcoded option list also includes `"Wise"` (line 528) which is not one of the 5 canonical methods and was supposedly removed in PAYMENT-CLEANUP-1.
+- `src/components/novsmm/dashboard-marketplace.tsx` SellTab (line 1225): `useAllServices()` does NOT pass `all=true` to `/api/services`, so per the H-6 fix the API omits `cost` from the response. The Sell-tab publish modal shows `cost: $0.00` in the dropdown (cosmetic only — the server-side `POST /api/offers` correctly fetches `service.cost` from DB and stores it).
+- `src/components/novsmm/dashboard-child-panels.tsx`: Create modal defaults `markupPercent=50` (line 510) while Edit modal defaults `markupPercent=20` (line 766, matches schema default). Inconsistent defaults — when a user re-opens the Edit modal of a freshly created panel, the slider starts at 20% even though they just created it at 50%.
+- `src/app/api/me/route.ts` PATCH (line 84): `role` enum is `["reseller","agency","creator","enterprise"]` but the User schema comment lists `user | reseller | agency | admin` and the admin Licenses enum uses `["reseller","agency","enterprise","white_label"]`. "creator" and "enterprise" don't appear anywhere else in the codebase — likely a stale enum.
+
+### Recommendation:
+- Remove the dead `ORDERS` mock array from `dashboard-data.ts` (the type is the only used export).
+- Fix WithdrawModal: replace the broken JSX-in-`map` with a `.filter(...).map(...)` and remove the legacy `"Wise"` option (use only the 5 canonical methods from `usePaymentMethods`).
+- Decide whether `useAllServices` should expose `cost` to authenticated users for the Sell tab (probably yes — the Sell tab needs cost for margin calculation). Either add `all=true` for authed users in `/api/services`, or expose `cost` for the user's own services only.
+- Align `EditChildPanelModal` default markupPercent with the create modal (50) or vice-versa.
+- Fix `updateProfileSchema.role` enum to match the User model values: `["user","reseller","agency"]` (admin cannot self-edit per the existing check).
+
+## Area 2: Public Pages (landing, sign-in, sign-up)
+### Status: 🔴 Critical
+### Findings:
+- **Social-login UI not synced with admin social-auth extension.** `src/components/novsmm/auth-fields.tsx` `SocialButton` only renders a Google button. `src/components/novsmm/login-screen.tsx` only calls `signIn("google")`. `src/components/novsmm/register-screen.tsx` only has a Google handler. ADMIN-FIX-BATCH-2 extended the admin social-auth panel to support Google + Facebook + GitHub + Twitter, but `src/lib/auth.ts` (NextAuth config) only registers `GoogleProvider`. Facebook / GitHub / Twitter credentials saved via the admin panel are stored in the DB but never consumed by NextAuth — users cannot actually log in with those providers. The admin UI shows "configured" status but login is impossible.
+- `src/components/novsmm/register-screen.tsx` line 30: `LANGUAGES = ["English","Español","Português","Français","Deutsch"]` — "Deutsch" was removed from the seed (ADMIN-FIX-BATCH-2) but is still selectable on the registration form. Selecting it stores `language:"Deutsch"` on the User row; `useTranslation` then does `.slice(0,2)` = "de" → no translations → falls back to English. The user is silently enrolled in English despite picking Deutsch.
+- `src/components/novsmm/register-screen.tsx` sends display names ("English","Español","Português","Français") as `language`, but `PATCH /api/me` expects ISO codes ("en","es","pt","fr") and validates against the Language table. Inconsistent — register stores display name, profile stores code. The `useTranslation` hook then tries `.slice(0,2)` on whatever's stored: `"Português".slice(0,2)` = "po" (should be "pt"), so Portuguese users see English. `"Español".slice(0,2)` = "es" (works by coincidence). `"Français".slice(0,2)` = "fr" (works). `"English".slice(0,2)` = "en" (works). Portuguese is broken.
+- `src/components/novsmm/legal-modal.tsx` (494 lines) is DEAD CODE — `LegalModal` is defined but never imported anywhere. It uses `legal@novsmm.io` and `LAST_UPDATED = "January 15, 2025"` — conflicting with the active `legal-pages.tsx` which uses `legal@novsmm.com` and "July 2026". Two parallel legal implementations with different domains, dates, and content. This is a maintenance hazard — someone could re-import `LegalModal` and silently regress the legal copy.
+- Landing-page `Payments` section correctly lists all 5 methods (Stripe, PayPal, Mercado Pago, NowPayments, Manual) — ✅ synced.
+- Landing-page `Services` section says "6,300+ services … powered by HuntSMM" — ✅ synced with the canonical HuntSMM provider.
+- Footer legal-page links (about, careers, press, partners, legal, privacy, terms, cookies — 8 pages) all open the `LegalPages` overlay with real content. ✅ synced.
+- `src/components/novsmm/api-docs-section.tsx` curl example uses `https://api.novsmm.com/api/v1/orders` — see Area 10 for domain inconsistency.
+- `src/components/novsmm/marketplace.tsx` (landing version) line 35: copy says "12+ gateways" — only 5 exist. Marketing copy is inflated.
+
+### Recommendation:
+- **CRITICAL** — Add Facebook/GitHub/Twitter providers to `src/lib/auth.ts` NextAuth config (mirror the per-provider DB-credential lookup pattern that's already there for Google). Either that, or restrict the admin social-auth UI to Google only until the other providers are wired.
+- Remove `"Deutsch"` from `register-screen.tsx` `LANGUAGES` array.
+- Switch `register-screen.tsx` to send ISO codes ("en","es","pt","fr") instead of display names (mirror what `dashboard-profile.tsx` does — fetch `/api/public/languages` and use `l.code`).
+- Delete `src/components/novsmm/legal-modal.tsx` (dead code) OR consolidate it with `legal-pages.tsx` and delete the latter.
+- Fix `marketplace.tsx` line 35 — change "12+ gateways" to "5 gateways" or "Stripe / PayPal / Mercado Pago / NowPayments / Manual".
+
+## Area 3: API v1 (Reseller API)
+### Status: ✅ Synced
+### Findings:
+- All 7 documented endpoints are implemented and match the PerfectPanel/JAP contract:
+  - `POST /api/v1/orders` — single + multi-order + drip-feed + custom comments
+  - `GET  /api/v1/services`
+  - `GET  /api/v1/balance`
+  - `GET  /api/v1/status` — single + multi
+  - `POST /api/v1/cancel` — single + multi
+  - `POST /api/v1/refill` — single + multi
+  - `GET  /api/v1/refill_status` — single + multi
+- No references to old payment methods (crypto / aurora / wise) — clean.
+- API-key auth via `requireApiKey()` with `read` / `order` permission scopes — consistent across all endpoints.
+- CORS preflight handled in middleware for `/api/v1/*`.
+- Rate limiting via IP+pathname bucket (300/min general API limit applies) — could be tighter per-key, but consistent.
+
+### Recommendation:
+- None for sync. (Optional: per-API-key rate limit (60 req/min) is mentioned in the legal Terms but not enforced at the route level — would need a `rateLimitByApiKey` middleware. Out of scope for this sync audit.)
+
+## Area 4: Child Panels feature
+### Status: ✅ Synced (with minor cosmetic issue)
+### Findings:
+- API: `GET / POST /api/child-panels` + `GET / PATCH / DELETE /api/child-panels/[id]` — fully implemented.
+- Pricing (`PLAN_FEES = { reseller: 49, agency: 149, enterprise: 499 }`) is consistent between API route, dashboard component `PLANS` constant, and the `legal-pages.tsx` Partner Program section.
+- Subdomain uniqueness, conditional balance debit (race-safe), encrypted API key + bcrypt hash + SHA-256 lookup hash + AES-encrypted form — full implementation.
+- Status transitions (active↔suspended, →cancelled) validated server-side.
+- API key shown ONCE in plaintext at creation time (same pattern as License keys).
+- Dashboard component renders all states + edit/suspend/resume/cancel actions.
+- MarkupPercent default mismatch (50 in Create, 20 in Edit) — noted in Area 1.
+
+### Recommendation:
+- Fix the Create vs Edit modal default markupPercent mismatch (see Area 1).
+
+## Area 5: Marketplace
+### Status: ⚠️ Issues
+### Findings:
+- `GET /api/services` paginated with platform/category/search filters — ✅ works.
+- `GET /api/public/offers` returns real offers from the Offer table (empty list on fresh install → landing-page component falls back to `SAMPLE_OFFERS` clearly marked as samples).
+- `POST /api/offers` (publish) computes `cost` and `margin` server-side from the real Service row — correct.
+- 150% markup claim: services are seeded at prices ~2-3× cost (e.g. Instagram Followers: cost $0.84, price $2.40 = 186% markup) — consistent with the original 150%+ directive.
+- `useAllServices` does not pass `all=true` so `cost` is hidden from the Sell tab UI (cosmetic — see Area 1).
+- Sample offers in `marketplace.tsx` (landing) lines 49-52 use the same prices as the seed (Instagram Followers $2.40, etc.) — ✅ consistent.
+- `dashboard-data.ts` `MARKETPLACE_OFFERS` mock has prices matching the seed — ✅ consistent.
+
+### Recommendation:
+- Decide whether the Sell tab needs `cost` exposed to authenticated users. If yes, either: (a) add `all=true` automatically when the request is authenticated, or (b) add a separate `/api/services/sell` endpoint that returns cost for authed users.
+
+## Area 6: Subscriptions (SMM)
+### Status: ✅ Synced
+### Findings:
+- `GET / POST /api/subscriptions` + `GET / PATCH /api/subscriptions/[id]` — fully implemented.
+- Status flow (active↔paused, →cancelled, terminal: completed/expired/cancelled) validated server-side.
+- Upfront cost = `service.price × maxQuantity × posts / 1000` — charged at creation, race-safe atomic debit.
+- Background worker `smm.subscription.check` (in `src/lib/smm-subscriptions.ts`) runs every 5 minutes, simulates new-post detection (sandbox mode — real Graph API integration would go here), auto-creates zero-charge orders, bumps postsProcessed.
+- Dashboard component renders all states + create/pause/resume/cancel + last post link.
+- One-shot job enqueued at creation so the first check runs quickly.
+
+### Recommendation:
+- None for sync. (Worker is sandbox-simulated — production needs real Graph API integration, but that's outside sync scope.)
+
+## Area 7: Wallet & Transactions
+### Status: ⚠️ Issues
+### Findings:
+- `POST /api/wallet/topup` correctly dispatches to all 5 methods (Stripe Checkout, PayPal orders, MP preference, NowPayments invoice, Manual WhatsApp deep-link) — ✅ synced after ADMIN-FIX-BATCH-1.
+- Each method's webhook (`/api/webhooks/{stripe,paypal,mercadopago,nowpayments}`) credits the wallet on confirmed payment.
+- Sandbox fallback for unconfigured methods (1.5s delay, 99.5% success) — clearly labelled in toast.
+- `POST /api/wallet/withdraw` uses race-safe conditional `updateMany WHERE balance >= amount` — ✅ correct.
+- `prisma/seed.ts` line 210: sample transaction `{ type:"withdrawal", amount:-1200, description:"Withdrawal to Wise · EUR", method:"wise" }` — `method:"wise"` is a stale value. "Wise" is no longer a payment method (it was removed in PAYMENT-CLEANUP-1). The schema's `Transaction.method` comment (line 187) still lists `stripe | paypal | crypto | wise | manual` — should be `stripe | paypal | mercadopago | nowpayments | manual`.
+- `prisma/schema.prisma` line 378: `WebhookLog.provider  String   // stripe | mercadopago | paypal | aurora | manual` — "aurora" was removed in PAYMENT-CLEANUP-1, should be "nowpayments".
+- `prisma/schema.prisma` line 524: `PaymentIntent.method  String   // stripe | mercadopago | paypal | aurora | manual` — same stale "aurora" reference.
+- `dashboard-wallet.tsx` WithdrawModal includes a hardcoded `"Wise"` option (line 528) — see Area 1.
+- `dashboard-wallet.tsx` TYPE_META (lines 282–290) only has 8 types but the schema/notify supports: `topup | withdrawal | sale | fee | referral | held | release`. Missing: `release` (when held balance is released back) — minor.
+
+### Recommendation:
+- Update the seed sample transaction to use `method: "manual"` (or "paypal") instead of "wise".
+- Update the schema comments on `Transaction.method`, `WebhookLog.provider`, `PaymentIntent.method` to reflect the canonical 5 methods: `stripe | paypal | mercadopago | nowpayments | manual`.
+- Remove the hardcoded `"Wise"` option from WithdrawModal (let it be driven entirely by `usePaymentMethods`).
+
+## Area 8: Orders
+### Status: ✅ Synced
+### Findings:
+- `POST /api/orders` — race-safe atomic debit + drip-feed config + audit + notification + enqueue `order.fulfill` job. ✅
+- `GET /api/orders` — paginated (100/page) with status/search filters. ✅
+- `PATCH /api/orders` — cancel within 60s of placement, refund to balance, audit. ✅
+- `POST /api/orders/refill` — creates a `[Refill] {publicId}` ticket + enqueues a refill fulfillment job. ✅ (admin refill endpoint at `/api/admin/refunds` handles Stripe refunds.)
+- `POST /api/orders/repeat` — re-places the same order with the same service+quantity+link. ✅
+- `POST /api/orders/mass` — multi-order batch. ✅
+- Order status flow (`pending → processing → in_progress → partial → completed | cancelled`) is consistent across API, dashboard, and the v1 status mapping.
+- Order placement uses `service.price × quantity / 1000` — consistent with the seed prices and the marketplace UI.
+- HuntSMM provider dispatch is in `provider-failover.ts` — properly dispatches by `provider.apiUrl` and throws for unsupported providers (was fixed in ADMIN-FIX-BATCH-1).
+
+### Recommendation:
+- None for sync.
+
+## Area 9: Notifications + notify.ts
+### Status: ✅ Synced
+### Findings:
+- `GET / POST /api/notifications` — list + mark-as-read. ✅
+- `createNotification()` writes to DB + broadcasts to WebSocket mini-service + sends templated email if `sendEmail:true`. ✅
+- 8 notification types: `order | sale | marketplace | ticket | recharge | withdrawal | referral | system` — all defined in the schema, the notify.ts `NotifInput.type` union, and the dashboard-notifications filter chips. ✅
+- `notifyAdmins()` helper for system-level events. ✅
+- WebSocket broadcast includes Bearer token auth via `NOTIFICATIONS_SERVICE_SECRET`. ✅
+- Email sandbox mode (logs to console) when SMTP env vars not set. ✅
+- `notifTypeToTemplateKey` maps notification type + meta to email template key (order_completed, order_failed, ticket_reply, referral_earned). ✅
+
+### Recommendation:
+- None for sync. (Severity enum in validations.ts includes `"error"` but the schema only allows `info | success | warning` — minor schema-validation drift, but the route defaults to "info" so it's not exploitable.)
+
+## Area 10: Email system
+### Status: ⚠️ Issues
+### Findings:
+- 6 default templates seeded: `welcome`, `order_completed`, `order_failed`, `ticket_reply`, `low_balance`, `referral_earned`. ✅
+- `renderTemplate` does `{{var}}` substitution with graceful degradation. ✅
+- `sendTemplatedEmail` falls back to legacy hardcoded text if no template found. ✅
+- SMTP via Nodemailer when `SMTP_HOST` + `SMTP_USER` env vars set; sandbox (console log) otherwise. ✅
+- Resend not used — Nodemailer is the only email transport. (package.json doesn't include `resend`.)
+- **Domain inconsistency** — three different domains are used across the codebase:
+  - `novsmm.io` — email addresses in `notify.ts` (noreply@novsmm.io), `invoice-html.ts` (billing@novsmm.io), `legal-modal.tsx` (legal@novsmm.io), `faq-section.tsx` (security@novsmm.io), `public/settings/route.ts` default (support@novsmm.io), `seed-settings.ts` (support@novsmm.io), `seed.ts` admin user (admin@novsmm.io)
+  - `novsmm.com` — child-panel subdomains (acme.novsmm.com), `legal-pages.tsx` email addresses (legal@/partners@/careers@/press@/privacy@/support@novsmm.com)
+  - `novsmm.shop` — admin-panel.tsx webhook URLs (https://novsmm.shop/api/webhooks/stripe) + OAuth redirect URLs (https://novsmm.shop/api/auth/callback/google)
+  - `api.novsmm.com` — curl examples in api-docs-section.tsx and /api/docs
+- Pick ONE canonical domain (probably `novsmm.shop` since that's what the webhook URLs use, suggesting it's the production host).
+
+### Recommendation:
+- **HIGH** — Unify the domain. Either (a) pick `novsmm.shop` everywhere and update all `novsmm.io` / `novsmm.com` references, or (b) pick `novsmm.com` everywhere and update `novsmm.shop` (admin-panel webhook URLs) and `novsmm.io` (notify.ts, invoice-html.ts, etc.).
+- Email sender (`EMAIL_FROM` env var) should match the canonical domain.
+
+## Area 11: i18n / Languages
+### Status: ⚠️ Issues
+### Findings:
+- `src/lib/i18n.ts` defines 49 translation keys per language for 4 languages (en, es, pt, fr) — all 4 packs are complete (no missing keys vs the English baseline). ✅
+- `getTranslations(lang)` returns English fallback for missing keys. ✅
+- `useTranslation` hook resolves language from session → navigator.language → "en". ✅
+- ADMIN-FIX-BATCH-2 removed German ("de") from the seed because no German translation pack exists — correct decision. ✅
+- **`register-screen.tsx` LANGUAGES array still includes "Deutsch"** (line 30) — see Area 2.
+- **`register-screen.tsx` sends display names instead of ISO codes** (e.g. "Português" instead of "pt") — see Area 2.
+- `useTranslation` does `userLang.toLowerCase().slice(0, 2)` — this works for "English"→"en", "Español"→"es", "Français"→"fr", but "Português"→"po" (broken, should be "pt").
+- `prisma/schema.prisma` line 363 comment: `code String  @unique // en, es, pt, fr, de` — stale `de` reference.
+
+### Recommendation:
+- Fix the schema comment on the Language model (remove `de`).
+- Fix `register-screen.tsx` to send ISO codes (fetch from `/api/public/languages`).
+- Remove "Deutsch" from the `LANGUAGES` array.
+
+## Area 12: Security & Middleware
+### Status: ✅ Synced (with note)
+### Findings:
+- CSP: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; img-src 'self' data: https: blob:; font-src 'self' data: https://fonts.gstatic.com; connect-src 'self' wss: ws: https:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'`. ✅
+- All 5 payment methods use hosted checkout (Stripe Checkout, PayPal approve URL, MP init_point, NowPayments invoice, WhatsApp redirect) — no payment SDK scripts are loaded client-side, so the CSP doesn't need to allow `js.stripe.com` / `paypal.com/sdk` etc. ✅
+- CSRF: Origin header value-matching on POST/PATCH/PUT/DELETE for non-NextAuth, non-webhook routes. Bearer-authenticated requests exempt (server-to-server API). ✅
+- Webhook routes exempt from CSRF (they use HMAC signature verification in their own handlers). ✅
+- Rate limits per-route: 20/15min for credential login, 10/hour for register, 5/hour for forgot-password, 10/min for wallet topup/withdraw, 20/min for orders, 120/min for admin, 20/min for tickets, 300/min general API. ✅
+- `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `HSTS: max-age=31536000; includeSubDomains; preload` — all set. ✅
+
+### Recommendation:
+- None for sync. (Optional future improvement: nonce-based CSP to remove `'unsafe-inline'` from script-src — already noted as a TODO in the middleware comment.)
+
+## Area 13: PWA
+### Status: 🔴 Critical
+### Findings:
+- **TWO manifest files exist with conflicting content:**
+  - `src/app/manifest.ts` (Next.js MetadataRoute → served at `/manifest.webmanifest`):
+    - name: "NOVSMM — SMM Panel Platform"
+    - background_color: "#0a0a0a", theme_color: "#0a0a0a"
+    - icons: `/icon.png` (single source, 192/512/any sizes, all `purpose: any` except the last which is `maskable`)
+    - shortcuts: `/?view=dashboard`, `/?view=dashboard&tab=marketplace`
+  - `public/manifest.json` (static file → served at `/manifest.json`):
+    - name: "NOVSMM — Social Media Marketing Infrastructure"
+    - background_color: "#ffffff", theme_color: "#0052ff"
+    - icons: `/novsmm-logo.png` (4 entries, 192+512 sizes × any+maskable)
+    - shortcuts: `/?view=dashboard`, `/#marketplace`
+    - Has `display_override: ["standalone","minimal-ui"]`, `lang`, `dir`, `prefer_related_applications`, `screenshots: []`
+  - These two are completely out of sync. Browsers will pick whichever is linked in the HTML head (or both, leading to undefined behavior).
+- `src/app/layout.tsx` doesn't explicitly link either manifest — Next.js auto-injects the `src/app/manifest.ts` one at `/manifest.webmanifest`. So the `public/manifest.json` is dead code (but a search engine or user manually hitting `/manifest.json` would see the wrong metadata).
+- `src/app/layout.tsx` viewport: `themeColor: "#0a0a0a"` (matches `src/app/manifest.ts`, conflicts with `public/manifest.json`'s `#0052ff`).
+- Service worker `/sw.js`:
+  - Caches `/` and `/icon.png` on install. ✅
+  - Network-first for navigation, cache-first for static assets, no caching for API. ✅
+  - Registered only in production via `sw-register.tsx`. ✅
+  - Cache version `novsmm-v1` — fine, but the SW never updates the version string when the app ships new code, so users may get stale cached app shells after a deploy. (Standard SW pitfall — not a sync issue per se.)
+
+### Recommendation:
+- **CRITICAL** — Delete `public/manifest.json` (it's dead code that conflicts with the canonical `src/app/manifest.ts`). Or merge its better fields (display_override, lang, dir, maskable icons) into `src/app/manifest.ts` and delete the static file.
+- Add a cache-versioning strategy to the service worker (e.g. `novsmm-v2` on next deploy + cleanup of `novsmm-v1`).
+
+## Area 14: Legal pages
+### Status: ⚠️ Issues
+### Findings:
+- `src/components/novsmm/legal-pages.tsx` (the active component) defines all 8 pages: `about`, `careers`, `press`, `partners`, `legal`, `privacy`, `terms`, `cookies`. ✅
+- All 8 pages have real, substantial content (not placeholders). ✅
+- Footer triggers all 8 via the `LegalPages` overlay. ✅
+- `register-screen.tsx` also opens the same overlay for Terms/Privacy links. ✅
+- **`legal-pages.tsx` "about" section says "4 Payment gateways"** (line 60) — the canonical count is 5.
+- **`legal-pages.tsx` "terms" section 5 says "Wallet top-ups are processed via Stripe, PayPal, Mercado Pago, or NowPayments (crypto)"** (line 588) — omits Manual.
+- **`legal-pages.tsx` "terms" section 4 mentions a 60-second cancel window** — consistent with the API. ✅
+- **`legal-pages.tsx` "terms" section 4 mentions a 30-day refill window** — consistent with the API. ✅
+- **`legal-pages.tsx` "terms" section 5 says "minimum withdrawal amount is $10"** — but `seed-settings.ts` has `limits.minWithdrawal: "50"`. Inconsistent — either the legal copy or the seed setting is wrong.
+- `faq-section.tsx` (different component) says "minimum payout is $5" for referrals — yet another value, doesn't match the legal Terms ($10) or the seed setting ($50).
+- `legal-pages.tsx` uses `@novsmm.com` emails; `legal-modal.tsx` (dead code) uses `@novsmm.io` — see Area 10.
+- `legal-pages.tsx` "privacy" section 2 mentions "Stripe, PayPal, Mercado Pago, NowPayments" — ✅ consistent with the canonical 5 (Manual is correctly omitted here since Manual doesn't process payment data).
+
+### Recommendation:
+- Fix "about" page: change "4 Payment gateways" to "5 Payment gateways".
+- Fix "terms" section 5: add "Manual (WhatsApp/Zelle/Wire)" to the payment methods list.
+- Reconcile the minimum-withdrawal amount: either update legal Terms to "$50" or update the seed setting to "$10" (pick one).
+- Fix FAQ's referral minimum payout claim to match (probably "$50" — matches AffiliateSection's PAYOUT_METHODS).
+
+## Area 15: Configuration
+### Status: ✅ Synced
+### Findings:
+- `next.config.ts`: minimal — `typescript.ignoreBuildErrors: true`, `reactStrictMode: true`, `poweredByHeader: false`. No stale config. ✅
+- `tsconfig.json`: standard Next.js 16 config with `@/*` path alias. `exclude` covers `prisma`, `scripts`, `mini-services`, `skills`, `examples`, `tool-results`, `agent-ctx`, `upload`. ✅
+- `package.json`:
+  - `"seed": "npx tsx prisma/seed.ts"` — ✅ added in ADMIN-FIX-BATCH-1.
+  - All deps align with actual usage (Next 16, React 19, Prisma 6.11, NextAuth 4.24, BullMQ 5.79, Nodemailer 9, Stripe 22.3, Zod 4, Zustand 5).
+  - `bun-types` is a devDependency but the project also runs on Node — both work.
+  - No unused/stale deps detected at the import level.
+- `eslint` runs clean (0 errors, 3 pre-existing warnings) per ADMIN-FIX-BATCH-2.
+
+### Recommendation:
+- None for sync.
+
+## Area 16: Database schema
+### Status: ⚠️ Issues (comment-only, no runtime impact)
+### Findings:
+- All models are well-indexed (`@@index` on userId, status, createdAt, lookupHash, etc.). ✅
+- Race-safe patterns (`updateMany WHERE balance >= amount`) used in orders, withdrawals, child-panels, subscriptions. ✅
+- Stale comments only (no behavioral impact):
+  - `Transaction.method` (line 187): `// stripe | paypal | crypto | wise | manual` — should be `stripe | paypal | mercadopago | nowpayments | manual`.
+  - `WebhookLog.provider` (line 378): `// stripe | mercadopago | paypal | aurora | manual` — "aurora" should be "nowpayments".
+  - `PaymentIntent.method` (line 524): same stale "aurora" reference.
+  - `Language.code` (line 363): `// en, es, pt, fr, de` — "de" was removed in ADMIN-FIX-BATCH-2.
+- `Notification.severity` (line 228): `// info | success | warning` — but `createNotificationSchema` in validations.ts allows `info | success | warning | error`. The "error" value would be persisted but the schema comment doesn't list it.
+- `User.role` (line 28): `// user | reseller | agency | admin` — but `updateProfileSchema.role` enum is `["reseller","agency","creator","enterprise"]`. "creator" and "enterprise" don't exist in the User.role comment.
+- `ChildPanel.plan` (line 649): `// reseller | agency | enterprise` — matches the API Zod schema. ✅
+- `License.plan` (line 328): `// reseller | agency | enterprise | white_label` — matches the LICENSE_PLANS enum in validations.ts (ADMIN-FIX-BATCH-2). ✅
+
+### Recommendation:
+- Update the 4 stale schema comments (Transaction.method, WebhookLog.provider, PaymentIntent.method, Language.code) to match the canonical values.
+- Decide whether `Notification.severity` should include "error" — either update the schema comment or remove "error" from `createNotificationSchema`.
+- Fix `updateProfileSchema.role` enum to match the User model values.
+
+## Critical Issues Found
+
+(prioritized — critical first)
+
+1. **[P0] Two conflicting PWA manifests** (`src/app/manifest.ts` vs `public/manifest.json`) — different name, theme_color, background_color, icons, shortcuts. Browsers seeing both get undefined behavior. (Area 13)
+
+2. **[P0] Social-login UI claims providers that aren't wired** — `auth-fields.tsx` / `login-screen.tsx` only support Google, but ADMIN-FIX-BATCH-2 added admin UI for Google + Facebook + GitHub + Twitter. Facebook/GitHub/Twitter credentials saved via admin are stored but never consumed by NextAuth (`src/lib/auth.ts` only registers `GoogleProvider`). Users cannot log in with those providers. (Area 2)
+
+3. **[P1] Three different domain names in use** — `novsmm.io` (emails, admin user), `novsmm.com` (legal pages, child-panel subdomains, API URL examples), `novsmm.shop` (admin webhook URLs, OAuth redirect URLs). Email senders, child-panel subdomains, and webhook URLs all need to be on the same canonical domain. (Area 10)
+
+4. **[P1] Dead `legal-modal.tsx` (494 lines)** with stale content (`legal@novsmm.io`, "January 15, 2025") conflicts with the active `legal-pages.tsx` (`legal@novsmm.com`, "July 2026"). Maintenance hazard. (Area 2)
+
+5. **[P1] `register-screen.tsx` stores display names as `language`** ("Portuguès"→"po" after slice) — Portuguese users silently fall back to English. (Area 2)
+
+6. **[P2] `register-screen.tsx` still offers "Deutsch"** in the language dropdown even though German was removed from the seed (no i18n pack exists). (Area 2)
+
+7. **[P2] `dashboard-data.ts` ORDERS mock array still references "Provider-01".."Provider-07"** — fake providers that were removed in ADMIN-FIX-BATCH-1. Dead code but a sync hazard. (Area 1)
+
+8. **[P2] `WithdrawModal` includes hardcoded "Wise" option** — Wise was removed from the canonical payment methods. (Area 1)
+
+9. **[P2] Stale schema comments** on `Transaction.method`, `WebhookLog.provider`, `PaymentIntent.method` mention "aurora" / "crypto" / "wise" which were all removed. (Areas 7 + 16)
+
+10. **[P2] Legal "about" page says "4 Payment gateways"** — should be 5. (Area 14)
+
+11. **[P2] Legal "terms" section 5 omits Manual** from the top-up methods list. (Area 14)
+
+12. **[P2] Minimum-withdrawal amount is inconsistent**: legal Terms says "$10", seed setting says "$50", FAQ says "$5" for referral payouts. (Area 14)
+
+13. **[P2] `prisma/seed.ts` sample transaction uses `method: "wise"`** — stale value. (Area 7)
+
+14. **[P3] `updateProfileSchema.role` enum includes "creator" and "enterprise"** which don't exist in the User.role schema. (Area 1 + 16)
+
+15. **[P3] `EditChildPanelModal` default markupPercent (20) doesn't match Create modal default (50)** — confusing UX. (Area 1)
+
+16. **[P3] `useAllServices` doesn't expose `cost`** — Sell-tab publish modal shows $0.00 cost (cosmetic; server-side cost calc is correct). (Area 1 + 5)
+
+17. **[P3] Landing-page `marketplace.tsx` says "12+ gateways"** — only 5 exist. (Area 2)
+
+18. **[P3] `dashboard-wallet.tsx` TYPE_META missing `release`** type — minor (held-balance release renders with default style). (Area 7)
+
+19. **[P3] Service worker has no cache-versioning strategy** — `novsmm-v1` is hardcoded; new deploys may serve stale app shells. (Area 13)
+
+## Action Plan
+
+(ordered by priority)
+
+### Batch A — Critical sync (do first)
+1. Delete `public/manifest.json` OR consolidate into `src/app/manifest.ts`. Pick one canonical PWA manifest.
+2. Wire Facebook/GitHub/Twitter providers into `src/lib/auth.ts` (mirror the Google DB-credential-lookup pattern), OR restrict the admin social-auth UI to Google-only.
+3. Pick one canonical domain (recommend `novsmm.shop` since it's already used for webhook URLs) and update all `novsmm.io` / `novsmm.com` references — including `notify.ts`, `invoice-html.ts`, `legal-pages.tsx`, `legal-modal.tsx` (or delete the latter), `faq-section.tsx`, `public/settings/route.ts` default, `seed-settings.ts`, `seed.ts` admin email, child-panel subdomain URLs (`*.novsmm.com`), and API docs curl examples (`api.novsmm.com`).
+4. Delete `src/components/novsmm/legal-modal.tsx` (dead code with stale content).
+
+### Batch B — i18n + register flow
+5. Fix `register-screen.tsx` to send ISO language codes (fetch from `/api/public/languages`).
+6. Remove "Deutsch" from `register-screen.tsx` `LANGUAGES` array.
+7. Update `prisma/schema.prisma` `Language.code` comment (remove `de`).
+
+### Batch C — Stale references cleanup
+8. Remove the dead `ORDERS` mock array from `dashboard-data.ts` (keep only the `OrderStatus` type).
+9. Remove the hardcoded "Wise" option from `WithdrawModal` and fix the broken JSX-in-`map` (use `.filter(...).map(...)`).
+10. Update `prisma/seed.ts` sample transaction `method: "wise"` → `"manual"` (or `"paypal"`).
+11. Update stale schema comments on `Transaction.method`, `WebhookLog.provider`, `PaymentIntent.method` to canonical 5 methods.
+12. Fix `updateProfileSchema.role` enum to `["user","reseller","agency"]`.
+
+### Batch D — Legal copy fixes
+13. Fix "about" page: "4 Payment gateways" → "5 Payment gateways".
+14. Fix "terms" section 5: add Manual to the payment methods list.
+15. Reconcile minimum-withdrawal amount across legal Terms, seed-settings, and FAQ.
+16. Fix landing-page `marketplace.tsx`: "12+ gateways" → "5 gateways".
+
+### Batch E — UX polish
+17. Align `EditChildPanelModal` default markupPercent with Create modal (50).
+18. Decide whether to expose `cost` to authed users in `/api/services` for the Sell tab.
+19. Add `release` to `dashboard-wallet.tsx` TYPE_META.
+20. Add a service-worker cache-version bump strategy for future deploys.
