@@ -323,6 +323,7 @@ model ApiKey {
   lastUsedAt  DateTime?
   lastUsedIp  String?
   createdAt   DateTime @default(now())
+  expiresAt   DateTime? // ASVS V13.1.3: 90-day default expiry enforced at creation
   revokedAt   DateTime?
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -330,6 +331,7 @@ model ApiKey {
   @@index([userId])
   @@index([status])
   @@index([lookupHash])
+  @@index([expiresAt])
 }
 
 // ─────────── Licenses (panel rental / sale system) ───────────

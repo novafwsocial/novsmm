@@ -92,6 +92,17 @@ export async function validateApiKey(req: NextRequest): Promise<{
   // Check if user is active
   if (apiKey.user.status !== "active") return null;
 
+  // ASVS V13.1.3: Check API key expiry (90-day default, configurable)
+  // If expiresAt is set and past, treat as revoked
+  if (apiKey.expiresAt && new Date(apiKey.expiresAt) < new Date()) {
+    // Auto-revoke expired key
+    await db.apiKey.update({
+      where: { id: apiKey.id },
+      data: { status: "revoked", revokedAt: new Date() },
+    }).catch(() => {}); // best-effort
+    return null;
+  }
+
   // Check IP allowlist (if configured)
   if (apiKey.ipAllowlist) {
     const clientIp =

@@ -146,6 +146,19 @@ export async function POST(req: NextRequest) {
 
     const { serviceId, quantity, link, dripFeed, dripDays, dripDelay } = parsed.data;
 
+    // ── ASVS V11.6.3: Max 100 orders per day per user (anti-abuse) ──
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayOrderCount = await db.order.count({
+      where: {
+        userId,
+        createdAt: { gte: todayStart },
+      },
+    });
+    if (todayOrderCount >= 100) {
+      return apiError("Daily order limit reached (100/day). Please try again tomorrow.", 429);
+    }
+
     // Fetch service
     const service = await db.service.findUnique({
       where: { id: serviceId },

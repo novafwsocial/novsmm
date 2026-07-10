@@ -84,6 +84,8 @@ export async function POST(req: NextRequest) {
       permissions: permissions ?? "read,order",
       status: "active",
       ipAllowlist: normalizedAllowlist,
+      // ASVS V13.1.3: 90-day default expiry — forces key rotation
+      expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
     },
   });
 

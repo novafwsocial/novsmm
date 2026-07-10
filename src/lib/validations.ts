@@ -31,6 +31,9 @@ export const registerSchema = z.object({
   // do `"English".slice(0,2)` = "en" (worked by coincidence) but
   // "Português".slice(0,2) = "po" (broken — fell back to English).
   language: z.string().default("en"),
+  // ASVS V11.6.1: referral code (optional) — anti-self-referral check
+  // happens in the route handler (IP + email domain match).
+  referralCode: z.string().optional(),
 }).refine((d) => d.password === d.confirm, {
   message: "Passwords don't match",
   path: ["confirm"],
@@ -56,7 +59,7 @@ export const topupSchema = z.object({
 });
 
 export const withdrawSchema = z.object({
-  amount: z.number().positive(),
+  amount: z.number().positive().min(10, "Minimum withdrawal is $10"), // ASVS V11.6.2
   method: z.string().min(1),
   destination: z.string().min(1),
 });

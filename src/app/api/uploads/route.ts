@@ -64,7 +64,13 @@ export async function POST(req: NextRequest) {
       message: "File uploaded successfully",
     }, 201);
   } catch (e: any) {
-    console.error("[uploads] POST error:", e);
+    // ASVS V7.1.2: use structured logger instead of console.error
+    try {
+      const { logger } = await import("@/lib/logger");
+      logger.error({ err: e, userId, module: "uploads" }, "Upload failed");
+    } catch {
+      console.error("[uploads] POST error:", e);
+    }
     return apiError("Failed to upload file", 500);
   }
 }
