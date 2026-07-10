@@ -11,6 +11,19 @@ const nextConfig: NextConfig = {
   },
   reactStrictMode: true,
   poweredByHeader: false,
+  // PERF: Image optimization — AVIF (best compression) + WebP fallback.
+  // Automatically converts and serves responsive images from next/image.
+  images: {
+    formats: ["image/avif", "image/webp"],
+    remotePatterns: [
+      { protocol: "https", hostname: "**" },
+    ],
+    minimumCacheTTL: 86400, // 24h cache for optimized images
+  },
+  // PERF: Compress responses with brotli (better than gzip)
+  compress: true,
+  // PERF: Only generate static pages for known routes (faster builds)
+  // experimental: { optimizeCss: true } — removed, not stable in Next 16
 };
 
 export default nextConfig;

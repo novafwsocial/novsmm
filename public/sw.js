@@ -24,9 +24,10 @@
 // Bumped on each deploy. The build pipeline can rewrite this to a content
 // hash (e.g. `novsmm-<git-sha>`) to force a cache refresh on every change.
 // Manual bump is also fine for small deploys.
-const CACHE_VERSION = "novsmm-v2";
+// v3: bumped after mobile performance optimizations (Reveal CSS, dynamic imports, virtualization)
+const CACHE_VERSION = "novsmm-v3";
 const CACHE = CACHE_VERSION;
-const APP_SHELL = ["/", "/icon.png"];
+const APP_SHELL = ["/", "/icon.png", "/manifest.webmanifest"];
 
 // Track whether this is the first install vs an upgrade.
 let isFirstInstall = true;

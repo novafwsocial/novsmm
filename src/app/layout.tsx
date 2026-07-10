@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from "@/lib/app-providers";
 import { SwRegister } from "@/components/novsmm/sw-register";
+import { WebVitals } from "@/components/novsmm/web-vitals";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -69,6 +70,7 @@ export default function RootLayout({
           {children}
           <Toaster />
           <SwRegister />
+          <WebVitals />
         </AppProviders>
       </body>
     </html>
