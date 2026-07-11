@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
 
 /**
  * NOVSMM Edge Middleware — rate limiting + security headers.
@@ -151,9 +150,8 @@ function addSecurityHeaders(res: NextResponse) {
   // (fonts.gstatic.com etc.). Helps TTFB on first visit.
   res.headers.set("X-DNS-Prefetch-Control", "on");
   // CSP — strict-dynamic + nonce-based. Removes 'unsafe-inline' from script-src.
-  // Next.js inline scripts (hydration, __NEXT_DATA__) are allowed via nonce.
-  // 'strict-dynamic' lets trusted scripts (PayPal SDK) load their own deps.
-  const cspNonce = crypto.randomUUID();
+  // Uses Web Crypto API (Edge Runtime compatible, no Node.js 'crypto' module).
+  const cspNonce = crypto.randomUUID(); // Web Crypto — works in Edge Runtime
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
