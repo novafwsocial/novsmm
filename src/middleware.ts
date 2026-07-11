@@ -119,7 +119,7 @@ function addSecurityHeaders(res: NextResponse) {
       "microphone=()",
       "midi=()",
       "navigation-override=()",
-      "payment=(self https://js.stripe.com https://www.paypal.com)",
+      "payment=(self https://www.paypal.com)",
       "picture-in-picture=(self)",
       "publickey-credentials-get=(self)",
       "screen-wake-lock=()",
@@ -172,12 +172,12 @@ function addSecurityHeaders(res: NextResponse) {
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' https://js.stripe.com https://www.paypal.com https://www.paypalobjects.com; " +
+      "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com; " +
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: blob:; " +
       "font-src 'self' data: https://fonts.gstatic.com; " +
-      "connect-src 'self' wss: ws: https: https://api.stripe.com https://www.paypal.com https://api.mercadopago.com https://api.nowpayments.io; " +
-      "frame-src https://js.stripe.com https://www.paypal.com https://hooks.stripe.com; " +
+      "connect-src 'self' wss: ws: https: https://www.paypal.com https://api.mercadopago.com https://api.nowpayments.io; " +
+      "frame-src https://www.paypal.com; " +
       "worker-src 'self' blob:; " +
       "object-src 'none'; " +
       "frame-ancestors 'none'; " +

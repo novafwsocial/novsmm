@@ -333,16 +333,7 @@ function TopupModal({ onClose }: { onClose: () => void }) {
         onClose();
         return;
       }
-      // ── Stripe Checkout Session ──
-      if (result?.provider === "stripe" && result?.checkoutUrl) {
-        toast({
-          title: "Redirecting to Stripe…",
-          description: "Complete your payment on Stripe. Your balance will update after payment.",
-        });
-        window.location.href = result.checkoutUrl;
-        return;
-      }
-      // ── PayPal / Mercado Pago ──
+      // ── PayPal / Mercado Pago / NowPayments ──
       if (result?.checkoutUrl) {
         toast({
           title: `Redirecting to ${method}…`,
@@ -528,7 +519,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
                 broken JSX-in-`map` (returning `false` for matching methods,
                 which React renders as nothing) is replaced with a clean
                 `.filter(...).map(...)` so every option is a real <option>. */}
-            <option value="Stripe">Stripe</option>
+            
             <option value="PayPal">PayPal</option>
             <option value="Mercado Pago">Mercado Pago</option>
             <option value="NowPayments">NowPayments (Crypto)</option>

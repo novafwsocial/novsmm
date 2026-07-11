@@ -20,7 +20,6 @@ import {
   ChevronDown,
   LogOut,
   Settings,
-  Home,
   Sun,
   Moon,
   CornerDownLeft,
@@ -455,19 +454,6 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
               </span>
             )}
-          </button>
-
-          <button
-            onClick={() => {
-              setBrowsingLanding(true);
-              setView("landing");
-            }}
-            className="hidden items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground sm:flex"
-            aria-label="View public landing page (session stays active)"
-            title="View landing page — your session stays active"
-          >
-            <Home className="h-3 w-3" />
-            Home
           </button>
 
           {(() => {

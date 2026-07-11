@@ -3,7 +3,6 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { topupSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
-import { isStripeConfigured, createTopupCheckoutSession, setStripeCredentials, clearStripeCredentials } from "@/lib/stripe";
 import { createNowPaymentsInvoice } from "@/lib/nowpayments";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { nextPublicId } from "@/lib/ids";
@@ -28,12 +27,12 @@ import { nextPublicId } from "@/lib/ids";
  * missing/undecryptable) is rejected with HTTP 422. The wallet is NEVER
  * credited without a real payment confirmation (webhook or admin approval).
  *
- * For external checkout providers (Stripe / PayPal / Mercado Pago / NowPayments),
+ * For external checkout providers (PayPal / Mercado Pago / NowPayments),
  * the wallet is NOT credited here — the provider's webhook handles that when
  * payment confirms. For Manual, an admin manually credits the balance after
  * confirming payment via WhatsApp/Zelle/Wire.
  *
- * Backward compatibility: the previous Stripe PaymentIntent response shape
+ * 
  * (with `clientSecret` + `paymentIntentId`) is preserved.
  */
 export async function POST(req: NextRequest) {
@@ -65,17 +64,6 @@ export async function POST(req: NextRequest) {
     }
     const hasCreds = !!creds && Object.keys(creds).length > 0;
 
-    // ── For Stripe: set runtime credentials (from DB) instead of mutating process.env ──
-    // SECURITY FIX: Previously mutated process.env.STRIPE_SECRET_KEY at runtime,
-    // which was thread-unsafe and persisted across requests. Now we use
-    // setStripeCredentials() which sets a module-level variable cleared at request end.
-    if (pm.name === "Stripe" && creds?.secretKey) {
-      setStripeCredentials({
-        secretKey: creds.secretKey,
-        webhookSecret: creds.webhookSecret,
-      });
-    }
-
     // Create pending transaction (for all paths — we record every attempt)
     const publicId = await nextPublicId("TX", 8842);
     const methodSlug = pm.name.toLowerCase().replace(/\s/g, "_");
@@ -98,69 +86,7 @@ export async function POST(req: NextRequest) {
     //  Per-method dispatch
     // ──────────────────────────────────────────────────────────────────
 
-    // ── 1. Stripe ──
-    // Uses Stripe Checkout Session (hosted by Stripe). The browser redirects
-    // to session.url, the user pays on Stripe's page, then Stripe redirects
-    // back to successUrl. The webhook (checkout.session.completed) credits
-    // the balance — we do NOT credit here.
-    if (pm.name === "Stripe" && (isStripeConfigured() || hasCreds)) {
-      try {
-        const user = await db.user.findUnique({
-          where: { id: userId },
-          select: { email: true },
-        });
-        const checkout = await createTopupCheckoutSession({
-          amount,
-          userId,
-          customerEmail: user?.email ?? "",
-          transactionPublicId: txn.publicId,
-          successUrl: `${origin}/?topup=success`,
-          cancelUrl: `${origin}/?topup=cancelled`,
-        });
-
-        if (checkout?.url) {
-          // Update transaction with Stripe session id for traceability
-          await db.transaction.update({
-            where: { id: txn.id },
-            data: {
-              reference: checkout.id,
-              description: `Top-up via Stripe (pending checkout ${checkout.id})`,
-            },
-          });
-
-          return apiOk({
-            provider: "stripe",
-            checkoutUrl: checkout.url,
-            sessionId: checkout.id,
-            transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
-            message: "Redirecting to Stripe Checkout to complete payment.",
-          });
-        }
-
-        // No URL returned (rare) — return a clear error, don't fall back to sandbox
-        await db.transaction.update({
-          where: { id: txn.id },
-          data: { status: "failed" },
-        });
-        return apiError(
-          "Stripe Checkout could not be created. Verify your Stripe credentials in Admin → Payments.",
-          502
-        );
-      } catch (stripeError: any) {
-        console.error("[wallet/topup] Stripe Checkout error:", stripeError?.message);
-        await db.transaction.update({
-          where: { id: txn.id },
-          data: { status: "failed" },
-        });
-        // Return a clear error — do NOT fall back to sandbox when Stripe is configured
-        return apiError(
-          `Stripe error: ${stripeError?.message ?? "Failed to create checkout session"}. Check Admin → Payments → Configure credentials.`,
-          502
-        );
-      }
-    }
-
-    // ── 2. PayPal ──
+    // ── 1. PayPal ──
     // The webhook at /api/webhooks/paypal will verify the signature via
     // PayPal's verify-webhook-signature API and credit the wallet on
     // PAYMENT.CAPTURE.COMPLETED. We pass the txn publicId as the order's
@@ -397,10 +323,6 @@ export async function POST(req: NextRequest) {
   } catch (e: any) {
     console.error("[wallet/topup] error:", e);
     return apiError("Top-up failed", 500);
-  } finally {
-    // Always clear runtime Stripe credentials at the end of the request
-    // to prevent credential leakage between requests
-    clearStripeCredentials();
   }
 }
 

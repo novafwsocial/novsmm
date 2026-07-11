@@ -2,7 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
-import { createRefund } from "@/lib/stripe";
+
 import { nextPublicId } from "@/lib/ids";
 import { raiseSecurityAlert } from "@/lib/security-alert";
 
@@ -80,30 +80,6 @@ export async function POST(req: NextRequest) {
       },
     }),
   ]);
-
-  // Fix: Process Stripe refund AFTER successful DB commit.
-  // If this fails, the DB is correct (refund recorded) but Stripe still
-  // has the charge. Log for manual reconciliation.
-  if (txn.method === "stripe" && txn.reference?.startsWith("pi_")) {
-    const stripeRefund = await createRefund(txn.reference).catch((err: any) => {
-      console.error("[refunds] Stripe refund FAILED after DB commit — manual reconciliation needed:", {
-        transactionId: txn.id,
-        reference: txn.reference,
-        error: err?.message,
-      });
-      return null;
-    });
-    if (!stripeRefund) {
-      // DB refund succeeded but Stripe refund failed — don't return error
-      // (the user's balance is already correct). Log for admin follow-up.
-      await audit(adminId, "refund_stripe_failed", "transaction", transactionId, {
-        amount: refundAmount,
-        reason,
-        user: txn.user.email,
-        note: "DB refund succeeded but Stripe refund failed — manual reconciliation needed",
-      });
-    }
-  }
 
   // Notify the user
   await createNotification({

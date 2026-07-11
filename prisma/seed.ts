@@ -129,15 +129,13 @@ async function main() {
   console.log(`  ✓ ${services.length} services`);
 
   // ── Payment methods ──
-  // Final 5 methods (PAYMENT-CLEANUP-1): Stripe, PayPal, Mercado Pago,
-  // NowPayments (crypto), Manual (WhatsApp/Zelle/Wire).
-  // Removed: Aurora Pay, Crypto (generic), Bank transfer, AurPay, DePay.
+  // Final 4 methods: PayPal, Mercado Pago, NowPayments (crypto), Manual.
+  // Removed: Stripe (per user request), Aurora Pay, Crypto, Bank transfer, AurPay, DePay.
   const paymentMethods = [
-    { name: "Stripe", glyph: "S", tone: "from-violet-500/15 to-violet-500/5 text-violet-700", settleTime: "Instant", fee: "2.9% + $0.30", currencies: "USD, EUR, GBP, +135", sortOrder: 1 },
-    { name: "PayPal", glyph: "P", tone: "from-blue-500/15 to-blue-500/5 text-blue-700", settleTime: "Instant", fee: "3.49% + $0.49", currencies: "USD, EUR, GBP, +25", sortOrder: 2 },
-    { name: "Mercado Pago", glyph: "M", tone: "from-cyan-500/15 to-cyan-500/5 text-cyan-700", settleTime: "Instant", fee: "3.99%", currencies: "BRL, MXN, ARS, +6", sortOrder: 3 },
-    { name: "NowPayments", glyph: "₿", tone: "from-amber-500/15 to-amber-500/5 text-amber-700", settleTime: "~3 min", fee: "0% · no chargebacks", currencies: "BTC, ETH, USDT, USDC", sortOrder: 4 },
-    { name: "Manual", glyph: "W", tone: "from-rose-500/15 to-rose-500/5 text-rose-700", settleTime: "1-24h", fee: "0% · contact team", currencies: "WhatsApp, Zelle, Wire", sortOrder: 5 },
+    { name: "PayPal", glyph: "P", tone: "from-blue-500/15 to-blue-500/5 text-blue-700", settleTime: "Instant", fee: "3.49% + $0.49", currencies: "USD, EUR, GBP, +25", sortOrder: 1 },
+    { name: "Mercado Pago", glyph: "M", tone: "from-cyan-500/15 to-cyan-500/5 text-cyan-700", settleTime: "Instant", fee: "3.99%", currencies: "BRL, MXN, ARS, +6", sortOrder: 2 },
+    { name: "NowPayments", glyph: "₿", tone: "from-amber-500/15 to-amber-500/5 text-amber-700", settleTime: "~3 min", fee: "0% · no chargebacks", currencies: "BTC, ETH, USDT, USDC", sortOrder: 3 },
+    { name: "Manual", glyph: "W", tone: "from-rose-500/15 to-rose-500/5 text-rose-700", settleTime: "1-24h", fee: "0% · contact team", currencies: "WhatsApp, Zelle, Wire", sortOrder: 4 },
   ];
   for (const pm of paymentMethods) {
     await db.paymentMethod.upsert({
@@ -157,7 +155,7 @@ async function main() {
   }
 
   // Cleanup obsolete payment methods (PAYMENT-CLEANUP-1)
-  const obsoleteMethods = ["Aurora Pay", "Crypto", "Bank transfer", "AurPay", "DePay"];
+  const obsoleteMethods = ["Stripe", "Aurora Pay", "Crypto", "Bank transfer", "AurPay", "DePay"];
   for (const name of obsoleteMethods) {
     await db.paymentMethod.deleteMany({ where: { name } });
   }
@@ -208,7 +206,7 @@ async function main() {
   const existingTxns = await db.transaction.count({ where: { userId: user.id } });
   if (existingTxns === 0) {
     const txnData = [
-      { type: "topup", amount: 500, description: "Top-up via Stripe •••• 4242", method: "stripe", reference: "pi_3OkL2m" },
+      { type: "topup", amount: 500, description: "Top-up via PayPal", method: "paypal", reference: "PAYID-MX1234" },
       { type: "sale", amount: 2.4, description: "Order #A-10432 — Instagram Followers", method: "balance", reference: "A-10432" },
       { type: "withdrawal", amount: -1200, description: "Withdrawal to PayPal · EUR", method: "paypal", reference: "wse_8841" },
       { type: "sale", amount: 24.0, description: "Order #A-10430 — YouTube Watch hours", method: "balance", reference: "A-10430" },

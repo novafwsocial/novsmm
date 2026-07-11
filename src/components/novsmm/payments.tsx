@@ -11,15 +11,6 @@ import { useEffect, useState, useRef } from "react";
 /* ── Provider data ────────────────────────────────────── */
 const PROVIDERS = [
   {
-    name: "Stripe",
-    methods: ["Visa", "Mastercard", "Amex", "Cards"],
-    currencies: 135,
-    settlement: "Instant",
-    security: "PCI DSS L1",
-    coverage: "200+ countries",
-    note: "Global card processing with 3-D Secure. Industry-standard reliability.",
-  },
-  {
     name: "PayPal",
     methods: ["PayPal", "Venmo", "Pay Later", "Cards"],
     currencies: 25,
@@ -86,7 +77,7 @@ export function Payments() {
               <br className="hidden sm:block" /> Settled in minutes.
             </>
           }
-          description="NOVSMM routes every transaction through Stripe, PayPal, Mercado Pago, NowPayments (crypto), or manual settlement — with FX conversion at mid-market rates and 100+ cryptocurrencies accepted."
+          description="NOVSMM routes every transaction through PayPal, Mercado Pago, NowPayments (crypto), or manual settlement — with FX conversion at mid-market rates and 100+ cryptocurrencies accepted."
         />
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
@@ -145,7 +136,7 @@ export function Payments() {
         {/* Footer stat strip */}
         <Reveal delay={0.1}>
           <div className="mt-10 grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4 sm:grid-cols-4 sm:p-6">
-            <Stat value={<><Counter to={5} duration={1.6} /></>} label="Payment gateways" />
+            <Stat value={<><Counter to={4} duration={1.6} /></>} label="Payment gateways" />
             <Stat value={<><Counter to={135} duration={2} /></>} label="Currencies" />
             <Stat value={<><Counter to={0.4} decimals={1} duration={2} />%</>} label="Failure rate" />
             <Stat value={<><Counter to={3} duration={1.4} /> min</>} label="Avg. settlement" icon={<Zap className="h-3.5 w-3.5 text-primary" />} />

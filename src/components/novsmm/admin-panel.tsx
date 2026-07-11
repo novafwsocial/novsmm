@@ -1413,7 +1413,6 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
   // Manual payment has no credentials — just a note
   const isManual = method.name === "Manual";
   // Stripe has its own help panel — fields + help
-  const isStripe = method.name === "Stripe";
 
   const fields = credentialFields[method.name] ?? [
     { key: "apiKey", label: "API Key", placeholder: "" },
@@ -1500,41 +1499,6 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
             </div>
           ) : (
             <>
-              {isStripe && (
-                <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-4 py-4">
-                  <div className="flex items-center gap-2 text-sm font-semibold text-violet-700">
-                    <CreditCard className="h-4 w-4" />
-                    Stripe — API keys & webhook
-                  </div>
-                  <ol className="mt-2 list-decimal space-y-1 pl-5 text-xs text-violet-700/80">
-                    <li>
-                      Get your API keys at{" "}
-                      <a
-                        href="https://dashboard.stripe.com/apikeys"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="font-medium underline underline-offset-2 hover:text-violet-900"
-                      >
-                        dashboard.stripe.com/apikeys
-                      </a>
-                      .
-                    </li>
-                    <li>
-                      Required fields: <strong>Secret Key</strong> (<code>sk_live_…</code> or <code>sk_test_…</code>) and <strong>Webhook Secret</strong> (<code>whsec_…</code>).
-                    </li>
-                    <li>
-                      Webhook URL to configure in Stripe:&nbsp;
-                      <code className="break-all">https://novsmm.shop/api/webhooks/stripe</code>
-                    </li>
-                    <li>
-                      Subscribe to these events:&nbsp;
-                      <code>checkout.session.completed</code>,&nbsp;
-                      <code>payment_intent.payment_failed</code>,&nbsp;
-                      <code>charge.refunded</code>.
-                    </li>
-                  </ol>
-                </div>
-              )}
               {fields.map((field) => (
                 <label key={field.key} className="block">
                   <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
@@ -2539,7 +2503,7 @@ function AdminWebhooks() {
             <div key={w.id} className="rounded-2xl border border-border/60 bg-background p-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg capitalize", w.provider === "stripe" ? "bg-violet-500/10 text-violet-700" : w.provider === "mercadopago" ? "bg-cyan-500/10 text-cyan-700" : "bg-muted text-muted-foreground")}>
+                  <span className={cn("flex h-8 w-8 items-center justify-center rounded-lg capitalize", w.provider === "paypal" ? "bg-violet-500/10 text-violet-700" : w.provider === "mercadopago" ? "bg-cyan-500/10 text-cyan-700" : "bg-muted text-muted-foreground")}>
                     <Webhook className="h-4 w-4" />
                   </span>
                   <div>
@@ -3424,8 +3388,8 @@ function AdminRefunds() {
               <AlertDialogDescription>
                 You are about to refund <span className="font-semibold text-foreground">${Math.abs(confirming.amount).toFixed(2)}</span> for transaction{" "}
                 <span className="font-mono text-foreground">{confirming.publicId}</span> ({confirming.user?.email}).
-                {confirming.method === "stripe" && confirming.reference?.startsWith("pi_") && (
-                  <span className="mt-1 block">A real Stripe refund will be issued.</span>
+                {false && confirming.reference?.startsWith("pi_") && (
+                  <span className="mt-1 block">A real refund will be issued.</span>
                 )}
               </AlertDialogDescription>
             </AlertDialogHeader>

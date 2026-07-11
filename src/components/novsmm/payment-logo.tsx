@@ -26,7 +26,6 @@ const PAYMENT_BRAND: Record<string, { glyph: string; bg: string; text: string }>
   "Mercado Pago": { glyph: "MP", bg: "bg-cyan-500", text: "text-white" },
   NowPayments: { glyph: "₿", bg: "bg-amber-500", text: "text-white" },
   Manual: { glyph: "W", bg: "bg-green-500", text: "text-white" },
-  Stripe: { glyph: "S", bg: "bg-violet-600", text: "text-white" },
 };
 
 /**
