@@ -53,8 +53,8 @@ const PAYOUT_METHODS = [
 ];
 
 const DEFAULT_STATS: StatusStats = {
-  totalUsers: 184500,
-  totalRevenue: 92400000,
+  totalUsers: 0,
+  totalRevenue: 0,
 };
 
 export function AffiliateSection() {

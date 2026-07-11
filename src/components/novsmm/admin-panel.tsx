@@ -1,3 +1,7 @@
+// TODO: Split into separate files (see EXHAUSTIVE_AUDIT_FINAL.md #6)
+// This file is 4,790 lines and contains 20+ admin sub-components. A previous
+// partial split attempt left dead duplicates in ./admin/ (now deleted). A
+// full extraction is feasible but risky without a full test suite — deferred.
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";

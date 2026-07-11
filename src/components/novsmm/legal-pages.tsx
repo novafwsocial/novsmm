@@ -213,7 +213,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             NOVSMM is a social media marketing infrastructure platform that provides resellers,
             agencies, and enterprises with a unified control surface for order fulfillment,
             payment processing, and real-time analytics across 16+ social platforms. The platform
-            processes millions of orders with a 99.99% uptime SLA and is compatible with the
+            processes millions of orders with a 99.9% uptime target and is compatible with the
             PerfectPanel / JAP reseller API ecosystem.
           </p>
         </section>
@@ -381,7 +381,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">Regulatory compliance</h2>
           <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">GDPR (EU):</strong> Self-service account deletion with personal data anonymization. Data processing agreements available upon request. Users can export their data and request erasure at any time.</span></li>
-            <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">PCI DSS:</strong> All payment card processing is handled by PCI-DSS Level 1 certified providers (Stripe, PayPal). NOVSMM never stores, transmits, or processes raw card data. Card data is tokenized at the provider level.</span></li>
+            <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">PCI DSS:</strong> All payment card processing is handled by PCI-DSS Level 1 certified payment providers (PayPal, Mercado Pago). NOVSMM never stores, transmits, or processes raw card data. Card data is tokenized at the provider level.</span></li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">Data encryption:</strong> All credentials, API keys, and payment method configurations are encrypted at rest using AES-256-GCM with random IVs and authentication tags. Encryption keys are derived from a server-side master key stored in environment variables.</span></li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">Audit trail:</strong> All administrative actions (user management, role changes, refunds, impersonation) are logged with userId, action, entity, IP address, and User-Agent. Logs are retained for 365 days.</span></li>
           </ul>

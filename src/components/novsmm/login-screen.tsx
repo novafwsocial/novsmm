@@ -444,12 +444,12 @@ export function LoginScreen() {
         <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-primary" />
-            SOC 2 controls
+            SOC 2-aligned controls
           </span>
           <span>·</span>
           <span>256-bit encryption</span>
           <span>·</span>
-          <span>99.99% uptime</span>
+          <span>99.9% uptime</span>
         </div>
       </motion.div>
 

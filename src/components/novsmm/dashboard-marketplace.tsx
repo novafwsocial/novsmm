@@ -1797,7 +1797,7 @@ function ServiceDetailModal({
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Community rating
+                Your rating
               </div>
               {currentRating ? (
                 <div className="mt-1 flex items-center gap-2">

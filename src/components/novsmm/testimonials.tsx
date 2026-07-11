@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { Star, Quote } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
@@ -84,7 +84,7 @@ const ROW_B: Testimonial[] = [
       "Their security posture is the real deal — audit logs, role-based access, DDoS shielding. Our enterprise clients finally stopped asking.",
     name: "Elena Petrova",
     role: "CISO, Verge Media",
-    result: "SOC 2 ready",
+    result: "SOC 2-aligned",
     rating: 5,
     initials: "EP",
     tone: "from-teal-500/20 to-teal-500/5 text-teal-700",
@@ -117,7 +117,7 @@ export function Testimonials() {
               <br className="hidden sm:block" /> Results that stayed.
             </>
           }
-          description="No carousel. Just the signal — from agencies, resellers, and enterprises running real volume on NOVSMM today."
+          description="Representative experiences from platform users. Results may vary."
         />
       </div>
 

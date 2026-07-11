@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
 import { ShieldCheck, Globe2, Clock, Zap } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
@@ -15,7 +15,7 @@ const PROVIDERS = [
     methods: ["PayPal", "Venmo", "Pay Later", "Cards"],
     currencies: 25,
     settlement: "Instant",
-    security: "PCI DSS L1",
+    security: "PCI DSS L1 (via provider)",
     coverage: "200+ countries",
     note: "Buyer protection & vaulted wallets. Trusted globally.",
   },
@@ -24,7 +24,7 @@ const PROVIDERS = [
     methods: ["Mercado Pago", "Pix", "Boleto", "OXXO"],
     currencies: 6,
     settlement: "Instant",
-    security: "PCI DSS L1",
+    security: "PCI DSS L1 (via provider)",
     coverage: "LATAM region",
     note: "Leading payment platform in Latin America. Local rails.",
   },

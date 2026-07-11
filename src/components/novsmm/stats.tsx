@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+import { motion } from "motion/react";
 import { useEffect, useMemo, useState } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {
@@ -34,12 +34,12 @@ type StatsPayload = {
 };
 
 const DEFAULTS: StatsPayload = {
-  totalUsers: 184500,
-  orders24h: 1843000,
-  activeServices: 242,
-  totalOrders: 4_280_000,
-  totalRevenue: 92_400_000,
-  ordersPerMin: 1284,
+  totalUsers: 0,
+  orders24h: 0,
+  activeServices: 0,
+  totalOrders: 0,
+  totalRevenue: 0,
+  ordersPerMin: 0,
 };
 
 function useStatusStats(): StatsPayload {
@@ -68,8 +68,11 @@ function useStatusStats(): StatsPayload {
 // useMemo to avoid setState-in-effect cascading renders.
 function useDailySeries(ordersPerMin: number) {
   return useMemo(() => {
+    if (ordersPerMin <= 0) {
+      return Array.from({ length: 14 }, () => ({ d: 0, v: 0 }));
+    }
     const baseline = Math.max(
-      84320,
+      100,
       Math.round((ordersPerMin * 1440 * 2.4) / 1000) * 1000,
     );
     return Array.from({ length: 14 }, (_, i) => ({

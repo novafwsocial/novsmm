@@ -206,13 +206,6 @@ const ORG_JSON_LD = {
       url: `${SITE_ORIGIN}/api-docs`,
     },
   ],
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.8",
-    ratingCount: "2400",
-    bestRating: "5",
-    worstRating: "1",
-  },
 };
 
 const WEBSITE_JSON_LD = {
