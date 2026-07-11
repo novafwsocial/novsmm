@@ -1,6 +1,6 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
+import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { ShieldCheck, Globe2, Clock, Zap } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";

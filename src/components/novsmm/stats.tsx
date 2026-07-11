@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {

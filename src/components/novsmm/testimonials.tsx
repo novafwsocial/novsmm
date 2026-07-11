@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "motion/react";
+import { motion } from "framer-motion";
 import { Star, Quote } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";

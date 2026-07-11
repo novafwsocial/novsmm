@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "motion/react";
+import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, MessageCircle } from "lucide-react";
 import { Reveal } from "./reveal";
 import { SectionHeading } from "./section-heading";
