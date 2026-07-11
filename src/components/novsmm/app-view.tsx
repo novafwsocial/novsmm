@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { Loader2, X, Lock, CheckCircle2, ArrowRight, AlertCircle, LayoutDashboard } from "lucide-react";
@@ -333,16 +332,15 @@ export function AppView({ landing }: { landing: ReactNode }) {
 
   return (
     <>
-      {/* Use a single motion.div with key to trigger re-mount on view change.
-          No exit animations — prevents "insertBefore" DOM errors. */}
-      <motion.div
+      {/* FIX: Removed motion.div — framer-motion causes "removeChild" DOM
+          errors when view changes rapidly (login → dashboard). Using a
+          plain div with CSS animation instead. */}
+      <div
         key={motionKey}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.3 }}
+        className="tab-content-enter"
       >
         {content}
-      </motion.div>
+      </div>
 
       {/* Reset password modal — overlay regardless of session state */}
       {resetToken && (
