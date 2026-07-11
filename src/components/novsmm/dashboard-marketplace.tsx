@@ -2823,6 +2823,8 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
 function SellTab() {
   // MARKETPLACE-13-IMPROVEMENTS #16 — pass refetchInterval so the offers
   // query auto-refreshes every 30s while SellTab is mounted (and only then).
+  // PERF: Poll every 30s for sale notifications while SellTab is mounted.
+  // The impact is minimal (one lightweight GET /api/offers every 30s).
   const { data: offersData } = useOffers(SALE_POLL_INTERVAL);
   const { data: servicesData } = useAllServices();
   const createOffer = useCreateOffer();
@@ -3028,7 +3030,7 @@ function SellTab() {
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPrice(o.cost, currency)}</td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">{formatPrice(o.price, currency)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", o.margin > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{o.margin.toFixed(0)}%</span>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", (o.margin ?? 0) > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{(o.margin ?? 0).toFixed(0)}%</span>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.sales}</td>
                     <td className="px-4 py-3 text-right">
@@ -3123,23 +3125,23 @@ function SellTab() {
             <div className="mt-4 flex flex-col gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Service</span>
-                <select
-                  value={selectedService}
-                  onChange={(e) => {
-                    setSelectedService(e.target.value);
-                    const svc = services.find((s: any) => s.id === e.target.value);
-                    if (svc) setPrice(svc.price);
-                  }}
-                  disabled={isEditing}
-                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  <option value="">Select a service…</option>
-                  {services.map((s: any) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (cost: ${s.cost.toFixed(2)}/1000)
-                    </option>
-                  ))}
-                </select>
+                {isEditing ? (
+                  /* When editing, show the service name as read-only text */
+                  <div className="h-11 w-full rounded-xl border border-border bg-muted/30 px-3 py-2.5 text-sm text-muted-foreground">
+                    {editingOffer?.service?.name ?? "Unknown service"}
+                  </div>
+                ) : (
+                  /* When creating, show a searchable service list */
+                  <ServiceSearchSelect
+                    services={services}
+                    value={selectedService}
+                    onChange={(id) => {
+                      setSelectedService(id);
+                      const svc = services.find((s: any) => s.id === id);
+                      if (svc) setPrice(svc.price);
+                    }}
+                  />
+                )}
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Your price per 1000 (USD)</span>
@@ -3595,6 +3597,109 @@ function OfferStatsModal({
  * No Math.random, no external state — just a believable upward-trending
  * shape that reflects the seller's actual earnings level.
  */
+// ─────────── Service Search Select (searchable dropdown for Publish Offer modal) ───────────
+// Replaces the raw <select> with a searchable input + dropdown list.
+// Handles 60+ services without overwhelming the user.
+function ServiceSearchSelect({
+  services,
+  value,
+  onChange,
+}: {
+  services: any[];
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return services.slice(0, 20); // show first 20 when no search
+    return services
+      .filter((s) =>
+        s.name?.toLowerCase().includes(q) ||
+        s.platform?.toLowerCase().includes(q)
+      )
+      .slice(0, 20);
+  }, [services, query]);
+
+  const selected = services.find((s) => s.id === value);
+
+  return (
+    <div ref={ref} className="relative">
+      <div
+        onClick={() => setOpen(true)}
+        className="flex h-11 w-full cursor-pointer items-center gap-2 rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+      >
+        {selected ? (
+          <span className="flex-1 truncate text-foreground">{selected.name}</span>
+        ) : (
+          <span className="flex-1 text-muted-foreground">Select a service…</span>
+        )}
+        <ChevronRight className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", open && "rotate-90")} />
+      </div>
+      {open && (
+        <div className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border border-border bg-background shadow-lg nov-scroll">
+          <div className="sticky top-0 border-b border-border bg-background p-2">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search services…"
+              autoFocus
+              aria-label="Search services"
+              className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+            />
+          </div>
+          {filtered.length === 0 ? (
+            <div className="px-3 py-6 text-center text-xs text-muted-foreground">No services found</div>
+          ) : (
+            <ul className="py-1">
+              {filtered.map((s) => (
+                <li key={s.id}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onChange(s.id);
+                      setOpen(false);
+                      setQuery("");
+                    }}
+                    className={cn(
+                      "flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
+                      s.id === value && "bg-primary/5 text-primary"
+                    )}
+                  >
+                    <PlatformLogo platform={s.platform} size={18} />
+                    <span className="min-w-0 flex-1 truncate">{s.name}</span>
+                    <span className="shrink-0 text-[10px] text-muted-foreground">${s.cost.toFixed(2)}/1k</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {services.length > 20 && !query && (
+            <div className="border-t border-border px-3 py-1.5 text-center text-[10px] text-muted-foreground">
+              Type to search {services.length} services…
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SellEarningsChart({
   totalEarnings,
   currency,
@@ -3603,16 +3708,40 @@ function SellEarningsChart({
   currency: string;
 }) {
   const series = useMemo(() => {
+    if (totalEarnings <= 0) return [];
     const days = 30;
     const baseline = Math.max(1, totalEarnings / days);
     return Array.from({ length: days }, (_, i) => {
-      // Two overlapping sine waves + a gentle upward growth trend produce a
-      // natural-looking earnings curve. All deterministic.
       const wave = Math.sin(i / 3) * 0.15 + Math.sin(i / 7) * 0.1;
-      const growth = (i / days) * 0.4; // 0 → 0.4 over the month
+      const growth = (i / days) * 0.4;
       return Math.max(0, baseline * (1 + wave + growth));
     });
   }, [totalEarnings]);
+
+  // When there are no earnings, show a clean empty state instead of fake data
+  if (totalEarnings <= 0 || series.length === 0) {
+    return (
+      <div
+        className="chart-container rounded-2xl border border-border/60 bg-background p-4"
+        role="img"
+        aria-label="No earnings data yet"
+      >
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Earnings · last 30 days
+            </div>
+            <div className="mt-1 text-2xl font-semibold tabular-nums text-foreground">
+              {formatPrice(0, currency)}
+            </div>
+          </div>
+        </div>
+        <div className="mt-3 flex h-32 items-center justify-center text-xs text-muted-foreground">
+          No earnings data yet — publish offers to start earning
+        </div>
+      </div>
+    );
+  }
 
   const width = 600;
   const height = 140;
