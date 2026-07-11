@@ -223,7 +223,7 @@ export function ApiDocsClient() {
                         {Object.entries(ep.params).map(([k, v]) => (
                           <div key={k} className="flex gap-2 py-1 text-sm">
                             <code className="font-medium text-primary">{k}</code>
-                            <span className="text-muted-foreground">{v as string}</span>
+                            <span className="text-muted-foreground">{typeof v === "string" ? v : JSON.stringify(v)}</span>
                           </div>
                         ))}
                       </div>
