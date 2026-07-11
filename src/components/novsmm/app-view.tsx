@@ -374,7 +374,7 @@ function BackToDashboardButton() {
     return (
       <button
         onClick={() => setDismissed(false)}
-        className="fixed bottom-6 left-6 z-[90] inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-6 right-6 z-[90] inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105"
       >
         <LayoutDashboard className="h-4 w-4" />
         Back to dashboard
@@ -383,7 +383,7 @@ function BackToDashboardButton() {
   }
 
   return (
-    <div className="fixed bottom-6 left-6 z-[90] flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 p-3 pr-4 shadow-xl backdrop-blur-md">
+    <div className="fixed bottom-6 right-6 z-[90] flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 p-3 pr-4 shadow-xl backdrop-blur-md">
       <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <LayoutDashboard className="h-5 w-5" />
       </div>
