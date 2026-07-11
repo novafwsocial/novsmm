@@ -147,7 +147,7 @@ const ADMIN_NAV: { id: AdminTab; label: string; icon: any }[] = [
   { id: "webhooks", label: "Webhook Logs", icon: Webhook },
   { id: "settings", label: "Settings", icon: Settings },
   { id: "security", label: "Security", icon: Lock },
-  { id: "roles", label: "Roles", icon: ShieldCheck },
+  // { id: "roles", label: "Roles", icon: ShieldCheck }, // Hidden: granular RBAC not enforced yet (Opción B audit)
   { id: "socialAuth", label: "Social Auth", icon: KeyRound },
   { id: "version", label: "Version", icon: ScrollText },
   { id: "emailTemplates", label: "Email Templates", icon: Mail },
@@ -189,9 +189,10 @@ export function AdminPanel() {
         </div>
       </Reveal>
 
-      {/* Admin sub-nav */}
+      {/* Admin sub-nav — desktop: horizontal tabs, mobile: dropdown */}
       <Reveal>
-        <div className="flex items-center gap-1 overflow-x-auto nov-scroll rounded-2xl border border-border/60 bg-background p-1">
+        {/* Desktop tabs (md+) */}
+        <div className="hidden items-center gap-1 overflow-x-auto nov-scroll rounded-2xl border border-border/60 bg-background p-1 md:flex">
           {ADMIN_NAV.map((n) => (
             <button
               key={n.id}
@@ -212,6 +213,22 @@ export function AdminPanel() {
               <span className="relative">{n.label}</span>
             </button>
           ))}
+        </div>
+
+        {/* Mobile dropdown (< md) */}
+        <div className="md:hidden">
+          <select
+            value={adminTab}
+            onChange={(e) => setAdminTab(e.target.value as any)}
+            aria-label="Select admin section"
+            className="h-11 w-full rounded-2xl border border-border bg-background px-4 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+          >
+            {ADMIN_NAV.map((n) => (
+              <option key={n.id} value={n.id}>
+                {n.label}
+              </option>
+            ))}
+          </select>
         </div>
       </Reveal>
 
@@ -238,7 +255,7 @@ export function AdminPanel() {
           {adminTab === "webhooks" && <AdminWebhooks />}
           {adminTab === "settings" && <AdminSettingsTab />}
           {adminTab === "security" && <AdminSecurity />}
-          {adminTab === "roles" && <AdminRoles />}
+          {/* {adminTab === "roles" && <AdminRoles />} — Hidden: RBAC not enforced yet */}
           {adminTab === "socialAuth" && <AdminSocialAuth />}
           {adminTab === "version" && <AdminVersion />}
           {adminTab === "emailTemplates" && <AdminEmailTemplates />}

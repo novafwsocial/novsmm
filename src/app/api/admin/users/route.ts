@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { updateUserSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
+import { raiseSecurityAlert } from "@/lib/security-alert";
 
 /** GET /api/admin/users — paginated user list. */
 export async function GET(req: NextRequest) {
@@ -78,8 +79,47 @@ export async function PATCH(req: NextRequest) {
 
   const { id, role, status } = parsed.data;
 
-  const user = await db.user.findUnique({ where: { id }, select: { status: true } });
+  const user = await db.user.findUnique({ where: { id }, select: { status: true, role: true } });
   if (!user) return apiError("User not found", 404);
+
+  // SECURITY: "Last admin" protection — prevent removing admin role from
+  // the last active admin, which would lock everyone out of the panel.
+  if (role && role !== "admin" && user.role === "admin") {
+    const activeAdminCount = await db.user.count({
+      where: { role: "admin", status: "active" },
+    });
+    if (activeAdminCount <= 1) {
+      return apiError(
+        "Cannot remove admin role from the last active admin. Promote another user to admin first.",
+        422
+      );
+    }
+  }
+
+  // SECURITY: Self-demotion guard — prevent admin from degrading their own role.
+  if (role && role !== "admin" && id === adminId) {
+    return apiError(
+      "You cannot change your own role. Ask another admin to do this.",
+      422
+    );
+  }
+
+  // SECURITY: Fire security alert when promoting to admin or demoting from admin.
+  if (role && role === "admin" && user.role !== "admin") {
+    await raiseSecurityAlert({
+      type: "role_escalation",
+      userId: adminId,
+      severity: "high",
+      message: `Admin ${adminId} promoted user ${id} to admin role`,
+    });
+  } else if (role && role !== "admin" && user.role === "admin") {
+    await raiseSecurityAlert({
+      type: "role_demotion",
+      userId: adminId,
+      severity: "high",
+      message: `Admin ${adminId} removed admin role from user ${id}`,
+    });
+  }
 
   const updateData: any = {};
   if (role) updateData.role = role;

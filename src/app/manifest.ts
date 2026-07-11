@@ -32,6 +32,11 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
+      // TODO AUDIT-14: The maskable icons below reuse the same PNG as "any".
+      // A proper maskable icon needs ~20% safe zone margin around the logo
+      // to prevent Android from cropping it on install. Generate a dedicated
+      // maskable variant (centered logo on solid background) and replace
+      // these entries. Until then, Android may crop the icon aggressively.
       { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
       { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAuth, apiOk, apiError } from "@/lib/api-utils";
+import { requireAdmin, apiOk, apiError } from "@/lib/api-utils";
 import { db } from "@/lib/db";
 import { decryptJSON } from "@/lib/crypto-utils";
 
@@ -8,11 +8,8 @@ import { decryptJSON } from "@/lib/crypto-utils";
  * Pings each provider's API to verify saved credentials work.
  */
 export async function POST(req: NextRequest) {
-  const { session, error } = await requireAuth();
+  const { error } = await requireAdmin();
   if (error) return error;
-  if ((session!.user as any).role !== "admin") {
-    return apiError("Admin only", 403);
-  }
 
   const body = await req.json();
   const { method } = body;

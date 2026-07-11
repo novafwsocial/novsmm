@@ -82,7 +82,7 @@ export function Field({
             setFocused(false);
             props.onBlur?.(e);
           }}
-          className="peer h-11 w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
+          className="peer h-11 w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground/60 focus:outline-none"
         />
         {valid && (
           <motion.span

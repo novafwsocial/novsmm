@@ -322,11 +322,12 @@ button, a, [role="button"], input, select, textarea {
   }
 }
 
-/* Optimize font rendering on mobile (prevents layout shift) */
+/* Optimize font rendering on mobile (prevents layout shift) + prevent horizontal scroll */
 html {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeSpeed; /* faster text, slight quality tradeoff */
+  overflow-x: hidden; /* safety net: prevent horizontal scroll from fixed-width elements */
 }
 
 /* Prevent layout shift from images without dimensions */
