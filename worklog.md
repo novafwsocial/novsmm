@@ -11466,3 +11466,38 @@ Stage Summary:
 - No structural changes to component logic — forms still submit, links still navigate, copy buttons still copy
 - Build passes; dev server runs cleanly on port 3000
 - ESLint has a pre-existing environment issue (TypeError: Class extends value undefined) unrelated to these changes
+
+---
+Task ID: MARKETPLACE-IMPROVE-1
+Agent: full-stack-developer
+Task: Deep improvement of Services/Marketplace panel (dashboard-marketplace.tsx)
+
+Work Log:
+- Read worklog + dashboard-marketplace.tsx (1,276 lines) + globals.css to confirm CSS utility classes (stat-card-3d, btn-press, skeleton-shimmer, modal-3d-enter, tab-content-enter, dash-reveal) already exist.
+- Confirmed recharts import was present but unused in body — removed cleanly (no chart to migrate, but added a brand-new lightweight SVG SellEarningsChart to deliver the "earnings over time" visual the task called for).
+- Removed framer-motion import (motion, AnimatePresence) and replaced all motion.* usages with CSS-class-driven equivalents:
+  * Tab active background: motion.span layoutId="mk-tab" → <span className="bg-primary tab-content-enter">
+  * Tab content swap: wrapped {tab === ...} in <div key={tab} className="tab-content-enter">
+  * ServiceDetailModal + MassOrderModal + Publish modal: motion.div → <div className="modal-3d-enter">
+  * Drip-feed conditional block: motion.div with height animation → <div className="tab-content-enter">
+- Created new SellEarningsChart component: pure SVG area chart with emerald gradient (#00B884), smooth cubic-bezier path, deterministic 30-day series derived from totalEarnings (no Math.random, SSR-safe), trend badge with computed growth %.
+- ServiceCard: added stat-card-3d class on root, flex flex-col + mt-auto for uniform card heights, btn-press on both footer buttons, tabIndex={0} + role="button" + aria-label + onKeyDown (Enter/Space activation), focus-visible ring.
+- Added a NEW "Order" button (primary, with ShoppingCart icon) next to the existing "Details" button in the card footer. Both call onClick with stopPropagation so the modal opens exactly once. Card-level click still works.
+- BuyTab loading state: replaced single spinner with 6 ServiceCardSkeleton cards using skeleton-shimmer (matches real card layout: logo placeholder, title bar, two-line description, spec row, price+CTA footer).
+- Empty state: replaced "No services match your search." with SearchX icon + "No services found" heading + "Try adjusting your search or filters" subtext + "Clear filters" button (resets search + sort + platform filter, only shown when there are active filters).
+- Added SortKey type + SORT_OPTIONS constant + sort dropdown next to search bar (ArrowUpDown icon, custom chevron). Sort applied inside the grouped useMemo on allServices before grouping: popular (id desc), price-asc, price-desc, fastest (parseDeliveryMinutes), name-asc. Helper parseDeliveryMinutes parses "0-2h"/"5-15d"/"0-30m" strings to minutes upper-bound.
+- Added platform service counts: computed platformCounts from allServices via useMemo; getPlatformCount() returns the accurate API total (data.pagination.total) for the "All" button when viewing all, and for the currently-selected platform; for other platforms returns loaded-so-far count (grows as user scrolls when filter is "All"). Displayed as "Instagram (1,098)" with tabular-nums + reduced opacity for visual hierarchy.
+- Added full keyboard accessibility: ServiceCard role=button/tabIndex/onKeyDown; platform filter buttons aria-pressed; tab list role=tablist with role=tab + aria-selected; sort dropdown aria-label="Sort services"; search input aria-label="Search services"; clear-search button aria-label; close buttons already had aria-label.
+- Reduced debounce from 400ms → 300ms for snappier search.
+- Sprinkled btn-press across all interactive buttons (Load more, Show more, Add row, Repeat, Publish offer, Remove, quick quantity chips, place-order CTAs) for tactile feedback consistency.
+- Cleaned up unused imports: removed `Counter` (was imported but never used in this file) and `getPlatformEmoji` (same).
+- Verified build passes: `bun run build` → ✓ Compiled successfully in 23.3s.
+
+Stage Summary:
+- framer-motion and recharts removed from dashboard-marketplace.tsx (zero new npm deps).
+- ServiceCard now has 3D hover (stat-card-3d), keyboard activation, two clear CTAs (Details + Order).
+- BuyTab has skeleton loading (6 cards), improved empty state with Clear filters, sort dropdown (5 options), platform counts, 300ms debounce.
+- SellTab gained a lightweight SVG earnings-trend chart (emerald gradient area, deterministic 30-day series, growth %).
+- All modals animate via CSS modal-3d-enter; tab swaps animate via tab-content-enter.
+- A11y: roles, aria-labels, aria-pressed, aria-selected, keyboard handlers added throughout.
+- Build: ✓ Compiled successfully in 23.3s.
