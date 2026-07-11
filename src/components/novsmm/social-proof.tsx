@@ -4,21 +4,21 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
 
 /**
- * Social proof notifications — shows recent signups/purchases
- * in the bottom-left corner. Creates FOMO and increases conversion.
+ * Social proof notifications — shows illustrative examples of platform activity.
  *
- * IMPORTANT: Only shows when user is in the HERO section (top of page).
- * Hides when user scrolls past 80% of viewport height so it NEVER
- * overlaps with content sections (stats, charts, tables).
+ * IMPORTANT: These are ILLUSTRATIVE EXAMPLES, not real-time data. Each
+ * notification is labeled with a "Demo" badge to comply with consumer
+ * protection regulations (FTC, EU unfair commercial practices directive).
  *
- * Desktop only (mobile is too small for these).
- * Auto-dismisses after 5s, then shows the next one after 8s.
+ * In a future version, this will be connected to a real /api/public/recent-activity
+ * endpoint that returns anonymized recent signups/orders. Until then, the
+ * "Demo" label makes it clear these are sample notifications, not live data.
  */
 
 const PROOF_EVENTS = [
   { name: "Carlos from Mexico", action: "just signed up", detail: "Reseller plan", flag: "🇲🇽" },
   { name: "Ana from Brazil", action: "placed an order", detail: "Instagram Followers × 1000", flag: "🇧🇷" },
-  { name: "Mike from USA", action: "topped up", detail: "$50 via Stripe", flag: "🇺🇸" },
+  { name: "Mike from USA", action: "topped up", detail: "$50 via PayPal", flag: "🇺🇸" },
   { name: "Priya from India", action: "just signed up", detail: "Agency plan", flag: "🇮🇳" },
   { name: "Sofia from Spain", action: "placed an order", detail: "TikTok Views × 5000", flag: "🇪🇸" },
   { name: "Liam from UK", action: "topped up", detail: "$100 via PayPal", flag: "🇬🇧" },
@@ -86,8 +86,9 @@ export function SocialProof() {
       <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 px-4 py-3 shadow-lg backdrop-blur-xl">
         <span className="text-2xl">{current.flag}</span>
         <div className="flex flex-col">
-          <div className="text-sm font-medium text-foreground">
+          <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             {current.name} {current.action}
+            <span className="rounded bg-muted px-1 py-0.5 text-[8px] font-bold uppercase tracking-wider text-muted-foreground" title="Illustrative example — not real-time data">Demo</span>
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <CheckCircle2 className="h-3 w-3 text-emerald-500" />

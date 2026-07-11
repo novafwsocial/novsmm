@@ -49,8 +49,13 @@ export async function POST(_req: NextRequest) {
     targetUserId: currentUserId,
   });
 
-  // Mint a fresh JWT for the real admin
-  const secret = process.env.NEXTAUTH_SECRET || "dev-secret-fallback";
+  // SECURITY P1 FIX: Fail-closed — no hardcoded fallback for JWT secret.
+  // If NEXTAUTH_SECRET is missing, return 500 instead of signing with a
+  // publicly-known string that would allow session forgery.
+  const secret = process.env.NEXTAUTH_SECRET;
+  if (!secret || secret.length < 16) {
+    return apiError("Server configuration error: NEXTAUTH_SECRET not set", 500);
+  }
   const newToken = {
     id: admin.id,
     email: admin.email,

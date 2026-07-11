@@ -39,6 +39,12 @@ export function Magnetic({
     if (typeof window !== "undefined" && window.matchMedia("(hover: none)").matches) {
       return;
     }
+    // P3 FIX: Respect prefers-reduced-motion and saveData
+    if (typeof window !== "undefined") {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const conn = (navigator as any).connection;
+      if (conn?.saveData) return;
+    }
     const el = ref.current;
     if (!el) return;
 

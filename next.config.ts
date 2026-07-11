@@ -12,12 +12,17 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // PERF: Image optimization — AVIF (best compression) + WebP fallback.
-  // Automatically converts and serves responsive images from next/image.
+  // SECURITY: remotePatterns restricted to explicit allowlist only.
+  // DO NOT use hostname: "**" — it creates an SSRF vector (server fetches
+  // any URL). Add new hosts here only when a verified use case requires it.
+  // Currently no remote images are used (logo is served from /public/).
   images: {
     formats: ["image/avif", "image/webp"],
-    remotePatterns: [
-      { protocol: "https", hostname: "**" },
-    ],
+    // No remotePatterns — all images are local (/public/ or data: URIs)
+    // If you need remote images (e.g. Google OAuth avatars), add the host:
+    // remotePatterns: [
+    //   { protocol: "https", hostname: "lh3.googleusercontent.com" },
+    // ],
     minimumCacheTTL: 86400, // 24h cache for optimized images
   },
   // PERF: Compress responses with brotli (better than gzip)

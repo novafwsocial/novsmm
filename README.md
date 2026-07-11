@@ -9,7 +9,7 @@ NOVSMM is an enterprise-grade SMM (Social Media Marketing) marketplace platform 
 - **Marketplace** — Buy services from 6,000+ SMM offerings across 20+ platforms (Instagram, TikTok, YouTube, Spotify, Telegram, X, Twitch, Discord, and more)
 - **Reseller Marketplace** — Create your own offers with custom margins (up to 50%)
 - **Multi-Provider** — HuntSMM integration with extensible provider architecture
-- **Payments** — Stripe, Mercado Pago, NowPayments (crypto), PayPal, Manual
+- **Payments** — PayPal, Mercado Pago, NowPayments (crypto), PayPal, Manual
 - **Wallet System** — Balance, held balance, transactions, invoices, CSV export
 - **Order Management** — Drip-feed, mass orders, order tracking, priority queues
 - **Subscriptions** — Plan-based access (free, starter, growth, enterprise)
@@ -36,7 +36,7 @@ NOVSMM is an enterprise-grade SMM (Social Media Marketing) marketplace platform 
 | UI | Tailwind CSS 4 + shadcn/ui (New York) + Framer Motion |
 | State | Zustand + TanStack Query v5 |
 | Real-time | Socket.IO 4 + @socket.io/redis-adapter |
-| Payments | Stripe, Mercado Pago, NowPayments, PayPal |
+| Payments | PayPal, Mercado Pago, NowPayments, PayPal |
 | AI | z-ai-web-dev-sdk (LLM, VLM, TTS, ASR, Image Generation, Web Search) |
 | Logging | pino (structured JSON) |
 | Metrics | prom-client (Prometheus) |
@@ -61,7 +61,7 @@ PostgreSQL (port 5432)           Redis (port 6379)
    ↓                                    ↓
 BullMQ Worker (background jobs)  ←──────┘
    ↓
-Payment Services (Stripe, MP, NowPayments, PayPal)
+Payment Services (PayPal, MP, NowPayments, PayPal)
    ↓
 SMM APIs (HuntSMM + future providers)
 ```
