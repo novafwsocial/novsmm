@@ -228,6 +228,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
       setPage(1);
       setAllServices([]);
       setExpandedPlatforms({}); // reset card limits
+      processedPagesRef.current.clear(); // CRITICAL: allow page 1 to be processed again
     }, 300);
     return () => clearTimeout(t);
   }, [search]);
@@ -265,11 +266,10 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     });
   }, [data, page]);
 
-  // Reset processed pages when debounced search OR platform filter changes
-  useEffect(() => {
-    processedPagesRef.current.clear();
-    setAllServices([]); // clear existing services so the new filter takes effect
-  }, [debouncedSearch, platformFilter]);
+  // NOTE: processedPagesRef and allServices are reset in handlePlatformChange
+  // and in the debouncedSearch effect above. No separate effect needed here —
+  // having one caused a race condition where services were loaded then
+  // immediately cleared on platform filter change.
 
   // Infinite scroll via IntersectionObserver (F-09: fallback for old browsers)
   useEffect(() => {
