@@ -102,9 +102,12 @@ async function main() {
   console.log(`  ✓ Received ${services.length} services from HuntSMM`);
 
   // 4. Process and import services
-  // The rate from HuntSMM is per 1000 units in their currency.
-  // We add a 30% markup for NOVSMM resellers.
-  const MARKUP = 1.3;
+  // The rate from HuntSMM is per 1000 units in USD.
+  // Markup is kept LOW to stay competitive — adjust MARKUP below to change.
+  // 30% markup = price is 1.3× the provider cost.
+  // 50% markup = price is 1.5× the provider cost.
+  // 100% markup = price is 2× the provider cost.
+  const MARKUP = 1.3; // 30% — competitive pricing
 
   let imported = 0;
   const batchSize = 100;

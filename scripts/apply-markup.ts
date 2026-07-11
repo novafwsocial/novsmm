@@ -19,7 +19,7 @@ async function main() {
   const markupArg = args.find((a) => a.startsWith("--markup="));
   const dryRun = args.includes("--dry-run");
 
-  const markupPercent = markupArg ? parseFloat(markupArg.split("=")[1]) : 150;
+  const markupPercent = markupArg ? parseFloat(markupArg.split("=")[1]) : 30;
   const multiplier = 1 + markupPercent / 100;
 
   console.log("╔═══════════════════════════════════════════════════╗");
