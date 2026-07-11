@@ -4,6 +4,13 @@ import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {
+  BarChart,
+  Bar,
+  ResponsiveContainer,
+  Cell,
+  Tooltip,
+} from "recharts";
+import {
   ShoppingCart,
   Users,
   DollarSign,
@@ -235,7 +242,36 @@ export function Stats() {
                 </div>
               </div>
               <div className="mt-5 h-[200px] w-full">
-                <MiniBarChart data={dailySales.map((d: any) => d.v)} />
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart
+                    data={dailySales}
+                    margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
+                  >
+                    <Tooltip
+                      cursor={{ fill: "oklch(0.5 0.005 285 / 0.05)" }}
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid oklch(0.928 0.003 285)",
+                        fontSize: 12,
+                        boxShadow: "0 8px 24px -8px rgba(0,0,0,0.12)",
+                      }}
+                      labelStyle={{ display: "none" }}
+                      formatter={(v: number) => [`$${v.toLocaleString()}`, "Sales"]}
+                    />
+                    <Bar dataKey="v" radius={[5, 5, 0, 0]} maxBarSize={26}>
+                      {dailySales.map((_, i) => (
+                        <Cell
+                          key={i}
+                          fill={
+                            i === dailySales.length - 1
+                              ? "#0052ff"
+                              : "oklch(0.85 0.04 264)"
+                          }
+                        />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           </Reveal>
@@ -330,42 +366,4 @@ function Mini({
   );
 }
 
-/**
- * Lightweight SVG bar chart — replaces recharts BarChart (~400KB JS).
- * Renders rounded bars with the last bar highlighted in primary color.
- */
-function MiniBarChart({ data }: { data: number[] }) {
-  const max = Math.max(...data, 1);
-  const barWidth = 100 / data.length;
 
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      className="h-full w-full"
-      style={{ overflow: "visible" }}
-    >
-      {data.map((v, i) => {
-        const h = (v / max) * 90;
-        const x = i * barWidth + barWidth * 0.15;
-        const w = barWidth * 0.7;
-        const y = 100 - h;
-        const isLast = i === data.length - 1;
-        return (
-          <rect
-            key={i}
-            x={x}
-            y={y}
-            width={w}
-            height={h}
-            rx={1.2}
-            ry={1.2}
-            fill={isLast ? "#0052ff" : "oklch(0.85 0.04 264)"}
-          >
-            <title>{`$${v.toLocaleString()}`}</title>
-          </rect>
-        );
-      })}
-    </svg>
-  );
-}
