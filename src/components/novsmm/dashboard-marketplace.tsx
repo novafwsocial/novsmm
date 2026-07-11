@@ -72,16 +72,30 @@ const PLATFORM_FILTERS = [
 
 const CATEGORY_FILTERS = [
   "All",
-  "Followers",
-  "Likes",
-  "Views",
-  "Subscribers",
-  "Members",
-  "Comments",
-  "Plays",
-  "Shares",
-  "General",
+  "followers",
+  "likes",
+  "views",
+  "subscribers",
+  "members",
+  "comments",
+  "plays",
+  "shares",
+  "general",
 ];
+
+// Pretty labels for display (DB stores lowercase, UI shows capitalized)
+const CATEGORY_LABELS: Record<string, string> = {
+  All: "All",
+  followers: "Followers",
+  likes: "Likes",
+  views: "Views",
+  subscribers: "Subscribers",
+  members: "Members",
+  comments: "Comments",
+  plays: "Plays",
+  shares: "Shares",
+  general: "General",
+};
 
 // History-tab status filter options. Values match the server-side status
 // strings used by /api/orders (processing, in_progress, etc.) so we can filter
@@ -870,7 +884,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                   : "border border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              {c}
+              {CATEGORY_LABELS[c] ?? c}
             </button>
           ))}
         </div>
