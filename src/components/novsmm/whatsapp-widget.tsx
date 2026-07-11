@@ -11,21 +11,20 @@ import { MessageCircle, X, Send } from "lucide-react";
  */
 export function WhatsAppWidget() {
   const [open, setOpen] = useState(false);
-  const [number, setNumber] = useState("5215512345678"); // default
+  const [number, setNumber] = useState("5215512345678");
   const [message, setMessage] = useState("");
-  // Show the unread badge only on the user's first session (until they open
-  // the chat for the first time). Persisted in localStorage so it doesn't
-  // re-appear on every page load. Uses a lazy initializer (reads localStorage
-  // once at mount) instead of setState-in-effect — avoids cascading renders
-  // and the `react-hooks/set-state-in-effect` lint rule.
-  const [showBadge, setShowBadge] = useState(() => {
+  // B-01 FIX: Move localStorage read to useEffect to prevent SSR hydration mismatch.
+  // React 19 Strict Mode detects the mismatch between server (no localStorage)
+  // and client (localStorage exists) and throws a hydration error.
+  const [showBadge, setShowBadge] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
     try {
-      return !localStorage.getItem("novsmm_wa_seen");
-    } catch {
-      // localStorage may be blocked — default to no badge.
-      return false;
-    }
-  });
+      setShowBadge(!localStorage.getItem("novsmm_wa_seen"));
+    } catch {}
+  }, []);
 
   // Fetch the WhatsApp number from public settings (no auth required)
   useEffect(() => {
@@ -107,7 +106,7 @@ export function WhatsAppWidget() {
 
         {/* Notification pulse — only on the user's first visit, dismissed
             permanently once they open the chat. */}
-        {!open && showBadge && (
+        {!open && mounted && showBadge && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
             <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">

@@ -138,9 +138,11 @@
 }
 
 /* ===== Lenis smooth scroll ===== */
-html.lenis,
-html.lenis body {
-  height: auto;
+@supports (height: 100dvh) {
+  html.lenis,
+  html.lenis body {
+    height: auto;
+  }
 }
 .lenis.lenis-smooth {
   scroll-behavior: auto !important;
@@ -295,7 +297,7 @@ button, a, [role="button"], input, select, textarea {
 }
 
 /* GPU-accelerate transforms on animated elements */
-.nov-marquee, .nov-marquee-slow, .nov-pulse-dot, [class*="animate-"] {
+.nov-marquee, .nov-marquee-slow, .nov-pulse-dot {
   will-change: transform;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
@@ -880,5 +882,13 @@ img, video, canvas, svg {
     transition: none !important;
     transform: none !important;
     opacity: 1 !important;
+  }
+}
+
+/* M-01: Touch targets minimum 44px on mobile */
+@media (max-width: 768px) {
+  button, a[role="button"], [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

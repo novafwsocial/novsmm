@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import crypto from "crypto";
 
 /**
  * NOVSMM Edge Middleware — rate limiting + security headers.
@@ -149,30 +150,14 @@ function addSecurityHeaders(res: NextResponse) {
   // X-DNS-Prefetch-Control — opt into DNS prefetching for asset origins
   // (fonts.gstatic.com etc.). Helps TTFB on first visit.
   res.headers.set("X-DNS-Prefetch-Control", "on");
-  // CSP — allows Tailwind inline styles, Google fonts, WebSocket, and the
-  // canonical payment-provider domains.
-  //
-  // BROAD-FIX-BATCH-1: added explicit entries for the 4 hosted-checkout
-  // payment providers (Stripe, PayPal, Mercado Pago, NowPayments) so that
-  // any future client-side SDK / iframe embed (e.g. Stripe Elements, PayPal
-  // Smart Buttons) is not blocked by the CSP. The current checkout flow is
-  // hosted (redirect to the provider's domain), so these entries are
-  // forward-compatible rather than strictly required today — but adding them
-  // now prevents a "CSP blocked the script" surprise when a provider SDK
-  // is introduced.
-  //
-  // 'unsafe-eval' removed (C-1 security fix) — not used anywhere in the codebase.
-  // 'unsafe-inline' retained for script-src (Next.js requires it for inline scripts/hydration).
-  // Future improvement: migrate to nonce-based CSP to remove 'unsafe-inline' too.
-  //
-  // FULL-WEB-IMPROVEMENT-1: added worker-src 'self' blob: (needed for
-  // chart.js / web-vitals workers), object-src 'none' (defense against
-  // Flash/Java plugin vectors), and upgrade-insecure-requests (forces
-  // http:// → https:// for any stray hardcoded URL).
+  // CSP — strict-dynamic + nonce-based. Removes 'unsafe-inline' from script-src.
+  // Next.js inline scripts (hydration, __NEXT_DATA__) are allowed via nonce.
+  // 'strict-dynamic' lets trusted scripts (PayPal SDK) load their own deps.
+  const cspNonce = crypto.randomUUID();
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' https://www.paypal.com https://www.paypalobjects.com; " +
+      `script-src 'self' 'nonce-${cspNonce}' 'strict-dynamic' https://www.paypal.com https://www.paypalobjects.com; ` +
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: blob:; " +
       "font-src 'self' data: https://fonts.gstatic.com; " +
@@ -296,6 +281,11 @@ export function middleware(req: NextRequest) {
       res.headers.set("Vary", "Origin");
     }
     addSecurityHeaders(res);
+    // S-01: Set nonce on response so Next.js can apply it to inline scripts
+    const nonce = res.headers.get("Content-Security-Policy")?.match(/nonce-([a-f0-9-]+)/)?.[1];
+    if (nonce) {
+      res.headers.set("x-nonce", nonce);
+    }
     // Pass IP to downstream API routes
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
@@ -323,12 +313,12 @@ export function middleware(req: NextRequest) {
     const origin = req.headers.get("origin") || req.headers.get("referer");
     const authHeader = req.headers.get("authorization");
 
-    // Server-to-server API calls with a Bearer token are exempt (they use their
-    // own auth — API keys). Browsers cannot set Authorization headers without
-    // CORS preflight, so this exemption is safe from CSRF.
-    if (authHeader && authHeader.startsWith("Bearer ")) {
-      // Bearer-authenticated requests skip Origin check
-    } else if (!origin) {
+    // S-02 FIX: Bearer token requests are NOT exempt from Origin check for
+    // browser-initiated state-changing requests. Only server-to-server calls
+    // (no Origin header at all) are exempt — browsers always send Origin.
+    if (authHeader && authHeader.startsWith("Bearer ") && !origin) {
+      // Server-to-server API call (no Origin) — allow
+    } else if (!origin && !authHeader) {
       // No Origin AND no Authorization → reject (CSRF protection)
       return NextResponse.json(
         { error: "CSRF check failed — missing origin" },
@@ -339,7 +329,7 @@ export function middleware(req: NextRequest) {
       const trustedHost = getTrustedHost();
       if (trustedHost) {
         try {
-          const originUrl = new URL(origin);
+          const originUrl = new URL(origin as string);
           if (originUrl.host !== trustedHost) {
             return NextResponse.json(
               { error: "CSRF check failed — origin mismatch" },

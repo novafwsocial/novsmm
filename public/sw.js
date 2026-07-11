@@ -25,7 +25,7 @@
 // hash (e.g. `novsmm-<git-sha>`) to force a cache refresh on every change.
 // Manual bump is also fine for small deploys.
 // v3: bumped after mobile performance optimizations (Reveal CSS, dynamic imports, virtualization)
-const CACHE_VERSION = "novsmm-v3";
+const CACHE_VERSION = "novsmm-v4";
 const CACHE = CACHE_VERSION;
 const APP_SHELL = ["/", "/icon.png", "/manifest.webmanifest"];
 
@@ -79,13 +79,31 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
+  // S-03 FIX: Routes that must NEVER be cached (authenticated content).
+  // Prevents data leakage between users on shared devices.
+  const NEVER_CACHE = [
+    "/api/auth/",
+    "/api/me",
+    "/api/admin/",
+    "/api/wallet/",
+    "/api/orders/",
+    "/api/offers",
+    "/api/tickets",
+    "/api/notifications",
+    "/api/child-panels",
+    "/api/subscriptions",
+    "/api/uploads",
+    "/api/v1/",
+  ];
+
   // Navigation requests (HTML pages) — network-first, fallback to cache
   if (request.mode === "navigate") {
+    const shouldCache = !NEVER_CACHE.some((path) => url.pathname.startsWith(path));
     event.respondWith(
       fetch(request)
         .then((response) => {
-          // Cache successful navigation responses
-          if (response.status === 200) {
+          // Only cache if NOT in the never-cache list
+          if (response.status === 200 && shouldCache) {
             const clone = response.clone();
             caches.open(CACHE).then((cache) => cache.put(request, clone));
           }

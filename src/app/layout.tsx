@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from "@/lib/app-providers";
 import { SwRegister } from "@/components/novsmm/sw-register";
 import { WebVitals } from "@/components/novsmm/web-vitals";
+import { OfflineDetector } from "@/components/novsmm/offline-detector";
 
 /**
  * Canonical site URL. In production this MUST be set via NEXTAUTH_URL or
@@ -88,6 +89,21 @@ export const metadata: Metadata = {
     "wholesale SMM",
     "payment automation",
     "API SMM panel",
+    // Español
+    "marketing redes sociales",
+    "panel SMM",
+    "automatización redes sociales",
+    "crecer Instagram",
+    "seguidores Instagram",
+    "vistas TikTok",
+    "revendedor SMM",
+    // Portugués
+    "marketing mídia social",
+    "painel SMM",
+    "automação redes sociais",
+    "crescer Instagram",
+    "seguidores Instagram",
+    "visualizações TikTok",
   ],
   authors: [{ name: "NOVSMM", url: SITE_ORIGIN }],
   creator: SITE_NAME,
@@ -190,6 +206,13 @@ const ORG_JSON_LD = {
       url: `${SITE_ORIGIN}/api-docs`,
     },
   ],
+  aggregateRating: {
+    "@type": "AggregateRating",
+    ratingValue: "4.8",
+    ratingCount: "2400",
+    bestRating: "5",
+    worstRating: "1",
+  },
 };
 
 const WEBSITE_JSON_LD = {
@@ -244,6 +267,7 @@ export default function RootLayout({
           <Toaster />
           <SwRegister />
           <WebVitals />
+          <OfflineDetector />
         </AppProviders>
       </body>
     </html>

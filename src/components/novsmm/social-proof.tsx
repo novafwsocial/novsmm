@@ -88,7 +88,7 @@ export function SocialProof() {
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
             {current.name} {current.action}
-            <span className="rounded bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-700" title="Illustrative example — not real-time data">Sample</span>
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70" title="Illustrative example — not real-time data">Illustrative</span>
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <CheckCircle2 className="h-3 w-3 text-emerald-500" />
