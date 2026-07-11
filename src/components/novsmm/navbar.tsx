@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Menu, X, ArrowRight } from "lucide-react";
+import { Menu, X, ArrowRight, Wallet } from "lucide-react";
+import { useSession } from "next-auth/react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { useApp } from "./app-store";
@@ -18,7 +19,14 @@ const NAV_LINKS = [
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-  const { setView } = useApp();
+  const { setView, authed, setBrowsingLanding } = useApp();
+  const { data: session } = useSession();
+  const user = (session?.user as any) ?? {};
+  const balance = user?.balance ?? 0;
+  const currency = user?.currency ?? "USD";
+
+  // If user is authed and browsing landing, show their balance + Dashboard button
+  const showAuthedNav = authed;
 
   useEffect(() => {
     let ticking = false;
@@ -34,6 +42,11 @@ export function Navbar() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+
+  const goDashboard = () => {
+    setBrowsingLanding(false);
+    setView("dashboard");
+  };
 
   return (
     <header
@@ -66,20 +79,40 @@ export function Navbar() {
           ))}
         </div>
 
-        <div className="hidden items-center gap-2 lg:flex">
-          <button
-            onClick={() => setView("login")}
-            className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-          >
-            Sign in
-          </button>
-          <Magnetic as="button" strength={0.25} onClick={() => setView("register")}>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-              Start free
-              <ArrowRight className="h-3.5 w-3.5" />
-            </span>
-          </Magnetic>
-        </div>
+        {showAuthedNav ? (
+          /* Authed user browsing landing — show balance + Dashboard button */
+          <div className="hidden items-center gap-2 lg:flex">
+            <div className="flex items-center gap-1.5 rounded-full border border-border bg-background/70 px-3 py-2 text-sm backdrop-blur-md">
+              <Wallet className="h-3.5 w-3.5 text-primary" />
+              <span className="font-medium text-foreground tabular-nums">
+                ${balance.toFixed(2)}
+              </span>
+              <span className="text-xs text-muted-foreground">{currency}</span>
+            </div>
+            <Magnetic as="button" strength={0.25} onClick={goDashboard}>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
+                Dashboard
+                <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </Magnetic>
+          </div>
+        ) : (
+          /* Not authed — show Sign in + Start free */
+          <div className="hidden items-center gap-2 lg:flex">
+            <button
+              onClick={() => setView("login")}
+              className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Sign in
+            </button>
+            <Magnetic as="button" strength={0.25} onClick={() => setView("register")}>
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
+                Start free
+                <ArrowRight className="h-3.5 w-3.5" />
+              </span>
+            </Magnetic>
+          </div>
+        )}
 
         <button
           className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground lg:hidden"
@@ -109,24 +142,46 @@ export function Navbar() {
             </a>
           ))}
           <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3">
-            <button
-              onClick={() => {
-                setOpen(false);
-                setView("login");
-              }}
-              className="rounded-2xl px-4 py-3 text-left text-base font-medium text-foreground/80"
-            >
-              Sign in
-            </button>
-            <button
-              onClick={() => {
-                setOpen(false);
-                setView("register");
-              }}
-              className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
-            >
-              Start free
-            </button>
+            {showAuthedNav ? (
+              <>
+                <div className="flex items-center justify-between rounded-2xl px-4 py-3 text-sm">
+                  <span className="text-muted-foreground">Balance</span>
+                  <span className="font-semibold text-foreground tabular-nums">
+                    ${balance.toFixed(2)} {currency}
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    goDashboard();
+                  }}
+                  className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
+                >
+                  Back to Dashboard
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setView("login");
+                  }}
+                  className="rounded-2xl px-4 py-3 text-left text-base font-medium text-foreground/80"
+                >
+                  Sign in
+                </button>
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    setView("register");
+                  }}
+                  className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
+                >
+                  Start free
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}

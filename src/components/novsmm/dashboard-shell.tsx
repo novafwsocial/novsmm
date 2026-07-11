@@ -203,9 +203,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       >
         <div className="flex h-16 items-center justify-between px-5">
           <a
-            onClick={() => setDashboardTab("home")}
+            onClick={() => {
+              setBrowsingLanding(true);
+              setView("landing");
+            }}
             className="cursor-pointer"
-            aria-label="Go to dashboard home"
+            aria-label="Go to NOVSMM home"
+            title="Back to NOVSMM home — your session stays active"
           >
             <Logo />
           </a>
@@ -303,7 +307,18 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               className="fixed inset-y-0 left-0 z-50 flex w-[260px] flex-col border-r border-border bg-background lg:hidden"
             >
               <div className="flex h-16 items-center justify-between px-5">
-                <Logo />
+                <a
+                  onClick={() => {
+                    setBrowsingLanding(true);
+                    setView("landing");
+                    setMobileOpen(false);
+                  }}
+                  className="cursor-pointer"
+                  aria-label="Go to NOVSMM home"
+                  title="Back to NOVSMM home — your session stays active"
+                >
+                  <Logo />
+                </a>
                 <button
                   onClick={() => setMobileOpen(false)}
                   className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
