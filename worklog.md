@@ -11501,3 +11501,31 @@ Stage Summary:
 - All modals animate via CSS modal-3d-enter; tab swaps animate via tab-content-enter.
 - A11y: roles, aria-labels, aria-pressed, aria-selected, keyboard handlers added throughout.
 - Build: ✓ Compiled successfully in 23.3s.
+
+---
+Task ID: MARKETPLACE-5-IMPROVEMENTS
+Agent: full-stack-developer
+Task: 5 marketplace improvements (category filter, edit offer, history filter, favorites, pagination)
+
+Work Log:
+- Read worklog.md + dashboard-marketplace.tsx (1,603 lines) + use-api.ts + /api/offers/route.ts + /api/services/route.ts for context.
+- Confirmed `useUpdateOffer` hook already exists in src/hooks/use-api.ts (line ~866) and the PATCH /api/offers endpoint already accepts { id, price } — no new API route needed.
+- Confirmed /api/services already accepts a `category` query param (line 32-53 of route.ts).
+- Improvement #1 (Category filter): added CATEGORY_FILTERS constant, `categoryFilter` state in BuyTab, `handleCategoryChange` (mirrors handlePlatformChange reset pattern), second row of smaller filter pills below the platform row, and passed `category` to useServices.
+- Updated `useServices` hook signature in src/hooks/use-api.ts to accept and forward `category` (added to URLSearchParams + queryKey).
+- Improvement #2 (Edit offer): added `editingOffer` state, `openEditModal()`, `closeModal()`, `resetModalState()` to SellTab; the publish modal now switches title/description/submit-label/service-select-disabled based on `isEditing`. Edit calls `useUpdateOffer().mutateAsync({ id, price })`. Added a Pencil "Edit" button next to the existing "Remove" button in the offers table.
+- Improvement #3 (History status filter): added HISTORY_STATUS_OPTIONS constant + `statusFilter` state to HistoryTab; dropdown uses the same ArrowUpDown + ChevronRight visual as the BuyTab sort dropdown. Added a "Showing X of Y orders" line that only appears when a filter is active. Empty state now differentiates "no orders at all" vs "no orders match this filter".
+- Improvement #4 (Favorites): added a `useFavorites` hook (localStorage key `novsmm_favorites`, returns `{ favorites: Set<string>, toggleFavorite }`) and a `showFavoritesOnly` state in BuyTab. The grouped useMemo now narrows allServices to favorited IDs first when the toggle is on. Added a "Favorites" Star toggle pill at the end of the platform filter row (amber-400 active state). ServiceCard now takes `isFavorite` + `onToggleFavorite` props and renders an absolute top-right star button (filled amber when favorited, outline otherwise) with stopPropagation so card click doesn't fire.
+- Improvement #5 (History pagination): added HISTORY_PAGE_SIZE = 15 constant + `historyPage` state. Added `filteredOrders` useMemo (filters by status), `pagedOrders` useMemo (slices for current page), `safePage` clamp, `totalPages`. Added Prev/Next buttons + "Page X of Y · Showing Z of N orders" footer (only when totalPages > 1). useEffect resets historyPage to 1 when statusFilter changes.
+- Imported `useCallback`, `Pencil`, `ChevronLeft` from react / lucide-react.
+- Imported `useUpdateOffer` from @/hooks/use-api.
+- clearFilters in BuyTab now also resets categoryFilter and showFavoritesOnly.
+- Build verified: `cd /home/z/my-project && bun run build` → `✓ Compiled successfully in 23.7s`, 109/109 static pages generated, no errors, no warnings.
+
+Stage Summary:
+- Files modified: src/components/novsmm/dashboard-marketplace.tsx (1,603 → 1,866 lines), src/hooks/use-api.ts (useServices now accepts category).
+- Files created: none.
+- All 5 improvements implemented without breaking existing functionality: BuyTab infinite scroll, ServiceDetailModal with drip-feed, MassOrderModal, SellTab publish/delete, HistoryTab repeat all still work.
+- No new npm dependencies. No framer-motion. CSS-only animations (existing stat-card-3d, btn-press, skeleton-shimmer, modal-3d-enter, tab-content-enter classes reused).
+- Mobile-first: category filter row + favorites toggle use the same horizontal-scroll pattern as platform filters; history status dropdown is full-width on mobile (sm:w-[180px] on larger screens); pagination footer stacks vertically on mobile (flex-col → sm:flex-row).
+- A11y: new filter buttons have aria-pressed; star button has aria-label + aria-pressed; pagination buttons have aria-label; status dropdown has aria-label; service select is correctly disabled during edit mode.

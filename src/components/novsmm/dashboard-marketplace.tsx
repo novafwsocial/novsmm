@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import {
   Search,
   Plus,
@@ -23,6 +23,8 @@ import {
   SearchX,
   ArrowUpDown,
   ShoppingCart,
+  Pencil,
+  ChevronLeft,
 } from "lucide-react";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
@@ -37,6 +39,7 @@ import {
   useSession,
   useOffers,
   useCreateOffer,
+  useUpdateOffer,
   useDeleteOffer,
 } from "@/hooks/use-api";
 import { formatPrice, loadCurrencyRates } from "@/lib/currency-utils";
@@ -51,6 +54,82 @@ const PLATFORM_FILTERS = [
   "WhatsApp", "LinkedIn", "Threads", "Snapchat",
   "Discord", "Pinterest", "Other",
 ];
+
+const CATEGORY_FILTERS = [
+  "All",
+  "Followers",
+  "Likes",
+  "Views",
+  "Subscribers",
+  "Members",
+  "Comments",
+  "Plays",
+  "Shares",
+  "General",
+];
+
+// History-tab status filter options. Values match the server-side status
+// strings used by /api/orders (processing, in_progress, etc.) so we can filter
+// the client-side array directly.
+const HISTORY_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: "all", label: "All statuses" },
+  { value: "processing", label: "Processing" },
+  { value: "in_progress", label: "In progress" },
+  { value: "completed", label: "Completed" },
+  { value: "partial", label: "Partial" },
+  { value: "cancelled", label: "Cancelled" },
+];
+
+const FAVORITES_STORAGE_KEY = "novsmm_favorites";
+const HISTORY_PAGE_SIZE = 15;
+
+/**
+ * useFavorites — lightweight client-side wishlist backed by localStorage.
+ * Returns a Set of service IDs that the user has starred, plus a stable
+ * toggle function. No API call is needed — favorites are device-local.
+ */
+function useFavorites() {
+  const [favorites, setFavorites] = useState<Set<string>>(new Set());
+
+  // Load from localStorage on mount (client-only).
+  useEffect(() => {
+    try {
+      const stored =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(FAVORITES_STORAGE_KEY)
+          : null;
+      if (stored) {
+        const arr = JSON.parse(stored);
+        if (Array.isArray(arr)) {
+          setFavorites(new Set(arr.filter((x) => typeof x === "string")));
+        }
+      }
+    } catch {
+      // Ignore parse / access errors — favorites just start empty.
+    }
+  }, []);
+
+  const toggleFavorite = useCallback((id: string) => {
+    setFavorites((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(
+            FAVORITES_STORAGE_KEY,
+            JSON.stringify([...next]),
+          );
+        }
+      } catch {
+        // Ignore quota / privacy-mode write errors — in-memory state still updates.
+      }
+      return next;
+    });
+  }, []);
+
+  return { favorites, toggleFavorite };
+}
 
 const QUALITY_BADGES: Record<string, { label: string; cls: string }> = {
   standard: { label: "Standard", cls: "bg-blue-500/10 text-blue-700" },
@@ -206,11 +285,14 @@ const PAGE_SIZE = 24;
 
 function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
   const [platformFilter, setPlatformFilter] = useState("All");
+  const [categoryFilter, setCategoryFilter] = useState("All");
   const [search, setSearch] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("popular");
   const [page, setPage] = useState(1);
   const [allServices, setAllServices] = useState<any[]>([]);
+  const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
+  const { favorites, toggleFavorite } = useFavorites();
   // PERF: Limit cards per platform to avoid rendering 6,382 DOM nodes at once.
   // "Show more" button under each platform reveals additional 30.
   const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, number>>({});
@@ -242,9 +324,19 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     processedPagesRef.current.clear();
   };
 
-  // Fetch paginated services
+  // Reset when category changes (same pattern as platformFilter)
+  const handleCategoryChange = (c: string) => {
+    setCategoryFilter(c);
+    setPage(1);
+    setAllServices([]);
+    setExpandedPlatforms({});
+    processedPagesRef.current.clear();
+  };
+
+  // Fetch paginated services (now includes category param)
   const { data, isLoading, isFetching } = useServices({
     platform: platformFilter,
+    category: categoryFilter,
     search: debouncedSearch || undefined,
     page,
     limit: PAGE_SIZE,
@@ -332,8 +424,14 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
 
   // Group by platform + apply sort. Sort runs on the full allServices array
   // before grouping, so ordering is consistent within each platform section.
+  // When showFavoritesOnly is active, the array is first narrowed to just
+  // services the user has starred (intersection of allServices & favorites).
   const grouped = useMemo(() => {
-    const sorted = [...allServices];
+    let source = allServices;
+    if (showFavoritesOnly) {
+      source = allServices.filter((s) => favorites.has(s.id));
+    }
+    const sorted = [...source];
     switch (sort) {
       case "price-asc":
         sorted.sort((a, b) => a.price - b.price);
@@ -362,15 +460,22 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
       g[s.platform].push(s);
     });
     return g;
-  }, [allServices, sort]);
+  }, [allServices, sort, showFavoritesOnly, favorites]);
 
   const clearFilters = () => {
     setSearch("");
     setSort("popular");
+    setCategoryFilter("All");
+    setShowFavoritesOnly(false);
     handlePlatformChange("All");
   };
 
-  const hasActiveFilters = search !== "" || platformFilter !== "All" || sort !== "popular";
+  const hasActiveFilters =
+    search !== "" ||
+    platformFilter !== "All" ||
+    categoryFilter !== "All" ||
+    sort !== "popular" ||
+    showFavoritesOnly;
 
   return (
     <div className="flex flex-col gap-4">
@@ -422,7 +527,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
         </div>
       </Reveal>
 
-      {/* Platform filters */}
+      {/* Platform filters + Favorites toggle */}
       <Reveal>
         <div className="flex items-center gap-1.5 overflow-x-auto nov-scroll">
           {PLATFORM_FILTERS.map((p) => {
@@ -458,6 +563,57 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               </button>
             );
           })}
+          {/* Favorites toggle — sits at the end of the platform filter row */}
+          <button
+            onClick={() => setShowFavoritesOnly((v) => !v)}
+            aria-pressed={showFavoritesOnly}
+            aria-label="Show only favorited services"
+            className={cn(
+              "min-h-[44px] shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+              showFavoritesOnly
+                ? "bg-amber-400 text-amber-950"
+                : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <Star
+              className={cn(
+                "mr-1 inline-flex h-4 w-4 align-middle",
+                showFavoritesOnly && "fill-current",
+              )}
+            />
+            Favorites
+            {favorites.size > 0 && (
+              <span
+                className={cn(
+                  "ml-1.5 tabular-nums text-[11px]",
+                  showFavoritesOnly ? "opacity-80" : "opacity-60",
+                )}
+              >
+                ({favorites.size})
+              </span>
+            )}
+          </button>
+        </div>
+      </Reveal>
+
+      {/* Category filters — second row, slightly smaller buttons */}
+      <Reveal>
+        <div className="flex items-center gap-1.5 overflow-x-auto nov-scroll">
+          {CATEGORY_FILTERS.map((c) => (
+            <button
+              key={c}
+              onClick={() => handleCategoryChange(c)}
+              aria-pressed={categoryFilter === c}
+              className={cn(
+                "min-h-[36px] shrink-0 rounded-full px-3 py-1 text-xs font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+                categoryFilter === c
+                  ? "bg-foreground text-background"
+                  : "border border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              {c}
+            </button>
+          ))}
         </div>
       </Reveal>
 
@@ -518,6 +674,8 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                     service={s}
                     currency={currency}
                     onClick={() => onSelectService(s)}
+                    isFavorite={favorites.has(s.id)}
+                    onToggleFavorite={() => toggleFavorite(s.id)}
                   />
                 ))}
               </div>
@@ -559,10 +717,14 @@ function ServiceCard({
   service,
   currency,
   onClick,
+  isFavorite,
+  onToggleFavorite,
 }: {
   service: any;
   currency: string;
   onClick: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
 }) {
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -581,7 +743,24 @@ function ServiceCard({
       aria-label={`${service.name} — ${service.platform}. Press Enter to view details and place an order.`}
       className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-all hover:-translate-y-0.5 hover:nov-ring-lg stat-card-3d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
     >
-      <div className="flex items-start justify-between gap-2">
+      {/* Favorite star — absolute top-right corner */}
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleFavorite();
+        }}
+        aria-label={isFavorite ? `Remove ${service.name} from favorites` : `Add ${service.name} to favorites`}
+        aria-pressed={isFavorite}
+        className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-amber-400/15 hover:text-amber-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 btn-press"
+      >
+        <Star
+          className={cn(
+            "h-4 w-4 transition-colors",
+            isFavorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
+          )}
+        />
+      </button>
+      <div className="flex items-start justify-between gap-2 pr-8">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <PlatformLogo platform={service.platform} size={28} />
@@ -591,7 +770,7 @@ function ServiceCard({
             {service.description}
           </p>
         </div>
-        <span className={cn("shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium", quality.cls)}>
+        <span className={cn("mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium", quality.cls)}>
           {quality.label}
         </span>
       </div>
@@ -1196,12 +1375,46 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
   const currency = user?.currency ?? "USD";
   const orders = data?.orders ?? [];
 
-  // Calculate summary
+  // Improvement #3: status filter — client-side filter on the loaded orders array.
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  // Improvement #5: pagination — 15 orders per page.
+  const [historyPage, setHistoryPage] = useState(1);
+
+  // Calculate summary (always reflects ALL orders, not the filtered view)
   const totalSpent = orders.reduce((s: number, o: any) => s + o.totalPrice, 0);
   const completedCount = orders.filter((o: any) => o.status === "completed").length;
   const activeCount = orders.filter((o: any) =>
     ["processing", "in_progress"].includes(o.status)
   ).length;
+
+  // Filter by status (client-side). "all" = no filter.
+  const filteredOrders = useMemo(() => {
+    if (statusFilter === "all") return orders;
+    return orders.filter((o: any) => o.status === statusFilter);
+  }, [orders, statusFilter]);
+
+  // Reset to page 1 when the status filter changes (or when the underlying
+  // orders array shrinks). Avoids landing on a now-empty page.
+  useEffect(() => {
+    setHistoryPage(1);
+  }, [statusFilter]);
+
+  const totalFiltered = filteredOrders.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / HISTORY_PAGE_SIZE));
+
+  // Clamp the current page if it ever exceeds totalPages (e.g. orders were
+  // removed server-side while a filter was active).
+  const safePage = Math.min(historyPage, totalPages);
+  const startIdx = (safePage - 1) * HISTORY_PAGE_SIZE;
+  const pagedOrders = useMemo(
+    () => filteredOrders.slice(startIdx, startIdx + HISTORY_PAGE_SIZE),
+    [filteredOrders, startIdx],
+  );
+  const shownOnPage = pagedOrders.length;
+
+  // Pagination handlers
+  const goToPrevPage = () => setHistoryPage((p) => Math.max(1, p - 1));
+  const goToNextPage = () => setHistoryPage((p) => Math.min(totalPages, p + 1));
 
   return (
     <div className="flex flex-col gap-4">
@@ -1224,12 +1437,46 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
       {/* Orders list */}
       <Reveal blur>
         <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
-          <div className="border-b border-border/60 px-5 py-4">
-            <div className="text-base font-semibold">Purchase history</div>
-            <div className="text-xs text-muted-foreground">
-              Click "Repeat" to re-order the same service with the same quantity.
+          {/* Header row: title + status filter dropdown (matches BuyTab sort style) */}
+          <div className="flex flex-col gap-3 border-b border-border/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <div className="text-base font-semibold">Purchase history</div>
+              <div className="text-xs text-muted-foreground">
+                Click "Repeat" to re-order the same service with the same quantity.
+              </div>
+            </div>
+            {/* Status filter dropdown — same style as the sort dropdown in BuyTab */}
+            <div className="relative shrink-0">
+              <ArrowUpDown
+                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+              <select
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="Filter orders by status"
+                className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
+              >
+                {HISTORY_STATUS_OPTIONS.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+              <ChevronRight
+                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground"
+                aria-hidden="true"
+              />
             </div>
           </div>
+
+          {/* Filter count line — only visible when a filter is active */}
+          {statusFilter !== "all" && (
+            <div className="border-b border-border/60 bg-muted/20 px-5 py-2 text-xs text-muted-foreground">
+              Showing {totalFiltered.toLocaleString()} of {orders.length.toLocaleString()} orders
+            </div>
+          )}
+
           <div className="overflow-x-auto nov-scroll">
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -1244,7 +1491,7 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
-                {orders.map((o: any) => (
+                {pagedOrders.map((o: any) => (
                   <tr key={o.id} className="transition-colors hover:bg-muted/30">
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-mono text-xs font-medium text-foreground">{o.publicId}</span>
@@ -1282,16 +1529,47 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
                     </td>
                   </tr>
                 ))}
-                {orders.length === 0 && (
+                {filteredOrders.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No purchases yet. Browse the Services tab to place your first order.
+                      {orders.length === 0
+                        ? "No purchases yet. Browse the Services tab to place your first order."
+                        : "No orders match the selected status."}
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination footer — only visible when there's more than one page */}
+          {totalPages > 1 && (
+            <div className="flex flex-col items-center gap-3 border-t border-border/60 px-5 py-3 sm:flex-row sm:justify-between">
+              <div className="text-xs text-muted-foreground tabular-nums">
+                Page {safePage} of {totalPages} · Showing {shownOnPage} of {totalFiltered} orders
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={goToPrevPage}
+                  disabled={safePage <= 1}
+                  aria-label="Previous page"
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 btn-press"
+                >
+                  <ChevronLeft className="h-3.5 w-3.5" />
+                  Prev
+                </button>
+                <button
+                  onClick={goToNextPage}
+                  disabled={safePage >= totalPages}
+                  aria-label="Next page"
+                  className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 btn-press"
+                >
+                  Next
+                  <ChevronRight className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </Reveal>
     </div>
@@ -1345,22 +1623,50 @@ function SellTab() {
   const { data: offersData } = useOffers();
   const { data: servicesData } = useAllServices();
   const createOffer = useCreateOffer();
+  const updateOffer = useUpdateOffer();
   const deleteOffer = useDeleteOffer();
   const { data: sessionData } = useSession();
   const currency = (sessionData?.user as any)?.currency ?? "USD";
   const [showPublish, setShowPublish] = useState(false);
+  // editingOffer is set when the user clicks "Edit" — when non-null, the modal
+  // is in edit mode (title says "Edit offer", submit calls PATCH instead of POST).
+  const [editingOffer, setEditingOffer] = useState<any | null>(null);
   const [selectedService, setSelectedService] = useState("");
   const [price, setPrice] = useState(0);
   const offers = offersData?.offers ?? [];
   const services = servicesData?.services ?? [];
 
+  const isEditing = !!editingOffer;
+  const isSubmitting = createOffer.isPending || updateOffer.isPending;
+
+  const resetModalState = () => {
+    setSelectedService("");
+    setPrice(0);
+    setEditingOffer(null);
+  };
+
+  const closeModal = () => {
+    setShowPublish(false);
+    resetModalState();
+  };
+
+  // Open the modal pre-filled with an offer's data for editing.
+  const openEditModal = (offer: any) => {
+    setEditingOffer(offer);
+    setSelectedService(offer.serviceId);
+    setPrice(offer.price);
+    setShowPublish(true);
+  };
+
   const handlePublish = async () => {
     if (!selectedService || price <= 0) return;
     try {
-      await createOffer.mutateAsync({ serviceId: selectedService, price });
-      setShowPublish(false);
-      setSelectedService("");
-      setPrice(0);
+      if (isEditing && editingOffer) {
+        await updateOffer.mutateAsync({ id: editingOffer.id, price });
+      } else {
+        await createOffer.mutateAsync({ serviceId: selectedService, price });
+      }
+      closeModal();
     } catch {
       // Error already handled by onError callback (toast shown)
     }
@@ -1392,7 +1698,10 @@ function SellTab() {
       {/* Publish button */}
       <div className="flex justify-end">
         <button
-          onClick={() => setShowPublish(true)}
+          onClick={() => {
+            resetModalState();
+            setShowPublish(true);
+          }}
           className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground btn-press"
         >
           <Plus className="h-3.5 w-3.5" /> Publish offer
@@ -1427,7 +1736,23 @@ function SellTab() {
                   </td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.sales}</td>
                   <td className="px-4 py-3 text-right">
-                    <button onClick={() => deleteOffer.mutate(o.id)} className="rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 btn-press">Remove</button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => openEditModal(o)}
+                        aria-label={`Edit offer for ${o.service?.name ?? "service"}`}
+                        className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 btn-press"
+                      >
+                        <Pencil className="h-3 w-3" />
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => deleteOffer.mutate(o.id)}
+                        aria-label={`Remove offer for ${o.service?.name ?? "service"}`}
+                        className="rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 btn-press"
+                      >
+                        Remove
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -1439,31 +1764,50 @@ function SellTab() {
         </div>
       </div>
 
-      {/* Publish modal */}
+      {/* Publish / Edit modal */}
       {showPublish && (
         <div
           className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
-          onClick={() => setShowPublish(false)}
+          onClick={closeModal}
         >
           <div
             onClick={(e) => e.stopPropagation()}
             className="modal-3d-enter relative w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
           >
             <button
-              onClick={() => setShowPublish(false)}
+              onClick={closeModal}
               className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground"
               aria-label="Close"
             >
               <X className="h-5 w-5" />
             </button>
-            <div className="text-base font-semibold">Publish offer</div>
-            <p className="mt-1 text-xs text-muted-foreground">Select a service and set your resale price. The margin is calculated automatically.</p>
+            <div className="text-base font-semibold">
+              {isEditing ? "Edit offer" : "Publish offer"}
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {isEditing
+                ? "Update your resale price. The margin is recalculated automatically."
+                : "Select a service and set your resale price. The margin is calculated automatically."}
+            </p>
             <div className="mt-4 flex flex-col gap-3">
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Service</span>
-                <select value={selectedService} onChange={(e) => { setSelectedService(e.target.value); const svc = services.find(s => s.id === e.target.value); if (svc) setPrice(svc.price); }} className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none">
+                <select
+                  value={selectedService}
+                  onChange={(e) => {
+                    setSelectedService(e.target.value);
+                    const svc = services.find((s: any) => s.id === e.target.value);
+                    if (svc) setPrice(svc.price);
+                  }}
+                  disabled={isEditing}
+                  className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <option value="">Select a service…</option>
-                  {services.map((s: any) => <option key={s.id} value={s.id}>{s.name} (cost: ${s.cost.toFixed(2)}/1000)</option>)}
+                  {services.map((s: any) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} (cost: ${s.cost.toFixed(2)}/1000)
+                    </option>
+                  ))}
                 </select>
               </label>
               <label className="block">
@@ -1471,16 +1815,33 @@ function SellTab() {
                 <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} step="0.01" min="0" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none" />
               </label>
               {selectedService && price > 0 && (() => {
-                const svc = services.find(s => s.id === selectedService);
+                const svc = services.find((s: any) => s.id === selectedService);
                 if (!svc) return null;
-                const margin = ((price - svc.cost) / price) * 100;
-                return <div className="rounded-xl bg-muted/30 px-4 py-2.5 text-sm"><span className="text-muted-foreground">Margin: </span><span className={cn("font-semibold", margin > 100 ? "text-emerald-600" : "text-amber-600")}>{margin.toFixed(1)}%</span></div>;
+                // For edit mode, fall back to the offer's stored cost if the
+                // service isn't in the loaded services list (e.g. it was
+                // paused since the offer was created).
+                const cost = svc.cost ?? editingOffer?.cost ?? 0;
+                const margin = ((price - cost) / price) * 100;
+                return (
+                  <div className="rounded-xl bg-muted/30 px-4 py-2.5 text-sm">
+                    <span className="text-muted-foreground">Margin: </span>
+                    <span className={cn("font-semibold", margin > 100 ? "text-emerald-600" : "text-amber-600")}>
+                      {margin.toFixed(1)}%
+                    </span>
+                  </div>
+                );
               })()}
             </div>
-            <button onClick={handlePublish} disabled={createOffer.isPending || !selectedService || price <= 0} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60 btn-press">
-              {createOffer.isPending ? "Publishing…" : "Publish offer"}
+            <button
+              onClick={handlePublish}
+              disabled={isSubmitting || !selectedService || price <= 0}
+              className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60 btn-press"
+            >
+              {isSubmitting
+                ? isEditing ? "Saving…" : "Publishing…"
+                : isEditing ? "Save changes" : "Publish offer"}
             </button>
-            <button onClick={() => setShowPublish(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
+            <button onClick={closeModal} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
           </div>
         </div>
       )}

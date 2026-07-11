@@ -130,6 +130,7 @@ export function useCancelOrder() {
 // ── Services (paginated) ──
 export function useServices(params?: {
   platform?: string;
+  category?: string;
   search?: string;
   page?: number;
   limit?: number;
@@ -137,12 +138,20 @@ export function useServices(params?: {
   const p = new URLSearchParams();
   if (params?.platform && params.platform !== "All")
     p.set("platform", params.platform);
+  if (params?.category && params.category !== "All")
+    p.set("category", params.category);
   if (params?.search) p.set("search", params.search);
   if (params?.page) p.set("page", String(params.page));
   if (params?.limit) p.set("limit", String(params.limit));
   const q = p.toString();
   return useQuery({
-    queryKey: ["services", params?.platform, params?.search, params?.page],
+    queryKey: [
+      "services",
+      params?.platform,
+      params?.category,
+      params?.search,
+      params?.page,
+    ],
     queryFn: () =>
       api.get<{ services: any[]; pagination: any }>(
         `/api/services${q ? `?${q}` : ""}`
