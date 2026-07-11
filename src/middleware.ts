@@ -149,13 +149,17 @@ function addSecurityHeaders(res: NextResponse) {
   // X-DNS-Prefetch-Control — opt into DNS prefetching for asset origins
   // (fonts.gstatic.com etc.). Helps TTFB on first visit.
   res.headers.set("X-DNS-Prefetch-Control", "on");
-  // CSP — strict-dynamic + nonce-based. Removes 'unsafe-inline' from script-src.
-  // Uses Web Crypto API (Edge Runtime compatible, no Node.js 'crypto' module).
-  const cspNonce = crypto.randomUUID(); // Web Crypto — works in Edge Runtime
+  // CSP — Next.js 16 requires 'unsafe-inline' for script-src because it
+  // injects inline scripts (__NEXT_DATA__, hydration) without nonce support
+  // in the App Router. 'strict-dynamic' is added so that trusted scripts
+  // (PayPal SDK) can load their own dependencies.
+  // NOTE: The nonce approach requires Next.js nonce configuration in
+  // next.config.ts + layout.tsx which is a larger migration. For now,
+  // 'unsafe-inline' + 'strict-dynamic' is the safe baseline.
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
-      `script-src 'self' 'nonce-${cspNonce}' 'strict-dynamic' https://www.paypal.com https://www.paypalobjects.com; ` +
+      "script-src 'self' 'unsafe-inline' 'strict-dynamic' https://www.paypal.com https://www.paypalobjects.com; " +
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: blob:; " +
       "font-src 'self' data: https://fonts.gstatic.com; " +
@@ -279,11 +283,6 @@ export function middleware(req: NextRequest) {
       res.headers.set("Vary", "Origin");
     }
     addSecurityHeaders(res);
-    // S-01: Set nonce on response so Next.js can apply it to inline scripts
-    const nonce = res.headers.get("Content-Security-Policy")?.match(/nonce-([a-f0-9-]+)/)?.[1];
-    if (nonce) {
-      res.headers.set("x-nonce", nonce);
-    }
     // Pass IP to downstream API routes
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
