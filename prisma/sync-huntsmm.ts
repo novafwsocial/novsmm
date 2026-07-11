@@ -102,12 +102,22 @@ async function main() {
   console.log(`  ✓ Received ${services.length} services from HuntSMM`);
 
   // 4. Process and import services
-  // The rate from HuntSMM is per 1000 units in USD.
-  // Markup is kept LOW to stay competitive — adjust MARKUP below to change.
-  // 30% markup = price is 1.3× the provider cost.
-  // 50% markup = price is 1.5× the provider cost.
-  // 100% markup = price is 2× the provider cost.
-  const MARKUP = 2.5; // 150% markup — price = cost × 2.5
+  //
+  // CRITICAL: HuntSMM prices are in INDIAN RUPEES (₹), NOT USD!
+  // The API returns `rate` in INR per 1000 units.
+  // We must convert INR → USD before storing.
+  //
+  // Conversion: 1 USD = 83.5 INR (adjust INR_TO_USD_RATE below if needed)
+  // Markup: 150% on the USD cost (price = cost_usd × 2.5)
+  //
+  // Example:
+  //   HuntSMM rate: ₹51.08 per 1000
+  //   USD cost: ₹51.08 / 83.5 = $0.61
+  //   Price (150% markup): $0.61 × 2.5 = $1.53
+  //   Profit: $0.92 (150% of $0.61)
+
+  const INR_TO_USD_RATE = 83.5; // 1 USD = 83.5 INR (update if exchange rate changes)
+  const MARKUP = 2.5; // 150% markup — price = cost_usd × 2.5
 
   let imported = 0;
   const batchSize = 100;
@@ -118,8 +128,11 @@ async function main() {
       const platform = detectPlatform(s.category || "", s.name || "");
       const category = detectCategory(s.name || "");
       const quality = detectQuality(s.name || "", s.description || "");
-      const cost = parseFloat(s.rate) || 0;
-      const price = parseFloat((cost * MARKUP).toFixed(2));
+
+      // Convert HuntSMM INR rate to USD
+      const inrRate = parseFloat(s.rate) || 0;
+      const cost = parseFloat((inrRate / INR_TO_USD_RATE).toFixed(4)); // USD cost
+      const price = parseFloat((cost * MARKUP).toFixed(4)); // USD price with 150% markup
       const minQty = parseInt(s.min) || 1;
       const maxQty = parseInt(s.max) || 1000000;
 
@@ -150,7 +163,18 @@ async function main() {
   console.log("\n\n✅ Sync complete!");
   console.log(`  Provider: HuntSMM`);
   console.log(`  Services imported: ${imported}`);
-  console.log(`  Markup applied: 150%`);
+  console.log(`  INR→USD rate: 1 USD = ${INR_TO_USD_RATE} INR`);
+  console.log(`  Markup applied: 150% (price = cost_usd × 2.5)`);
+
+  // Show a sample to verify pricing
+  const sample = await db.service.findFirst({ select: { name: true, cost: true, price: true } });
+  if (sample) {
+    console.log(`\n  Sample service:`);
+    console.log(`    Name: ${sample.name}`);
+    console.log(`    Cost (USD): $${sample.cost}`);
+    console.log(`    Price (USD): $${sample.price}`);
+    console.log(`    Profit: $${(sample.price - sample.cost).toFixed(4)} (${(((sample.price - sample.cost) / sample.cost) * 100).toFixed(0)}%)`);
+  }
 
   // 5. Verify
   const count = await db.service.count();
