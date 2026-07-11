@@ -262,7 +262,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           </div>
           <button
             onClick={() => setDashboardTab("wallet")}
-            className="mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
+            className="btn-press mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
           >
             <Plus className="h-3.5 w-3.5" /> Top up
           </button>

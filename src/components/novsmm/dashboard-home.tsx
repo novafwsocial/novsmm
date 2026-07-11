@@ -37,6 +37,7 @@ import {
 } from "recharts";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
+import { DashReveal } from "./dash-reveal";
 import { useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { useApp } from "./app-store";
@@ -101,6 +102,7 @@ export function DashboardHome() {
         </div>
       </Reveal>
 
+      <DashReveal>
       <RevealStagger stagger={0.06} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <RevealItem>
           <StatCard
@@ -141,70 +143,72 @@ export function DashboardHome() {
           />
         </RevealItem>
       </RevealStagger>
+      </DashReveal>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <Reveal blur className="lg:col-span-2">
-          <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Revenue · {RANGE_RANGE_LABEL[range]}
+      <DashReveal delay={0.05}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <Reveal blur className="lg:col-span-2">
+            <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
+                    Revenue · {RANGE_RANGE_LABEL[range]}
+                  </div>
+                  <div className="mt-1 text-3xl font-semibold tabular-nums">
+                    $<Counter to={rangeRevenue} duration={1.5} />
+                  </div>
                 </div>
-                <div className="mt-1 text-3xl font-semibold tabular-nums">
-                  $<Counter to={rangeRevenue} duration={1.5} />
+                <div className="flex items-center gap-1.5 text-xs">
+                  {(["7d", "30d", "90d"] as Range[]).map((r) => (
+                    <button
+                      key={r}
+                      onClick={() => setRange(r)}
+                      aria-pressed={range === r}
+                      className={cn(
+                        "rounded-full px-2.5 py-1 font-medium transition-colors",
+                        range === r
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted"
+                      )}
+                    >
+                      {RANGE_LABEL[r]}
+                    </button>
+                  ))}
                 </div>
               </div>
-              <div className="flex items-center gap-1.5 text-xs">
-                {(["7d", "30d", "90d"] as Range[]).map((r) => (
-                  <button
-                    key={r}
-                    onClick={() => setRange(r)}
-                    aria-pressed={range === r}
-                    className={cn(
-                      "rounded-full px-2.5 py-1 font-medium transition-colors",
-                      range === r
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted"
-                    )}
-                  >
-                    {RANGE_LABEL[r]}
-                  </button>
-                ))}
+              <div className="chart-container mt-5 h-[220px] w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={series} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
+                    <defs>
+                      <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#0052ff" stopOpacity={0.28} />
+                        <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
+                    <XAxis dataKey="d" hide />
+                    <Tooltip
+                      contentStyle={{
+                        borderRadius: 10,
+                        border: "1px solid rgba(0,0,0,0.08)",
+                        fontSize: 12,
+                      }}
+                      labelStyle={{ display: "none" }}
+                      formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]}
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="revenue"
+                      stroke="#0052ff"
+                      strokeWidth={2}
+                      fill="url(#revArea)"
+                      animationDuration={800}
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
               </div>
             </div>
-            <div className="mt-5 h-[220px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0052ff" stopOpacity={0.28} />
-                      <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="d" hide />
-                  <Tooltip
-                    contentStyle={{
-                      borderRadius: 10,
-                      border: "1px solid rgba(0,0,0,0.08)",
-                      fontSize: 12,
-                    }}
-                    labelStyle={{ display: "none" }}
-                    formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]}
-                  />
-                  <Area
-                    type="monotone"
-                    dataKey="revenue"
-                    stroke="#0052ff"
-                    strokeWidth={2}
-                    fill="url(#revArea)"
-                    animationDuration={800}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-        </Reveal>
+          </Reveal>
 
         <div className="flex flex-col gap-4">
           <Reveal blur delay={0.06}>
@@ -254,7 +258,8 @@ export function DashboardHome() {
             </div>
           </Reveal>
         </div>
-      </div>
+        </div>
+      </DashReveal>
 
       {/* Loyalty Rewards card — tier badge, total points, progress to next tier,
           recent achievements, "View all" → profile achievements section */}
@@ -269,6 +274,7 @@ export function DashboardHome() {
       />
 
       {/* Recent orders */}
+      <DashReveal delay={0.1}>
       <Reveal blur>
         <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
           <div className="flex items-center justify-between">
@@ -318,6 +324,7 @@ export function DashboardHome() {
           </div>
         </div>
       </Reveal>
+      </DashReveal>
 
       {/* Favorites + Recent tickets */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
@@ -409,7 +416,7 @@ function StatCard({
   tint?: keyof typeof TINTS;
 }) {
   return (
-    <div className="group relative h-full overflow-hidden rounded-2xl border border-border/60 bg-background p-4 transition-shadow hover:nov-ring-lg sm:p-5">
+    <div className="stat-card-3d group relative h-full overflow-hidden rounded-2xl border border-border/60 bg-background p-4 transition-shadow hover:nov-ring-lg sm:p-5">
       <div className="flex items-start justify-between">
         <span className={cn("flex h-9 w-9 items-center justify-center rounded-lg", TINTS[tint])}>
           {icon}

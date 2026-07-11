@@ -11334,3 +11334,56 @@ Stage Summary:
 - Services grid now reveals each card with a 3D rotateX(15deg) → 0deg perspective animation on scroll (mobile falls back to 2D translateY).
 - Mobile users get a sticky bottom CTA bar appearing past 60% of viewport height; desktop users get rotating social-proof notifications in the bottom-left.
 - Build passes cleanly; no new npm dependencies added; performance budget preserved (IntersectionObserver + rAF + CSS-only animations, no per-frame JS).
+
+---
+Task ID: DASHBOARD-3D-ENHANCEMENT-1
+Agent: full-stack-developer
+Task: Subtle 3D + motion enhancements for dashboard + admin panel
+
+Work Log:
+- Read worklog.md (LANDED-3D-ENHANCEMENT-1 context) for prior 3D landing work and design vocabulary.
+- Reviewed the dashboard surfaces in scope: dashboard-home.tsx (StatCard, chart, recent orders, loyalty, referral), admin-panel.tsx (AdminOverview, AdminStat, AdminUsers/Services/Providers/Payments/Withdrawals/ApiKeys/Licenses/Currencies/Languages/Coupons/Orders/Refunds/Cms tables + 17 modals), and dashboard-shell.tsx (sidebar Top up button).
+- Appended a self-contained "DASHBOARD 3D & MOTION" CSS block to the END of src/app/globals.css — covering stat-card-3d (translateY -4px + rotateX 2deg on hover, 0.3s cubic-bezier(0.16,1,0.3,1)), table-row-hover (bg-muted + translateX 2px, 0.2s ease), tab-content-enter (tabFadeIn keyframes), dash-reveal (opacity + translateY 20px → 0, 0.5s cubic-bezier), btn-press (scale 0.97 on :active), badge-pulse (subtle opacity oscillation 2s), skeleton-shimmer (1.5s ease-in-out infinite), modal-3d-enter (modal3dIn keyframes — perspective(800px) rotateX(-5deg) scale(0.95) translateY(10px) → identity), and chart-container (rotateX 1deg on hover). Includes a @media (max-width: 768px) block that disables all hover transforms + the dash-reveal transition, and a @media (prefers-reduced-motion: reduce) block that disables every animation/transition/transform in this system. All effects are GPU-composited (transform/opacity only) — no per-frame JS, no layout thrash.
+- Created src/components/novsmm/dash-reveal.tsx — IntersectionObserver-based 2D scroll reveal wrapper. Unlike the landing Scroll3DReveal (which uses 3D rotateX), this only fades + slides content vertically — better for data-heavy interfaces where users need to read numbers quickly. Falls back to immediate show on mobile (<768px) and when IntersectionObserver is unavailable. Observer disconnects after first intersection (one-shot reveal, no repeated re-animation).
+- Enhanced src/components/novsmm/dashboard-home.tsx:
+  · Imported DashReveal.
+  · Added `stat-card-3d` to the StatCard root div className (so all 4 top-of-page stat cards lift on hover).
+  · Wrapped the stat cards RevealStagger in <DashReveal> (top row reveals on scroll).
+  · Wrapped the chart + wallet + quick-stats grid (lg:grid-cols-3) in <DashReveal delay={0.05}> (chart row reveals on scroll with subtle stagger).
+  · Wrapped the recent-orders Reveal section in <DashReveal delay={0.1}> (last reveal layer).
+  · Added `chart-container` to the revenue AreaChart wrapper div (subtle 1deg 3D depth on hover).
+- Enhanced src/components/novsmm/admin-panel.tsx:
+  · Imported DashReveal.
+  · Wrapped AdminOverview stat cards RevealStagger in <DashReveal> and the chart + health grid in <DashReveal delay={0.05}>.
+  · Added `stat-card-3d` to the AdminStat component's root div className (covers all 4 overview stat cards: Total users, Orders 24h, Revenue 30d, Active services).
+  · Added `chart-container` to the AdminOverview revenue AreaChart wrapper div.
+  · Bulk-replaced all 12 admin table data rows (`transition-colors hover:bg-muted/30`) to include `table-row-hover` — covers AdminUsers (with cn()), AdminServices, AdminOrders, AdminRefunds, AdminWithdrawals, AdminApiKeys, AdminLicenses, AdminCurrencies, AdminLanguages, AdminCoupons, AdminCms, and AdminEmailTemplates. Header rows were left untouched.
+  · Bulk-replaced all primary action button patterns to include `btn-press`:
+    - 9× `rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground` (Add service/provider/payment method, Generate key, Issue license, Add currency/language, Create coupon/role/promotion, Create order, New content)
+    - 10× `rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground` (modal Save buttons — Service, Provider, AddPayment, Role, API key, IP allowlist, License, Currency, Language, Promotion, Coupon, Manual order)
+    - 1× `rounded-xl bg-primary px-5 py-2.5` (Broadcast now)
+    - 1× `rounded-xl bg-primary px-6 py-3` (Save settings)
+    - 2× `rounded-xl bg-primary px-5 text-sm` (Save & enable OAuth, Publish version)
+    - 2× `rounded-xl bg-primary px-5 py-2 text-xs` (Save template / Save content)
+    - (Got it / Save credentials buttons with `transition-shadow hover:nov-shadow-blue` also picked up btn-press via the bulk replace.)
+  · Bulk-replaced all 17 admin modal content divs to include `modal-3d-enter`:
+    - 11× `relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60` (most modals)
+    - 1× `relative max-h-[90vh] w-full max-w-lg overflow-y-auto` (ConfigureCredentialsModal)
+    - 1× `relative w-full max-w-2xl max-h-[90vh] overflow-y-auto` (RoleModal)
+    - 2× `relative w-full max-w-3xl max-h-[92vh] overflow-y-auto` (EmailTemplateEditor, CmsEditor)
+    - 1× `relative w-full max-w-md rounded-3xl border border-amber-500/40` (ImpersonateModal — amber variant)
+- Enhanced src/components/novsmm/dashboard-shell.tsx:
+  · Added `btn-press` to the sidebar "Top up" wallet button (the only primary action button in the shell — the rest are icon buttons, palette triggers, and the command palette rows, which already have their own hover states).
+- Ran `bun run build` — ✓ Compiled successfully in 30.6s, ✓ TypeScript passed in 26.4s, ✓ 105/105 static pages generated, no errors. (Note: `bun run lint` is broken in this environment due to a @typescript-eslint/utils / ESLint 10.6.0 incompatibility — same as noted in LANDING-3D-ENHANCEMENT-1. `next build` performs its own TS type-check and passes.)
+
+Stage Summary:
+- 1 new component: dash-reveal.tsx — zero-dependency client component (React + IntersectionObserver + CSS).
+- 1 CSS system appended to globals.css — 8 utility classes (stat-card-3d, table-row-hover, tab-content-enter, dash-reveal, btn-press, badge-pulse, skeleton-shimmer, modal-3d-enter, chart-container), 4 keyframes (tabFadeIn, badge-pulse-subtle, skeleton-shimmer, modal3dIn), with @media (max-width: 768px) and @media (prefers-reduced-motion: reduce) overrides. All effects subtle: maxTilt ~2deg on stat cards, 1deg on charts, 5deg one-shot on modals; all durations ≤0.5s; all GPU-composited.
+- Dashboard home: stat cards lift on hover, chart has 1deg perspective, 3 major sections (stat row / chart row / recent orders) reveal on scroll. Existing framer-motion Reveal wrappers preserved underneath DashReveal for layered motion.
+- Admin overview: stat cards lift on hover, chart has 1deg perspective, 2 sections (stat row / chart row) reveal on scroll.
+- Admin tables (12 tables): all data rows now translate 2px + bg highlight on hover. Header rows unchanged. Tables remain sortable/clickable (transform only affects the row, not its children's event targets).
+- Admin modals (17 modals): all open with a one-shot 0.3s 3D scale + rotateX entrance. Existing onClick stopPropagation, close-on-backdrop-click, and form submit behavior preserved — the modal-3d-enter class only adds a CSS animation to the content div.
+- Primary action buttons (24+ buttons across admin + 1 in dashboard shell): all get a 0.1s scale(0.97) on :active for tactile feedback.
+- Mobile: every hover/transition effect is disabled via @media (max-width: 768px); dash-reveal content shows immediately on mobile (the component itself short-circuits to setInView(true)).
+- Accessibility: prefers-reduced-motion: reduce disables every animation, transition, and transform in this system; opacity forced to 1 so content is always visible.
+- Build passes cleanly; no new npm dependencies added; performance budget preserved (IntersectionObserver + CSS-only animations, no per-frame JS, no framer-motion additions on dashboard surfaces — existing framer-motion Reveals untouched).

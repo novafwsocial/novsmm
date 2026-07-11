@@ -60,6 +60,7 @@ import { useApp, type AdminTab } from "./app-store";
 import { Counter } from "./counter";
 import { PaymentLogo } from "./payment-logo";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
+import { DashReveal } from "./dash-reveal";
 import { signIn, useSession as useNextAuthSession } from "next-auth/react";
 import {
   useAdminOverview,
@@ -258,19 +259,22 @@ function AdminOverview() {
     <div className="flex flex-col gap-4">
       <BroadcastComposer />
 
+      <DashReveal>
       <RevealStagger stagger={0.05} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <RevealItem><AdminStat icon={<Users className="h-4 w-4" />} label="Total users" value={<Counter to={s?.totalUsers ?? 0} duration={2} />} delta="live" /></RevealItem>
         <RevealItem><AdminStat icon={<Activity className="h-4 w-4" />} label="Orders (24h)" value={<Counter to={s?.orders24h ?? 0} duration={2} />} delta="live" /></RevealItem>
         <RevealItem><AdminStat icon={<CreditCard className="h-4 w-4" />} label="Revenue (30d)" value={<>$<Counter to={s?.revenue30d ?? 0} duration={2} /></>} delta="live" /></RevealItem>
         <RevealItem><AdminStat icon={<Server className="h-4 w-4" />} label="Active services" value={<Counter to={s?.services ?? 0} duration={1.5} />} delta={`${s?.providers ?? 0} providers`} /></RevealItem>
       </RevealStagger>
+      </DashReveal>
 
+      <DashReveal delay={0.05}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <Reveal blur className="lg:col-span-2">
           <div className="rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
             <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Platform revenue · 30d</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">$<Counter to={s?.revenue30d ?? 0} duration={2} /></div>
-            <div className="mt-4 h-[220px]">
+            <div className="chart-container mt-4 h-[220px]">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
                   <defs>
@@ -306,6 +310,7 @@ function AdminOverview() {
           </div>
         </Reveal>
       </div>
+      </DashReveal>
     </div>
   );
 }
@@ -393,7 +398,7 @@ function BroadcastComposer() {
             <button
               onClick={submit}
               disabled={broadcast.isPending || !form.title.trim() || !form.message.trim()}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 btn-press rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground disabled:opacity-60"
             >
               {broadcast.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               {broadcast.isPending ? "Sending…" : "Broadcast now"}
@@ -424,7 +429,7 @@ function SelectField({ label, value, onChange, options }: { label: string; value
 
 function AdminStat({ icon, label, value, delta }: { icon: React.ReactNode; label: string; value: React.ReactNode; delta: string }) {
   return (
-    <div className="rounded-2xl border border-border/60 bg-background p-4">
+    <div className="stat-card-3d rounded-2xl border border-border/60 bg-background p-4">
       <div className="flex items-center justify-between">
         <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">{icon}</span>
         <span className="text-[11px] font-medium text-emerald-600">{delta}</span>
@@ -565,7 +570,7 @@ function AdminUsers() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {users.map((u: any) => (
-                  <tr key={u.id} className={cn("transition-colors hover:bg-muted/30", selected.has(u.id) && "bg-primary/[0.04]")}>
+                  <tr key={u.id} className={cn("table-row-hover transition-colors hover:bg-muted/30", selected.has(u.id) && "bg-primary/[0.04]")}>
                     <td className="px-4 py-3">
                       <input
                         type="checkbox"
@@ -712,7 +717,7 @@ function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void })
       <form
         onClick={(e) => e.stopPropagation()}
         onSubmit={handleImpersonate}
-        className="relative w-full max-w-md rounded-3xl border border-amber-500/40 bg-background p-6 nov-ring-lg"
+        className="relative modal-3d-enter w-full max-w-md rounded-3xl border border-amber-500/40 bg-background p-6 nov-ring-lg"
       >
         <button
           type="button"
@@ -839,7 +844,7 @@ function AdminServices() {
           <div className="text-base font-semibold">Catalog · {services.length} services</div>
           <button
             onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Add service
           </button>
@@ -860,7 +865,7 @@ function AdminServices() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {services.map((s: any) => (
-                <tr key={s.id} className="transition-colors hover:bg-muted/30">
+                <tr key={s.id} className="table-row-hover transition-colors hover:bg-muted/30">
                   <td className="px-4 py-3">
                     <div className="font-medium text-foreground">{s.name}</div>
                     {s.provider && <div className="text-[11px] text-muted-foreground">{s.provider.name}</div>}
@@ -1031,7 +1036,7 @@ function ServiceModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
         <div className="text-base font-semibold">{mode === "create" ? "Add service" : "Edit service"}</div>
         <div className="mt-4 grid grid-cols-2 gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -1145,7 +1150,7 @@ function ServiceModal({
           </div>
         )}
 
-        <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {loading ? "Saving…" : mode === "create" ? "Create service" : "Save changes"}
         </button>
         <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -1182,7 +1187,7 @@ function AdminProviders() {
       <div className="mb-4 flex justify-end">
         <button
           onClick={() => setShowAdd(true)}
-          className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+          className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
         >
           <Plus className="h-3.5 w-3.5" /> Add provider
         </button>
@@ -1286,7 +1291,7 @@ function ProviderModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">{mode === "create" ? "Add API provider" : "Edit provider"}</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -1306,7 +1311,7 @@ function ProviderModal({
             <Input label="Latency (ms)" type="number" value={String(form.latency)} onChange={(v) => setForm({ ...form, latency: Number(v) })} />
           </div>
         </div>
-        <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {loading ? "Saving…" : mode === "create" ? "Add provider" : "Save changes"}
         </button>
         <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -1362,7 +1367,7 @@ function AdminPayments() {
         <div className="flex justify-end">
           <button
             onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Add payment method
           </button>
@@ -1462,7 +1467,7 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
         <button onClick={onClose} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-4 w-4" />
         </button>
@@ -1584,7 +1589,7 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
             <button
               onClick={handleSave}
               disabled={loading}
-              className="flex items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+              className="flex items-center justify-center gap-2 btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
             >
               {loading ? (
                 <>
@@ -1605,7 +1610,7 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
           <div className="mt-5">
             <button
               onClick={onClose}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
+              className="flex w-full items-center justify-center gap-2 btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
             >
               <CheckCircle2 className="h-4 w-4" />
               Got it
@@ -1626,7 +1631,7 @@ function AddPaymentMethodModal({ onClose, onCreate }: { onClose: () => void; onC
   };
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Add payment method</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input label="Name" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -1637,7 +1642,7 @@ function AddPaymentMethodModal({ onClose, onCreate }: { onClose: () => void; onC
           <Input label="Fee" value={form.fee} onChange={(v) => setForm({ ...form, fee: v })} />
           <Input label="Currencies" value={form.currencies} onChange={(v) => setForm({ ...form, currencies: v })} />
         </div>
-        <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={submit} disabled={loading || !form.name} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {loading ? "Adding…" : "Add method"}
         </button>
       </div>
@@ -1713,7 +1718,7 @@ function AdminRoles() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Create role
           </button>
@@ -1881,7 +1886,7 @@ function RoleModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
         <div className="text-base font-semibold">{mode === "create" ? "Create role" : `Edit · ${role?.name}`}</div>
 
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -1946,7 +1951,7 @@ function RoleModal({
           ))}
         </div>
 
-        <button onClick={submit} disabled={loading || (mode === "create" && !name.trim())} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={submit} disabled={loading || (mode === "create" && !name.trim())} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {loading ? "Saving…" : mode === "create" ? "Create role" : "Save changes"}
         </button>
         <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -1982,7 +1987,7 @@ function AdminWithdrawals() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {withdrawals.map((w: any) => (
-                <tr key={w.id} className="transition-colors hover:bg-muted/30">
+                <tr key={w.id} className="table-row-hover transition-colors hover:bg-muted/30">
                   <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{w.publicId}</td>
                   <td className="px-4 py-3">
                     <div className="font-medium text-foreground">{w.user?.name}</div>
@@ -2061,7 +2066,7 @@ function AdminApiKeys() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Generate key
           </button>
@@ -2114,7 +2119,7 @@ function AdminApiKeys() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {keys.map((k: any) => (
-                  <tr key={k.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={k.id} className="table-row-hover transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{k.publicId}</td>
                     <td className="px-4 py-3 font-medium text-foreground">{k.name}</td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{k.user?.email}</td>
@@ -2167,7 +2172,7 @@ function AdminApiKeys() {
 
       {showCreate && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+          <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Generate API key</div>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="User ID" value={form.userId} onChange={(v) => setForm({ ...form, userId: v })} />
@@ -2178,7 +2183,7 @@ function AdminApiKeys() {
                 Restrict this key to specific IPs. Leave empty to allow any IP.
               </p>
             </div>
-            <button onClick={handleCreate} disabled={createKey.isPending || !form.userId || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+            <button onClick={handleCreate} disabled={createKey.isPending || !form.userId || !form.name} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
               {createKey.isPending ? "Generating…" : "Generate key"}
             </button>
             <button onClick={() => setShowCreate(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -2188,13 +2193,13 @@ function AdminApiKeys() {
 
       {editingIp && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setEditingIp(null)}>
-          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+          <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Edit IP Allowlist</div>
             <p className="mt-1 text-xs text-muted-foreground">Comma-separated list of allowed IPs. Leave empty to allow any IP.</p>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="Allowed IPs" value={editingIp.value} onChange={(v) => setEditingIp({ ...editingIp, value: v })} />
             </div>
-            <button onClick={handleSaveIp} disabled={updateIp.isPending} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+            <button onClick={handleSaveIp} disabled={updateIp.isPending} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
               {updateIp.isPending ? "Saving…" : "Save allowlist"}
             </button>
             <button onClick={() => setEditingIp(null)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -2234,7 +2239,7 @@ function AdminLicenses() {
             <div className="text-base font-semibold">Licenses · {licenses.length}</div>
             <div className="text-xs text-muted-foreground">Panel rental/sale system — anti-replication</div>
           </div>
-          <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+          <button onClick={() => setShowCreate(true)} className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
             <Plus className="h-3.5 w-3.5" /> Issue license
           </button>
         </div>
@@ -2280,7 +2285,7 @@ function AdminLicenses() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {licenses.map((l: any) => (
-                  <tr key={l.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={l.id} className="table-row-hover transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-foreground">{l.licenseKey}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{l.customerName}</div>
@@ -2318,7 +2323,7 @@ function AdminLicenses() {
 
       {showCreate && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+          <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Issue new license</div>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="Customer name" value={form.customerName} onChange={(v) => setForm({ ...form, customerName: v })} />
@@ -2338,7 +2343,7 @@ function AdminLicenses() {
                 <Input label="Max orders" type="number" value={String(form.maxOrders)} onChange={(v) => setForm({ ...form, maxOrders: Number(v) })} />
               </div>
             </div>
-            <button onClick={handleCreate} disabled={createLic.isPending || !form.customerName || !form.customerEmail} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+            <button onClick={handleCreate} disabled={createLic.isPending || !form.customerName || !form.customerEmail} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
               {createLic.isPending ? "Issuing…" : "Issue license"}
             </button>
             <button onClick={() => setShowCreate(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -2366,7 +2371,7 @@ function AdminCurrencies() {
             <div className="text-base font-semibold">Currencies · {currencies.length}</div>
             <div className="text-xs text-muted-foreground">Manage available currencies + exchange rates</div>
           </div>
-          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
             <Plus className="h-3.5 w-3.5" /> Add currency
           </button>
         </div>
@@ -2384,7 +2389,7 @@ function AdminCurrencies() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {currencies.map((c: any) => (
-                <tr key={c.id} className="transition-colors hover:bg-muted/30">
+                <tr key={c.id} className="table-row-hover transition-colors hover:bg-muted/30">
                   <td className="px-4 py-3 font-mono font-semibold text-foreground">{c.code}</td>
                   <td className="px-4 py-3 text-muted-foreground">{c.name}</td>
                   <td className="px-4 py-3 text-lg">{c.symbol}</td>
@@ -2410,7 +2415,7 @@ function AdminCurrencies() {
       </div>
       {showAdd && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+          <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add currency</div>
             <div className="mt-4 flex flex-col gap-3">
               <Input label="Code (e.g. USD)" value={form.code} onChange={(v) => setForm({ ...form, code: v.toUpperCase() })} />
@@ -2420,7 +2425,7 @@ function AdminCurrencies() {
                 <Input label="Rate vs USD" type="number" value={String(form.rate)} onChange={(v) => setForm({ ...form, rate: Number(v) })} />
               </div>
             </div>
-            <button onClick={async () => { await createCur.mutateAsync(form); setShowAdd(false); setForm({ code: "", name: "", symbol: "$", rate: 1.0 }); }} disabled={!form.code || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+            <button onClick={async () => { await createCur.mutateAsync(form); setShowAdd(false); setForm({ code: "", name: "", symbol: "$", rate: 1.0 }); }} disabled={!form.code || !form.name} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
               Add currency
             </button>
             <button onClick={() => setShowAdd(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -2448,7 +2453,7 @@ function AdminLanguages() {
             <div className="text-base font-semibold">Languages · {languages.length}</div>
             <div className="text-xs text-muted-foreground">Manage available UI languages</div>
           </div>
-          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
+          <button onClick={() => setShowAdd(true)} className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground">
             <Plus className="h-3.5 w-3.5" /> Add language
           </button>
         </div>
@@ -2466,7 +2471,7 @@ function AdminLanguages() {
             </thead>
             <tbody className="divide-y divide-border/60">
               {languages.map((l: any) => (
-                <tr key={l.id} className="transition-colors hover:bg-muted/30">
+                <tr key={l.id} className="table-row-hover transition-colors hover:bg-muted/30">
                   <td className="px-4 py-3 text-xl">{l.flag}</td>
                   <td className="px-4 py-3 font-mono font-semibold text-foreground">{l.code}</td>
                   <td className="px-4 py-3 text-muted-foreground">{l.name}</td>
@@ -2489,7 +2494,7 @@ function AdminLanguages() {
       </div>
       {showAdd && (
         <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
-          <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+          <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add language</div>
             <div className="mt-4 flex flex-col gap-3">
               <div className="grid grid-cols-2 gap-3">
@@ -2499,7 +2504,7 @@ function AdminLanguages() {
               <Input label="Name (English)" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
               <Input label="Native name" value={form.nativeName} onChange={(v) => setForm({ ...form, nativeName: v })} />
             </div>
-            <button onClick={async () => { await createLang.mutateAsync(form); setShowAdd(false); setForm({ code: "", name: "", nativeName: "", flag: "🌍" }); }} disabled={!form.code || !form.name} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+            <button onClick={async () => { await createLang.mutateAsync(form); setShowAdd(false); setForm({ code: "", name: "", nativeName: "", flag: "🌍" }); }} disabled={!form.code || !form.name} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
               Add language
             </button>
             <button onClick={() => setShowAdd(false)} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -2672,7 +2677,7 @@ function AdminSettingsTab() {
             </div>
           ))}
         </div>
-        <button onClick={handleSave} disabled={updateSettings.isPending} className="mt-1 self-start rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={handleSave} disabled={updateSettings.isPending} className="btn-press mt-1 self-start rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {updateSettings.isPending ? "Saving…" : "Save settings"}
         </button>
       </div>
@@ -2699,7 +2704,7 @@ function AdminPromotions() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> New promotion
           </button>
@@ -2824,7 +2829,7 @@ function PromotionModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">{mode === "create" ? "New promotion" : "Edit promotion"}</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input label="Title" value={form.name} onChange={(v) => setForm({ ...form, name: v })} />
@@ -2849,7 +2854,7 @@ function PromotionModal({
             ]} />
           )}
         </div>
-        <button onClick={submit} disabled={loading || !form.name.trim()} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={submit} disabled={loading || !form.name.trim()} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {loading ? "Saving…" : mode === "create" ? "Create promotion" : "Save changes"}
         </button>
         <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -2893,7 +2898,7 @@ function AdminCoupons() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Create coupon
           </button>
@@ -2915,7 +2920,7 @@ function AdminCoupons() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {coupons.map((c: any) => (
-                  <tr key={c.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={c.id} className="table-row-hover transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3">
                       <span className="rounded-md bg-muted/60 px-2 py-0.5 font-mono text-xs font-semibold text-foreground">
                         {c.code}
@@ -3080,7 +3085,7 @@ function CouponModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">{mode === "create" ? "Create coupon" : "Edit coupon"}</div>
         <div className="mt-4 flex flex-col gap-3">
           <Input
@@ -3138,7 +3143,7 @@ function CouponModal({
         <button
           onClick={submit}
           disabled={loading || !form.code.trim() || form.value <= 0}
-          className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
+          className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
         >
           {loading ? "Saving…" : mode === "create" ? "Create coupon" : "Save changes"}
         </button>
@@ -3167,7 +3172,7 @@ function AdminOrders() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> Create order
           </button>
@@ -3189,7 +3194,7 @@ function AdminOrders() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {orders.map((o: any) => (
-                  <tr key={o.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={o.id} className="table-row-hover transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{o.publicId}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{o.user?.name ?? "—"}</div>
@@ -3286,7 +3291,7 @@ function CreateManualOrderModal({
 
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
+      <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Create manual order</div>
         <div className="text-[11px] text-muted-foreground">Admin-created orders are complimentary (no balance debit).</div>
         <div className="mt-4 flex flex-col gap-3">
@@ -3327,7 +3332,7 @@ function CreateManualOrderModal({
             />
           </label>
         </div>
-        <button onClick={submit} disabled={loading || !form.userId.trim() || !form.serviceId} className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
+        <button onClick={submit} disabled={loading || !form.userId.trim() || !form.serviceId} className="mt-5 w-full btn-press rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">
           {loading ? "Creating…" : "Create order"}
         </button>
         <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">Cancel</button>
@@ -3378,7 +3383,7 @@ function AdminRefunds() {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {refundable.map((t: any) => (
-                  <tr key={t.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={t.id} className="table-row-hover transition-colors hover:bg-muted/30">
                     <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.publicId}</td>
                     <td className="px-4 py-3">
                       <div className="font-medium text-foreground">{t.user?.name ?? "—"}</div>
@@ -3738,7 +3743,7 @@ function AdminSocialAuth() {
                         savingProvider === p.id ||
                         (!creds[p.id].clientId && !creds[p.id].clientSecret)
                       }
-                      className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+                      className="inline-flex h-10 items-center justify-center gap-2 btn-press rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
                     >
                       {savingProvider === p.id
                         ? "Saving..."
@@ -3897,7 +3902,7 @@ function AdminVersion() {
             <button
               onClick={handlePublish}
               disabled={loading || !version}
-              className="inline-flex h-10 items-center justify-center gap-2 rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
+              className="inline-flex h-10 items-center justify-center gap-2 btn-press rounded-xl bg-primary px-5 text-sm font-medium text-primary-foreground disabled:opacity-50"
             >
               {loading ? "Publishing..." : "Publish version"}
             </button>
@@ -3967,7 +3972,7 @@ function AdminEmailTemplates() {
           </div>
           <button
             onClick={() => setShowCreate(true)}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
           >
             <Plus className="h-3.5 w-3.5" /> New template
           </button>
@@ -3992,7 +3997,7 @@ function AdminEmailTemplates() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {templates.map((t: any) => (
-                    <tr key={t.id} className="transition-colors hover:bg-muted/30">
+                    <tr key={t.id} className="table-row-hover transition-colors hover:bg-muted/30">
                       <td className="px-4 py-3 font-medium text-foreground">{t.name}</td>
                       <td className="px-4 py-3">
                         <code className="rounded bg-muted px-1.5 py-0.5 text-[11px] font-mono">{t.key}</code>
@@ -4146,7 +4151,7 @@ function EmailTemplateEditor({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+        className="relative modal-3d-enter w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
       >
         <button
           onClick={onClose}
@@ -4267,7 +4272,7 @@ function EmailTemplateEditor({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 btn-press rounded-xl bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {isEdit ? "Save changes" : "Create template"}
@@ -4345,7 +4350,7 @@ function AdminCms() {
             </select>
             <button
               onClick={() => setShowCreate(true)}
-              className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+              className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
             >
               <Plus className="h-3.5 w-3.5" /> New content
             </button>
@@ -4373,7 +4378,7 @@ function AdminCms() {
                 </thead>
                 <tbody className="divide-y divide-border/60">
                   {items.map((item: any) => (
-                    <tr key={item.id} className="transition-colors hover:bg-muted/30">
+                    <tr key={item.id} className="table-row-hover transition-colors hover:bg-muted/30">
                       <td className="px-4 py-3">
                         <div className="font-medium text-foreground">{item.title}</div>
                         <div className="text-[11px] text-muted-foreground font-mono">/{item.slug}</div>
@@ -4520,7 +4525,7 @@ function CmsEditor({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="relative w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+        className="relative modal-3d-enter w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
       >
         <button
           onClick={onClose}
@@ -4653,7 +4658,7 @@ function CmsEditor({
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 btn-press rounded-xl bg-primary px-5 py-2 text-xs font-medium text-primary-foreground disabled:opacity-60"
           >
             {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
             {isEdit ? "Save changes" : "Create content"}

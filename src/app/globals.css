@@ -565,3 +565,122 @@ img, video, canvas, svg {
     opacity: 1 !important;
   }
 }
+
+/* ─── DASHBOARD 3D & MOTION (subtle, functional) ─── */
+
+/* Stat card hover lift — subtle 3D perspective on hover */
+.stat-card-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.stat-card-3d:hover {
+  transform: translateY(-4px) perspective(600px) rotateX(2deg);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.12), 0 4px 12px -4px rgba(0, 82, 255, 0.08);
+}
+
+/* Table row hover — smooth highlight */
+.table-row-hover {
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.table-row-hover:hover {
+  background-color: var(--muted);
+  transform: translateX(2px);
+}
+
+/* Tab transition — smooth content swap */
+.tab-content-enter {
+  animation: tabFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Dashboard scroll reveal — subtle (no 3D rotate, just fade + slide) */
+.dash-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.dash-reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Button press effect — tactile feedback */
+.btn-press {
+  transition: transform 0.1s ease;
+}
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Badge pulse — for live/active indicators */
+@keyframes badge-pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.badge-pulse {
+  animation: badge-pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Loading skeleton shimmer — for data loading states */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--muted-foreground) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Modal entrance — 3D scale + fade */
+.modal-3d-enter {
+  animation: modal3dIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes modal3dIn {
+  from { opacity: 0; transform: perspective(800px) rotateX(-5deg) scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: perspective(800px) rotateX(0deg) scale(1) translateY(0); }
+}
+
+/* Chart container — subtle 3D depth */
+.chart-container {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chart-container:hover {
+  transform: perspective(1000px) rotateX(1deg);
+}
+
+/* Disable on mobile for performance */
+@media (max-width: 768px) {
+  .stat-card-3d:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .table-row-hover:hover {
+    transform: none;
+  }
+  .chart-container:hover {
+    transform: none;
+  }
+  .dash-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .stat-card-3d, .table-row-hover, .tab-content-enter, .dash-reveal,
+  .btn-press, .badge-pulse, .modal-3d-enter, .chart-container {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
