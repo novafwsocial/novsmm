@@ -11529,3 +11529,42 @@ Stage Summary:
 - No new npm dependencies. No framer-motion. CSS-only animations (existing stat-card-3d, btn-press, skeleton-shimmer, modal-3d-enter, tab-content-enter classes reused).
 - Mobile-first: category filter row + favorites toggle use the same horizontal-scroll pattern as platform filters; history status dropdown is full-width on mobile (sm:w-[180px] on larger screens); pagination footer stacks vertically on mobile (flex-col → sm:flex-row).
 - A11y: new filter buttons have aria-pressed; star button has aria-label + aria-pressed; pagination buttons have aria-label; status dropdown has aria-label; service select is correctly disabled during edit mode.
+
+---
+Task ID: MARKETPLACE-13-IMPROVEMENTS
+Agent: full-stack-developer
+Task: 13 marketplace improvements (compare, price filter, trending, reviews, list view, export, pause offer, stats, bulk publish, suggested price, sale notif, search order, refund)
+
+Work Log:
+- Read worklog.md (MARKETPLACE-5-IMPROVEMENTS context) + dashboard-marketplace.tsx (1,965 lines) + use-api.ts + /api/offers/route.ts + /api/orders/route.ts + /api/admin/refunds/route.ts + /api/public/offers/route.ts for context.
+- Confirmed /api/offers PATCH route already accepts `{ id, status }` for pause/activate (no route change needed for #12).
+- Confirmed /api/public/offers already filters `status: "active"` so paused offers are automatically hidden from buyers.
+- Confirmed existing `useCancelOrder` hook (line 112 of use-api.ts) already wraps PATCH /api/orders with `{ orderId }` — reused it for #18 (cancel path) instead of duplicating.
+- Modified /api/admin/refunds/route.ts: POST now also accepts `orderId` in the body. When provided (instead of `transactionId`), the route looks up the order, finds its sale transaction by `reference = order.publicId`, and uses that transaction ID for the refund. All downstream `transactionId` references in the route now use the resolved `resolvedTxnId` variable. Backwards-compatible — existing `transactionId` callers still work.
+- Modified src/hooks/use-api.ts: added `useUpdateOfferStatus` (PATCH /api/offers with `{ id, status }`, contextual toast), `useAdminRefundOrder` (POST /api/admin/refunds with `{ orderId }`), extended `useOffers` to accept an optional `refetchInterval` parameter (used by SellTab for sale-notification polling).
+- Modified src/components/novsmm/dashboard-marketplace.tsx (the main work). All 13 features shipped:
+  · #6 Compare: `comparisonList` state in BuyTab (max 3, soft cap drops oldest); `toggleComparison`/`clearComparison`/`isComparing` helpers; new `CompareBar` (floating bottom bar, fixed positioning, safe-area insets) + `CompareModal` (side-by-side table with Price/Delivery/Min-Max/Quality rows + per-column remove). Added Compare toggle button to both `ServiceCard` and `ServiceListRow` (bottom-left, primary-color when active).
+  · #7 Price filter: `minPriceInput`/`maxPriceInput`/`appliedMinPrice`/`appliedMaxPrice` state in BuyTab. Apply button commits the typed values; Clear button resets. Filter applied inside the `grouped` useMemo alongside favorites. Active filter renders as a removable chip.
+  · #8 Trending: `trendingServices` useMemo sorts `allServices` by ascending ID and slices 6. New `TrendingSection` component (amber gradient panel, Flame icon, horizontal scroller of 200px mini cards) rendered at the top of BuyTab.
+  · #9 Reviews: new `useReviews` hook (localStorage key `novsmm_reviews`, online-mean running average + count). ServiceCard renders `★ 4.5 (12)` summary in footer. ServiceDetailModal has a full "Community rating" + "Rate this service" block with 5 interactive stars (hover/focus state, ARIA radiogroup). Submitting fires a "Thanks for rating!" toast.
+  · #10 List/Grid view: new `useViewMode` hook (localStorage key `novsmm_view_mode`, defaults to `grid`). Segmented control (LayoutGrid / List icons) next to the sort dropdown. List view renders a compact `<table>` with the existing `table-row-hover` class; columns hide at sm/md breakpoints for mobile.
+  · #11 Export CSV: `exportCsv` function in HistoryTab builds an RFC-4180-quoted CSV from `filteredOrders`, downloads via `Blob` + `URL.createObjectURL` + temporary `<a>`. Filename `novsmm-orders-YYYY-MM-DD.csv`. Button disabled when no orders.
+  · #12 Pause/Activate: `useUpdateOfferStatus` hook + Pause/Activate button on each offer row. Paused rows are dimmed (`opacity-50`) with an amber "Paused" badge. Active-offer count now drives the summary card.
+  · #13 Per-offer stats: new `OfferStatsModal` showing Total sales, Total revenue (uses `o.earnings`, falls back to `sales × (price − cost)`), Margin per sale, Date published, Status, and a cost/price/margin footer. Triggered by a new violet Stats button.
+  · #14 Bulk publish: new `BulkPublishModal` with search + multi-select checkboxes, markup % input (default 150%), live calculated-price preview, sequential publish with progress UI ("Publishing 3/10…"). Triggered by a new "Bulk publish" button next to "Publish offer".
+  · #15 Suggested price: in the Publish/Edit offer modal, when a service is selected, shows `💡 Suggested price: $X.XX (150% markup)` (cost × 2.5), a "Use suggested" button that fills the price input, and the NOVSMM catalog competitor price for reference.
+  · #16 Sale notification: SellTab passes `SALE_POLL_INTERVAL` (30s) to `useOffers` so React Query auto-refetches while SellTab is mounted. A `useEffect` watches `offersData.totalSales` and, on increase, fires a `🎉 You made a sale!` toast with the revenue gain + offer name. Refs track previous totals.
+  · #17 Search orders: new `searchInput`/`debouncedSearch` state in HistoryTab with 300ms debounce. Filters by publicId / serviceName / platform. Works alongside the status filter (both must match). Empty state shows `No orders match "X"`.
+  · #18 Refund/Cancel: new `refundTarget` state holds the order + mode ("cancel" | "refund"). `canCancel` returns true for non-admins within 60s of placement on pending/processing orders; `canRefund` returns true for admins on completed orders. Both open a confirmation dialog (red for cancel, amber for refund) with the order ID + amount + "Keep order" / "Cancel & refund" / "Issue refund" actions. Cancel calls `useCancelOrder` with `{ orderId }`; Refund calls `useAdminRefundOrder` with `orderId`. Both invalidate orders/wallet/dashboard queries on success.
+- Cleaned up: removed unused `PartyPopper` import, unused `formatRating` helper, unused `CANCEL_WINDOW_MS` duplicate constant, unused `getRating` destructure in ServiceDetailModal.
+- Verified build: `cd /home/z/my-project && bun run build` → `✓ Compiled successfully in 24.3s`, `✓ TypeScript in 18.3s`, `✓ 109/109 static pages generated`. No errors, no new warnings, no new npm dependencies.
+
+Stage Summary:
+- Files modified (3): src/components/novsmm/dashboard-marketplace.tsx (1,965 → ~3,650 lines), src/hooks/use-api.ts (added useUpdateOfferStatus + useAdminRefundOrder + useOffers refetchInterval param), src/app/api/admin/refunds/route.ts (POST now accepts orderId and resolves to the order's sale transaction).
+- Files created (1): agent-ctx/MARKETPLACE-13-IMPROVEMENTS-full-stack-developer.md (this work record).
+- All 13 features shipped without breaking existing functionality: BuyTab infinite scroll, ServiceDetailModal with drip-feed, MassOrderModal, SellTab publish/edit/delete, HistoryTab repeat + status filter + pagination, favorites toggle, category filter — all still work.
+- No new npm dependencies. No framer-motion. CSS-only animations (existing stat-card-3d, btn-press, skeleton-shimmer, modal-3d-enter, tab-content-enter, table-row-hover classes reused).
+- Mobile-first: trending is a horizontal scroller; compare bar respects safe-area insets; list view hides columns at sm/md breakpoints; bulk publish modal scrolls vertically; refund confirmation dialog stacks buttons vertically on mobile.
+- A11y: all new buttons have aria-label / aria-pressed; star rating uses role=radiogroup + role=radio + aria-checked; compare bar uses role=region; view toggle uses role=group; export CSV button is disabled when no orders (aria-disabled implicit).
+- localStorage used for: reviews (`novsmm_reviews`), view mode (`novsmm_view_mode`). No DB migrations needed.
+- Build: ✓ PASS.

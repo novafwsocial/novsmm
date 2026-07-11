@@ -22,14 +22,36 @@ export async function POST(req: NextRequest) {
   // H-1 fix: safe JSON parse
   let body;
   try { body = await req.json(); } catch { return apiError("Invalid JSON body", 422); }
-  const { transactionId, reason } = body;
+  const { transactionId, reason, orderId } = body;
 
-  if (!transactionId) {
-    return apiError("Transaction ID is required", 422);
+  // MARKETPLACE-13-IMPROVEMENTS (#18): support refunding directly from an
+  // order ID. When `orderId` is provided instead of `transactionId`, look up
+  // the original sale transaction for the order. The order-create flow writes
+  // one sale transaction per order with reference = order.publicId, so we can
+  // resolve it deterministically.
+  let resolvedTxnId = transactionId;
+  if (!resolvedTxnId && orderId) {
+    const order = await db.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, publicId: true, userId: true, totalPrice: true, serviceName: true },
+    });
+    if (!order) return apiError("Order not found", 404);
+    const saleTxn = await db.transaction.findFirst({
+      where: { reference: order.publicId, userId: order.userId },
+      orderBy: { createdAt: "desc" },
+    });
+    if (!saleTxn) {
+      return apiError("No sale transaction found for this order", 404);
+    }
+    resolvedTxnId = saleTxn.id;
+  }
+
+  if (!resolvedTxnId) {
+    return apiError("Transaction ID or Order ID is required", 422);
   }
 
   const txn = await db.transaction.findUnique({
-    where: { id: transactionId },
+    where: { id: resolvedTxnId },
     include: { user: { select: { email: true, name: true } } },
   });
 
@@ -53,7 +75,7 @@ export async function POST(req: NextRequest) {
   await db.$transaction([
     // Mark original transaction as refunded
     db.transaction.update({
-      where: { id: transactionId },
+      where: { id: resolvedTxnId },
       data: { status: "failed" },
     }),
     // If it was a credit (topup/sale), deduct from balance
@@ -93,7 +115,7 @@ export async function POST(req: NextRequest) {
   });
 
   // Audit log
-  await audit(adminId, "refund", "transaction", transactionId, { amount: refundAmount, reason, user: txn.user.email });
+  await audit(adminId, "refund", "transaction", resolvedTxnId, { amount: refundAmount, reason, user: txn.user.email });
 
   // SECURITY (OWASP A09-2, P3): raise an alert for high-value refunds (>$500)
   // — useful for spotting slow-compromise attacks where small refunds escalate.
@@ -105,7 +127,7 @@ export async function POST(req: NextRequest) {
       userId: txn.userId,
       metadata: {
         amount: refundAmount,
-        transactionId,
+        transactionId: resolvedTxnId,
         adminId,
         reason,
       },

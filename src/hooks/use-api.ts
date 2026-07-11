@@ -856,10 +856,11 @@ export function usePublicLanguages() {
 }
 
 // ── Offers (marketplace sell) ──
-export function useOffers() {
+export function useOffers(refetchInterval?: number) {
   return useQuery({
     queryKey: ["offers"],
     queryFn: () => api.get<{ offers: any[]; totalEarnings: number; totalSales: number }>("/api/offers"),
+    refetchInterval,
   });
 }
 export function useCreateOffer() {
@@ -888,6 +889,67 @@ export function useDeleteOffer() {
     mutationFn: (id: string) => api.delete(`/api/offers?id=${id}`),
     onSuccess: () => { qc.invalidateQueries({ queryKey: ["offers"] }); toast({ title: "Offer removed" }); },
     onError: (e: Error) => toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+/**
+ * useUpdateOfferStatus — pause/activate an offer (MARKETPLACE-13-IMPROVEMENTS #12).
+ * Wraps the same PATCH /api/offers endpoint with a `status` field, which the
+ * route already accepts (active | paused). Kept as a dedicated hook so the
+ * intent is obvious at call sites and the toast message is contextual.
+ */
+export function useUpdateOfferStatus() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: ({ id, status }: { id: string; status: "active" | "paused" }) =>
+      api.patch(`/api/offers`, { id, status }),
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["offers"] });
+      toast({
+        title: vars.status === "paused" ? "Offer paused" : "Offer activated",
+        description:
+          vars.status === "paused"
+            ? "Paused offers are hidden from buyers until reactivated."
+            : "Your offer is visible to buyers again.",
+      });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Failed", description: e.message, variant: "destructive" }),
+  });
+}
+
+/**
+ * useCancelOrder — cancel a pending order within the 60-second window
+ * (MARKETPLACE-13-IMPROVEMENTS #18). The route is PATCH /api/orders with body
+ * `{ orderId }` and refunds the user's balance atomically.
+ *
+ * NOTE: a `useCancelOrder` hook already exists earlier in this file
+ * (lines 112-128) with the exact same mutationFn signature — it invalidates
+ * the same query keys and shows the same toast. We therefore don't re-declare
+ * it here; the dashboard-marketplace.tsx Refund/Cancel UI imports and uses
+ * the original `useCancelOrder` directly.
+ */
+
+/**
+ * useAdminRefundOrder — admin-only refund of an order from the history tab
+ * (MARKETPLACE-13-IMPROVEMENTS #18). Calls POST /api/admin/refunds with
+ * `{ orderId }`, which the route resolves to the order's sale transaction.
+ */
+export function useAdminRefundOrder() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  return useMutation({
+    mutationFn: (orderId: string) =>
+      api.post<{ message: string }>("/api/admin/refunds", { orderId }),
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["orders"] });
+      qc.invalidateQueries({ queryKey: ["wallet"] });
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      toast({ title: "Refund processed", description: data.message });
+    },
+    onError: (e: Error) =>
+      toast({ title: "Refund failed", description: e.message, variant: "destructive" }),
   });
 }
 

@@ -25,6 +25,18 @@ import {
   ShoppingCart,
   Pencil,
   ChevronLeft,
+  GitCompare,
+  LayoutGrid,
+  List as ListIcon,
+  Flame,
+  Download,
+  Pause,
+  Play,
+  BarChart3,
+  Sparkles,
+  DollarSign,
+  Filter,
+  RotateCcw,
 } from "lucide-react";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
@@ -40,12 +52,15 @@ import {
   useOffers,
   useCreateOffer,
   useUpdateOffer,
+  useUpdateOfferStatus,
   useDeleteOffer,
+  useCancelOrder,
+  useAdminRefundOrder,
 } from "@/hooks/use-api";
 import { formatPrice, loadCurrencyRates } from "@/lib/currency-utils";
 import { useApp } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
-import { PlatformLogo } from "./platform-logo";
+import { PlatformLogo, getPlatformEmoji } from "./platform-logo";
 import { cn } from "@/lib/utils";
 
 const PLATFORM_FILTERS = [
@@ -82,6 +97,18 @@ const HISTORY_STATUS_OPTIONS: { value: string; label: string }[] = [
 
 const FAVORITES_STORAGE_KEY = "novsmm_favorites";
 const HISTORY_PAGE_SIZE = 15;
+
+// MARKETPLACE-13-IMPROVEMENTS — new localStorage-backed feature storage keys
+const REVIEWS_STORAGE_KEY = "novsmm_reviews";
+const VIEW_MODE_STORAGE_KEY = "novsmm_view_mode";
+const MAX_COMPARISON = 3; // up to 3 services in compare tray
+const TRENDING_COUNT = 6; // number of trending mini-cards to show
+const SALE_POLL_INTERVAL = 30_000; // 30s polling for new-sale notifications
+const ORDER_CANCEL_WINDOW_MS = 60_000; // 60s cancel window for non-admins
+// Type for the rating entry persisted in localStorage. We store a running
+// average + count so the card can render `★ 4.5 (12)` without re-tallying.
+type ReviewEntry = { rating: number; count: number };
+type ReviewsMap = Record<string, ReviewEntry>;
 
 /**
  * useFavorites — lightweight client-side wishlist backed by localStorage.
@@ -129,6 +156,97 @@ function useFavorites() {
   }, []);
 
   return { favorites, toggleFavorite };
+}
+
+/**
+ * useReviews — client-side star ratings (MARKETPLACE-13-IMPROVEMENTS #9).
+ * Storage shape: { [serviceId]: { rating: runningAvg, count: n } }.
+ *
+ * The average is updated incrementally with the standard online-mean formula
+ * (avg = avg + (rating - avg) / count) so we never need to store the raw
+ * individual votes — keeping the localStorage payload tiny even for power
+ * users who rate dozens of services.
+ */
+function useReviews() {
+  const [reviews, setReviews] = useState<ReviewsMap>({});
+
+  useEffect(() => {
+    try {
+      const stored =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(REVIEWS_STORAGE_KEY)
+          : null;
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed && typeof parsed === "object") setReviews(parsed as ReviewsMap);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const rateService = useCallback((serviceId: string, rating: number) => {
+    setReviews((prev) => {
+      const existing = prev[serviceId];
+      const next: ReviewsMap = { ...prev };
+      if (existing) {
+        const newCount = existing.count + 1;
+        const newAvg = existing.rating + (rating - existing.rating) / newCount;
+        next[serviceId] = { rating: newAvg, count: newCount };
+      } else {
+        next[serviceId] = { rating, count: 1 };
+      }
+      try {
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(REVIEWS_STORAGE_KEY, JSON.stringify(next));
+        }
+      } catch {
+        // ignore write errors
+      }
+      return next;
+    });
+  }, []);
+
+  const getRating = useCallback(
+    (serviceId: string): ReviewEntry | null => reviews[serviceId] ?? null,
+    [reviews],
+  );
+
+  return { reviews, rateService, getRating };
+}
+
+/**
+ * useViewMode — grid vs list preference (MARKETPLACE-13-IMPROVEMENTS #10).
+ * Persisted to localStorage so the user's choice survives page reloads.
+ * Defaults to "grid" (the existing layout) when no preference is stored.
+ */
+function useViewMode() {
+  const [viewMode, setViewModeState] = useState<"grid" | "list">("grid");
+
+  useEffect(() => {
+    try {
+      const stored =
+        typeof window !== "undefined"
+          ? window.localStorage.getItem(VIEW_MODE_STORAGE_KEY)
+          : null;
+      if (stored === "grid" || stored === "list") setViewModeState(stored);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const setViewMode = useCallback((mode: "grid" | "list") => {
+    setViewModeState(mode);
+    try {
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, mode);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  return { viewMode, setViewMode };
 }
 
 const QUALITY_BADGES: Record<string, { label: string; cls: string }> = {
@@ -293,6 +411,22 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
   const [allServices, setAllServices] = useState<any[]>([]);
   const [showFavoritesOnly, setShowFavoritesOnly] = useState(false);
   const { favorites, toggleFavorite } = useFavorites();
+  const { reviews, rateService, getRating } = useReviews();
+  const { viewMode, setViewMode } = useViewMode();
+
+  // MARKETPLACE-13-IMPROVEMENTS #6 — comparison tray state. Reset on page
+  // leave (intentionally NOT persisted to localStorage per the task spec).
+  const [comparisonList, setComparisonList] = useState<any[]>([]);
+  const [showCompareModal, setShowCompareModal] = useState(false);
+
+  // MARKETPLACE-13-IMPROVEMENTS #7 — price filter. The "input" values are
+  // what's typed; `applied*` is what's actually used for filtering (committed
+  // on Apply click). This matches the spec: "Apply button that filters".
+  const [minPriceInput, setMinPriceInput] = useState("");
+  const [maxPriceInput, setMaxPriceInput] = useState("");
+  const [appliedMinPrice, setAppliedMinPrice] = useState<number | null>(null);
+  const [appliedMaxPrice, setAppliedMaxPrice] = useState<number | null>(null);
+
   // PERF: Limit cards per platform to avoid rendering 6,382 DOM nodes at once.
   // "Show more" button under each platform reveals additional 30.
   const [expandedPlatforms, setExpandedPlatforms] = useState<Record<string, number>>({});
@@ -426,10 +560,20 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
   // before grouping, so ordering is consistent within each platform section.
   // When showFavoritesOnly is active, the array is first narrowed to just
   // services the user has starred (intersection of allServices & favorites).
+  // MARKETPLACE-13-IMPROVEMENTS #7: client-side price filter is also applied
+  // here so the indicator + grouped counts reflect the active range.
   const grouped = useMemo(() => {
     let source = allServices;
     if (showFavoritesOnly) {
       source = allServices.filter((s) => favorites.has(s.id));
+    }
+    if (appliedMinPrice != null || appliedMaxPrice != null) {
+      source = source.filter((s) => {
+        const p = s.price;
+        if (appliedMinPrice != null && p < appliedMinPrice) return false;
+        if (appliedMaxPrice != null && p > appliedMaxPrice) return false;
+        return true;
+      });
     }
     const sorted = [...source];
     switch (sort) {
@@ -460,13 +604,70 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
       g[s.platform].push(s);
     });
     return g;
-  }, [allServices, sort, showFavoritesOnly, favorites]);
+  }, [allServices, sort, showFavoritesOnly, favorites, appliedMinPrice, appliedMaxPrice]);
+
+  // MARKETPLACE-13-IMPROVEMENTS #8 — Trending services. Spec: services with
+  // the lowest service ID numbers (oldest/most established). We slice from
+  // allServices (which already contains the loaded catalog) so the row
+  // updates as more pages load. Stable order via numeric ID ascending.
+  const trendingServices = useMemo(() => {
+    if (allServices.length === 0) return [];
+    return [...allServices]
+      .sort((a, b) => Number(a.id) - Number(b.id))
+      .slice(0, TRENDING_COUNT);
+  }, [allServices]);
+
+  // MARKETPLACE-13-IMPROVEMENTS #6 — comparison tray handlers. Max 3 to keep
+  // the side-by-side modal readable on mobile. Toggling an already-added
+  // service removes it; toggling at the cap shows a friendly toast.
+  const toggleComparison = useCallback(
+    (service: any) => {
+      setComparisonList((prev) => {
+        if (prev.some((s) => s.id === service.id)) {
+          return prev.filter((s) => s.id !== service.id);
+        }
+        if (prev.length >= MAX_COMPARISON) {
+          // Soft cap — drop the oldest entry and add the new one so the
+          // user's most-recent pick is always reflected.
+          return [...prev.slice(prev.length - MAX_COMPARISON + 1), service];
+        }
+        return [...prev, service];
+      });
+    },
+    [],
+  );
+
+  const clearComparison = useCallback(() => setComparisonList([]), []);
+  const isComparing = useCallback(
+    (id: string) => comparisonList.some((s) => s.id === id),
+    [comparisonList],
+  );
+
+  // MARKETPLACE-13-IMPROVEMENTS #7 — price filter handlers. Apply commits the
+  // typed values (parsed as numbers, ignoring empties); Clear resets both.
+  const applyPriceFilter = () => {
+    const mn = minPriceInput.trim() === "" ? null : Number(minPriceInput);
+    const mx = maxPriceInput.trim() === "" ? null : Number(maxPriceInput);
+    setAppliedMinPrice(mn != null && !Number.isNaN(mn) ? mn : null);
+    setAppliedMaxPrice(mx != null && !Number.isNaN(mx) ? mx : null);
+  };
+
+  const clearPriceFilter = () => {
+    setMinPriceInput("");
+    setMaxPriceInput("");
+    setAppliedMinPrice(null);
+    setAppliedMaxPrice(null);
+  };
+
+  const isPriceFilterActive =
+    appliedMinPrice != null || appliedMaxPrice != null;
 
   const clearFilters = () => {
     setSearch("");
     setSort("popular");
     setCategoryFilter("All");
     setShowFavoritesOnly(false);
+    clearPriceFilter();
     handlePlatformChange("All");
   };
 
@@ -475,11 +676,25 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     platformFilter !== "All" ||
     categoryFilter !== "All" ||
     sort !== "popular" ||
-    showFavoritesOnly;
+    showFavoritesOnly ||
+    isPriceFilterActive;
 
   return (
     <div className="flex flex-col gap-4">
-      {/* Search + Sort */}
+      {/* MARKETPLACE-13-IMPROVEMENTS #8 — Trending row at the top (before any
+          filters). Shows the 6 oldest/lowest-ID services in a horizontal
+          scroller. Skipped entirely when the catalog hasn't loaded yet. */}
+      {trendingServices.length > 0 && (
+        <Reveal>
+          <TrendingSection
+            services={trendingServices}
+            currency={currency}
+            onSelect={onSelectService}
+          />
+        </Reveal>
+      )}
+
+      {/* Search + Sort + View toggle */}
       <Reveal>
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
           <div className="flex flex-1 items-center gap-2 rounded-xl border border-border bg-background px-4 py-2.5 text-sm transition-colors focus-within:border-primary/40">
@@ -523,6 +738,42 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground"
               aria-hidden="true"
             />
+          </div>
+          {/* MARKETPLACE-13-IMPROVEMENTS #10 — grid / list view toggle.
+              Segmented control styled like the existing tab pills. */}
+          <div
+            className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-background p-1"
+            role="group"
+            aria-label="View mode"
+          >
+            <button
+              type="button"
+              onClick={() => setViewMode("grid")}
+              aria-pressed={viewMode === "grid"}
+              aria-label="Grid view"
+              className={cn(
+                "flex h-[34px] w-[34px] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                viewMode === "grid"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <LayoutGrid className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("list")}
+              aria-pressed={viewMode === "list"}
+              aria-label="List view"
+              className={cn(
+                "flex h-[34px] w-[34px] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
+                viewMode === "list"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:bg-muted hover:text-foreground",
+              )}
+            >
+              <ListIcon className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </Reveal>
@@ -617,6 +868,65 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
         </div>
       </Reveal>
 
+      {/* MARKETPLACE-13-IMPROVEMENTS #7 — price filter row. Inline min/max
+          inputs + Apply. The "Price: $X - $Y" indicator + Clear button show
+          up only when a range has been applied. */}
+      <Reveal>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5">
+            <DollarSign className="h-3.5 w-3.5 text-muted-foreground" />
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={minPriceInput}
+              onChange={(e) => setMinPriceInput(e.target.value)}
+              placeholder="Min"
+              aria-label="Minimum price"
+              className="w-16 bg-transparent text-xs font-medium tabular-nums text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+            />
+            <span className="text-xs text-muted-foreground">—</span>
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="0.01"
+              value={maxPriceInput}
+              onChange={(e) => setMaxPriceInput(e.target.value)}
+              placeholder="Max"
+              aria-label="Maximum price"
+              className="w-16 bg-transparent text-xs font-medium tabular-nums text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={applyPriceFilter}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:nov-shadow-blue btn-press"
+          >
+            <Filter className="h-3.5 w-3.5" />
+            Apply
+          </button>
+          {isPriceFilterActive && (
+            <button
+              type="button"
+              onClick={clearPriceFilter}
+              className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors btn-press"
+            >
+              <X className="h-3.5 w-3.5" />
+              Price:&nbsp;
+              {appliedMinPrice != null
+                ? `$${appliedMinPrice.toFixed(2)}`
+                : "$0"}
+              &nbsp;–&nbsp;
+              {appliedMaxPrice != null
+                ? `$${appliedMaxPrice.toFixed(2)}`
+                : "∞"}
+            </button>
+          )}
+        </div>
+      </Reveal>
+
       {/* Results count */}
       {data?.pagination && (
         <div className="text-xs text-muted-foreground">
@@ -653,6 +963,58 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
             </button>
           )}
         </div>
+      ) : viewMode === "list" ? (
+        // MARKETPLACE-13-IMPROVEMENTS #10 — list view: compact rows in a
+        // single column. Shows many more services per screen than the grid.
+        <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
+          <div className="overflow-x-auto nov-scroll">
+            <table className="w-full text-sm">
+              <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium">Service</th>
+                  <th className="px-4 py-3 text-right font-medium">Price/1k</th>
+                  <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Min/Max</th>
+                  <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Delivery</th>
+                  <th className="px-4 py-3 text-right font-medium">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border/60">
+                {Object.entries(grouped).flatMap(([platform, svcs]) => {
+                  const limit = expandedPlatforms[platform] ?? INITIAL_CARDS_PER_PLATFORM;
+                  const visible = svcs.slice(0, limit);
+                  return visible.map((s) => (
+                    <ServiceListRow
+                      key={s.id}
+                      service={s}
+                      currency={currency}
+                      onClick={() => onSelectService(s)}
+                      isFavorite={favorites.has(s.id)}
+                      onToggleFavorite={() => toggleFavorite(s.id)}
+                      isInComparison={isComparing(s.id)}
+                      onToggleCompare={() => toggleComparison(s)}
+                      rating={getRating(s.id)}
+                    />
+                  ));
+                })}
+              </tbody>
+            </table>
+          </div>
+          {/* Infinite scroll sentinel (list variant) */}
+          <div ref={sentinelRef} className="flex h-16 items-center justify-center">
+            {isFetching && page > 1 ? (
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            ) : data?.pagination?.hasMore ? (
+              <button
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-full border border-border px-6 py-2 text-sm font-medium text-foreground hover:bg-muted btn-press"
+              >
+                Load more
+              </button>
+            ) : (
+              <span className="text-xs text-muted-foreground">— End of catalog —</span>
+            )}
+          </div>
+        </div>
       ) : (
         <>
           {Object.entries(grouped).map(([platform, svcs]) => {
@@ -676,6 +1038,9 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                     onClick={() => onSelectService(s)}
                     isFavorite={favorites.has(s.id)}
                     onToggleFavorite={() => toggleFavorite(s.id)}
+                    isInComparison={isComparing(s.id)}
+                    onToggleCompare={() => toggleComparison(s)}
+                    rating={getRating(s.id)}
                   />
                 ))}
               </div>
@@ -708,6 +1073,28 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
           </div>
         </>
       )}
+
+      {/* MARKETPLACE-13-IMPROVEMENTS #6 — floating Compare bar. Only shown
+          when the user has selected 2+ services. Clicking opens the modal;
+          the X clears the tray. Sticky bottom positioning so it stays
+          visible while scrolling. */}
+      {comparisonList.length >= 2 && (
+        <CompareBar
+          count={comparisonList.length}
+          onOpen={() => setShowCompareModal(true)}
+          onClear={clearComparison}
+        />
+      )}
+
+      {/* MARKETPLACE-13-IMPROVEMENTS #6 — side-by-side comparison modal */}
+      {showCompareModal && comparisonList.length >= 2 && (
+        <CompareModal
+          services={comparisonList}
+          currency={currency}
+          onClose={() => setShowCompareModal(false)}
+          onRemove={(id) => toggleComparison(comparisonList.find((s) => s.id === id)!)}
+        />
+      )}
     </div>
   );
 }
@@ -719,12 +1106,18 @@ function ServiceCard({
   onClick,
   isFavorite,
   onToggleFavorite,
+  isInComparison,
+  onToggleCompare,
+  rating,
 }: {
   service: any;
   currency: string;
   onClick: () => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  isInComparison: boolean;
+  onToggleCompare: () => void;
+  rating: ReviewEntry | null;
 }) {
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -790,36 +1183,175 @@ function ServiceCard({
         </span>
       </div>
 
-      {/* Footer — price on left, "View details" + "Order now" buttons on right */}
+      {/* Footer — price on left, "View details" + "Order now" buttons on right.
+          Bottom-left holds the Compare toggle (MARKETPLACE-13-IMPROVEMENTS #6)
+          and bottom-right shows the rating summary (#9) when present. */}
       <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3">
-        <div>
-          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
-            Per 1000 · {currency}
-          </div>
-          <div className="text-lg font-semibold tabular-nums text-foreground">
-            {formatPrice(service.price, currency)}
+        <div className="flex items-center gap-2">
+          {/* MARKETPLACE-13-IMPROVEMENTS #6 — Compare checkbox/button.
+              Renders as a small chip with the GitCompare icon. Active state
+              uses the primary color so it's obvious which cards are in the
+              comparison tray. */}
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCompare();
+            }}
+            aria-pressed={isInComparison}
+            aria-label={isInComparison ? `Remove ${service.name} from comparison` : `Add ${service.name} to comparison`}
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary btn-press",
+              isInComparison
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <GitCompare className="h-3.5 w-3.5" />
+          </button>
+          <div>
+            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              Per 1000 · {currency}
+            </div>
+            <div className="text-lg font-semibold tabular-nums text-foreground">
+              {formatPrice(service.price, currency)}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-col items-end gap-1">
+          {/* MARKETPLACE-13-IMPROVEMENTS #9 — rating summary, small stars.
+              Only rendered when at least one rating exists in localStorage. */}
+          {rating && (
+            <div className="flex items-center gap-0.5 text-[10px] text-amber-600 tabular-nums" title={`Rated ${rating.rating.toFixed(1)} by ${rating.count} user${rating.count > 1 ? "s" : ""}`}>
+              <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
+              <span className="font-semibold">{rating.rating.toFixed(1)}</span>
+              <span className="text-muted-foreground">({rating.count})</span>
+            </div>
+          )}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={(e) => { e.stopPropagation(); onClick(); }}
+              aria-label={`View details for ${service.name}`}
+              className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted btn-press"
+            >
+              Details
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onClick(); }}
+              aria-label={`Order ${service.name} now`}
+              className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue btn-press"
+            >
+              <ShoppingCart className="h-3.5 w-3.5" />
+              Order
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── Service List Row (MARKETPLACE-13-IMPROVEMENTS #10) ───────────
+// Compact row for list view. Same props as ServiceCard so the parent can
+// render either layout from the same source array. Uses the existing
+// `table-row-hover` class for the hover highlight + translate.
+function ServiceListRow({
+  service,
+  currency,
+  onClick,
+  isFavorite,
+  onToggleFavorite,
+  isInComparison,
+  onToggleCompare,
+  rating,
+}: {
+  service: any;
+  currency: string;
+  onClick: () => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  isInComparison: boolean;
+  onToggleCompare: () => void;
+  rating: ReviewEntry | null;
+}) {
+  return (
+    <tr
+      className="table-row-hover cursor-pointer transition-colors"
+      onClick={onClick}
+    >
+      <td className="px-4 py-3">
+        <div className="flex items-center gap-2">
           <button
-            onClick={(e) => { e.stopPropagation(); onClick(); }}
-            aria-label={`View details for ${service.name}`}
-            className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted btn-press"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleFavorite();
+            }}
+            aria-pressed={isFavorite}
+            aria-label={isFavorite ? `Remove ${service.name} from favorites` : `Add ${service.name} to favorites`}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-amber-400/15 hover:text-amber-500 btn-press"
           >
-            Details
-            <ChevronRight className="h-3.5 w-3.5" />
+            <Star
+              className={cn(
+                "h-3.5 w-3.5",
+                isFavorite ? "fill-amber-400 text-amber-500" : "text-muted-foreground",
+              )}
+            />
+          </button>
+          <PlatformLogo platform={service.platform} size={20} />
+          <div className="min-w-0">
+            <div className="truncate text-sm font-medium text-foreground">
+              {service.name}
+            </div>
+            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+              <span>{service.platform}</span>
+              {rating && (
+                <span className="inline-flex items-center gap-0.5 text-amber-600 tabular-nums">
+                  <Star className="h-2.5 w-2.5 fill-amber-400 text-amber-500" />
+                  {rating.rating.toFixed(1)} ({rating.count})
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </td>
+      <td className="px-4 py-3 text-right font-semibold tabular-nums text-foreground">
+        {formatPrice(service.price, currency)}
+      </td>
+      <td className="hidden px-4 py-3 text-right tabular-nums text-muted-foreground sm:table-cell">
+        {service.minQty.toLocaleString()}-{service.maxQty.toLocaleString()}
+      </td>
+      <td className="hidden px-4 py-3 text-xs text-muted-foreground md:table-cell">
+        {service.deliveryTime}
+      </td>
+      <td className="px-4 py-3 text-right">
+        <div className="flex items-center justify-end gap-1.5">
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleCompare();
+            }}
+            aria-pressed={isInComparison}
+            aria-label={isInComparison ? `Remove ${service.name} from comparison` : `Add ${service.name} to comparison`}
+            className={cn(
+              "inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors btn-press",
+              isInComparison
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border text-muted-foreground hover:bg-muted hover:text-foreground",
+            )}
+          >
+            <GitCompare className="h-3.5 w-3.5" />
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onClick(); }}
             aria-label={`Order ${service.name} now`}
-            className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue btn-press"
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue btn-press"
           >
             <ShoppingCart className="h-3.5 w-3.5" />
             Order
           </button>
         </div>
-      </div>
-    </div>
+      </td>
+    </tr>
   );
 }
 
@@ -857,6 +1389,266 @@ function ServiceCardSkeleton() {
   );
 }
 
+// ─────────── Trending Section (MARKETPLACE-13-IMPROVEMENTS #8) ───────────
+// Horizontal scroller of mini cards displayed at the top of BuyTab. Each
+// mini card shows: platform emoji, truncated name, price, "Order" button.
+// Clicking anywhere on a card opens the regular ServiceDetailModal so the
+// user can still see the full specs / drip-feed form before buying.
+function TrendingSection({
+  services,
+  currency,
+  onSelect,
+}: {
+  services: any[];
+  currency: string;
+  onSelect: (s: any) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-amber-50/60 via-background to-background p-4">
+      <div className="mb-3 flex items-center gap-2">
+        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-amber-400/15 text-amber-600">
+          <Flame className="h-4 w-4" />
+        </span>
+        <div>
+          <div className="text-sm font-semibold text-foreground">Trending services</div>
+          <div className="text-[10px] text-muted-foreground">
+            Most established services on NOVSMM — chosen by catalog age.
+          </div>
+        </div>
+      </div>
+      <div className="flex gap-3 overflow-x-auto nov-scroll pb-1">
+        {services.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => onSelect(s)}
+            aria-label={`Order ${s.name} — ${formatPrice(s.price, currency)} per 1000`}
+            className="group flex w-[200px] shrink-0 flex-col gap-2 rounded-xl border border-border/60 bg-background p-3 text-left transition-all hover:-translate-y-0.5 hover:nov-ring-md stat-card-3d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary btn-press"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-lg" aria-hidden="true">
+                {getPlatformEmoji(s.platform)}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-xs font-semibold text-foreground">
+                  {s.name}
+                </div>
+                <div className="text-[10px] text-muted-foreground">{s.platform}</div>
+              </div>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                  Per 1000
+                </div>
+                <div className="text-sm font-semibold tabular-nums text-foreground">
+                  {formatPrice(s.price, currency)}
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue">
+                <ShoppingCart className="h-3 w-3" />
+                Order
+              </span>
+            </div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─────────── Compare Bar (MARKETPLACE-13-IMPROVEMENTS #6) ───────────
+// Floating bottom bar that appears once 2+ services are in the comparison
+// tray. Fixed at the bottom of the viewport so it stays visible while
+// scrolling the catalog. Mobile-safe: respects safe-area insets.
+function CompareBar({
+  count,
+  onOpen,
+  onClear,
+}: {
+  count: number;
+  onOpen: () => void;
+  onClear: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md"
+      style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+      role="region"
+      aria-label="Comparison tray"
+    >
+      <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-medium text-foreground">
+          <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-primary">
+            <GitCompare className="h-4 w-4" />
+          </span>
+          <span>
+            Compare ({count})
+            <span className="ml-1 text-xs font-normal text-muted-foreground">
+              {count >= MAX_COMPARISON ? "· max reached" : "· pick another to add"}
+            </span>
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onClear}
+            className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors btn-press"
+            aria-label="Clear comparison list"
+          >
+            <X className="h-3.5 w-3.5" />
+            Clear
+          </button>
+          <button
+            type="button"
+            onClick={onOpen}
+            className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue btn-press"
+          >
+            Compare now
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── Compare Modal (MARKETPLACE-13-IMPROVEMENTS #6) ───────────
+// Side-by-side comparison of up to 3 services. Rows: Name, Platform, Price,
+// Delivery time, Min/Max, Quality. Each column has a remove (X) button so
+// the user can prune the tray without leaving the modal. Horizontal scroll
+// on mobile so all 3 columns stay readable.
+function CompareModal({
+  services,
+  currency,
+  onClose,
+  onRemove,
+}: {
+  services: any[];
+  currency: string;
+  onClose: () => void;
+  onRemove: (id: string) => void;
+}) {
+  const rows: { label: string; render: (s: any) => React.ReactNode }[] = [
+    {
+      label: "Price / 1000",
+      render: (s) => (
+        <span className="font-semibold tabular-nums text-foreground">
+          {formatPrice(s.price, currency)}
+        </span>
+      ),
+    },
+    {
+      label: "Delivery time",
+      render: (s) => <span className="text-foreground">{s.deliveryTime}</span>,
+    },
+    {
+      label: "Min / Max qty",
+      render: (s) => (
+        <span className="tabular-nums text-foreground">
+          {s.minQty.toLocaleString()} – {s.maxQty.toLocaleString()}
+        </span>
+      ),
+    },
+    {
+      label: "Quality",
+      render: (s) => {
+        const q = QUALITY_BADGES[s.quality] ?? QUALITY_BADGES.standard;
+        return (
+          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", q.cls)}>
+            {q.label}
+          </span>
+        );
+      },
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="modal-3d-enter relative max-h-[90vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+      >
+        <button
+          onClick={onClose}
+          className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close comparison"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <GitCompare className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Compare services</h2>
+            <p className="text-xs text-muted-foreground">
+              Side-by-side view of {services.length} services. Click ✕ to remove.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 overflow-x-auto nov-scroll">
+          <table className="w-full min-w-[480px] text-sm">
+            <thead>
+              <tr>
+                <th className="w-32 px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Attribute
+                </th>
+                {services.map((s) => (
+                  <th key={s.id} className="px-3 py-2 text-left align-top">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <PlatformLogo platform={s.platform} size={20} />
+                          <span className="truncate text-sm font-semibold text-foreground">
+                            {s.name}
+                          </span>
+                        </div>
+                        <div className="text-[10px] text-muted-foreground">{s.platform}</div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => onRemove(s.id)}
+                        aria-label={`Remove ${s.name} from comparison`}
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-red-500/10 hover:text-red-600 btn-press"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.label} className="border-t border-border/60">
+                  <td className="px-3 py-3 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    {row.label}
+                  </td>
+                  {services.map((s) => (
+                    <td key={s.id} className="px-3 py-3">
+                      {row.render(s)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        <p className="mt-4 text-center text-[10px] text-muted-foreground">
+          Tip: pick up to {MAX_COMPARISON} services for an at-a-glance comparison.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 // ─────────── Service Detail Modal ───────────
 function ServiceDetailModal({
   service,
@@ -870,6 +1662,13 @@ function ServiceDetailModal({
   const { data: sessionData } = useSession();
   const { setDashboardTab } = useApp();
   const { toast } = useToast();
+  // MARKETPLACE-13-IMPROVEMENTS #9 — star ratings in the detail modal.
+  // We instantiate the hook locally so the modal can both READ the current
+  // rating and WRITE a new rating without needing to lift state up. The
+  // rating persists across modal re-opens because useReviews reads from
+  // localStorage on mount.
+  const { reviews, rateService } = useReviews();
+  const [hoverRating, setHoverRating] = useState(0);
   const user = (sessionData?.user as any) ?? {};
   const currency = user?.currency ?? "USD";
   const [quantity, setQuantity] = useState(service.minQty);
@@ -890,6 +1689,18 @@ function ServiceDetailModal({
   const remainder = quantity - perChunk * safeDays;
 
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
+  const currentRating = reviews[service.id] ?? null;
+
+  // MARKETPLACE-13-IMPROVEMENTS #9 — submit a new rating. Persists to
+  // localStorage (via the hook), shows a toast, and clears the hover state.
+  const handleRate = (rating: number) => {
+    rateService(service.id, rating);
+    setHoverRating(0);
+    toast({
+      title: "Thanks for rating!",
+      description: `You rated ${service.name} ${rating} star${rating > 1 ? "s" : ""}.`,
+    });
+  };
 
   const handleOrder = async () => {
     try {
@@ -955,6 +1766,88 @@ function ServiceDetailModal({
           <Spec icon={<TrendingUp className="h-4 w-4" />} label="Speed" value={service.rate} />
           <Spec icon={<Zap className="h-4 w-4" />} label="Min quantity" value={service.minQty.toLocaleString()} />
           <Spec icon={<Star className="h-4 w-4" />} label="Max quantity" value={service.maxQty.toLocaleString()} />
+        </div>
+
+        {/* MARKETPLACE-13-IMPROVEMENTS #9 — Reviews / ratings block.
+            Shows the running average + count (if any) above the interactive
+            5-star picker. Hover state is local; click commits via rateService. */}
+        <div className="mt-4 rounded-xl border border-border/60 p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                Community rating
+              </div>
+              {currentRating ? (
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="flex items-center gap-0.5" aria-hidden="true">
+                    {Array.from({ length: 5 }).map((_, i) => (
+                      <Star
+                        key={i}
+                        className={cn(
+                          "h-4 w-4",
+                          i < Math.round(currentRating.rating)
+                            ? "fill-amber-400 text-amber-500"
+                            : "text-muted-foreground/40",
+                        )}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm font-semibold tabular-nums text-foreground">
+                    {currentRating.rating.toFixed(1)}
+                  </span>
+                  <span className="text-xs text-muted-foreground tabular-nums">
+                    ({currentRating.count} review{currentRating.count > 1 ? "s" : ""})
+                  </span>
+                </div>
+              ) : (
+                <div className="mt-1 text-xs text-muted-foreground">
+                  No ratings yet — be the first to review.
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 border-t border-border/60 pt-3">
+            <div className="text-xs font-medium text-muted-foreground">Rate this service</div>
+            <div
+              className="mt-1.5 flex items-center gap-1"
+              role="radiogroup"
+              aria-label="Rate this service from 1 to 5 stars"
+            >
+              {Array.from({ length: 5 }).map((_, i) => {
+                const value = i + 1;
+                const active = hoverRating >= value || (!hoverRating && currentRating && value <= Math.round(currentRating.rating));
+                return (
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={value === (hoverRating || Math.round(currentRating?.rating ?? 0))}
+                    aria-label={`${value} star${value > 1 ? "s" : ""}`}
+                    onMouseEnter={() => setHoverRating(value)}
+                    onMouseLeave={() => setHoverRating(0)}
+                    onFocus={() => setHoverRating(value)}
+                    onBlur={() => setHoverRating(0)}
+                    onClick={() => handleRate(value)}
+                    className="rounded p-0.5 transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 btn-press"
+                  >
+                    <Star
+                      className={cn(
+                        "h-6 w-6 transition-colors",
+                        active
+                          ? "fill-amber-400 text-amber-500"
+                          : "text-muted-foreground/40",
+                      )}
+                    />
+                  </button>
+                );
+              })}
+              <span className="ml-2 text-xs text-muted-foreground">
+                {hoverRating
+                  ? `Click to submit ${hoverRating} star${hoverRating > 1 ? "s" : ""}`
+                  : "Hover and click to rate"}
+              </span>
+            </div>
+          </div>
         </div>
 
         {/* Price breakdown */}
@@ -1370,15 +2263,38 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
 function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
   const { data } = useOrders();
   const repeatOrder = useRepeatOrder();
+  const cancelOrder = useCancelOrder();
+  const adminRefund = useAdminRefundOrder();
   const { data: sessionData } = useSession();
+  const { toast } = useToast();
   const user = (sessionData?.user as any) ?? {};
   const currency = user?.currency ?? "USD";
+  const isAdmin = user?.role === "admin";
   const orders = data?.orders ?? [];
 
   // Improvement #3: status filter — client-side filter on the loaded orders array.
   const [statusFilter, setStatusFilter] = useState<string>("all");
   // Improvement #5: pagination — 15 orders per page.
   const [historyPage, setHistoryPage] = useState(1);
+
+  // MARKETPLACE-13-IMPROVEMENTS #17 — search input + 300ms debounce.
+  // Filters by publicId (e.g. "A12345") OR serviceName OR platform. Works
+  // alongside the status filter — both conditions must match.
+  const [searchInput, setSearchInput] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  // MARKETPLACE-13-IMPROVEMENTS #18 — refund/cancel confirmation dialog.
+  // Holds the order currently awaiting user confirmation. `mode` is
+  // "cancel" (non-admin, 60s window) or "refund" (admin only).
+  const [refundTarget, setRefundTarget] = useState<{ order: any; mode: "cancel" | "refund" } | null>(null);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(searchInput.trim());
+      setHistoryPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
 
   // Calculate summary (always reflects ALL orders, not the filtered view)
   const totalSpent = orders.reduce((s: number, o: any) => s + o.totalPrice, 0);
@@ -1388,10 +2304,24 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
   ).length;
 
   // Filter by status (client-side). "all" = no filter.
+  // MARKETPLACE-13-IMPROVEMENTS #17 — also apply the search filter so both
+  // conditions narrow the result set together.
   const filteredOrders = useMemo(() => {
-    if (statusFilter === "all") return orders;
-    return orders.filter((o: any) => o.status === statusFilter);
-  }, [orders, statusFilter]);
+    let result = orders;
+    if (statusFilter !== "all") {
+      result = result.filter((o: any) => o.status === statusFilter);
+    }
+    if (debouncedSearch) {
+      const q = debouncedSearch.toLowerCase();
+      result = result.filter(
+        (o: any) =>
+          (o.publicId ?? "").toLowerCase().includes(q) ||
+          (o.serviceName ?? "").toLowerCase().includes(q) ||
+          (o.platform ?? "").toLowerCase().includes(q),
+      );
+    }
+    return result;
+  }, [orders, statusFilter, debouncedSearch]);
 
   // Reset to page 1 when the status filter changes (or when the underlying
   // orders array shrinks). Avoids landing on a now-empty page.
@@ -1415,6 +2345,74 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
   // Pagination handlers
   const goToPrevPage = () => setHistoryPage((p) => Math.max(1, p - 1));
   const goToNextPage = () => setHistoryPage((p) => Math.min(totalPages, p + 1));
+
+  // MARKETPLACE-13-IMPROVEMENTS #11 — CSV export. Generates a CSV from the
+  // current filteredOrders array (so any active status/search filter is
+  // respected) and triggers a download. No external libs — vanilla Blob +
+  // URL.createObjectURL + a temporary <a> element.
+  const exportCsv = () => {
+    if (filteredOrders.length === 0) return;
+    const header = ["Order ID", "Service", "Platform", "Quantity", "Total Price", "Status", "Date"];
+    const escapeCell = (v: any) => {
+      const s = String(v ?? "");
+      // Quote per RFC 4180: wrap in quotes + escape embedded quotes by doubling.
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const rows = filteredOrders.map((o: any) =>
+      [
+        o.publicId,
+        o.serviceName,
+        o.platform,
+        o.quantity,
+        o.totalPrice.toFixed(2),
+        o.status,
+        new Date(o.createdAt).toISOString(),
+      ]
+        .map(escapeCell)
+        .join(","),
+    );
+    const csv = [header.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const today = new Date().toISOString().slice(0, 10);
+    a.download = `novsmm-orders-${today}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast({
+      title: "Export ready",
+      description: `Downloaded ${filteredOrders.length} order${filteredOrders.length > 1 ? "s" : ""} as CSV.`,
+    });
+  };
+
+  // MARKETPLACE-13-IMPROVEMENTS #18 — determine whether to show the
+  // Cancel/Refund affordance for a given order. Non-admins see "Cancel"
+  // only within 60s of placement (and only for pending/processing orders).
+  // Admins see "Refund" on completed orders.
+  const canCancel = (o: any) => {
+    if (isAdmin) return false; // admins use the refund path instead
+    if (o.status !== "pending" && o.status !== "processing") return false;
+    return Date.now() - new Date(o.createdAt).getTime() <= ORDER_CANCEL_WINDOW_MS;
+  };
+  const canRefund = (o: any) => isAdmin && o.status === "completed";
+
+  const handleConfirmRefund = async () => {
+    if (!refundTarget) return;
+    const { order, mode } = refundTarget;
+    try {
+      if (mode === "cancel") {
+        await cancelOrder.mutateAsync({ orderId: order.id });
+      } else {
+        await adminRefund.mutateAsync(order.id);
+      }
+      setRefundTarget(null);
+    } catch {
+      // Error already handled by onError callback in the hooks (toast shown).
+    }
+  };
 
   return (
     <div className="flex flex-col gap-4">
@@ -1445,35 +2443,76 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
                 Click "Repeat" to re-order the same service with the same quantity.
               </div>
             </div>
-            {/* Status filter dropdown — same style as the sort dropdown in BuyTab */}
-            <div className="relative shrink-0">
-              <ArrowUpDown
-                className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden="true"
-              />
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                aria-label="Filter orders by status"
-                className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
+            <div className="flex flex-wrap items-center gap-2">
+              {/* MARKETPLACE-13-IMPROVEMENTS #17 — search box. 300ms debounce. */}
+              <div className="relative">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+                <input
+                  type="search"
+                  value={searchInput}
+                  onChange={(e) => setSearchInput(e.target.value)}
+                  placeholder="Search by ID or service…"
+                  aria-label="Search orders by ID or service name"
+                  className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background pl-9 pr-9 text-sm text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[220px]"
+                />
+                {searchInput && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchInput("")}
+                    aria-label="Clear search"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+              {/* Status filter dropdown — same style as the sort dropdown in BuyTab */}
+              <div className="relative shrink-0">
+                <ArrowUpDown
+                  className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  aria-label="Filter orders by status"
+                  className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
+                >
+                  {HISTORY_STATUS_OPTIONS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronRight
+                  className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground"
+                  aria-hidden="true"
+                />
+              </div>
+              {/* MARKETPLACE-13-IMPROVEMENTS #11 — Export CSV button.
+                  Disabled when no orders exist (so the empty state can't
+                  trigger a download). */}
+              <button
+                type="button"
+                onClick={exportCsv}
+                disabled={orders.length === 0}
+                aria-label="Export orders as CSV"
+                className="inline-flex h-[42px] items-center gap-1.5 rounded-xl border border-border bg-background px-3 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-40 btn-press"
               >
-                {HISTORY_STATUS_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>
-                    {o.label}
-                  </option>
-                ))}
-              </select>
-              <ChevronRight
-                className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 rotate-90 text-muted-foreground"
-                aria-hidden="true"
-              />
+                <Download className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Export CSV</span>
+              </button>
             </div>
           </div>
 
-          {/* Filter count line — only visible when a filter is active */}
-          {statusFilter !== "all" && (
+          {/* Filter count line — visible when any filter (status or search) is active */}
+          {(statusFilter !== "all" || debouncedSearch !== "") && (
             <div className="border-b border-border/60 bg-muted/20 px-5 py-2 text-xs text-muted-foreground">
-              Showing {totalFiltered.toLocaleString()} of {orders.length.toLocaleString()} orders
+              {debouncedSearch !== "" ? (
+                <>Showing {totalFiltered.toLocaleString()} of {orders.length.toLocaleString()} orders matching &ldquo;{debouncedSearch}&rdquo;</>
+              ) : (
+                <>Showing {totalFiltered.toLocaleString()} of {orders.length.toLocaleString()} orders</>
+              )}
             </div>
           )}
 
@@ -1492,7 +2531,7 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
               </thead>
               <tbody className="divide-y divide-border/60">
                 {pagedOrders.map((o: any) => (
-                  <tr key={o.id} className="transition-colors hover:bg-muted/30">
+                  <tr key={o.id} className="table-row-hover transition-colors">
                     <td className="whitespace-nowrap px-4 py-3">
                       <span className="font-mono text-xs font-medium text-foreground">{o.publicId}</span>
                     </td>
@@ -1518,14 +2557,43 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
                       {new Date(o.createdAt).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <button
-                        onClick={() => repeatOrder.mutate({ orderId: o.id })}
-                        disabled={repeatOrder.isPending}
-                        className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50 btn-press"
-                      >
-                        <Repeat2 className="h-3.5 w-3.5" />
-                        Repeat
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => repeatOrder.mutate({ orderId: o.id })}
+                          disabled={repeatOrder.isPending}
+                          className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50 btn-press"
+                        >
+                          <Repeat2 className="h-3.5 w-3.5" />
+                          Repeat
+                        </button>
+                        {/* MARKETPLACE-13-IMPROVEMENTS #18 — Cancel (non-admin,
+                            within 60s of placement). Mirrors the existing
+                            Repeat button styling but in red to signal
+                            destructive action. */}
+                        {canCancel(o) && (
+                          <button
+                            onClick={() => setRefundTarget({ order: o, mode: "cancel" })}
+                            disabled={cancelOrder.isPending}
+                            aria-label={`Cancel order ${o.publicId}`}
+                            className="inline-flex items-center gap-1 rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-50 btn-press"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                            Cancel
+                          </button>
+                        )}
+                        {/* Admin path — Refund on completed orders. */}
+                        {canRefund(o) && (
+                          <button
+                            onClick={() => setRefundTarget({ order: o, mode: "refund" })}
+                            disabled={adminRefund.isPending}
+                            aria-label={`Refund order ${o.publicId}`}
+                            className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50 btn-press"
+                          >
+                            <RotateCcw className="h-3.5 w-3.5" />
+                            Refund
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -1534,7 +2602,9 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
                     <td colSpan={7} className="px-4 py-12 text-center text-sm text-muted-foreground">
                       {orders.length === 0
                         ? "No purchases yet. Browse the Services tab to place your first order."
-                        : "No orders match the selected status."}
+                        : debouncedSearch !== ""
+                          ? `No orders match "${debouncedSearch}".`
+                          : "No orders match the selected status."}
                     </td>
                   </tr>
                 )}
@@ -1572,6 +2642,115 @@ function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
           )}
         </div>
       </Reveal>
+
+      {/* MARKETPLACE-13-IMPROVEMENTS #18 — Refund / Cancel confirmation.
+          A small modal-style dialog that summarizes what will happen and
+          asks the user to confirm. Uses the same modal-3d-enter entrance. */}
+      {refundTarget && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+          onClick={() => !cancelOrder.isPending && !adminRefund.isPending && setRefundTarget(null)}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="modal-3d-enter relative w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+          >
+            <button
+              onClick={() => setRefundTarget(null)}
+              disabled={cancelOrder.isPending || adminRefund.isPending}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground disabled:opacity-40"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-3">
+              <span
+                className={cn(
+                  "flex h-11 w-11 items-center justify-center rounded-xl",
+                  refundTarget.mode === "cancel"
+                    ? "bg-red-500/10 text-red-600"
+                    : "bg-amber-500/10 text-amber-600",
+                )}
+              >
+                {refundTarget.mode === "cancel" ? (
+                  <X className="h-5 w-5" />
+                ) : (
+                  <RotateCcw className="h-5 w-5" />
+                )}
+              </span>
+              <div>
+                <h3 className="text-base font-semibold text-foreground">
+                  {refundTarget.mode === "cancel" ? "Cancel order" : "Refund order"}
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  #{refundTarget.order.publicId} · {refundTarget.order.serviceName}
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-foreground/90">
+              {refundTarget.mode === "cancel" ? (
+                <>
+                  Cancel order <span className="font-mono">#{refundTarget.order.publicId}</span>?{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatPrice(refundTarget.order.totalPrice, currency)}
+                  </span>{" "}
+                  will be returned to your balance.
+                </>
+              ) : (
+                <>
+                  Refund order <span className="font-mono">#{refundTarget.order.publicId}</span>?{" "}
+                  <span className="font-semibold tabular-nums">
+                    {formatPrice(refundTarget.order.totalPrice, currency)}
+                  </span>{" "}
+                  will be returned to the buyer&rsquo;s balance. This action is recorded in the audit log.
+                </>
+              )}
+            </p>
+            <div className="mt-5 flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setRefundTarget(null)}
+                disabled={cancelOrder.isPending || adminRefund.isPending}
+                className="rounded-xl border border-border px-4 py-2 text-sm font-medium text-foreground hover:bg-muted transition-colors disabled:opacity-40 btn-press"
+              >
+                Keep order
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmRefund}
+                disabled={cancelOrder.isPending || adminRefund.isPending}
+                className={cn(
+                  "inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-sm font-medium text-white transition-colors disabled:opacity-60 btn-press",
+                  refundTarget.mode === "cancel"
+                    ? "bg-red-600 hover:bg-red-700"
+                    : "bg-amber-600 hover:bg-amber-700",
+                )}
+              >
+                {(refundTarget.mode === "cancel" ? cancelOrder.isPending : adminRefund.isPending) ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Processing…
+                  </>
+                ) : (
+                  <>
+                    {refundTarget.mode === "cancel" ? (
+                      <>
+                        <X className="h-4 w-4" />
+                        Cancel &amp; refund
+                      </>
+                    ) : (
+                      <>
+                        <RotateCcw className="h-4 w-4" />
+                        Issue refund
+                      </>
+                    )}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1620,12 +2799,16 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
 
 // ─────────── Sell Tab (Offers) ───────────
 function SellTab() {
-  const { data: offersData } = useOffers();
+  // MARKETPLACE-13-IMPROVEMENTS #16 — pass refetchInterval so the offers
+  // query auto-refreshes every 30s while SellTab is mounted (and only then).
+  const { data: offersData } = useOffers(SALE_POLL_INTERVAL);
   const { data: servicesData } = useAllServices();
   const createOffer = useCreateOffer();
   const updateOffer = useUpdateOffer();
+  const updateOfferStatus = useUpdateOfferStatus();
   const deleteOffer = useDeleteOffer();
   const { data: sessionData } = useSession();
+  const { toast } = useToast();
   const currency = (sessionData?.user as any)?.currency ?? "USD";
   const [showPublish, setShowPublish] = useState(false);
   // editingOffer is set when the user clicks "Edit" — when non-null, the modal
@@ -1635,6 +2818,61 @@ function SellTab() {
   const [price, setPrice] = useState(0);
   const offers = offersData?.offers ?? [];
   const services = servicesData?.services ?? [];
+
+  // MARKETPLACE-13-IMPROVEMENTS #14 — Bulk publish modal state.
+  const [showBulkPublish, setShowBulkPublish] = useState(false);
+  // MARKETPLACE-13-IMPROVEMENTS #13 — Stats modal state. Holds the offer
+  // currently being inspected (or null when the modal is closed).
+  const [statsOffer, setStatsOffer] = useState<any | null>(null);
+
+  // MARKETPLACE-13-IMPROVEMENTS #16 — Sale notification. We track the
+  // previous `totalSales` value with a ref so we can detect increases
+  // between polls. The effect watches offersData.totalSales and fires a
+  // toast on increase; the refetchInterval on useOffers above drives the
+  // 30s polling while SellTab is mounted (and only while it's mounted).
+  const prevTotalSalesRef = useRef<number | null>(null);
+  const prevOffersSalesMapRef = useRef<Record<string, number>>({});
+  useEffect(() => {
+    // Skip the very first response — we don't want to toast on mount.
+    if (prevTotalSalesRef.current === null) {
+      prevTotalSalesRef.current = offersData?.totalSales ?? 0;
+      prevOffersSalesMapRef.current = Object.fromEntries(
+        offers.map((o: any) => [o.id, o.sales]),
+      );
+      return;
+    }
+    const newTotal = offersData?.totalSales ?? 0;
+    if (newTotal > (prevTotalSalesRef.current ?? 0)) {
+      // Find which offer(s) gained a sale to attribute the toast.
+      const gained = offers.filter((o: any) => {
+        const prev = prevOffersSalesMapRef.current[o.id] ?? 0;
+        return o.sales > prev;
+      });
+      const delta = newTotal - (prevTotalSalesRef.current ?? 0);
+      if (gained.length > 0) {
+        // Sum the new revenue from the most-recent sale on each gained offer.
+        const revenueGain = gained.reduce((sum: number, o: any) => {
+          const prevSales = prevOffersSalesMapRef.current[o.id] ?? 0;
+          const newSales = o.sales - prevSales;
+          return sum + newSales * (o.price - o.cost);
+        }, 0);
+        toast({
+          title: "🎉 You made a sale!",
+          description: `+${formatPrice(revenueGain, currency)} from ${gained[0].service?.name ?? "your offer"}${gained.length > 1 ? ` and ${gained.length - 1} other${gained.length > 2 ? "s" : ""}` : ""}.`,
+        });
+      } else {
+        toast({
+          title: "🎉 You made a sale!",
+          description: `+${delta} new sale${delta > 1 ? "s" : ""} recorded.`,
+        });
+      }
+    }
+    prevTotalSalesRef.current = newTotal;
+    prevOffersSalesMapRef.current = Object.fromEntries(
+      offers.map((o: any) => [o.id, o.sales]),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offersData?.totalSales]);
 
   const isEditing = !!editingOffer;
   const isSubmitting = createOffer.isPending || updateOffer.isPending;
@@ -1672,7 +2910,15 @@ function SellTab() {
     }
   };
 
+  // MARKETPLACE-13-IMPROVEMENTS #12 — pause / activate. Calls the dedicated
+  // useUpdateOfferStatus hook which PATCHes { id, status } to /api/offers.
+  const handleTogglePause = (offer: any) => {
+    const next = offer.status === "paused" ? "active" : "paused";
+    updateOfferStatus.mutate({ id: offer.id, status: next });
+  };
+
   const totalEarnings = offersData?.totalEarnings ?? 0;
+  const activeOfferCount = offers.filter((o: any) => o.status !== "paused").length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -1680,7 +2926,7 @@ function SellTab() {
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-2xl border border-border/60 bg-background p-4">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Active offers</div>
-          <div className="mt-1 text-2xl font-semibold tabular-nums">{offers.length}</div>
+          <div className="mt-1 text-2xl font-semibold tabular-nums">{activeOfferCount}</div>
         </div>
         <div className="rounded-2xl border border-border/60 bg-background p-4">
           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total sales</div>
@@ -1695,8 +2941,17 @@ function SellTab() {
       {/* Earnings chart — lightweight SVG, no recharts dependency */}
       <SellEarningsChart totalEarnings={totalEarnings} currency={currency} />
 
-      {/* Publish button */}
-      <div className="flex justify-end">
+      {/* Publish buttons — primary "Publish offer" + secondary "Bulk publish" */}
+      <div className="flex flex-wrap justify-end gap-2">
+        <button
+          onClick={() => {
+            resetModalState();
+            setShowBulkPublish(true);
+          }}
+          className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted btn-press"
+        >
+          <Layers className="h-3.5 w-3.5" /> Bulk publish
+        </button>
         <button
           onClick={() => {
             resetModalState();
@@ -1723,39 +2978,93 @@ function SellTab() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {offers.map((o: any) => (
-                <tr key={o.id} className="transition-colors hover:bg-muted/30">
-                  <td className="px-4 py-3">
-                    <div className="font-medium text-foreground">{o.service?.name ?? "—"}</div>
-                    <div className="text-[10px] text-muted-foreground">{o.service?.platform}</div>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPrice(o.cost, currency)}</td>
-                  <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">{formatPrice(o.price, currency)}</td>
-                  <td className="px-4 py-3 text-right tabular-nums">
-                    <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", o.margin > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{o.margin.toFixed(0)}%</span>
-                  </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.sales}</td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1.5">
-                      <button
-                        onClick={() => openEditModal(o)}
-                        aria-label={`Edit offer for ${o.service?.name ?? "service"}`}
-                        className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 btn-press"
-                      >
-                        <Pencil className="h-3 w-3" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => deleteOffer.mutate(o.id)}
-                        aria-label={`Remove offer for ${o.service?.name ?? "service"}`}
-                        className="rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 btn-press"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {offers.map((o: any) => {
+                const isPaused = o.status === "paused";
+                return (
+                  <tr
+                    key={o.id}
+                    className={cn(
+                      "table-row-hover transition-colors",
+                      isPaused && "opacity-50",
+                    )}
+                  >
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium text-foreground">{o.service?.name ?? "—"}</div>
+                          <div className="text-[10px] text-muted-foreground">{o.service?.platform}</div>
+                        </div>
+                        {/* MARKETPLACE-13-IMPROVEMENTS #12 — Paused badge. */}
+                        {isPaused && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                            <Pause className="h-2.5 w-2.5" />
+                            Paused
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPrice(o.cost, currency)}</td>
+                    <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">{formatPrice(o.price, currency)}</td>
+                    <td className="px-4 py-3 text-right tabular-nums">
+                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", o.margin > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{o.margin.toFixed(0)}%</span>
+                    </td>
+                    <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.sales}</td>
+                    <td className="px-4 py-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        {/* MARKETPLACE-13-IMPROVEMENTS #13 — Stats button. */}
+                        <button
+                          onClick={() => setStatsOffer(o)}
+                          aria-label={`View stats for ${o.service?.name ?? "service"}`}
+                          className="inline-flex items-center gap-1 rounded-lg bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-700 transition-colors hover:bg-violet-500/20 btn-press"
+                        >
+                          <BarChart3 className="h-3 w-3" />
+                          <span className="hidden sm:inline">Stats</span>
+                        </button>
+                        {/* MARKETPLACE-13-IMPROVEMENTS #12 — Pause / Activate. */}
+                        <button
+                          onClick={() => handleTogglePause(o)}
+                          disabled={updateOfferStatus.isPending}
+                          aria-label={isPaused ? `Activate offer for ${o.service?.name ?? "service"}` : `Pause offer for ${o.service?.name ?? "service"}`}
+                          aria-pressed={isPaused}
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors disabled:opacity-50 btn-press",
+                            isPaused
+                              ? "bg-emerald-500/10 text-emerald-700 hover:bg-emerald-500/20"
+                              : "bg-amber-500/10 text-amber-700 hover:bg-amber-500/20",
+                          )}
+                        >
+                          {isPaused ? (
+                            <>
+                              <Play className="h-3 w-3" />
+                              <span className="hidden sm:inline">Activate</span>
+                            </>
+                          ) : (
+                            <>
+                              <Pause className="h-3 w-3" />
+                              <span className="hidden sm:inline">Pause</span>
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => openEditModal(o)}
+                          aria-label={`Edit offer for ${o.service?.name ?? "service"}`}
+                          className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 btn-press"
+                        >
+                          <Pencil className="h-3 w-3" />
+                          <span className="hidden sm:inline">Edit</span>
+                        </button>
+                        <button
+                          onClick={() => deleteOffer.mutate(o.id)}
+                          aria-label={`Remove offer for ${o.service?.name ?? "service"}`}
+                          className="rounded-lg bg-red-500/10 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-500/20 btn-press"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
               {offers.length === 0 && (
                 <tr><td colSpan={6} className="px-4 py-12 text-center text-sm text-muted-foreground">No offers published yet. Click "Publish offer" to start selling.</td></tr>
               )}
@@ -1814,6 +3123,41 @@ function SellTab() {
                 <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Your price per 1000 (USD)</span>
                 <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} step="0.01" min="0" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none" />
               </label>
+              {/* MARKETPLACE-13-IMPROVEMENTS #15 — Suggested price hint + Use
+                  suggested button + competitor (NOVSMM catalog) price. The
+                  suggestion is cost × 2.5 (150% markup), matching the
+                  NOVSMM default resale price calculation. */}
+              {(() => {
+                const svc = services.find((s: any) => s.id === selectedService);
+                const cost = svc?.cost ?? editingOffer?.cost ?? 0;
+                if (!cost) return null;
+                const suggested = cost * 2.5;
+                return (
+                  <div className="rounded-xl bg-primary/5 px-4 py-3 text-xs">
+                    <div className="flex items-center gap-1.5 text-foreground">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-medium">Suggested price:</span>
+                      <span className="font-semibold tabular-nums">${suggested.toFixed(2)}</span>
+                      <span className="text-muted-foreground">(150% markup)</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setPrice(Number(suggested.toFixed(2)))}
+                      className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[10px] font-medium text-primary-foreground transition-colors hover:nov-shadow-blue btn-press"
+                    >
+                      <ArrowRight className="h-3 w-3" />
+                      Use suggested
+                    </button>
+                    <div className="mt-2 border-t border-border/60 pt-2 text-muted-foreground">
+                      NOVSMM price:{" "}
+                      <span className="font-semibold tabular-nums text-foreground">
+                        ${svc?.price?.toFixed(2) ?? "—"}
+                      </span>{" "}
+                      <span className="text-[10px]">(catalog competitor price)</span>
+                    </div>
+                  </div>
+                );
+              })()}
               {selectedService && price > 0 && (() => {
                 const svc = services.find((s: any) => s.id === selectedService);
                 if (!svc) return null;
@@ -1845,6 +3189,375 @@ function SellTab() {
           </div>
         </div>
       )}
+
+      {/* MARKETPLACE-13-IMPROVEMENTS #14 — Bulk publish modal. */}
+      {showBulkPublish && (
+        <BulkPublishModal
+          services={services}
+          currency={currency}
+          onClose={() => setShowBulkPublish(false)}
+        />
+      )}
+
+      {/* MARKETPLACE-13-IMPROVEMENTS #13 — Per-offer stats modal. */}
+      {statsOffer && (
+        <OfferStatsModal
+          offer={statsOffer}
+          currency={currency}
+          onClose={() => setStatsOffer(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ─────────── Bulk Publish Modal (MARKETPLACE-13-IMPROVEMENTS #14) ───────────
+// Lets a seller publish offers for many services at once with a uniform
+// markup. Multi-select with search; preview list shows calculated prices
+// before submission. Uses useCreateOffer in Promise.all so all creations
+// fire in parallel (subject to the API's own rate limiting).
+function BulkPublishModal({
+  services,
+  currency,
+  onClose,
+}: {
+  services: any[];
+  currency: string;
+  onClose: () => void;
+}) {
+  const createOffer = useCreateOffer();
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [markup, setMarkup] = useState(150); // percent, default 150%
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return services;
+    return services.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        s.platform.toLowerCase().includes(q),
+    );
+  }, [services, search]);
+
+  const toggle = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const preview = useMemo(
+    () =>
+      services
+        .filter((s) => selectedIds.has(s.id))
+        .map((s) => ({
+          ...s,
+          calculatedPrice: Number((s.cost * (1 + markup / 100)).toFixed(2)),
+        })),
+    [services, selectedIds, markup],
+  );
+
+  const handlePublishAll = async () => {
+    if (preview.length === 0) return;
+    setProgress({ done: 0, total: preview.length });
+    let succeeded = 0;
+    let failed = 0;
+    // Sequential with progress tracking — Promise.all would hide per-item
+    // errors behind the first rejection. Sequential gives clean progress UI.
+    for (let i = 0; i < preview.length; i++) {
+      const item = preview[i];
+      try {
+        await createOffer.mutateAsync({
+          serviceId: item.id,
+          price: item.calculatedPrice,
+        });
+        succeeded++;
+      } catch {
+        // Error toast is fired by the hook's onError per call; we just count.
+        failed++;
+      }
+      setProgress({ done: i + 1, total: preview.length });
+    }
+    setProgress(null);
+    setSelectedIds(new Set());
+    toast({
+      title: "Bulk publish complete",
+      description: `${succeeded} offer${succeeded !== 1 ? "s" : ""} published${failed > 0 ? ` · ${failed} failed` : ""}.`,
+    });
+    if (succeeded > 0) onClose();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="modal-3d-enter relative max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+      >
+        <button
+          onClick={onClose}
+          className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <Layers className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Bulk publish offers</h2>
+            <p className="text-xs text-muted-foreground">
+              Pick multiple services and set a single markup — we&rsquo;ll create offers for each.
+            </p>
+          </div>
+        </div>
+
+        {/* Markup input */}
+        <div className="mt-4 flex flex-wrap items-end gap-3">
+          <label className="block">
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Markup (%)</span>
+            <input
+              type="number"
+              value={markup}
+              onChange={(e) => setMarkup(Math.max(0, Number(e.target.value) || 0))}
+              min={0}
+              step={10}
+              className="h-11 w-32 rounded-xl border border-border bg-background px-3 text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            />
+          </label>
+          <div className="text-xs text-muted-foreground">
+            <span className="font-semibold text-foreground tabular-nums">{selectedIds.size}</span> selected ·{" "}
+            formula: <span className="font-mono text-foreground">cost × (1 + {markup / 100})</span>
+          </div>
+        </div>
+
+        {/* Search + multi-select list */}
+        <div className="mt-4 flex items-center gap-2 rounded-xl border border-border bg-background px-3 py-2 text-sm">
+          <Search className="h-4 w-4 text-muted-foreground" />
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search services to publish…"
+            aria-label="Search services for bulk publish"
+            className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+          />
+          {selectedIds.size > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedIds(new Set())}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear ({selectedIds.size})
+            </button>
+          )}
+        </div>
+
+        <div className="mt-3 max-h-72 overflow-y-auto nov-scroll rounded-xl border border-border/60">
+          {filtered.length === 0 ? (
+            <div className="px-4 py-8 text-center text-xs text-muted-foreground">
+              No services match &ldquo;{search}&rdquo;.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {filtered.map((s) => {
+                const checked = selectedIds.has(s.id);
+                const calc = Number((s.cost * (1 + markup / 100)).toFixed(2));
+                return (
+                  <li key={s.id}>
+                    <label
+                      className={cn(
+                        "flex cursor-pointer items-center gap-3 px-4 py-2.5 transition-colors hover:bg-muted/40",
+                        checked && "bg-primary/5",
+                      )}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => toggle(s.id)}
+                        className="h-4 w-4 cursor-pointer accent-primary"
+                      />
+                      <PlatformLogo platform={s.platform} size={20} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium text-foreground">{s.name}</div>
+                        <div className="text-[10px] text-muted-foreground">
+                          {s.platform} · cost ${s.cost.toFixed(2)}/1k
+                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Price</div>
+                        <div className="text-sm font-semibold tabular-nums text-emerald-600">
+                          {formatPrice(calc, currency)}
+                        </div>
+                      </div>
+                    </label>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Selected preview */}
+        {preview.length > 0 && (
+          <div className="mt-3 rounded-xl bg-muted/30 p-3 text-xs">
+            <div className="font-medium text-foreground">Preview ({preview.length})</div>
+            <div className="mt-1.5 flex flex-wrap gap-1.5">
+              {preview.slice(0, 8).map((p) => (
+                <span
+                  key={p.id}
+                  className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground"
+                >
+                  {getPlatformEmoji(p.platform)} {p.name.length > 18 ? p.name.slice(0, 18) + "…" : p.name} · ${p.calculatedPrice.toFixed(2)}
+                </span>
+              ))}
+              {preview.length > 8 && (
+                <span className="text-[10px] text-muted-foreground">+{preview.length - 8} more</span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Publish button with progress */}
+        <button
+          onClick={handlePublishAll}
+          disabled={preview.length === 0 || createOffer.isPending || progress !== null}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60 btn-press"
+        >
+          {progress ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Publishing {progress.done}/{progress.total}…
+            </>
+          ) : createOffer.isPending ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Publishing…
+            </>
+          ) : (
+            <>
+              <Plus className="h-4 w-4" />
+              Publish {preview.length} offer{preview.length !== 1 ? "s" : ""}
+            </>
+          )}
+        </button>
+        <button onClick={onClose} className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground">
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────── Offer Stats Modal (MARKETPLACE-13-IMPROVEMENTS #13) ───────────
+// Small modal showing per-offer sales metrics. Uses fields already present
+// on the offer object (sales, earnings, margin, cost, price, createdAt,
+// status). Revenue falls back to sales × (price − cost) when earnings is 0.
+function OfferStatsModal({
+  offer,
+  currency,
+  onClose,
+}: {
+  offer: any;
+  currency: string;
+  onClose: () => void;
+}) {
+  const sales: number = offer.sales ?? 0;
+  const marginPerSale = Math.max(0, (offer.price ?? 0) - (offer.cost ?? 0));
+  // Prefer the server-tracked earnings column; fall back to a calculated
+  // estimate when it's 0 (e.g. legacy offers without earnings tracking).
+  const revenue =
+    offer.earnings && offer.earnings > 0 ? offer.earnings : sales * marginPerSale;
+  const isPaused = offer.status === "paused";
+
+  const stats: { label: string; value: string; cls?: string }[] = [
+    { label: "Total sales", value: sales.toLocaleString() },
+    {
+      label: "Total revenue",
+      value: formatPrice(revenue, currency),
+      cls: "text-emerald-600",
+    },
+    {
+      label: "Margin per sale",
+      value: formatPrice(marginPerSale, currency),
+      cls: "text-foreground",
+    },
+    {
+      label: "Date published",
+      value: new Date(offer.createdAt).toLocaleDateString(),
+    },
+    {
+      label: "Status",
+      value: isPaused ? "Paused" : "Active",
+      cls: isPaused ? "text-amber-700" : "text-emerald-700",
+    },
+  ];
+
+  return (
+    <div
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="modal-3d-enter relative w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+      >
+        <button
+          onClick={onClose}
+          className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+          aria-label="Close"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <div className="flex items-center gap-3">
+          <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-violet-500/10 text-violet-600">
+            <BarChart3 className="h-6 w-6" />
+          </span>
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Offer stats</h2>
+            <p className="text-xs text-muted-foreground">
+              {offer.service?.name ?? "Service"} · {offer.service?.platform ?? "—"}
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 flex flex-col gap-2">
+          {stats.map((s) => (
+            <div
+              key={s.label}
+              className="flex items-center justify-between rounded-xl border border-border/60 px-4 py-3 text-sm"
+            >
+              <span className="text-muted-foreground">{s.label}</span>
+              <span className={cn("font-semibold tabular-nums", s.cls ?? "text-foreground")}>
+                {s.value}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 rounded-xl bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground">
+          <span className="font-medium text-foreground">Cost / Price:</span>{" "}
+          {formatPrice(offer.cost, currency)} →{" "}
+          <span className="font-semibold text-emerald-600">{formatPrice(offer.price, currency)}</span>{" "}
+          ({offer.margin?.toFixed(0) ?? 0}% margin)
+        </div>
+
+        <button
+          onClick={onClose}
+          className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue btn-press"
+        >
+          Close
+        </button>
+      </div>
     </div>
   );
 }
