@@ -10,6 +10,7 @@ import { useApp, type DashboardTab } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
 import { StatusPage } from "./status-page";
 import { LegalPages, type LegalPageType } from "./legal-pages";
+import { DashReveal } from "./dash-reveal";
 
 type FooterLink = {
   label: string;
@@ -156,7 +157,7 @@ export function Footer() {
             e.preventDefault();
             handleLink(link);
           }}
-          className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+          className="footer-link-3d text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
           {link.label}
         </a>
@@ -166,7 +167,7 @@ export function Footer() {
       <button
         type="button"
         onClick={() => handleLink(link)}
-        className="text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
+        className="footer-link-3d text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
         {link.label}
       </button>
@@ -233,7 +234,7 @@ export function Footer() {
                       ?.scrollIntoView({ behavior: "smooth", block: "start" });
                   }
                 }}
-                className="inline-flex"
+                className="footer-logo-float inline-flex"
                 aria-label="NOVSMM home"
               >
                 <Logo />
@@ -245,7 +246,7 @@ export function Footer() {
               <button
                 type="button"
                 onClick={() => setStatusOpen(true)}
-                className="mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15"
+                className="status-badge-glow mt-5 inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700 transition-colors hover:bg-emerald-500/15"
               >
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -255,17 +256,23 @@ export function Footer() {
               </button>
             </div>
 
-            {COLUMNS.map((c) => (
-              <div key={c.title}>
-                <div className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
-                  {c.title}
+            {COLUMNS.map((c, idx) => (
+              <DashReveal
+                key={c.title}
+                className="footer-col-reveal"
+                delay={0.05 * (idx + 1)}
+              >
+                <div>
+                  <div className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
+                    {c.title}
+                  </div>
+                  <ul className="mt-4 flex flex-col gap-2.5">
+                    {c.links.map((l) => (
+                      <li key={l.label}>{renderLink(l)}</li>
+                    ))}
+                  </ul>
                 </div>
-                <ul className="mt-4 flex flex-col gap-2.5">
-                  {c.links.map((l) => (
-                    <li key={l.label}>{renderLink(l)}</li>
-                  ))}
-                </ul>
-              </div>
+              </DashReveal>
             ))}
           </div>
 

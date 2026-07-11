@@ -167,13 +167,13 @@ export function ChangelogClient() {
 
                 {/* Timeline dot */}
                 <div
-                  className={`absolute left-0 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border ${colorClass}`}
+                  className={`timeline-dot-pulse absolute left-0 top-1.5 flex h-6 w-6 items-center justify-center rounded-full border ${colorClass}`}
                 >
                   <Icon className="h-3 w-3" />
                 </div>
 
                 {/* Content */}
-                <div className="rounded-2xl border border-border bg-background p-5 transition-shadow hover:shadow-md">
+                <div className="timeline-entry-3d rounded-2xl border border-border bg-background p-5 transition-shadow hover:shadow-md">
                   <div className="flex items-center gap-3">
                     <span className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${colorClass}`}>
                       {entry.category}

@@ -11440,3 +11440,29 @@ Stage Summary:
 - Pre-existing deprecation warning ("middleware" file convention → use "proxy") — pre-existing, not introduced by this task; middleware.ts still functions correctly in Next.js 16.2.10.
 - No new npm dependencies added (per task constraint). Used only next/og (built-in), next/font, next/link — all already in stack.
 - No existing functionality broken: lazy section loading, smooth scroll, dashboard SPA routing, WebSocket notifications, NextAuth, all API routes — untouched. Only additive metadata/headers/JSON-LD/404 page.
+
+---
+Task ID: FOOTER-AUTH-DOCS-3D-1
+Agent: full-stack-developer
+Task: 3D motion for footer, auth screens, API docs, changelog, 404
+
+Work Log:
+- Reviewed prior 3D work (LANDING-3D-ENHANCEMENT-1, DASHBOARD-3D-ENHANCEMENT-1) for context
+- Appended ~200 lines of new CSS to globals.css covering: footer links/columns/status badge/logo float, auth card/input/social button, API docs endpoint/method/code block, changelog timeline entry/dot, 404 float/resource cards. Mobile (max-width:768px) disables all 3D. prefers-reduced-motion disables everything.
+- Footer (footer.tsx): imported DashReveal, added `footer-link-3d` to both `<a>` and `<button>` variants in renderLink, wrapped each COLUMNS entry in `<DashReveal className="footer-col-reveal" delay={0.05*(idx+1)}>`, added `status-badge-glow` to the All Systems Operational badge, added `footer-logo-float` to the NOVSMM logo container.
+- Login (login-screen.tsx): added `auth-card-3d` to the max-w-[440px] motion.div, `auth-card-inner` to the rounded-3xl card div, wrapped each `<Field>` in `<div className="auth-input-3d">` (email, password — 2FA field left inside its panel), wrapped each `<SocialButton>` in `<div className="social-btn-3d">`, added `btn-press` to the Sign in button.
+- Register (register-screen.tsx): same pattern — `auth-card-3d` on max-w-[460px] container, `auth-card-inner` on card, `auth-input-3d` wrappers on Full name, Username, Email, Password, Confirm password Fields, `social-btn-3d` wrappers on social buttons, `btn-press` on Create account button.
+- API Docs (api-docs-page.tsx): added `endpoint-card-3d` to each endpoint div, `method-badge-3d` to each method badge span (GET/POST/etc.), `code-block-3d` to all 3 `<pre>` blocks (request body, response, cURL examples), `btn-press` to both copy buttons (auth-header and example command).
+- Changelog (changelog-page.tsx): added `timeline-entry-3d` to each timeline content card, `timeline-dot-pulse` to each timeline dot. No buttons exist on this page so no `btn-press` needed.
+- 404 (not-found.tsx): added `error-404-float` to the 404 gradient text, `btn-press` to both CTA links (Back to home, Explore services), `resource-card-3d` to all 3 resource cards (API docs, FAQ, Get help).
+- Ran `bun run build` — ✓ Compiled successfully in 35.2s, all 109 static pages generated.
+
+Stage Summary:
+- 7 files modified: globals.css, footer.tsx, login-screen.tsx, register-screen.tsx, api-docs-page.tsx, changelog-page.tsx, not-found.tsx
+- All 3D effects are GPU-composited (transform/opacity/box-shadow only)
+- Mobile-first: all 3D disabled at max-width:768px via @media query
+- prefers-reduced-motion: all 3D disabled
+- No new npm dependencies added — pure CSS animations
+- No structural changes to component logic — forms still submit, links still navigate, copy buttons still copy
+- Build passes; dev server runs cleanly on port 3000
+- ESLint has a pre-existing environment issue (TypeError: Class extends value undefined) unrelated to these changes

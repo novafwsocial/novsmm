@@ -174,7 +174,7 @@ export function RegisterScreen() {
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         exit={{ opacity: 0, y: 16, filter: "blur(8px)" }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[460px]"
+        className="auth-card-3d relative w-full max-w-[460px]"
       >
         <button
           onClick={() => setView("landing")}
@@ -184,7 +184,7 @@ export function RegisterScreen() {
           Back to home
         </button>
 
-        <div className="overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-8">
+        <div className="auth-card-inner overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-8">
           <div className="flex flex-col items-center text-center">
             <Logo />
             <h1 className="mt-6 text-2xl font-semibold tracking-tight text-balance">
@@ -199,12 +199,13 @@ export function RegisterScreen() {
             {socialProviders.length > 0 && (
               <div className="flex flex-col gap-2.5">
                 {socialProviders.map((p) => (
-                  <SocialButton
-                    key={p}
-                    provider={p}
-                    onClick={() => handleSocial(p)}
-                    loading={socialLoading === p}
-                  />
+                  <div key={p} className="social-btn-3d">
+                    <SocialButton
+                      provider={p}
+                      onClick={() => handleSocial(p)}
+                      loading={socialLoading === p}
+                    />
+                  </div>
                 ))}
               </div>
             )}
@@ -232,45 +233,51 @@ export function RegisterScreen() {
 
           <form onSubmit={submit} className="flex flex-col gap-4">
             <div className="grid grid-cols-2 gap-3">
+              <div className="auth-input-3d">
+                <Field
+                  label="Full name"
+                  icon={<User className="h-4 w-4" />}
+                  placeholder="Daniela Ríos"
+                  value={form.name}
+                  onChange={update("name")}
+                  valid={nameValid}
+                />
+              </div>
+              <div className="auth-input-3d">
+                <Field
+                  label="Username"
+                  icon={<span className="text-sm font-medium">@</span>}
+                  placeholder="daniela"
+                  value={form.username}
+                  onChange={update("username")}
+                  valid={usernameValid}
+                  error={
+                    form.username.length > 0 && !usernameValid
+                      ? "3+ chars, letters/numbers/_"
+                      : undefined
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="auth-input-3d">
               <Field
-                label="Full name"
-                icon={<User className="h-4 w-4" />}
-                placeholder="Daniela Ríos"
-                value={form.name}
-                onChange={update("name")}
-                valid={nameValid}
-              />
-              <Field
-                label="Username"
-                icon={<span className="text-sm font-medium">@</span>}
-                placeholder="daniela"
-                value={form.username}
-                onChange={update("username")}
-                valid={usernameValid}
+                label="Email"
+                icon={<Mail className="h-4 w-4" />}
+                type="email"
+                placeholder="you@company.com"
+                value={form.email}
+                onChange={update("email")}
+                valid={emailValid}
                 error={
-                  form.username.length > 0 && !usernameValid
-                    ? "3+ chars, letters/numbers/_"
+                  form.email.length > 0 && !emailValid
+                    ? "Enter a valid email address"
                     : undefined
                 }
               />
             </div>
 
-            <Field
-              label="Email"
-              icon={<Mail className="h-4 w-4" />}
-              type="email"
-              placeholder="you@company.com"
-              value={form.email}
-              onChange={update("email")}
-              valid={emailValid}
-              error={
-                form.email.length > 0 && !emailValid
-                  ? "Enter a valid email address"
-                  : undefined
-              }
-            />
-
-            <div>
+            <div className="auth-input-3d">
               <Field
                 label="Password"
                 icon={<Lock className="h-4 w-4" />}
@@ -283,20 +290,22 @@ export function RegisterScreen() {
               <PasswordStrength value={form.password} />
             </div>
 
-            <Field
-              label="Confirm password"
-              icon={<Lock className="h-4 w-4" />}
-              type="password"
-              placeholder="Re-enter password"
-              value={form.confirm}
-              onChange={update("confirm")}
-              valid={confirmValid}
-              error={
-                form.confirm.length > 0 && !confirmValid
-                  ? "Passwords don't match"
-                  : undefined
-              }
-            />
+            <div className="auth-input-3d">
+              <Field
+                label="Confirm password"
+                icon={<Lock className="h-4 w-4" />}
+                type="password"
+                placeholder="Re-enter password"
+                value={form.confirm}
+                onChange={update("confirm")}
+                valid={confirmValid}
+                error={
+                  form.confirm.length > 0 && !confirmValid
+                    ? "Passwords don't match"
+                    : undefined
+                }
+              />
+            </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <SelectField
@@ -326,7 +335,7 @@ export function RegisterScreen() {
                 type="submit"
                 disabled={!canSubmit}
                 className={cn(
-                  "inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium transition-all",
+                  "btn-press inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium transition-all",
                   canSubmit
                     ? "bg-primary text-primary-foreground hover:nov-shadow-blue"
                     : "cursor-not-allowed bg-muted text-muted-foreground"

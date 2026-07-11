@@ -251,7 +251,7 @@ export function LoginScreen() {
         animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
         exit={{ opacity: 0, y: 16, filter: "blur(8px)" }}
         transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="relative w-full max-w-[440px]"
+        className="auth-card-3d relative w-full max-w-[440px]"
       >
         <button
           onClick={() => setView("landing")}
@@ -261,7 +261,7 @@ export function LoginScreen() {
           Back to home
         </button>
 
-        <div className="overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-8">
+        <div className="auth-card-inner overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-8">
           <div className="flex flex-col items-center text-center">
             <Logo />
             <h1 className="mt-6 text-2xl font-semibold tracking-tight text-balance">
@@ -276,12 +276,13 @@ export function LoginScreen() {
           {socialProviders.length > 0 && (
             <div className="mt-7 flex flex-col gap-2.5">
               {socialProviders.map((p) => (
-                <SocialButton
-                  key={p}
-                  provider={p}
-                  onClick={() => handleSocial(p)}
-                  loading={socialLoading === p}
-                />
+                <div key={p} className="social-btn-3d">
+                  <SocialButton
+                    provider={p}
+                    onClick={() => handleSocial(p)}
+                    loading={socialLoading === p}
+                  />
+                </div>
               ))}
             </div>
           )}
@@ -309,26 +310,30 @@ export function LoginScreen() {
           )}
 
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
-            <Field
-              label="Email or username"
-              icon={<Mail className="h-4 w-4" />}
-              type="email"
-              autoComplete="email"
-              placeholder="you@company.com"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              valid={emailValid && email.length > 0}
-            />
-            <Field
-              label="Password"
-              icon={<Lock className="h-4 w-4" />}
-              type="password"
-              autoComplete="current-password"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              valid={pwValid && password.length > 0}
-            />
+            <div className="auth-input-3d">
+              <Field
+                label="Email or username"
+                icon={<Mail className="h-4 w-4" />}
+                type="email"
+                autoComplete="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                valid={emailValid && email.length > 0}
+              />
+            </div>
+            <div className="auth-input-3d">
+              <Field
+                label="Password"
+                icon={<Lock className="h-4 w-4" />}
+                type="password"
+                autoComplete="current-password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                valid={pwValid && password.length > 0}
+              />
+            </div>
 
             {needs2FA && (
               <motion.div
@@ -403,7 +408,7 @@ export function LoginScreen() {
               <button
                 type="submit"
                 disabled={loading || (needs2FA && !totpValid)}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
+                className="btn-press inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue disabled:opacity-60"
               >
                 {loading ? (
                   <>

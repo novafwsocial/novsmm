@@ -30,7 +30,7 @@ export default function NotFound() {
         {/* 404 mark — large, branded */}
         <p
           aria-hidden
-          className="select-none text-[clamp(6rem,18vw,12rem)] font-semibold leading-none tracking-tighter nov-text-gradient"
+          className="error-404-float select-none text-[clamp(6rem,18vw,12rem)] font-semibold leading-none tracking-tighter nov-text-gradient"
         >
           404
         </p>
@@ -51,14 +51,14 @@ export default function NotFound() {
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
           <Link
             href="/"
-            className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="btn-press inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <ArrowLeft className="h-4 w-4" />
             Back to home
           </Link>
           <Link
             href="/#services"
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-6 py-3 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            className="btn-press inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-6 py-3 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
             <Compass className="h-4 w-4" />
             Explore services
@@ -69,7 +69,7 @@ export default function NotFound() {
         <div className="mt-12 grid gap-3 sm:grid-cols-3">
           <Link
             href="/api-docs"
-            className="group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="resource-card-3d group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Search className="h-5 w-5 text-primary" aria-hidden />
             <p className="mt-2 text-sm font-semibold text-foreground">API docs</p>
@@ -79,7 +79,7 @@ export default function NotFound() {
           </Link>
           <Link
             href="/#faq"
-            className="group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="resource-card-3d group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Compass className="h-5 w-5 text-primary" aria-hidden />
             <p className="mt-2 text-sm font-semibold text-foreground">FAQ</p>
@@ -89,7 +89,7 @@ export default function NotFound() {
           </Link>
           <Link
             href="/#security"
-            className="group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+            className="resource-card-3d group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <LifeBuoy className="h-5 w-5 text-primary" aria-hidden />
             <p className="mt-2 text-sm font-semibold text-foreground">Get help</p>

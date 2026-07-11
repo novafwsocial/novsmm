@@ -684,3 +684,200 @@ img, video, canvas, svg {
     opacity: 1 !important;
   }
 }
+
+/* ─── FOOTER 3D & MOTION ─── */
+
+/* Footer link hover — 3D lift + glow */
+.footer-link-3d {
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s ease;
+  will-change: transform;
+  transform-style: preserve-3d;
+}
+.footer-link-3d:hover {
+  transform: translateX(4px) translateZ(10px);
+  color: var(--primary);
+}
+.footer-link-3d::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  width: 2px;
+  height: 0;
+  background: var(--primary);
+  border-radius: 1px;
+  transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.footer-link-3d:hover::before {
+  height: 100%;
+}
+
+/* Footer column reveal — stagger fade-in on scroll */
+.footer-col-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.footer-col-reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Footer status badge — pulse glow */
+@keyframes status-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+.status-badge-glow {
+  animation: status-badge-glow 3s ease-in-out infinite;
+}
+
+/* Footer logo — subtle 3D float */
+@keyframes footer-logo-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(0.5deg); }
+}
+.footer-logo-float {
+  animation: footer-logo-float 5s ease-in-out infinite;
+}
+
+/* ─── AUTH SCREENS 3D ─── */
+
+/* Auth card — 3D entrance + tilt on hover */
+.auth-card-3d {
+  perspective: 1000px;
+}
+.auth-card-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: authCardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes authCardIn {
+  from { opacity: 0; transform: perspective(800px) rotateX(10deg) translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: perspective(800px) rotateX(0deg) translateY(0) scale(1); }
+}
+
+/* Auth input — 3D focus glow */
+.auth-input-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.auth-input-3d:focus-within {
+  transform: translateZ(10px);
+  box-shadow: 0 8px 24px -8px rgba(0, 82, 255, 0.15);
+}
+
+/* Social login button — 3D hover */
+.social-btn-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.social-btn-3d:hover {
+  transform: translateY(-2px) translateZ(5px);
+  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.1);
+}
+.social-btn-3d:active {
+  transform: translateY(0) translateZ(0);
+}
+
+/* ─── API DOCS PAGE 3D ─── */
+
+/* Endpoint card — 3D hover lift */
+.endpoint-card-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.endpoint-card-3d:hover {
+  transform: translateY(-2px) perspective(600px) rotateX(1deg);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Method badge — 3D pop */
+.method-badge-3d {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.method-badge-3d:hover {
+  transform: scale(1.05) translateZ(5px);
+}
+
+/* Code block — 3D depth */
+.code-block-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.code-block-3d:hover {
+  transform: translateZ(5px);
+}
+
+/* ─── CHANGELOG PAGE 3D ─── */
+
+/* Timeline entry — 3D hover */
+.timeline-entry-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.timeline-entry-3d:hover {
+  transform: translateX(4px) translateZ(5px);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Timeline dot — pulse */
+@keyframes timeline-dot-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+  50% { transform: scale(1.1); box-shadow: 0 0 0 4px transparent; }
+}
+.timeline-dot-pulse {
+  animation: timeline-dot-pulse 3s ease-in-out infinite;
+}
+
+/* ─── 404 PAGE 3D ─── */
+
+/* 404 gradient text — 3D float */
+@keyframes error-404-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(-1deg); }
+}
+.error-404-float {
+  animation: error-404-float 4s ease-in-out infinite;
+}
+
+/* 404 resource cards — 3D hover */
+.resource-card-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+  transform-style: preserve-3d;
+}
+.resource-card-3d:hover {
+  transform: translateY(-4px) perspective(600px) rotateX(2deg);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.12);
+}
+
+/* ─── MOBILE: DISABLE ALL 3D ─── */
+@media (max-width: 768px) {
+  .footer-link-3d:hover { transform: none; }
+  .footer-link-3d:hover::before { height: 0; }
+  .auth-card-inner { animation: none; opacity: 1; transform: none; }
+  .auth-input-3d:focus-within { transform: none; }
+  .social-btn-3d:hover { transform: none; }
+  .endpoint-card-3d:hover { transform: none; }
+  .method-badge-3d:hover { transform: none; }
+  .code-block-3d:hover { transform: none; }
+  .timeline-entry-3d:hover { transform: none; }
+  .resource-card-3d:hover { transform: none; }
+  .footer-logo-float { animation: none; }
+}
+
+/* ─── REDUCED MOTION ─── */
+@media (prefers-reduced-motion: reduce) {
+  .footer-link-3d, .footer-col-reveal, .auth-card-inner, .auth-input-3d,
+  .social-btn-3d, .endpoint-card-3d, .method-badge-3d, .code-block-3d,
+  .timeline-entry-3d, .timeline-dot-pulse, .resource-card-3d,
+  .error-404-float, .footer-logo-float, .status-badge-glow {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

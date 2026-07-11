@@ -142,7 +142,7 @@ export function ApiDocsClient() {
               <code className="text-sm text-foreground">{doc.auth.header}</code>
               <button
                 onClick={() => copyToClipboard(doc.auth.header, "auth-header")}
-                className="ml-auto text-muted-foreground hover:text-foreground"
+                className="btn-press ml-auto text-muted-foreground hover:text-foreground"
                 aria-label="Copy"
               >
                 {copiedKey === "auth-header" ? (
@@ -185,13 +185,13 @@ export function ApiDocsClient() {
             {doc.endpoints.map((ep, i) => (
               <div
                 key={i}
-                className="overflow-hidden rounded-2xl border border-border"
+                className="endpoint-card-3d overflow-hidden rounded-2xl border border-border"
                 id={`endpoint-${i}`}
               >
                 {/* Endpoint header */}
                 <div className="flex items-center gap-3 border-b border-border bg-muted/30 px-5 py-3">
                   <span
-                    className={`rounded-md border px-2 py-0.5 text-xs font-bold ${
+                    className={`method-badge-3d rounded-md border px-2 py-0.5 text-xs font-bold ${
                       METHOD_COLORS[ep.method] || "bg-muted text-muted-foreground border-border"
                     }`}
                   >
@@ -236,7 +236,7 @@ export function ApiDocsClient() {
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Request Body
                       </h4>
-                      <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-muted/20 p-3 text-xs">
+                      <pre className="code-block-3d mt-2 overflow-x-auto rounded-lg border border-border bg-muted/20 p-3 text-xs">
                         <code>{JSON.stringify(ep.body, null, 2)}</code>
                       </pre>
                     </div>
@@ -248,7 +248,7 @@ export function ApiDocsClient() {
                       <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                         Response
                       </h4>
-                      <pre className="mt-2 overflow-x-auto rounded-lg border border-border bg-muted/20 p-3 text-xs">
+                      <pre className="code-block-3d mt-2 overflow-x-auto rounded-lg border border-border bg-muted/20 p-3 text-xs">
                         <code>{JSON.stringify(ep.response, null, 2)}</code>
                       </pre>
                     </div>
@@ -289,7 +289,7 @@ export function ApiDocsClient() {
                   <span className="text-xs font-medium text-muted-foreground">{name}</span>
                   <button
                     onClick={() => copyToClipboard(cmd, `ex-${name}`)}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="btn-press text-muted-foreground hover:text-foreground"
                     aria-label="Copy command"
                   >
                     {copiedKey === `ex-${name}` ? (
@@ -299,7 +299,7 @@ export function ApiDocsClient() {
                     )}
                   </button>
                 </div>
-                <pre className="overflow-x-auto p-4 text-xs">
+                <pre className="code-block-3d overflow-x-auto p-4 text-xs">
                   <code className="text-foreground">{cmd}</code>
                 </pre>
               </div>
