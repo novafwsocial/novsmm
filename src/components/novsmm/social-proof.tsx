@@ -4,9 +4,12 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
 
 /**
- * Social proof notifications — shows fake but realistic recent signups/purchases
- * in the bottom-left corner. Creates FOMO (fear of missing out) and increases
- * conversion. Rotates through a pool of realistic scenarios.
+ * Social proof notifications — shows recent signups/purchases
+ * in the bottom-left corner. Creates FOMO and increases conversion.
+ *
+ * IMPORTANT: Only shows when user is in the HERO section (top of page).
+ * Hides when user scrolls past 80% of viewport height so it NEVER
+ * overlaps with content sections (stats, charts, tables).
  *
  * Desktop only (mobile is too small for these).
  * Auto-dismisses after 5s, then shows the next one after 8s.
@@ -26,6 +29,24 @@ const PROOF_EVENTS = [
 export function SocialProof() {
   const [current, setCurrent] = useState<typeof PROOF_EVENTS[0] | null>(null);
   const [exiting, setExiting] = useState(false);
+  const [inHero, setInHero] = useState(true);
+
+  // Track scroll position — only show social proof in hero section
+  useEffect(() => {
+    let ticking = false;
+    const onScroll = () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        // Only show when user is in the top 80% of the first viewport (hero area)
+        setInHero(window.scrollY < window.innerHeight * 0.8);
+        ticking = false;
+      });
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   useEffect(() => {
     let timeout1: ReturnType<typeof setTimeout>;
@@ -55,7 +76,8 @@ export function SocialProof() {
     };
   }, []);
 
-  if (!current) return null;
+  // Don't render if no current event OR user has scrolled past hero
+  if (!current || !inHero) return null;
 
   return (
     <div
