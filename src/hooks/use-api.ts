@@ -151,6 +151,18 @@ export function useServices(params?: {
   });
 }
 
+// ── Service counts per platform (for marketplace filter bar) ──
+export function useServicesCounts() {
+  return useQuery({
+    queryKey: ["services-counts"],
+    queryFn: () =>
+      api.get<{ counts: Record<string, number>; total: number }>(
+        "/api/services/counts"
+      ),
+    staleTime: 5 * 60 * 1000, // cache for 5 minutes
+  });
+}
+
 // ── All services (for sell tab dropdown — lightweight, no pagination) ──
 export function useAllServices(search?: string) {
   const q = search ? `?search=${search}&limit=60` : "?limit=60";

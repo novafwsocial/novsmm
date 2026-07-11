@@ -27,6 +27,7 @@ import {
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
   useServices,
+  useServicesCounts,
   useAllServices,
   useCreateOrder,
   useMassOrder,
@@ -317,18 +318,16 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     return counts;
   }, [allServices]);
 
+  // Fetch accurate per-platform counts from /api/services/counts (cached)
+  const { data: countsData } = useServicesCounts();
+  const realPlatformCounts = countsData?.counts ?? {};
+
   const getPlatformCount = (p: string): number | null => {
     if (p === "All") {
-      // Accurate total from the API for the current filter context.
-      return platformFilter === "All" ? (data?.pagination?.total ?? null) : null;
+      return countsData?.total ?? data?.pagination?.total ?? null;
     }
-    if (platformFilter === p) {
-      // Currently-selected platform — show accurate total from API.
-      return data?.pagination?.total ?? null;
-    }
-    // Other platforms — show count of loaded services (may grow as user scrolls
-    // when platformFilter === "All").
-    return platformCounts[p] ?? 0;
+    // Use accurate counts from the API
+    return realPlatformCounts[p] ?? null;
   };
 
   // Group by platform + apply sort. Sort runs on the full allServices array

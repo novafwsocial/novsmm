@@ -837,21 +837,53 @@ function AdminServices() {
   const [deleting, setDeleting] = useState<any | null>(null);
   const services = data?.services ?? [];
 
+  // PERF: Pagination + search — don't render all 6,390 rows at once
+  const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 25;
+
+  // Filter + paginate
+  const filtered = useMemo(() => {
+    if (!searchQuery.trim()) return services;
+    const q = searchQuery.toLowerCase();
+    return services.filter((s: any) =>
+      s.name?.toLowerCase().includes(q) ||
+      s.platform?.toLowerCase().includes(q) ||
+      s.category?.toLowerCase().includes(q)
+    );
+  }, [services, searchQuery]);
+
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paginated = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Reset to page 1 when search changes
+  useEffect(() => { setCurrentPage(1); }, [searchQuery]);
+
   return (
     <Reveal blur>
       <div className="overflow-hidden rounded-2xl border border-border/60 bg-background">
-        <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
-          <div className="text-base font-semibold">Catalog · {services.length} services</div>
-          <button
-            onClick={() => setShowAdd(true)}
-            className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
-          >
-            <Plus className="h-3.5 w-3.5" /> Add service
-          </button>
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 px-5 py-4">
+          <div className="text-base font-semibold">Catalog · {filtered.length} services{searchQuery && ` (filtered from ${services.length})`}</div>
+          <div className="flex items-center gap-2">
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search services..."
+              aria-label="Search services"
+              className="h-9 w-48 rounded-full border border-border bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <button
+              onClick={() => setShowAdd(true)}
+              className="inline-flex items-center gap-1 btn-press rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground"
+            >
+              <Plus className="h-3.5 w-3.5" /> Add service
+            </button>
+          </div>
         </div>
-        <div className="overflow-x-auto nov-scroll">
+        <div className="overflow-x-auto nov-scroll max-h-[600px] overflow-y-auto">
           <table className="w-full text-sm">
-            <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
+            <thead className="sticky top-0 z-10 bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
               <tr>
                 <th scope="col" className="px-4 py-3 text-left font-medium">Service</th>
                 <th scope="col" className="px-4 py-3 text-left font-medium">Platform</th>
@@ -864,7 +896,7 @@ function AdminServices() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border/60">
-              {services.map((s: any) => (
+              {paginated.map((s: any) => (
                 <tr key={s.id} className="table-row-hover transition-colors hover:bg-muted/30">
                   <td className="px-4 py-3">
                     <div className="font-medium text-foreground">{s.name}</div>
@@ -889,14 +921,40 @@ function AdminServices() {
                   </td>
                 </tr>
               ))}
-              {services.length === 0 && (
+              {paginated.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">No services yet</td>
+                  <td colSpan={8} className="px-4 py-12 text-center text-sm text-muted-foreground">
+                    {searchQuery ? "No services match your search" : "No services yet"}
+                  </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+        {/* Pagination controls */}
+        {totalPages > 1 && (
+          <div className="flex items-center justify-between border-t border-border/60 px-5 py-3 text-xs text-muted-foreground">
+            <span>
+              Page {currentPage} of {totalPages} · Showing {paginated.length} of {filtered.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed btn-press"
+              >
+                ← Prev
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="rounded-lg border border-border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed btn-press"
+              >
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
       </div>
       {showAdd && (
         <ServiceModal
