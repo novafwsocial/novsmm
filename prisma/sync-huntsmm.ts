@@ -107,7 +107,7 @@ async function main() {
   // 30% markup = price is 1.3× the provider cost.
   // 50% markup = price is 1.5× the provider cost.
   // 100% markup = price is 2× the provider cost.
-  const MARKUP = 1.3; // 30% — competitive pricing
+  const MARKUP = 2.5; // 150% markup — price = cost × 2.5
 
   let imported = 0;
   const batchSize = 100;
@@ -150,7 +150,7 @@ async function main() {
   console.log("\n\n✅ Sync complete!");
   console.log(`  Provider: HuntSMM`);
   console.log(`  Services imported: ${imported}`);
-  console.log(`  Markup applied: 30%`);
+  console.log(`  Markup applied: 150%`);
 
   // 5. Verify
   const count = await db.service.count();
