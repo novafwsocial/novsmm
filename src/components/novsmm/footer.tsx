@@ -75,7 +75,7 @@ const COLUMNS: FooterColumn[] = [
     links: [
       { label: "Docs", externalUrl: "/api-docs" },
       { label: "API reference", externalUrl: "/api-docs" },
-      { label: "Changelog", externalUrl: "/api/cms?type=blog_post&category=changelog" },
+      { label: "Changelog", externalUrl: "/changelog" },
       { label: "Security", anchor: "#security" },
       { label: "Legal", legalPage: "legal" },
     ],
