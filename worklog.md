@@ -11568,3 +11568,60 @@ Stage Summary:
 - A11y: all new buttons have aria-label / aria-pressed; star rating uses role=radiogroup + role=radio + aria-checked; compare bar uses role=region; view toggle uses role=group; export CSV button is disabled when no orders (aria-disabled implicit).
 - localStorage used for: reviews (`novsmm_reviews`), view mode (`novsmm_view_mode`). No DB migrations needed.
 - Build: ✓ PASS.
+
+---
+Task ID: MARKETPLACE-DEEP-FIX
+Agent: full-stack-developer
+Task: Deep fix marketplace — rendering bug + cleanup + optimization
+
+Work Log:
+- Read worklog + 3,677-line dashboard-marketplace.tsx end-to-end; traced the
+  `useServices` → `useEffect [data, page]` → `setAllServices` → `grouped` →
+  render data flow.
+- Identified ROOT CAUSE of the "0 of 6,390 services" rendering bug: the
+  300 ms search-debounce `useEffect [search]` ran on the initial mount
+  (like every useEffect does) and scheduled a timeout that called
+  `setAllServices([])` + `processedPagesRef.current.clear()` 300 ms later.
+  The API responded ~100 ms in, the data effect populated `allServices`
+  with the 24 services, then 300 ms after mount the debounce timeout fired
+  and wiped them. Because `data` and `page` didn't change (response was
+  cached), the data effect never re-ran to repopulate — UI stuck at 0.
+- Identified SECONDARY bug: `useServices` uses `placeholderData: (prev) => prev`,
+  so on page/filter/search change `data` is still the previous query's data
+  while refetching. The data effect merged stale services and marked the
+  page processed, so the real new data was ignored when it arrived.
+- Fix #1: added `skipFirstSearchRef` so the debounce effect bails on its
+  first (mount) run — subsequent search changes still debounce + clear as
+  before.
+- Fix #2: destructured `isPlaceholderData` from `useServices` and added
+  `if (isPlaceholderData) return;` plus a defence-in-depth
+  `if (data.pagination?.page !== page) return;` guard in the
+  data-accumulation effect. Together they guarantee `allServices` only
+  ever contains services for the current query.
+- Removed dead code: `platformCounts` useMemo (computed from allServices
+  but never read — `getPlatformCount` uses server-provided countsData
+  instead); the ghost `onRepeat` prop on `HistoryTab` (passed as `() => {}`
+  and never used internally); the misleading NOTE comment about a "race
+  condition" (it was describing defect #1); an unnecessary eslint-disable
+  pragma for a rule that isn't in the config.
+- Reorganised: moved `processedPagesRef` declaration above the debounce
+  effect that references it (was below — worked but read poorly).
+- Verified all 18 features intact: category filter, edit offer, history
+  status filter, favorites, history pagination, compare services, price
+  filter, trending, reviews, list/grid view, export CSV, pause/activate
+  offer, per-offer stats, bulk publish, suggested price, sale notification,
+  search order by ID, refund from history.
+- Ran `bun run build` — PASS (✓ Compiled in 22.5s; TypeScript clean; 109
+  static pages generated).
+
+Stage Summary:
+- Rendering bug fixed at the root: marketplace now correctly shows all 24
+  services on first load instead of "0 of 6,390 services". Filter changes,
+  search, pagination, and infinite scroll all reset cleanly thanks to the
+  `isPlaceholderData` guard.
+- ~30 lines of dead code / ghost props removed; refactored data-effect
+  ordering for readability.
+- File: 3,677 → 3,685 lines (line count grew slightly due to longer
+  explanatory comments; net executable code reduced).
+- No new deps. No framer-motion. No recharts. All 18 features preserved.
+  Build passes.

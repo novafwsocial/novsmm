@@ -360,7 +360,7 @@ export function DashboardMarketplace() {
           <BuyTab onSelectService={setSelectedService} />
         )}
         {tab === "sell" && <SellTab />}
-        {tab === "history" && <HistoryTab onRepeat={() => {}} />}
+        {tab === "history" && <HistoryTab />}
       </div>
 
       {selectedService && (
@@ -437,14 +437,29 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
   const user = (sessionData?.user as any) ?? {};
   const currency = user?.currency ?? "USD";
 
-  // PERF: 300ms debounce (down from 400ms) for snappier search response.
+  // Tracks which pages have already been merged into `allServices` so we don't
+  // double-append when the data effect re-runs. Cleared by the filter handlers
+  // below so a fresh query starts from page 1.
+  const processedPagesRef = useRef<Set<number>>(new Set());
+
+  // PERF: 300ms debounce for snappier search response. We skip the very first
+  // run (mount) so we don't blow away the initial page-1 fetch that's already
+  // in flight — that was the root cause of the "0 of N services" rendering
+  // bug: the timeout fired 300ms after mount and cleared `allServices` after
+  // the data effect had just populated it, and because `data` didn't change
+  // the effect never re-ran to repopulate.
+  const skipFirstSearchRef = useRef(true);
   useEffect(() => {
+    if (skipFirstSearchRef.current) {
+      skipFirstSearchRef.current = false;
+      return;
+    }
     const t = setTimeout(() => {
       setDebouncedSearch(search);
       setPage(1);
       setAllServices([]);
       setExpandedPlatforms({}); // reset card limits
-      processedPagesRef.current.clear(); // CRITICAL: allow page 1 to be processed again
+      processedPagesRef.current.clear(); // allow page 1 to be processed again
     }, 300);
     return () => clearTimeout(t);
   }, [search]);
@@ -467,8 +482,11 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     processedPagesRef.current.clear();
   };
 
-  // Fetch paginated services (now includes category param)
-  const { data, isLoading, isFetching } = useServices({
+  // Fetch paginated services (includes platform/category/search/page params).
+  // `isPlaceholderData` is true while React Query is fetching the next result
+  // but is still showing the previous (now-stale) data — we use it below to
+  // avoid merging stale services into the accumulator.
+  const { data, isLoading, isFetching, isPlaceholderData } = useServices({
     platform: platformFilter,
     category: categoryFilter,
     search: debouncedSearch || undefined,
@@ -476,26 +494,25 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     limit: PAGE_SIZE,
   });
 
-  // Accumulate services for infinite scroll — use a ref to track if we've processed this page
-  const processedPagesRef = useRef<Set<number>>(new Set());
+  // Accumulate services for infinite scroll. Skip placeholder (stale) data so
+  // we never merge the previous query's services into the current view —
+  // this is what guarantees a clean reset when platform/category/search
+  // change even though `useServices` keeps the old `data` reference alive
+  // while the new fetch is in flight.
   useEffect(() => {
     if (!data?.services) return;
+    if (isPlaceholderData) return; // wait for the real (current-query) data
+    if (data.pagination?.page !== page) return; // safety: ignore mismatched pages
     if (processedPagesRef.current.has(page)) return;
     processedPagesRef.current.add(page);
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     setAllServices((prev) => {
       if (page === 1) return data.services;
       const existingIds = new Set(prev.map((s) => s.id));
       const newOnes = data.services.filter((s) => !existingIds.has(s.id));
       return [...prev, ...newOnes];
     });
-  }, [data, page]);
-
-  // NOTE: processedPagesRef and allServices are reset in handlePlatformChange
-  // and in the debouncedSearch effect above. No separate effect needed here —
-  // having one caused a race condition where services were loaded then
-  // immediately cleared on platform filter change.
+  }, [data, page, isPlaceholderData]);
 
   // Infinite scroll via IntersectionObserver (F-09: fallback for old browsers)
   useEffect(() => {
@@ -531,20 +548,11 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
     return () => observer.disconnect();
   }, [data?.pagination?.hasMore, isFetching]);
 
-  // Compute platform counts from currently-loaded services. The "All" count
-  // comes from the API's pagination.total (accurate total of all services),
-  // while individual platforms reflect loaded services in the current view.
-  // As the user scrolls, per-platform counts grow, giving a sense of catalog
-  // depth without making 17 separate API calls.
-  const platformCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    allServices.forEach((s) => {
-      counts[s.platform] = (counts[s.platform] ?? 0) + 1;
-    });
-    return counts;
-  }, [allServices]);
-
-  // Fetch accurate per-platform counts from /api/services/counts (cached)
+  // Fetch accurate per-platform counts from /api/services/counts (cached).
+  // This replaces the old client-side `platformCounts` useMemo which computed
+  // counts from `allServices` but was never actually read — `getPlatformCount`
+  // below uses the server-provided counts instead, which are accurate for the
+  // whole catalog (not just the currently-loaded page).
   const { data: countsData } = useServicesCounts();
   const realPlatformCounts = countsData?.counts ?? {};
 
@@ -2260,7 +2268,7 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
 }
 
 // ─────────── History Tab (Purchase History + Repeat) ───────────
-function HistoryTab({ onRepeat }: { onRepeat: () => void }) {
+function HistoryTab() {
   const { data } = useOrders();
   const repeatOrder = useRepeatOrder();
   const cancelOrder = useCancelOrder();
