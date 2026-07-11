@@ -184,7 +184,7 @@ export function ApiDocsSection() {
                 <Magnetic
                   as="button"
                   strength={0.25}
-                  onClick={() => window.open("/api/docs", "_blank")}
+                  onClick={() => window.open("/api-docs", "_blank")}
                 >
                   <span className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
                     View full API docs

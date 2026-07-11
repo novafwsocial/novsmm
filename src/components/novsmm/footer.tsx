@@ -45,7 +45,7 @@ const COLUMNS: FooterColumn[] = [
       { label: "Marketplace", anchor: "#marketplace" },
       { label: "Payments", anchor: "#payments" },
       { label: "Analytics", tab: "analytics" },
-      { label: "API", externalUrl: "/api/docs" },
+      { label: "API", externalUrl: "/api-docs" },
     ],
   },
   {
@@ -73,8 +73,8 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Resources",
     links: [
-      { label: "Docs", externalUrl: "/api/docs" },
-      { label: "API reference", externalUrl: "/api/docs" },
+      { label: "Docs", externalUrl: "/api-docs" },
+      { label: "API reference", externalUrl: "/api-docs" },
       { label: "Changelog", externalUrl: "/api/cms?type=blog_post&category=changelog" },
       { label: "Security", anchor: "#security" },
       { label: "Legal", legalPage: "legal" },
