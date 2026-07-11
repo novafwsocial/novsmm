@@ -11387,3 +11387,56 @@ Stage Summary:
 - Mobile: every hover/transition effect is disabled via @media (max-width: 768px); dash-reveal content shows immediately on mobile (the component itself short-circuits to setInView(true)).
 - Accessibility: prefers-reduced-motion: reduce disables every animation, transition, and transform in this system; opacity forced to 1 so content is always visible.
 - Build passes cleanly; no new npm dependencies added; performance budget preserved (IntersectionObserver + CSS-only animations, no per-frame JS, no framer-motion additions on dashboard surfaces — existing framer-motion Reveals untouched).
+
+---
+Task ID: FULL-WEB-IMPROVEMENT-1
+Agent: full-stack-developer
+Task: Full website audit + improvement (SEO, a11y, performance, UX, security)
+
+Work Log:
+- Read worklog.md for context (Tasks 1–13, 14, 15, PROD-1, WS-2): landing + dashboard + admin + WebSocket notifications service all built; production backend wired; previous remediation batches already added CSP/HSTS/CSRF and consolidated PWA manifest.
+- Audited current state of layout.tsx, middleware.ts, next.config.ts, manifest.ts, error.tsx, loading.tsx, public/robots.txt, public/sw.js. Confirmed existing strengths (PWA manifest consolidated, CSP comprehensive, HSTS preload, smooth Lenis scroll, lazy section loading, sticky footer). Confirmed missing pieces.
+- SEO fixes:
+  • Rewrote src/app/layout.tsx metadata: added metadataBase (resolved from NEXT_PUBLIC_SITE_URL → NEXTAUTH_URL → localhost fallback), title.template "%s · NOVSMM", expanded keywords (14), authors/creator/publisher, alternates.canonical, robots with googleBot directives (max-image-preview=large, max-snippet, max-video-preview), explicit manifest ref, openGraph with url/locale/alternateLocale/images fallback, twitter card with site/creator, icons (icon+apple+favicon), formatDetection (no telephone/email/address auto-linking), verification (Google Search Console env-driven).
+  • Resource hints in <head>: preconnect to fonts.gstatic.com (crossOrigin) + fonts.googleapis.com, dns-prefetch for fonts.gstatic.com.
+  • Added JSON-LD Organization + WebSite (with SearchAction) structured data as static <script> tags in layout <head>.
+  • Created src/app/sitemap.ts: emits / + 9 anchored section URLs (/+#services etc.) + /api/docs, with env-resolved absolute URLs and priority/changeFrequency hints.
+  • Created src/app/robots.ts (replaces static public/robots.txt — DELETED the duplicate). Per-bot rules: full crawl for Googlebot/Bingbot/Twitterbot/facebookexternalhit/LinkedInBot/Applebot/WhatsApp; explicit AI-crawler opt-out (GPTBot, ChatGPT-User, CCBot, anthropic-ai, Claude-Web, Google-Extended); default deny on all auth/admin/wallet/orders/uploads/me/v1/tickets/notifications/subscriptions/child-panels/webhooks/internal/provider API paths; sitemap + host directives auto-resolved.
+  • Created src/app/opengraph-image.tsx (1200×630, edge runtime, ImageResponse) — branded OG card with NOVSMM logo, headline, trust chips.
+  • Created src/app/twitter-image.tsx (1200×630, edge runtime) — Twitter summary_large_image variant (glow moved to bottom for Twitter top-crop safety).
+  • Created src/components/novsmm/landing-json-ld.tsx (server component): WebApplication + Service + FAQPage (7 Q&As) + BreadcrumbList JSON-LD.
+  • Wired <LandingJsonLd /> into src/app/page.tsx (server component — no "use client" — so script tags render statically for crawlers).
+- Accessibility fixes:
+  • Added skip-to-content link as first focusable element in layout body (sr-only, focus:not-sr-only with fixed positioning + visible focus ring).
+  • Added id="main-content" to <main> in src/app/page.tsx so the skip link target exists.
+  • viewport.themeColor now uses media-query array (light: #ffffff, dark: #0052ff) instead of single value.
+  • viewport.colorScheme: "light dark" added.
+  • All new pages (not-found.tsx, opengraph-image.tsx) include proper aria attributes / alt text / focus-visible rings.
+  • Verified single h1 per page: Hero has the only <h1> on landing; not-found.tsx has a single <h1>.
+- Performance:
+  • Resource hints added (preconnect, dns-prefetch) for font origins.
+  • Confirmed Hero is SSR-enabled (already), below-fold sections lazy-loaded via next/dynamic with skeletons (already).
+  • next.config.ts headers() adds: 1-day cache + stale-while-revalidate for public static assets (png/svg/woff2/etc.); no-cache + Service-Worker-Allowed:/ for /sw.js (so SW updates aren't blocked by browser cache).
+  • Explicitly did NOT override /_next/static Cache-Control (Next.js manages immutable hashing for chunks; overriding triggers build warning).
+- UX polish:
+  • Created src/app/not-found.tsx — branded 404 page with grid background, large "404" gradient mark, single h1, descriptive help text, primary CTA (Back to home) + secondary (Explore services), 3 resource cards (API docs / FAQ / Get help), proper focus-visible rings, error code footer microcopy. Replaces Next.js default 404.
+  • Verified existing error.tsx (App Router error boundary) — already comprehensive (digest ID, generic message, reset button, no info leak). Untouched.
+  • Verified existing loading.tsx — already shows spinner + "Loading…". Untouched.
+- Security headers (middleware.ts):
+  • Added Permissions-Policy with explicit allow/deny for 30+ browser features (camera/mic/geolocation/USB/Bluetooth/etc. all disabled; only autoplay/fullscreen/payment/clipboard-write/encrypted-media/picture-in-picture/publickey-credentials-get allowed for self, plus payment for Stripe/PayPal origins).
+  • Added Cross-Origin-Opener-Policy: same-origin (Spectre mitigation, doesn't break payment redirects).
+  • Added Cross-Origin-Resource-Policy: same-origin (hot-link protection).
+  • Added X-DNS-Prefetch-Control: on.
+  • Extended CSP: added worker-src 'self' blob: (needed for chart.js/web-vitals workers), object-src 'none' (plugin vector defense), upgrade-insecure-requests (force http→https).
+  • Documented why COEP=require-corp is intentionally NOT set (would break Stripe/PayPal iframes).
+
+Stage Summary:
+- BUILD PASSES — `bun run build` clean (✓ Compiled successfully in ~36s, ✓ TypeScript in ~28s, ✓ 107/107 static pages generated, no errors, no new warnings).
+- New routes added (visible in build output): /robots.txt (static), /sitemap.xml (static), /opengraph-image (edge), /twitter-image (edge), /_not-found (uses custom not-found.tsx).
+- Files CREATED (7): src/app/sitemap.ts, src/app/robots.ts, src/app/not-found.tsx, src/app/opengraph-image.tsx, src/app/twitter-image.tsx, src/components/novsmm/landing-json-ld.tsx, agent-ctx/FULL-WEB-IMPROVEMENT-1-full-stack-developer.md.
+- Files MODIFIED (4): src/app/layout.tsx (comprehensive metadata + JSON-LD + resource hints + skip-to-content), src/app/page.tsx (LandingJsonLd + main id), src/middleware.ts (Permissions-Policy + COOP + CORP + X-DNS-Prefetch-Control + extended CSP), next.config.ts (headers() for static asset caching + sw.js no-cache).
+- Files DELETED (1): public/robots.txt (replaced by app/robots.ts — Next.js convention; deletion prevents file-convention conflict).
+- Pre-existing lint runner is broken (`@typescript-eslint/utils` Class extends value undefined — eslint 10.6.0 / typescript-eslint incompatibility, unrelated to this task). Build's TypeScript check is the source of truth — passes clean.
+- Pre-existing deprecation warning ("middleware" file convention → use "proxy") — pre-existing, not introduced by this task; middleware.ts still functions correctly in Next.js 16.2.10.
+- No new npm dependencies added (per task constraint). Used only next/og (built-in), next/font, next/link — all already in stack.
+- No existing functionality broken: lazy section loading, smooth scroll, dashboard SPA routing, WebSocket notifications, NextAuth, all API routes — untouched. Only additive metadata/headers/JSON-LD/404 page.

@@ -8,6 +8,7 @@ import { AppView } from "@/components/novsmm/app-view";
 import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
 import { StickyCTA } from "@/components/novsmm/sticky-cta";
 import { SocialProof } from "@/components/novsmm/social-proof";
+import { LandingJsonLd } from "@/components/novsmm/landing-json-ld";
 
 /**
  * PERF: Lazy-load below-the-fold landing sections.
@@ -84,12 +85,18 @@ export default function Home() {
     <ErrorBoundary>
     <SmoothScroll>
       <div className="relative flex min-h-screen flex-col bg-background">
+        {/* FULL-WEB-IMPROVEMENT-1: Landing-page JSON-LD (WebApplication,
+            Service, FAQPage, BreadcrumbList). Server-rendered as static
+            <script> tags so Google can crawl rich-result entities without
+            executing JS. */}
+        <LandingJsonLd />
         <ScrollProgress />
         <AppView
           landing={
             <>
               <Navbar />
-              <main className="flex-1">
+              {/* id="main-content" — target of the skip-to-content link in layout.tsx (a11y) */}
+              <main id="main-content" className="flex-1">
                 <Hero />
                 <Services />
                 <Marketplace />

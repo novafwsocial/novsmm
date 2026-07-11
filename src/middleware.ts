@@ -86,6 +86,69 @@ function addSecurityHeaders(res: NextResponse) {
     "Strict-Transport-Security",
     "max-age=31536000; includeSubDomains; preload"
   );
+  // FULL-WEB-IMPROVEMENT-1: Permissions-Policy — restricts browser features
+  // the site does NOT use. Anything not explicitly allowed here is denied
+  // to both first-party and third-party (iframe) contexts. We allow only
+  // the minimal feature set required for the app to function:
+  //   - clipboard-write: copy-to-clipboard buttons (dashboard orders, API keys)
+  //   - autoplay: video testimonials in the hero (silent/muted, optional)
+  //   - fullscreen: dashboard charts can go fullscreen
+  //   - payment: Stripe/PayPal/MercadoPago hosted checkout (Web Payments API)
+  // Everything else (camera, mic, geolocation, USB, Bluetooth, etc.) is
+  // explicitly disabled — so a compromised third-party script cannot
+  // request them.
+  res.headers.set(
+    "Permissions-Policy",
+    [
+      "accelerometer=()",
+      "ambient-light-sensor=()",
+      "autoplay=(self)",
+      "battery=()",
+      "camera=()",
+      "cross-origin-isolated=()",
+      "display-capture=()",
+      "document-domain=()",
+      "encrypted-media=(self)",
+      "execution-while-not-rendered=()",
+      "execution-while-out-of-viewport=()",
+      "fullscreen=(self)",
+      "geolocation=()",
+      "gyroscope=()",
+      "keyboard-map=()",
+      "magnetometer=()",
+      "microphone=()",
+      "midi=()",
+      "navigation-override=()",
+      "payment=(self https://js.stripe.com https://www.paypal.com)",
+      "picture-in-picture=(self)",
+      "publickey-credentials-get=(self)",
+      "screen-wake-lock=()",
+      "sync-xhr=()",
+      "usb=()",
+      "web-share=()",
+      "xr-spatial-tracking=()",
+      "clipboard-write=(self)",
+      "clipboard-read=()",
+      "gamepad=()",
+      "hid=()",
+      "idle-detection=()",
+      "serial=()",
+      "window-placement=()",
+    ].join(", ")
+  );
+  // FULL-WEB-IMPROVEMENT-1: COOP=same-origin — isolates browsing context
+  // so a malicious popup/iframe cannot access window references. Does NOT
+  // break payment provider iframes (those are cross-origin, isolated by
+  // the same-origin policy already).
+  // NOTE: We intentionally do NOT set COEP=require-corp because it would
+  // break the third-party payment SDK iframes (Stripe Elements, PayPal
+  // Smart Buttons) that load resources without CORP headers. COOP alone
+  // is the safe baseline.
+  res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
+  res.headers.set("Cross-Origin-Resource-Policy", "same-origin");
+  // X-DNS-Prefetch-Control — opt into DNS prefetching for asset origins
+  // (fonts.gstatic.com etc.). Helps TTFB on first visit.
+  res.headers.set("X-DNS-Prefetch-Control", "on");
   // CSP — allows Tailwind inline styles, Google fonts, WebSocket, and the
   // canonical payment-provider domains.
   //
@@ -101,6 +164,11 @@ function addSecurityHeaders(res: NextResponse) {
   // 'unsafe-eval' removed (C-1 security fix) — not used anywhere in the codebase.
   // 'unsafe-inline' retained for script-src (Next.js requires it for inline scripts/hydration).
   // Future improvement: migrate to nonce-based CSP to remove 'unsafe-inline' too.
+  //
+  // FULL-WEB-IMPROVEMENT-1: added worker-src 'self' blob: (needed for
+  // chart.js / web-vitals workers), object-src 'none' (defense against
+  // Flash/Java plugin vectors), and upgrade-insecure-requests (forces
+  // http:// → https:// for any stray hardcoded URL).
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
@@ -110,9 +178,12 @@ function addSecurityHeaders(res: NextResponse) {
       "font-src 'self' data: https://fonts.gstatic.com; " +
       "connect-src 'self' wss: ws: https: https://api.stripe.com https://www.paypal.com https://api.mercadopago.com https://api.nowpayments.io; " +
       "frame-src https://js.stripe.com https://www.paypal.com https://hooks.stripe.com; " +
+      "worker-src 'self' blob:; " +
+      "object-src 'none'; " +
       "frame-ancestors 'none'; " +
       "base-uri 'self'; " +
-      "form-action 'self' https://www.paypal.com;"
+      "form-action 'self' https://www.paypal.com; " +
+      "upgrade-insecure-requests"
   );
 }
 

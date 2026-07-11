@@ -22,8 +22,46 @@ const nextConfig: NextConfig = {
   },
   // PERF: Compress responses with brotli (better than gzip)
   compress: true,
-  // PERF: Only generate static pages for known routes (faster builds)
-  // experimental: { optimizeCss: true } — removed, not stable in Next 16
+  // FULL-WEB-IMPROVEMENT-1: production-grade static-asset caching. The
+  // middleware runs on every route EXCEPT _next/static / _next/image /
+  // favicon.ico / logo.svg (see matcher in middleware.ts). For those
+  // excluded static assets, headers() below provides a baseline set of
+  // security + caching headers so static files served directly by Next
+  // (without middleware) still get hardened. Defense in depth.
+  // NOTE: /_next/static is intentionally NOT customized — Next.js already
+  // emits an immutable long-cache header for content-hashed chunks, and
+  // overriding it triggers a build warning. We only add security headers
+  // for the public-folder static assets and a no-cache rule for sw.js.
+  // PERF: experimental.optimizeCss removed — not stable in Next 16.
+  async headers() {
+    return [
+      {
+        // Public folder static assets (icon.png, logo.svg, etc.) — medium cache
+        source: "/:path*.(png|jpg|jpeg|gif|svg|webp|avif|ico|woff|woff2|ttf|otf)",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=86400, stale-while-revalidate=604800",
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Cross-Origin-Resource-Policy", value: "same-origin" },
+        ],
+      },
+      {
+        // Service worker — must NEVER be cached aggressively, otherwise
+        // users get stuck on an old SW version after deploys.
+        source: "/sw.js",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "no-cache, no-store, must-revalidate",
+          },
+          { key: "Service-Worker-Allowed", value: "/" },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
+
