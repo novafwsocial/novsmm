@@ -221,7 +221,7 @@ export function AdminPanel() {
             value={adminTab}
             onChange={(e) => setAdminTab(e.target.value as any)}
             aria-label="Select admin section"
-            className="h-11 w-full rounded-2xl border border-border bg-background px-4 text-sm font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+            className="h-11 w-full rounded-2xl border border-border bg-background px-4 text-base font-medium text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
           >
             {ADMIN_NAV.map((n) => (
               <option key={n.id} value={n.id}>
@@ -466,6 +466,9 @@ function AdminUsers() {
   const [debounced, setDebounced] = useState("");
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [impersonateTarget, setImpersonateTarget] = useState<any | null>(null);
+  // AUDIT R3: step-up auth modal for role changes to/from admin
+  const [roleChangeTarget, setRoleChangeTarget] = useState<{ id: string; name: string; currentRole: string; newRole: string } | null>(null);
+  const [confirmPw, setConfirmPw] = useState("");
 
   // Debounce search input 300ms
   useEffect(() => {
@@ -630,7 +633,15 @@ function AdminUsers() {
                         )}
                         <IconBtn
                           icon={ShieldCheck}
-                          onClick={() => updateUser.mutate({ id: u.id, role: "admin" })}
+                          onClick={() => {
+                            if (u.role === "admin") {
+                              // Demoting from admin — open confirm modal
+                              setRoleChangeTarget({ id: u.id, name: u.name || u.email, currentRole: "admin", newRole: "user" });
+                            } else {
+                              // Promoting to admin — open confirm modal
+                              setRoleChangeTarget({ id: u.id, name: u.name || u.email, currentRole: u.role, newRole: "admin" });
+                            }
+                          }}
                         />
                         {/* Impersonate — admin-only, active non-admin users only */}
                         {u.status === "active" && u.role !== "admin" && (
@@ -663,6 +674,76 @@ function AdminUsers() {
           user={impersonateTarget}
           onClose={() => setImpersonateTarget(null)}
         />
+      )}
+      {/* AUDIT R3: Step-up auth modal for admin role changes */}
+      {roleChangeTarget && (
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+          onClick={() => { setRoleChangeTarget(null); setConfirmPw(""); }}
+        >
+          <div
+            onClick={(e) => e.stopPropagation()}
+            className="modal-3d-enter relative w-full max-w-md rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
+          >
+            <button
+              onClick={() => { setRoleChangeTarget(null); setConfirmPw(""); }}
+              className="absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground"
+              aria-label="Close"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <div className="flex items-center gap-3">
+              <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-500/10 text-amber-600">
+                <ShieldCheck className="h-6 w-6" />
+              </span>
+              <div>
+                <h2 className="text-base font-semibold text-foreground">
+                  {roleChangeTarget.newRole === "admin" ? "Promote to admin" : "Remove admin role"}
+                </h2>
+                <p className="text-xs text-muted-foreground">
+                  {roleChangeTarget.name} · {roleChangeTarget.currentRole} → {roleChangeTarget.newRole}
+                </p>
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-muted-foreground">
+              This action changes admin privileges. Enter your password to confirm.
+            </p>
+            <input
+              type="password"
+              value={confirmPw}
+              onChange={(e) => setConfirmPw(e.target.value)}
+              placeholder="Your password"
+              autoFocus
+              className="mt-3 h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:ring-2 focus:ring-primary"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && confirmPw) {
+                  updateUser.mutate(
+                    { id: roleChangeTarget.id, role: roleChangeTarget.newRole as any, confirmPassword: confirmPw },
+                    { onSuccess: () => { setRoleChangeTarget(null); setConfirmPw(""); } }
+                  );
+                }
+              }}
+            />
+            <button
+              onClick={() => {
+                updateUser.mutate(
+                  { id: roleChangeTarget.id, role: roleChangeTarget.newRole as any, confirmPassword: confirmPw },
+                  { onSuccess: () => { setRoleChangeTarget(null); setConfirmPw(""); } }
+                );
+              }}
+              disabled={!confirmPw || updateUser.isPending}
+              className="mt-4 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60 btn-press"
+            >
+              {updateUser.isPending ? "Verifying…" : "Confirm role change"}
+            </button>
+            <button
+              onClick={() => { setRoleChangeTarget(null); setConfirmPw(""); }}
+              className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
     </Reveal>
   );
@@ -1943,7 +2024,7 @@ function RoleModal({
                 type="text"
                 value={color}
                 onChange={(e) => setColor(e.target.value)}
-                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
               />
             </div>
           </label>
@@ -2369,7 +2450,7 @@ function AdminLicenses() {
               <Input label="Customer email" value={form.customerEmail} onChange={(v) => setForm({ ...form, customerEmail: v })} />
               <label className="block">
                 <span className="mb-1 block text-xs font-medium text-muted-foreground">Plan</span>
-                <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm">
+                <select value={form.plan} onChange={(e) => setForm({ ...form, plan: e.target.value })} className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base">
                   <option value="reseller">Reseller</option>
                   <option value="agency">Agency</option>
                   <option value="enterprise">Enterprise</option>
@@ -4236,7 +4317,7 @@ function EmailTemplateEditor({
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 placeholder="Welcome Email"
-                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
               />
             </div>
             <div>
@@ -4247,7 +4328,7 @@ function EmailTemplateEditor({
                 value={form.subject}
                 onChange={(e) => setForm({ ...form, subject: e.target.value })}
                 placeholder="Welcome to NOVSMM, {{name}}!"
-                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+                className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
               />
             </div>
             <div>
@@ -4593,7 +4674,7 @@ function CmsEditor({
             <input
               value={form.title}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             />
           </div>
 
@@ -4602,7 +4683,7 @@ function CmsEditor({
             <select
               value={form.type}
               onChange={(e) => setForm({ ...form, type: e.target.value })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             >
               <option value="blog_post">Blog post</option>
               <option value="faq">FAQ</option>
@@ -4616,7 +4697,7 @@ function CmsEditor({
             <select
               value={form.status}
               onChange={(e) => setForm({ ...form, status: e.target.value })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             >
               <option value="draft">Draft</option>
               <option value="published">Published</option>
@@ -4639,7 +4720,7 @@ function CmsEditor({
             <input
               value={form.category}
               onChange={(e) => setForm({ ...form, category: e.target.value })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             />
           </div>
 
@@ -4649,7 +4730,7 @@ function CmsEditor({
               type="number"
               value={String(form.sortOrder)}
               onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })}
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             />
           </div>
 
@@ -4659,7 +4740,7 @@ function CmsEditor({
               value={form.tags}
               onChange={(e) => setForm({ ...form, tags: e.target.value })}
               placeholder="guide, beginners"
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             />
           </div>
 
@@ -4669,7 +4750,7 @@ function CmsEditor({
               value={form.excerpt}
               onChange={(e) => setForm({ ...form, excerpt: e.target.value })}
               placeholder="One-line summary shown in cards/lists"
-              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm"
+              className="h-10 w-full rounded-lg border border-border bg-background px-3 text-base"
             />
           </div>
 

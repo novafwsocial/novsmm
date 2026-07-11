@@ -108,6 +108,10 @@ export const updateUserSchema = z.object({
   id: z.string(),
   role: z.enum(["user", "reseller", "agency", "admin"]).optional(),
   status: z.enum(["active", "suspended", "pending"]).optional(),
+  // SECURITY (audit R3): when role changes to/from "admin", the admin must
+  // re-authenticate by providing their current password. This is step-up auth
+  // — prevents session hijacking from being sufficient to create a new admin.
+  confirmPassword: z.string().optional(),
   // SECURITY (OWASP A04-2, P1): `balance` is intentionally NOT accepted here.
   // All balance changes must go through the dedicated /api/admin/users/adjust-balance
   // endpoint, which creates a Transaction row (audit trail), requires a `reason`,

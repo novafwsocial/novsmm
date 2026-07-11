@@ -77,10 +77,35 @@ export async function PATCH(req: NextRequest) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
-  const { id, role, status } = parsed.data;
+  const { id, role, status, confirmPassword } = parsed.data;
 
   const user = await db.user.findUnique({ where: { id }, select: { status: true, role: true } });
   if (!user) return apiError("User not found", 404);
+
+  // SECURITY (audit R3): Step-up authentication for role changes to/from admin.
+  // When promoting to admin or demoting from admin, require the acting admin's
+  // current password to prevent session hijacking from being sufficient.
+  const isRoleAdminChange =
+    role && ((role === "admin" && user.role !== "admin") || (role !== "admin" && user.role === "admin"));
+
+  if (isRoleAdminChange) {
+    if (!confirmPassword) {
+      return apiError("Confirm your password to change admin roles.", 422);
+    }
+    // Verify the acting admin's password (not the target user's)
+    const admin = await db.user.findUnique({
+      where: { id: adminId },
+      select: { passwordHash: true },
+    });
+    if (!admin?.passwordHash) {
+      return apiError("Server error: admin account has no password", 500);
+    }
+    const bcrypt = await import("bcryptjs");
+    const valid = await bcrypt.compare(confirmPassword, admin.passwordHash);
+    if (!valid) {
+      return apiError("Incorrect password. Please try again.", 422);
+    }
+  }
 
   // SECURITY: "Last admin" protection — prevent removing admin role from
   // the last active admin, which would lock everyone out of the panel.

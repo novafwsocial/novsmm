@@ -222,7 +222,7 @@ function FieldInput({ label, icon, value, onChange }: { label: string; icon: Rea
       <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{label}</span>
       <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 transition-shadow focus-within:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]">
         <span className="text-muted-foreground">{icon}</span>
-        <input value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full bg-transparent text-sm text-foreground focus:outline-none" />
+        <input value={value} onChange={(e) => onChange(e.target.value)} className="h-11 w-full bg-transparent text-base text-foreground focus:outline-none" />
       </div>
     </label>
   );
@@ -353,7 +353,7 @@ function DangerZone() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   placeholder="Re-enter your password"
-                  className="h-11 w-full bg-transparent text-sm text-foreground focus:outline-none"
+                  className="h-11 w-full bg-transparent text-base text-foreground focus:outline-none"
                   autoComplete="current-password"
                 />
                 <button
@@ -514,7 +514,7 @@ function SecuritySection() {
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Current password</span>
               <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 transition-shadow focus-within:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]">
                 <Lock className="h-3.5 w-3.5 text-muted-foreground" />
-                <input type={showPw ? "text" : "password"} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} className="h-11 w-full bg-transparent text-sm focus:outline-none" />
+                <input type={showPw ? "text" : "password"} value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} className="h-11 w-full bg-transparent text-base focus:outline-none" />
                 <button onClick={() => setShowPw(!showPw)} className="text-muted-foreground">{showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}</button>
               </div>
             </label>
@@ -522,7 +522,7 @@ function SecuritySection() {
               <span className="mb-1.5 block text-xs font-medium text-muted-foreground">New password (min 8 characters)</span>
               <div className="flex items-center gap-2 rounded-xl border border-border bg-background px-3.5 transition-shadow focus-within:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]">
                 <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
-                <input type={showPw ? "text" : "password"} value={newPw} onChange={(e) => setNewPw(e.target.value)} className="h-11 w-full bg-transparent text-sm focus:outline-none" />
+                <input type={showPw ? "text" : "password"} value={newPw} onChange={(e) => setNewPw(e.target.value)} className="h-11 w-full bg-transparent text-base focus:outline-none" />
               </div>
             </label>
             <button onClick={handleChangePassword} disabled={loading || !currentPw || newPw.length < 8} className="inline-flex items-center gap-2 self-start rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground disabled:opacity-60">

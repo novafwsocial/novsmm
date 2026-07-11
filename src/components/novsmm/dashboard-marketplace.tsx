@@ -3145,7 +3145,7 @@ function SellTab() {
               </label>
               <label className="block">
                 <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Your price per 1000 (USD)</span>
-                <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} step="0.01" min="0" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none" />
+                <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} step="0.01" min="0" className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none" />
               </label>
               {/* MARKETPLACE-13-IMPROVEMENTS #15 — Suggested price hint + Use
                   suggested button + competitor (NOVSMM catalog) price. The
