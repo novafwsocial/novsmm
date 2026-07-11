@@ -67,9 +67,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
     });
   }
 
-  // Public API docs (crawlable — no auth required for /api/docs)
+  // Public API docs page (formatted HTML, crawlable)
   routes.push({
-    url: `${SITE_ORIGIN}/api/docs`,
+    url: `${SITE_ORIGIN}/api-docs`,
     lastModified: now,
     changeFrequency: "weekly",
     priority: 0.6,

@@ -187,7 +187,7 @@ const ORG_JSON_LD = {
       "@type": "ContactPoint",
       contactType: "customer support",
       availableLanguage: ["English", "Spanish", "Portuguese"],
-      url: `${SITE_ORIGIN}/api/docs`,
+      url: `${SITE_ORIGIN}/api-docs`,
     },
   ],
 };

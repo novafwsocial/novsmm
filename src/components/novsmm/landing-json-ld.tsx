@@ -157,7 +157,7 @@ const faqLd = {
       name: "Does NOVSMM offer an API?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. NOVSMM exposes a public REST API with API-key authentication and outbound webhooks. Place orders, check status, refill, cancel, and query your balance programmatically. Full reference is at /api/docs.",
+        text: "Yes. NOVSMM exposes a public REST API with API-key authentication and outbound webhooks. Place orders, check status, refill, cancel, and query your balance programmatically. Full reference is at /api-docs.",
       },
     },
     {

@@ -68,7 +68,7 @@ export default function NotFound() {
         {/* Secondary resources */}
         <div className="mt-12 grid gap-3 sm:grid-cols-3">
           <Link
-            href="/api/docs"
+            href="/api-docs"
             className="group rounded-2xl border border-border/60 bg-background/60 p-4 text-left backdrop-blur-sm transition-colors hover:border-border hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
           >
             <Search className="h-5 w-5 text-primary" aria-hidden />
