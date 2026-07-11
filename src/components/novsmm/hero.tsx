@@ -13,6 +13,7 @@ import {
 import { Magnetic } from "./magnetic";
 import { Counter } from "./counter";
 import { HeroDashboard } from "./hero-dashboard";
+import { Tilt3D } from "./tilt-3d";
 import { useApp } from "./app-store";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 
@@ -165,14 +166,14 @@ export function Hero() {
             value={<Counter to={242} duration={2.2} />}
           />
 
-          <div className="relative overflow-hidden rounded-[20px] nov-ring-lg nov-grain bg-background">
+          <Tilt3D className="relative overflow-hidden rounded-[20px] nov-ring-lg nov-grain bg-background" maxTilt={6}>
             <HeroDashboard />
-          </div>
+          </Tilt3D>
 
           {/* glow under dashboard */}
           <div
             aria-hidden
-            className="pointer-events-none absolute -bottom-10 left-1/2 h-40 w-3/4 -translate-x-1/2 rounded-full bg-primary/10 blur-[80px]"
+            className="glow-3d pointer-events-none absolute -bottom-10 left-1/2 h-40 w-3/4 -translate-x-1/2 rounded-full bg-primary/10 blur-[80px]"
           />
         </div>
       </div>
@@ -197,7 +198,7 @@ function FloatingChip({
     <div
       className={`z-20 items-center gap-2.5 rounded-2xl border border-border/60 bg-background/90 px-3.5 py-2.5 nov-ring backdrop-blur-xl ${className ?? ""}`}
       style={{
-        animation: `chipIn 0.7s ${delay}s cubic-bezier(0.16, 1, 0.3, 1) both`,
+        animation: `chipIn 0.7s ${delay}s cubic-bezier(0.16, 1, 0.3, 1) both, float-3d 6s ease-in-out infinite ${delay + 1}s`,
       }}
     >
       <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted">

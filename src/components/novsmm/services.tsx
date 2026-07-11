@@ -4,7 +4,7 @@ import { ArrowUpRight } from "lucide-react";
 import { PLATFORMS, type Platform } from "./platforms";
 import { PlatformLogo } from "./platform-logo";
 import { SectionHeading } from "./section-heading";
-import { Reveal } from "./reveal";
+import { Scroll3DReveal } from "./scroll-3d-reveal";
 
 export function Services() {
   return (
@@ -23,12 +23,12 @@ export function Services() {
 
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
           {PLATFORMS.map((p, i) => (
-            <Reveal key={p.name} delay={i * 0.05}>
+            <Scroll3DReveal key={p.name} delay={i * 0.05}>
               <ServiceCard platform={p} />
-            </Reveal>
+            </Scroll3DReveal>
           ))}
           {/* Aggregate card */}
-          <Reveal delay={PLATFORMS.length * 0.05}>
+          <Scroll3DReveal delay={PLATFORMS.length * 0.05}>
             <div className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-dashed border-border bg-muted/30 p-5 transition-colors hover:border-primary/40">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
@@ -43,7 +43,7 @@ export function Services() {
                 </div>
               </div>
             </div>
-          </Reveal>
+          </Scroll3DReveal>
         </div>
       </div>
     </section>

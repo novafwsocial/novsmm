@@ -11309,3 +11309,28 @@ Notable strong-security areas (verified clean):
 No code was modified. Full audit report with file:line references, impacts,
 and concrete fixes for all 27 findings is at:
 /home/z/my-project/OWASP_AUDIT_REPORT.md
+
+---
+Task ID: LANDING-3D-ENHANCEMENT-1
+Agent: full-stack-developer
+Task: 3D landing enhancements + conversion optimization
+
+Work Log:
+- Read worklog.md and reviewed existing hero.tsx, services.tsx, page.tsx, app-store.ts, globals.css for context.
+- Appended a self-contained "3D & SCROLL ANIMATION SYSTEM" CSS block to the end of src/app/globals.css (perspective utils, tilt-card, parallax via scroll-timeline, reveal-3d, float-3d, glow-3d, flip-card, sticky-cta, social-proof slide animations, shimmer-cta) plus mobile-disable and prefers-reduced-motion overrides.
+- Created src/components/novsmm/scroll-3d-reveal.tsx — IntersectionObserver-based 3D scroll reveal wrapper (no scroll listeners, GPU-composited transform/opacity only, falls back to immediate show).
+- Created src/components/novsmm/tilt-3d.tsx — mouse-tracked 3D tilt for cards with rAF throttling, disabled on touch devices via matchMedia("(hover: none)").
+- Created src/components/novsmm/sticky-cta.tsx — mobile-only sticky CTA bar that appears after scrolling past 60% of viewport height (rAF-throttled scroll listener, respects safe-area-inset-bottom, hidden on lg+).
+- Created src/components/novsmm/social-proof.tsx — desktop-only FOMO notification cycling through 8 realistic signup/order/topup scenarios; 4s initial delay, 5s visible, 3s gap, slide-in-up/slide-out-down animations, manual dismiss button.
+- Enhanced src/components/novsmm/hero.tsx: imported Tilt3D, wrapped HeroDashboard in <Tilt3D maxTilt={6}> with the original ring/grain/rounded classes, added `glow-3d` class to the glow div under the dashboard, added `float-3d` class to FloatingChip wrapper.
+- Enhanced src/components/novsmm/services.tsx: imported Scroll3DReveal, replaced all <Reveal> wrappers (platform cards + aggregate card) with <Scroll3DReveal>, removed now-unused Reveal import to avoid lint/unused errors.
+- Updated src/app/page.tsx: imported StickyCTA and SocialProof, rendered both inside the main wrapper (after <WhatsAppWidget />) so they are visible across the entire app surface.
+- Ran `bun run build` — compiled successfully in 31.9s, TypeScript passed in 27.3s, all 105 static pages generated, no errors. (Note: `bun run lint` is broken in this environment due to a @typescript-eslint/utils / ESLint 10.6.0 incompatibility unrelated to these changes — `next build` performs its own TS type-check and passes.)
+
+Stage Summary:
+- 4 new components: scroll-3d-reveal, tilt-3d, sticky-cta, social-proof — all client components, all zero-dependency (pure React + CSS), all GPU-composited (transform/opacity only).
+- 1 new CSS system appended to globals.css covering 3D perspective, tilt, parallax (scroll-timeline + IntersectionObserver fallback), reveal-3d, float-3d, glow-3d, flip-card, sticky-cta, social-proof, shimmer-cta — with mobile-disable (@media max-width:768px) and prefers-reduced-motion overrides.
+- Hero dashboard now has mouse-tracking 3D tilt + glowing aura; floating stat chips carry the float-3d class.
+- Services grid now reveals each card with a 3D rotateX(15deg) → 0deg perspective animation on scroll (mobile falls back to 2D translateY).
+- Mobile users get a sticky bottom CTA bar appearing past 60% of viewport height; desktop users get rotating social-proof notifications in the bottom-left.
+- Build passes cleanly; no new npm dependencies added; performance budget preserved (IntersectionObserver + rAF + CSS-only animations, no per-frame JS).

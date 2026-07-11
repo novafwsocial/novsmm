@@ -6,6 +6,8 @@ import { Navbar } from "@/components/novsmm/navbar";
 import { Hero } from "@/components/novsmm/hero";
 import { AppView } from "@/components/novsmm/app-view";
 import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
+import { StickyCTA } from "@/components/novsmm/sticky-cta";
+import { SocialProof } from "@/components/novsmm/social-proof";
 
 /**
  * PERF: Lazy-load below-the-fold landing sections.
@@ -105,6 +107,8 @@ export default function Home() {
         />
         {/* WhatsApp live chat — always visible across the entire app */}
         <WhatsAppWidget />
+        <StickyCTA />
+        <SocialProof />
       </div>
     </SmoothScroll>
     </ErrorBoundary>

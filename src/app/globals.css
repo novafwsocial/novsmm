@@ -414,3 +414,154 @@ img, video, canvas, svg {
     filter: none !important;
   }
 }
+
+/* ─── 3D & SCROLL ANIMATION SYSTEM ─── */
+
+/* 3D perspective utilities */
+.perspective-1000 { perspective: 1000px; }
+.perspective-2000 { perspective: 2000px; }
+.preserve-3d { transform-style: preserve-3d; }
+.backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+
+/* 3D card tilt — triggered by JS mouse tracking (data-tilt attribute) */
+.tilt-card {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.tilt-card-inner {
+  transform: translateZ(40px);
+  transform-style: preserve-3d;
+}
+
+/* Scroll-driven parallax (CSS scroll-timeline — Chrome 115+, Safari 17.4+)
+   Fallback: IntersectionObserver adds .in-view class for older browsers */
+@supports (animation-timeline: scroll()) {
+  .parallax-layer {
+    animation: parallax-up linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes parallax-up {
+    from { transform: translateZ(0) translateY(0); }
+    to { transform: translateZ(0) translateY(-100px); }
+  }
+}
+
+/* 3D scroll reveal — cards rotate in from perspective */
+.reveal-3d {
+  opacity: 0;
+  transform: perspective(800px) rotateX(15deg) translateY(60px);
+  transform-origin: center bottom;
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: opacity, transform;
+}
+.reveal-3d.in-view {
+  opacity: 1;
+  transform: perspective(800px) rotateX(0deg) translateY(0);
+}
+
+/* Floating 3D animation */
+@keyframes float-3d {
+  0%, 100% { transform: translateY(0) rotateY(0deg) rotateX(0deg); }
+  25% { transform: translateY(-10px) rotateY(2deg) rotateX(1deg); }
+  50% { transform: translateY(-5px) rotateY(0deg) rotateX(-1deg); }
+  75% { transform: translateY(-15px) rotateY(-2deg) rotateX(1deg); }
+}
+.float-3d { animation: float-3d 6s ease-in-out infinite; transform-style: preserve-3d; }
+
+/* 3D glow pulse */
+@keyframes glow-3d-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(0, 82, 255, 0.15), 0 0 40px rgba(0, 82, 255, 0.08); }
+  50% { box-shadow: 0 0 30px rgba(0, 82, 255, 0.25), 0 0 60px rgba(0, 82, 255, 0.12); }
+}
+.glow-3d { animation: glow-3d-pulse 4s ease-in-out infinite; }
+
+/* 3D flip card */
+.flip-card { perspective: 1000px; }
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.flip-card:hover .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-card-back { transform: rotateY(180deg); }
+
+/* Scroll progress glow (enhanced version of scroll progress bar) */
+@keyframes scroll-glow {
+  0% { box-shadow: 0 0 5px rgba(0, 82, 255, 0.3); }
+  50% { box-shadow: 0 0 15px rgba(0, 82, 255, 0.6); }
+  100% { box-shadow: 0 0 5px rgba(0, 82, 255, 0.3); }
+}
+
+/* Sticky CTA bar (mobile conversion) */
+.sticky-cta {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sticky-cta.visible { transform: translateY(0); }
+
+/* Social proof notification */
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes slide-out-down {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(20px) scale(0.95); }
+}
+.social-proof {
+  animation: slide-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.social-proof.exit {
+  animation: slide-out-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Shimmer effect for CTAs */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer-cta {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Disable 3D on mobile for performance */
+@media (max-width: 768px) {
+  .reveal-3d {
+    opacity: 0;
+    transform: translateY(30px); /* simpler on mobile */
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .reveal-3d.in-view {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .float-3d { animation: none; }
+  .parallax-layer { animation: none !important; transform: none !important; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-3d, .float-3d, .glow-3d, .parallax-layer, .shimmer-cta, .social-proof {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
