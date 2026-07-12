@@ -11793,3 +11793,93 @@ Stage Summary:
   + purge de caché de Cloudflare por el operador.
 - El sandbox local (localhost:3000) SÍ funciona correctamente tras el
   fix (verificado con Playwright: 12K chars, 9 secciones, 0 errores).
+
+---
+Task ID: DEPLOY-DEEP-ANALYSIS
+Agent: main (orchestrator)
+Task: Análisis profundo y exhaustivo de TODOS los deploys (WSL2, no VPS)
+
+Work Log:
+- Usuario aclaró: NO es VPS, es WSL2. Deploy por GitHub tiene errores.
+- Verifiqué estado actual de novsmm.shop: **HTTP/2 502 Bad Gateway**
+  (Cloudflare no puede alcanzar el origin = WSL2 caído o pm2 parado).
+
+ANÁLISIS EXHAUSTIVO DE LA INFRAESTRUCTURA DE DEPLOY:
+
+1. GitHub Actions (.github/workflows/ci.yml):
+   - Tiene 4 jobs: lint-typecheck, build, security, deploy.
+   - CRÍTICO: el job "deploy" NO hace deploy real. Solo hace echo:
+       echo "🚀 Ready for manual deploy:"
+       echo "   ssh into server → cd ~/novsmm → git pull → npm run build → pm2 restart novsmm"
+   - Es decir, GitHub Actions SOLO valida (lint+build+security scan).
+   - El deploy REAL es 100% manual en WSL2.
+
+2. Problemas del build en WSL2 (confirmados del screenshot del usuario):
+   a) next/font/google requiere acceso a fonts.googleapis.com al compilar.
+      En WSL2 sin internet saliente a Google, falla con:
+        "Failed to fetch 'Inter' from Google Fonts."
+        "Turbopack build failed with 2 errors: next/font: error"
+      FIX YA APLICADO (commit 7fd927a): reemplazado next/font/google
+      por <link> tags en layout.tsx + variables CSS en globals.css.
+      Verificado: `bun run build` pasa (✓ Compiled 25.8s, 110/110 pages).
+
+3. Configuración PM2 vs package.json (INCONSISTENCIA DETECTADA):
+   - ecosystem.config.js usa: `.next/standalone/server.js`
+   - PERO next.config.ts NO tiene `output: 'standalone'`
+   - PERO package.json start: `next start -p 3000` (NO usa standalone)
+   - El usuario ejecutó: `pm2 start "npm run start" --name novsmm`
+     → eso ejecuta `next start -p 3000`, que NO requiere standalone.
+     → requiere `.next/` con BUILD_ID (✅ existe tras build exitoso).
+   - CONCLUSIÓN: la inconsistencia NO es problema en este caso,
+     pero ecosystem.config.js está roto para uso futuro.
+
+4. Prisma schema (INCONSISTENCIA):
+   - prisma/schema.prisma dice `provider = "postgresql"`
+   - Pero .env actual usa SQLite: `DATABASE_URL=file:/home/z/my-project/db/custom.db`
+   - En WSL2 el usuario tiene SQLite, no PostgreSQL.
+   - El build de CI usa `postgresql://dummy:dummy@localhost:5432/dummy`
+     (no se conecta, solo genera el cliente — funciona).
+   - PERO `next start` en WSL2 necesita que el schema coincida con la DB.
+   - Si el usuario hace `prisma generate` con schema postgresql + usa
+     SQLite en runtime → errota "Unknown PRisma engine" en runtime.
+
+5. CSP bloqueaba hidratación (YA FIXEADO, commit 2d06722):
+   - middleware.ts tenía `'unsafe-inline' 'strict-dynamic'` → CSP3 spec
+     hace que strict-dynamic silencie unsafe-inline → bloquea scripts
+     inline de Next.js 16 → página atascada en loading.tsx.
+   - Fix: remover strict-dynamic, añadir unsafe-eval.
+   - NO está desplegado en novsmm.shop (sigue 502).
+
+6. Cloudflare cache (CRÍTICO):
+   - novsmm.shop está detrás de Cloudflare.
+   - Page Rules: "Cache Everything" para HTML, "Bypass" para /api/*.
+   - El HTML cacheado tiene la CSP vieja (rota).
+   - Tras redeploy, HAY que purgar Cloudflare o los usuarios siguen
+     viendo la versión rota por hasta 5 min (edge TTL).
+
+7. Scripts de deploy (4 scripts, todos para VPS/Docker, NO WSL2):
+   - scripts/deploy.sh → usa docker compose (no aplica en WSL2 simple)
+   - scripts/deploy-lowmem.sh → igual, docker compose
+   - NO HAY un script simple para WSL2 + pm2.
+   - El usuario está haciendo deploy manual con:
+       pm2 start "npm run start" --name novsmm
+
+RAÍCES DEL PROBLEMA (por qué "no carga la web"):
+- novsmm.shop = 502 Bad Gateway ahora mismo → WSL2 está apagado o pm2
+  está parado o el puerto 3000 no responde.
+- Cuando el WSL2 estuvo arriba la última vez, el build fallaba por
+  next/font/google (Google Fonts inaccesible) → npm run build fail →
+  next start no encuentra .next/BUILD_ID → app cae → 502.
+- Y aunque el build pasara, la CSP vieja (con 'strict-dynamic')
+  bloqueaba la hidratación → "Cargando..." infinito.
+
+Stage Summary:
+- 2 fixes críticos YA en GitHub (commits 2d06722 + 7fd927a):
+  1. CSP: remover 'strict-dynamic' (fix loading loop)
+  2. Fonts: next/font/google → <link> tags (fix build error)
+- Verificado en sandbox: `npm run build` pasa, `next start` sirve
+  la home completa (12K chars, CSP correcta, sin errores).
+- El usuario en WSL2 necesita hacer pull + build + pm2 restart
+  + purge Cloudflare cache.
+- Como su WSL2 no resuelve github.com, le di comandos `sed` para
+  aplicar los 2 fixes directo en los archivos sin git.
