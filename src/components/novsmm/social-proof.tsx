@@ -82,6 +82,9 @@ export function SocialProof() {
   return (
     <div
       className={`social-proof ${exiting ? "exit" : ""} fixed bottom-5 left-5 z-40 hidden lg:block`}
+      // A2-M-002 FIX: aria-live=polite so screen readers announce new notifications
+      aria-live="polite"
+      aria-label="Platform activity"
     >
       <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 px-4 py-3 shadow-lg backdrop-blur-xl">
         <span className="text-2xl">{current.flag}</span>

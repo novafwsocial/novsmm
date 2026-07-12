@@ -42,7 +42,7 @@ if [ -z "$BACKUP_FILE" ]; then
   echo "Backups disponibles en $BACKUP_DIR:"
   echo ""
   
-  BACKUPS=$(find "$BACKUP_DIR" -name "novsmm_db_*.sql.gz" -type f | sort -r)
+  BACKUPS=$(find "$BACKUP_DIR" -name "novsmm_db_*.sql.gz*" -type f | sort -r)
   
   if [ -z "$BACKUPS" ]; then
     fail "No hay backups en $BACKUP_DIR"

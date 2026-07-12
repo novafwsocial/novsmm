@@ -48,7 +48,7 @@ echo ""
 # ── 1. Select backup ──
 BACKUP_FILE="${1:-}"
 if [ -z "$BACKUP_FILE" ]; then
-  BACKUP_FILE=$(find "$BACKUP_DIR" -name "novsmm_db_*.sql.gz" -type f 2>/dev/null | sort -r | head -1)
+  BACKUP_FILE=$(find "$BACKUP_DIR" -name "novsmm_db_*.sql.gz*" -type f 2>/dev/null | sort -r | head -1)
   if [ -z "$BACKUP_FILE" ]; then
     fail "No backups found in $BACKUP_DIR"
     echo "  Run ./scripts/backup.sh first."

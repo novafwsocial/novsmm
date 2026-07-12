@@ -30,15 +30,13 @@ const PUBLIC_SETTING_KEYS = [
 ];
 
 export async function GET() {
-  // SECURITY (S-L-006): only fetch public-safe keys — never load ALL settings.
-  const settings = await db.setting.findMany({
-    where: { key: { in: PUBLIC_SETTING_KEYS } },
-  });
-  const map: Record<string, string> = {};
-  settings.forEach((s) => (map[s.key] = s.value));
-
-  // Fetch active currencies + languages in parallel
-  const [currencies, languages] = await Promise.all([
+  // PERF FIX (R-M-003): all 3 queries in a single Promise.all.
+  // Previously settings query ran first, then currencies + languages
+  // in a second Promise.all — 2 round-trips instead of 1.
+  const [settings, currencies, languages] = await Promise.all([
+    db.setting.findMany({
+      where: { key: { in: PUBLIC_SETTING_KEYS } },
+    }),
     db.currency.findMany({
       where: { status: "active" },
       orderBy: { sortOrder: "asc" },
@@ -50,6 +48,8 @@ export async function GET() {
       select: { code: true, name: true, nativeName: true, flag: true },
     }),
   ]);
+  const map: Record<string, string> = {};
+  settings.forEach((s) => (map[s.key] = s.value));
 
   const response = apiOk({
     siteName: map["platform.name"] ?? "NOVSMM",

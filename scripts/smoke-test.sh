@@ -90,8 +90,8 @@ echo "=== 3. SECURITY ==="
 STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/orders" -H "Content-Type: application/json" -d '{}' 2>/dev/null || echo "000")
 [ "$STATUS" = "403" ] && ok "CSRF (sin Origin): 403" || fail "CSRF (sin Origin): $STATUS (esperado 403)"
 
-STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/webhooks/stripe" -H "Content-Type: application/json" -d '{}' 2>/dev/null || echo "000")
-[ "$STATUS" = "401" ] && ok "Stripe webhook fail-closed: 401" || fail "Stripe webhook: $STATUS (esperado 401)"
+STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/webhooks/nowpayments" -H "Content-Type: application/json" -d '{}' 2>/dev/null || echo "000")
+[ "$STATUS" = "401" ] && ok "NowPayments webhook fail-closed: 401" || fail "NowPayments webhook: $STATUS (esperado 401)"
 
 STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/webhooks/mercadopago" -H "Content-Type: application/json" -d '{}' 2>/dev/null || echo "000")
 [ "$STATUS" = "401" ] && ok "MP webhook fail-closed: 401" || fail "MP webhook: $STATUS (esperado 401)"

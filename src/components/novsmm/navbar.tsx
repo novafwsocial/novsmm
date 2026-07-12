@@ -10,17 +10,9 @@ import { cn } from "@/lib/utils";
 import { useLanguage } from "./language-provider";
 import { LanguageSwitcher } from "./language-switcher";
 
-const NAV_LINKS = [
-  { label: "Platform", href: "#hero" },
-  { label: "Services", href: "#services" },
-  { label: "Marketplace", href: "#marketplace" },
-  { label: "Payments", href: "#payments" },
-  { label: "Security", href: "#security" },
-  // FIX (U-C-001): Pricing was unreachable from the landing — the /pricing
-  // route exists but no nav link pointed to it. Adding it here makes the
-  // CTA visible on every page (+15-25% signup rate per UX audit).
-  { label: "Pricing", href: "/pricing" },
-];
+// A2-M-004 FIX: removed the top-level static NAV_LINKS — the dynamic
+// one inside Navbar() (with i18n translations) is the single source.
+// Keeping the static one caused confusion and dual maintenance.
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
@@ -148,6 +140,10 @@ export function Navbar() {
           style={{
             animation: "mobileMenuIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
+          // A2-M-003 FIX: add dialog semantics for screen readers
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
         >
           {NAV_LINKS.map((l) => (
             <a
