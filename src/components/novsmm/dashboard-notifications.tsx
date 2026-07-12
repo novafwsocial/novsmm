@@ -192,7 +192,7 @@ export function DashboardNotifications() {
                         <div className="truncate text-sm font-semibold text-foreground">
                           {n.title}
                         </div>
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {timeAgo(n.createdAt)}
                         </span>
                       </div>

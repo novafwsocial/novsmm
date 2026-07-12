@@ -343,7 +343,7 @@ export function DashboardHome() {
                   <PlatformLogo platform={f.service?.platform ?? "Other"} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">{f.service?.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
+                    <div className="text-[11px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
                   </div>
                 </div>
               )) : (
@@ -368,7 +368,7 @@ export function DashboardHome() {
                   <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", t.priority === "high" ? "bg-red-500" : "bg-amber-500")} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium text-foreground">#{t.publicId} · {t.subject}</div>
-                    <div className="text-[10px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
+                    <div className="text-[11px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
                   </div>
                 </div>
               )) : (

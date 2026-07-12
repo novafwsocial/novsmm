@@ -397,7 +397,7 @@ function CurrencyStep({ data, setData, options }: StepProps & { options: any[] }
               {c.symbol}
             </span>
             <span className="text-sm font-medium text-foreground">{c.code}</span>
-            <span className="text-[10px] text-muted-foreground">{c.name}</span>
+            <span className="text-[11px] text-muted-foreground">{c.name}</span>
           </motion.button>
         ))}
       </div>

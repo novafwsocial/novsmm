@@ -215,7 +215,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-3 nov-scroll">
-          <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Workspace
           </div>
           {NAV.map((n) => {
@@ -241,7 +241,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
           {isAdmin && (
             <>
-              <div className="mt-5 px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <div className="mt-5 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Admin
               </div>
               <NavButton
@@ -411,7 +411,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <span className="w-full text-left text-foreground/80">
               Search orders, services, clients…
             </span>
-            <kbd className="hidden rounded border border-border bg-background px-1.5 text-[10px] sm:inline">
+            <kbd className="hidden rounded border border-border bg-background px-1.5 text-[11px] sm:inline">
               ⌘K
             </kbd>
           </button>
@@ -541,7 +541,7 @@ function NavButton({
       {badge && (
         <span
           className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+            "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
             active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
           )}
         >
@@ -575,7 +575,7 @@ function UserPill({
           <div className="truncate text-xs font-semibold text-foreground">
             {user.name}
           </div>
-          <div className="truncate text-[10px] text-muted-foreground">
+          <div className="truncate text-[11px] text-muted-foreground">
             {user.email}
           </div>
         </div>
@@ -831,7 +831,7 @@ function CommandPalette({
             aria-controls="cmd-list"
             aria-activedescendant={filtered[safeIndex] ? `cmd-${safeIndex}` : undefined}
           />
-          <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 text-[10px] text-muted-foreground sm:inline">
+          <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 text-[11px] text-muted-foreground sm:inline">
             Esc
           </kbd>
         </div>
@@ -850,7 +850,7 @@ function CommandPalette({
           ) : (
             Array.from(groups.entries()).map(([group, cmds]) => (
               <div key={group} className="mb-1.5">
-                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   {group}
                 </div>
                 {cmds.map((cmd) => {
@@ -902,7 +902,7 @@ function CommandPalette({
         </div>
 
         {/* Footer / keyboard hints */}
-        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-2.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-2.5 text-[11px] text-muted-foreground">
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center gap-1">
               <kbd className="rounded border border-border bg-background px-1.5 py-0.5">↑</kbd>

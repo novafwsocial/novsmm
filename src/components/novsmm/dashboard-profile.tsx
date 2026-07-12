@@ -166,7 +166,7 @@ export function DashboardProfile() {
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                 {currencies.map((c: any) => (
                   <button key={c.code} onClick={() => setField("currency", c.code)} className={cn("flex items-center justify-between rounded-xl border p-3 text-left transition-all", form.currency === c.code ? "border-primary bg-primary/[0.04] nov-ring" : "border-border hover:bg-muted/30")}>
-                    <div className="flex items-center gap-2"><span className="text-lg font-semibold">{c.symbol}</span><div><div className="text-sm font-medium">{c.code}</div><div className="text-[10px] text-muted-foreground">{c.name}</div></div></div>
+                    <div className="flex items-center gap-2"><span className="text-lg font-semibold">{c.symbol}</span><div><div className="text-sm font-medium">{c.code}</div><div className="text-[11px] text-muted-foreground">{c.name}</div></div></div>
                     {form.currency === c.code && <CheckCircle2 className="h-4 w-4 text-primary" />}
                   </button>
                 ))}
@@ -180,7 +180,7 @@ export function DashboardProfile() {
               <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
                 {languages.map((l: any) => (
                   <button key={l.code} onClick={() => setField("language", l.code)} className={cn("flex items-center gap-2 rounded-xl border p-3 text-left transition-all", form.language === l.code ? "border-primary bg-primary/[0.04] nov-ring" : "border-border hover:bg-muted/30")}>
-                    <span className="text-xl">{l.flag}</span><div><div className="text-sm font-medium">{l.nativeName}</div><div className="text-[10px] text-muted-foreground">{l.name}</div></div>
+                    <span className="text-xl">{l.flag}</span><div><div className="text-sm font-medium">{l.nativeName}</div><div className="text-[11px] text-muted-foreground">{l.name}</div></div>
                     {form.language === l.code && <CheckCircle2 className="ml-auto h-4 w-4 text-primary" />}
                   </button>
                 ))}
@@ -717,7 +717,7 @@ function SessionsSection() {
               <div className="flex items-center gap-3">
                 <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-muted-foreground"><Monitor className="h-4 w-4" /></span>
                 <div>
-                  <div className="text-sm font-medium text-foreground">{s.device} {s.current && <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">CURRENT</span>}</div>
+                  <div className="text-sm font-medium text-foreground">{s.device} {s.current && <span className="ml-1 rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">CURRENT</span>}</div>
                   <div className="text-xs text-muted-foreground">{s.ip} · {new Date(s.lastActive).toLocaleString()}</div>
                 </div>
               </div>
@@ -832,19 +832,19 @@ function ReferralsSection() {
 
           <div className="mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
-              <div className="text-[10px] uppercase tracking-wider opacity-60">Total referrals</div>
+              <div className="text-[11px] uppercase tracking-wider opacity-60">Total referrals</div>
               <div className="text-xl font-semibold">{totalReferrals}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider opacity-60">Active</div>
+              <div className="text-[11px] uppercase tracking-wider opacity-60">Active</div>
               <div className="text-xl font-semibold">{activeReferrals}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider opacity-60">Total earned</div>
+              <div className="text-[11px] uppercase tracking-wider opacity-60">Total earned</div>
               <div className="text-xl font-semibold">{formatPrice(totalEarnings, currency)}</div>
             </div>
             <div>
-              <div className="text-[10px] uppercase tracking-wider opacity-60">Commission</div>
+              <div className="text-[11px] uppercase tracking-wider opacity-60">Commission</div>
               <div className="text-xl font-semibold">{(commissionRate * 100).toFixed(0)}%</div>
             </div>
           </div>
@@ -927,11 +927,11 @@ function ReferralsSection() {
                     </td>
                     <td className="px-3 py-2.5 text-right">
                       {isCurrent ? (
-                        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[10px] font-semibold text-primary">Current</span>
+                        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-[11px] font-semibold text-primary">Current</span>
                       ) : isUnlocked ? (
-                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-medium text-emerald-700">Unlocked</span>
+                        <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-medium text-emerald-700">Unlocked</span>
                       ) : (
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">Locked</span>
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Locked</span>
                       )}
                     </td>
                   </tr>
@@ -953,7 +953,7 @@ function ReferralsSection() {
               <div key={p.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3">
                 <div>
                   <div className="text-sm font-medium">{p.description || "Referral commission"}</div>
-                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                  <div className="text-[11px] text-muted-foreground tabular-nums">
                     {p.publicId} · {new Date(p.createdAt).toLocaleDateString()}
                   </div>
                 </div>
@@ -997,9 +997,9 @@ function ReferralsSection() {
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium">
-                      {l.name || `@${l.username}`} {isMe && <span className="text-[10px] text-primary">(you)</span>}
+                      {l.name || `@${l.username}`} {isMe && <span className="text-[11px] text-primary">(you)</span>}
                     </div>
-                    <div className="text-[10px] text-muted-foreground tabular-nums">
+                    <div className="text-[11px] text-muted-foreground tabular-nums">
                       {l.referralCount} referrals · {l.tierEmoji} {l.tierLabel}
                     </div>
                   </div>
@@ -1023,8 +1023,8 @@ function ReferralsSection() {
         <div className="mt-3 flex flex-col gap-2">
           {referrals.filter((r: any) => r.referredEmail).length > 0 ? referrals.filter((r: any) => r.referredEmail).map((r: any) => (
             <div key={r.id} className="flex items-center justify-between rounded-xl border border-border/60 p-3">
-              <div><div className="text-sm font-medium">{r.referredEmail || "Pending signup"}</div><div className="text-[10px] text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</div></div>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", r.status === "rewarded" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{r.status}</span>
+              <div><div className="text-sm font-medium">{r.referredEmail || "Pending signup"}</div><div className="text-[11px] text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</div></div>
+              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", r.status === "rewarded" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{r.status}</span>
             </div>
           )) : <div className="py-6 text-center text-sm text-muted-foreground">No referrals yet. Share your link above!</div>}
         </div>
@@ -1143,19 +1143,19 @@ function AchievementsSection() {
         {/* Quick stats */}
         <div className="relative mt-5 grid grid-cols-2 gap-4 sm:grid-cols-4">
           <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Achievements</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Achievements</div>
             <div className="text-xl font-semibold tabular-nums">{achievements.unlockedCount}/{achievements.total}</div>
           </div>
           <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total spent</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total spent</div>
             <div className="text-xl font-semibold tabular-nums">{formatPrice(stats.totalSpent, currency)}</div>
           </div>
           <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Completed orders</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Completed orders</div>
             <div className="text-xl font-semibold tabular-nums">{stats.completedOrders}</div>
           </div>
           <div className="rounded-xl border border-border/60 bg-background/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Referrals</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Referrals</div>
             <div className="text-xl font-semibold tabular-nums">{stats.referralCount}</div>
           </div>
         </div>
@@ -1191,7 +1191,7 @@ function AchievementsSection() {
                   <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-emerald-600" />
                 </div>
                 <div className="text-xs text-muted-foreground">{a.description}</div>
-                <div className="mt-1.5 flex items-center gap-2 text-[10px]">
+                <div className="mt-1.5 flex items-center gap-2 text-[11px]">
                   <span className="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/15 px-2 py-0.5 font-medium text-emerald-700">
                     +{a.bonus} pts
                   </span>
@@ -1221,7 +1221,7 @@ function AchievementsSection() {
                 {/* Progress bar (hidden for binary achievements like early_adopter) */}
                 {a.target > 0 && (
                   <div className="mt-1.5">
-                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                       <span className="tabular-nums">
                         {a.type.includes("spent")
                           ? `${formatPrice(a.current, currency)} / ${formatPrice(a.target, currency)}`
@@ -1238,11 +1238,11 @@ function AchievementsSection() {
                   </div>
                 )}
                 {a.target === 0 && (
-                  <div className="mt-1.5 inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground">
+                  <div className="mt-1.5 inline-flex items-center gap-0.5 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
                     <Lock className="h-2.5 w-2.5" /> Locked
                   </div>
                 )}
-                <div className="mt-1 text-[10px] font-medium text-muted-foreground">
+                <div className="mt-1 text-[11px] font-medium text-muted-foreground">
                   +{a.bonus} pts on unlock
                 </div>
               </div>
@@ -1272,7 +1272,7 @@ function AchievementsSection() {
                 </span>
                 <div>
                   <div className="text-sm font-medium text-foreground">{reasonLabel(p.reason)}</div>
-                  <div className="text-[10px] text-muted-foreground tabular-nums">
+                  <div className="text-[11px] text-muted-foreground tabular-nums">
                     {new Date(p.createdAt).toLocaleString()}
                     {p.orderId && " · linked to order"}
                   </div>

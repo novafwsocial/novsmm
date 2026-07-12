@@ -296,7 +296,7 @@ export function Stats() {
                   />
                 ))}
               </div>
-              <div className="mt-1.5 flex justify-between text-[10px] text-muted-foreground">
+              <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
                 <span>60 days ago</span>
                 <span>today</span>
               </div>
@@ -329,7 +329,7 @@ function Mini({
 }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}
       </span>

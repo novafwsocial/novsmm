@@ -182,7 +182,7 @@ export function PricingClient() {
                 )}
               >
                 Yearly
-                <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">
+                <span className="ml-1.5 rounded-full bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">
                   Save 20%
                 </span>
               </button>
@@ -206,7 +206,7 @@ export function PricingClient() {
                   )}
                 >
                   {tier.highlighted && (
-                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[10px] font-semibold uppercase tracking-wider text-primary-foreground">
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-primary px-3 py-1 text-[11px] font-semibold uppercase tracking-wider text-primary-foreground">
                       Most popular
                     </span>
                   )}

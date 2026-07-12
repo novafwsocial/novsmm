@@ -132,7 +132,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">Senior Full-Stack Engineer</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Engineering</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Next.js 16 + TypeScript + PostgreSQL + Redis. You'll own the dashboard and API surface end-to-end. Minimum 5 years production experience.</p>
             </div>
@@ -142,7 +142,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">DevOps / SRE Engineer</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Infrastructure</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Docker, CI/CD, Prometheus, Grafana, AlertManager. You'll own deployment pipelines, monitoring, and incident response. On-call rotation required.</p>
             </div>
@@ -152,7 +152,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">Payment Integrations Engineer</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Engineering</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Stripe, Mercado Pago, PayPal, NowPayments, crypto gateways. You'll build and maintain payment flows, webhook handlers, and reconciliation logic.</p>
             </div>
@@ -162,7 +162,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">Customer Success Manager</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Operations</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Manage enterprise reseller accounts, handle escalations, and drive product feedback. Fluent English + Spanish required.</p>
             </div>
@@ -299,7 +299,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">Reseller Partner</div>
-                <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-medium text-primary-foreground">$49/mo</span>
+                <span className="rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">$49/mo</span>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Self-service child panel with subdomain + API key</li>
@@ -312,7 +312,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">Agency Partner</div>
-                <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-medium text-primary-foreground">$149/mo</span>
+                <span className="rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">$149/mo</span>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Everything in Reseller, plus:</li>
@@ -326,7 +326,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">Enterprise Partner</div>
-                <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-medium text-primary-foreground">$499/mo</span>
+                <span className="rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">$499/mo</span>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Everything in Agency, plus:</li>

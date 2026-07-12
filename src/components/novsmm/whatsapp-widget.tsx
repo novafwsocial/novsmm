@@ -109,7 +109,7 @@ export function WhatsAppWidget() {
         {!open && mounted && showBadge && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+            <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white">
               1
             </span>
           </span>
@@ -171,7 +171,7 @@ export function WhatsAppWidget() {
                 </button>
               </div>
 
-              <p className="mt-2 text-center text-[10px] text-muted-foreground">
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">
                 Opens WhatsApp in a new tab · {number}
               </p>
             </div>

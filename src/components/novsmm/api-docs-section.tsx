@@ -88,7 +88,7 @@ function CodeBlock({
           </span>
         </div>
         <span
-          className={`text-[10px] font-medium uppercase tracking-wider ${
+          className={`text-[11px] font-medium uppercase tracking-wider ${
             accent === "emerald" ? "text-emerald-300/70" : "text-primary/80"
           }`}
         >

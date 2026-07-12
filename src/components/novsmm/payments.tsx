@@ -110,7 +110,7 @@ export function Payments() {
                     {p.methods.map((m) => (
                       <span
                         key={m}
-                        className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-foreground/70"
+                        className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground/70"
                       >
                         {m}
                       </span>
@@ -158,7 +158,7 @@ function Meta({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}
       </span>
@@ -303,7 +303,7 @@ function FloatingCoin({
         >
           {c.glyph}
         </div>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {c.label}
         </span>
       </motion.div>

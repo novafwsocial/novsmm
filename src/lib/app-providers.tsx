@@ -18,7 +18,14 @@ export function AppProviders({ children }: { children: ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 15 * 1000,
-            refetchOnWindowFocus: true,
+            // PERF FIX (P-H-001): refetchOnWindowFocus was `true`, which
+            // caused a burst of 15-20 API requests every time the user
+            // switched back to the NOVSMM tab. Most of our queries already
+            // have their own refetchInterval (dashboard: 60s, orders: 60s,
+            // notifications: via WS), so window-focus refetch is redundant
+            // and wasteful. Set to false — queries still refetch on mount
+            // and on their own intervals.
+            refetchOnWindowFocus: false,
             retry: 1,
           },
         },

@@ -129,7 +129,7 @@ export function Security() {
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
                     {l.desc}
                   </p>
-                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-[10px] font-medium text-foreground/70">
+                  <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-[11px] font-medium text-foreground/70">
                     <Activity className="h-3 w-3 text-emerald-600" />
                     {l.metric}
                   </div>
@@ -146,7 +146,7 @@ export function Security() {
 function StatusPill({ state }: { state: "ok" | "warn" }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[10px] font-medium ${
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
         state === "ok"
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700"
           : "border-amber-500/30 bg-amber-500/10 text-amber-700"
@@ -223,7 +223,7 @@ function ShieldVisual() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.6, delay: 0.4 + i * 0.1 }}
-          className="absolute flex items-center gap-1.5 rounded-full border border-border/60 bg-background/90 px-2.5 py-1 text-[10px] font-medium text-foreground/80 backdrop-blur-md"
+          className="absolute flex items-center gap-1.5 rounded-full border border-border/60 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-foreground/80 backdrop-blur-md"
           style={{ left: p.x, top: p.y, transform: "translate(-50%, -50%)" }}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -253,7 +253,7 @@ function Metric({
       <div className="text-sm font-semibold tabular-nums text-foreground">
         {value}
       </div>
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
         {label}
       </div>
     </div>

@@ -168,7 +168,7 @@ export function DashboardTickets() {
           >
             <Inbox className="h-3.5 w-3.5" /> Tickets
             {tickets.length > 0 && (
-              <span className="rounded-full bg-muted px-1.5 text-[10px] tabular-nums text-foreground">
+              <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-foreground">
                 {tickets.length}
               </span>
             )}
@@ -409,7 +409,7 @@ function TicketRow({
       <div className="truncate text-[11px] text-muted-foreground">
         {t.messages?.[t.messages.length - 1]?.text ?? "No messages"}
       </div>
-      <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+      <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <Clock className="h-2.5 w-2.5" /> {timeAgo(t.updatedAt)}
         </span>
@@ -484,7 +484,7 @@ const ConversationBody = forwardRef<HTMLDivElement, { active: any }>(
             >
               {m.text}
             </div>
-            <div className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
               {timeAgo(m.createdAt)}
               {m.sender === "user" && <CheckCheck className="h-3 w-3 text-primary" />}
             </div>
@@ -583,7 +583,7 @@ function ConversationComposer({
           {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
         </motion.button>
       </div>
-      <div className="mt-1.5 px-1 text-[10px] text-muted-foreground">
+      <div className="mt-1.5 px-1 text-[11px] text-muted-foreground">
         Press Enter to send · Shift+Enter for newline
       </div>
     </div>
@@ -665,7 +665,7 @@ function CannedRepliesButton({
             transition={{ duration: 0.15 }}
             className="absolute bottom-full right-0 z-50 mb-2 w-80 max-h-72 overflow-y-auto rounded-2xl border border-border bg-background p-1.5 nov-ring-lg nov-scroll"
           >
-            <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               Canned replies
             </div>
             {items.length === 0 ? (
@@ -687,11 +687,11 @@ function CannedRepliesButton({
                     <span className="truncate text-xs font-medium text-foreground">
                       {item.title}
                     </span>
-                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] text-muted-foreground">
+                    <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">
                       {item.category}
                     </span>
                   </div>
-                  <div className="mt-0.5 truncate text-[10px] text-muted-foreground">
+                  <div className="mt-0.5 truncate text-[11px] text-muted-foreground">
                     {item.body.slice(0, 80)}
                   </div>
                 </button>
@@ -788,7 +788,7 @@ function PriorityPill({ priority }: { priority: string }) {
       ? "bg-amber-500/10 text-amber-700"
       : "bg-muted text-muted-foreground";
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", cls)}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", cls)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", priority === "high" ? "bg-red-500" : priority === "medium" ? "bg-amber-500" : "bg-muted-foreground")} />
       {priority}
     </span>
@@ -805,7 +805,7 @@ function StatusPill({ status }: { status: string }) {
       ? "bg-emerald-500/10 text-emerald-700"
       : "bg-muted text-muted-foreground";
   return (
-    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", cls)}>
+    <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", cls)}>
       {status}
     </span>
   );

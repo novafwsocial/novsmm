@@ -148,7 +148,7 @@ export function Marketplace() {
                           <div className="text-sm font-semibold text-foreground">
                             {s.title}
                           </div>
-                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                             {s.chip}
                           </span>
                         </div>
@@ -229,7 +229,7 @@ export function Marketplace() {
                       <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 tabular-nums">
                         {o.margin.toFixed(0)}%
                       </span>
-                      <span className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-medium text-emerald-600">
+                      <span className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-600">
                         <TrendingUp className="h-3 w-3" />
                         {o.sales} sold
                       </span>
