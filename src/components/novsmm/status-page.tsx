@@ -110,7 +110,7 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
   const updatedAt = data?.updatedAt ?? new Date().toISOString();
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}

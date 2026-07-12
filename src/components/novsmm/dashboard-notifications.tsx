@@ -69,7 +69,16 @@ export function DashboardNotifications() {
       socket = io(`/?XTransformPort=3003${wsToken ? `&token=${wsToken}` : ""}`, {
         transports: ["websocket", "polling"],
         reconnection: true,
-        reconnectionAttempts: 10,
+        // PERF FIX (P-M-004): was 10 — too low for long dashboard sessions.
+        // If the user's network drops briefly (e.g., switching wifi, sleep/
+        // wake), 10 attempts at ~1s each = 10s before giving up. After that,
+        // real-time notifications stop working until page refresh.
+        // Infinity = keep trying with exponential backoff (socket.io default:
+        // starts at 1s, max 5s). The dashboard is a long-lived session, so
+        // persistent reconnection is the right behavior.
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       });
       socketRef.current = socket;
 

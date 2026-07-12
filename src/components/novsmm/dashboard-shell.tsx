@@ -278,7 +278,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile sidebar */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {mobileOpen && (
           <>
             <motion.div
@@ -571,7 +571,7 @@ function UserPill({
         </div>
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {open && (
           <motion.div
             initial={{ opacity: 0, y: -4, scale: 0.97 }}

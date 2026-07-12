@@ -136,7 +136,7 @@ export function DashboardSubscriptions() {
       </Reveal>
 
       {/* Create modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showCreate && (
           <CreateSubscriptionModal onClose={() => setShowCreate(false)} />
         )}

@@ -160,7 +160,7 @@ export function DashboardChildPanels() {
       </RevealStagger>
 
       {/* Just-created API key banner (shown once after creation) */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {createdKey && (
           <CreatedKeyBanner
             panel={createdKey.panel}
@@ -188,7 +188,7 @@ export function DashboardChildPanels() {
       </Reveal>
 
       {/* Create modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showCreate && (
           <CreateChildPanelModal
             onClose={() => setShowCreate(false)}
@@ -388,7 +388,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
       </div>
 
       {/* Edit modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {editing && (
           <EditChildPanelModal
             panel={p}

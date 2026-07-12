@@ -117,7 +117,7 @@ export function WhatsAppWidget() {
       </motion.button>
 
       {/* Chat popup */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {open && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}

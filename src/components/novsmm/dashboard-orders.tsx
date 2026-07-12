@@ -229,7 +229,7 @@ export function DashboardOrders() {
       </Reveal>
 
       {/* Order Detail Drawer */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {selectedOrder && (
           <OrderDetailDrawer
             order={selectedOrder}

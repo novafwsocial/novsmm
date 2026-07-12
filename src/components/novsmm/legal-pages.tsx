@@ -771,7 +771,7 @@ export function LegalPages({
   const pageData = page ? PAGES[page] : null;
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {pageData && (
         <motion.div
           initial={{ opacity: 0 }}

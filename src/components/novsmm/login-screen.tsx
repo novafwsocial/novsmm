@@ -453,7 +453,7 @@ export function LoginScreen() {
         </div>
       </motion.div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showForgot && (
           <ForgotPasswordModal onClose={() => setShowForgot(false)} />
         )}

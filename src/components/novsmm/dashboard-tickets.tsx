@@ -187,7 +187,7 @@ export function DashboardTickets() {
           </button>
         </div>
 
-        <AnimatePresence>
+        <AnimatePresence mode="wait">
           {mobilePane === "list" ? (
             <motion.div
               key="list"
@@ -656,7 +656,7 @@ function CannedRepliesButton({
           <ClipboardList className="h-4 w-4" />
         )}
       </button>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {open && (
           <motion.div
             initial={{ opacity: 0, y: 4, scale: 0.96 }}
