@@ -4,19 +4,65 @@ import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createServiceSchema, updateServiceSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 
-/** GET /api/admin/services — all services including paused. */
-export async function GET() {
+/** GET /api/admin/services — paginated list of all services including paused.
+ *
+ * PERF FIX (P-H-003): previously this route loaded ALL services (6,390+ rows)
+ * with includes on every request → 3-5MB JSON response, 500ms+ query time.
+ * Now supports server-side pagination + search + platform filter.
+ *
+ * Query params:
+ *   page     — 1-based page number (default 1)
+ *   limit    — rows per page (default 50, max 200)
+ *   search   — case-insensitive search on name/platform (optional)
+ *   platform — filter by platform (optional)
+ *
+ * Response: { services, pagination: { page, limit, total, totalPages } }
+ */
+export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const services = await db.service.findMany({
-    include: {
-      provider: true,
-      serviceProviders: { include: { provider: true }, orderBy: { priority: "asc" } },
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
+  const search = searchParams.get("search")?.trim() ?? "";
+  const platform = searchParams.get("platform")?.trim() ?? "";
+
+  const where = {
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search } },
+            { platform: { contains: search } },
+          ],
+        }
+      : {}),
+    ...(platform ? { platform } : {}),
+  };
+
+  const [services, total] = await Promise.all([
+    db.service.findMany({
+      where,
+      include: {
+        provider: true,
+        serviceProviders: { include: { provider: true }, orderBy: { priority: "asc" } },
+      },
+      orderBy: { platform: "asc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.service.count({ where }),
+  ]);
+
+  return apiOk({
+    services,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     },
-    orderBy: { platform: "asc" },
   });
-  return apiOk({ services });
 }
 
 /** POST /api/admin/services — create a new service. */

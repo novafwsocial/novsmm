@@ -6,18 +6,31 @@ import { generateApiKey, generateApiPublicId } from "@/lib/license";
 import bcrypt from "bcryptjs";
 
 /**
- * GET /api/admin/api-keys — list all API keys (admin view, shows public IDs only).
+ * GET /api/admin/api-keys — paginated list of all API keys (admin view,
+ * shows public IDs only).
+ *
+ * PERF FIX (P-H-004): added server-side pagination. Query params:
+ * page (default 1), limit (default 50, max 200).
  */
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const keys = await db.apiKey.findMany({
-    include: {
-      user: { select: { name: true, email: true, username: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
+
+  const [keys, total] = await Promise.all([
+    db.apiKey.findMany({
+      include: {
+        user: { select: { name: true, email: true, username: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.apiKey.count(),
+  ]);
 
   // Never expose the hash or the full key — only the publicId
   const safe = keys.map((k) => ({
@@ -34,7 +47,15 @@ export async function GET(req: NextRequest) {
     user: k.user,
   }));
 
-  return apiOk({ apiKeys: safe });
+  return apiOk({
+    apiKeys: safe,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
 }
 
 /**
