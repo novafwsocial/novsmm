@@ -48,7 +48,17 @@ export const loginSchema = z.object({
 export const createOrderSchema = z.object({
   serviceId: z.string().min(1),
   quantity: z.number().int().positive(),
-  link: z.string().url().optional().or(z.literal("")),
+  // SECURITY FIX (S-M-003): link must be http/https URL (rejects
+  // javascript:, data:, blob: — prevents stored XSS when admin clicks
+  // the order link in the dashboard).
+  link: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
+      message: "Link must be an http:// or https:// URL",
+    })
+    .optional()
+    .or(z.literal("")),
 });
 
 // ── Wallet schemas ──

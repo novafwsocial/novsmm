@@ -25,7 +25,22 @@ const singleOrderSchema = z.object({
   // PerfectPanel uses "service" — accept both "service" and "serviceId"
   service: z.string().min(1).optional(),
   serviceId: z.string().min(1).optional(),
-  link: z.string().min(1).optional().or(z.literal("")),
+  // SECURITY FIX (S-M-003): `link` must be a valid URL with http/https
+  // protocol. Previously this was `z.string().min(1)` which accepted
+  // ANY string — including `javascript:alert(1)` and `data:text/html,...`.
+  // When an admin views the order in the dashboard and clicks the link
+  // (rendered as <a href={order.link} target="_blank">), a javascript:
+  // URL would execute in the admin's browser → stored XSS.
+  // The URL regex allows http/https only (rejects javascript:, data:,
+  // blob:, file:, etc.).
+  link: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
+      message: "Link must be an http:// or https:// URL",
+    })
+    .optional()
+    .or(z.literal("")),
   quantity: z.number().int().positive(),
   // Drip-feed params (PerfectPanel contract)
   runs: z.number().int().positive().optional(),

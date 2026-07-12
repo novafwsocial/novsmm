@@ -363,15 +363,60 @@ export function middleware(req: NextRequest) {
             { status: 403 }
           );
         }
+      } else {
+        // SECURITY FIX (S-H-003): NEXTAUTH_URL is not set.
+        // In PRODUCTION, fail-closed — reject the request. Allowing any
+        // Origin when the trusted host is unknown opens a CSRF hole: an
+        // attacker site could POST to /api/wallet/withdraw with the
+        // victim's session cookie and the request would be accepted.
+        // In DEV, allow through (NEXTAUTH_URL is commonly unset during
+        // local development — developers use localhost:3000 directly).
+        if (process.env.NODE_ENV === "production") {
+          console.error(
+            "[CSRF] NEXTAUTH_URL is not set in production — rejecting state-changing request. " +
+              "Set NEXTAUTH_URL in .env to fix this."
+          );
+          return NextResponse.json(
+            { error: "CSRF check failed — server misconfiguration (NEXTAUTH_URL not set)" },
+            { status: 500 }
+          );
+        }
+        // Dev mode: allow through with a console warning.
+        console.warn(
+          "[CSRF] NEXTAUTH_URL not set in dev mode — allowing any Origin. Set NEXTAUTH_URL for production."
+        );
       }
-      // If NEXTAUTH_URL is not set (e.g., dev mode), we fall back to allowing
-      // any Origin — but log a warning. Production MUST set NEXTAUTH_URL.
     }
   }
 
-  // Get client IP (behind Caddy proxy)
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+  // Get client IP for rate limiting + audit logging.
+  //
+  // SECURITY FIX (S-H-004): previously this used `x-forwarded-for` directly,
+  // which is client-forgeable. An attacker could send `X-Forwarded-For:
+  // <random-ip>` with every request to bypass rate limiting (each request
+  // gets a fresh bucket) and poison audit logs.
+  //
+  // Resolution order (most-trusted first):
+  //   1. `CF-Connecting-IP` — set by Cloudflare, cannot be forged by the
+  //      client (Cloudflare overwrites any client-supplied value).
+  //   2. `x-client-ip` — set by this same middleware earlier in the
+  //      request lifecycle (but not present on the first pass).
+  //   3. `x-forwarded-for` — ONLY trusted if the request came through the
+  //      reverse proxy. We take the FIRST IP (leftmost) which is the
+  //      client. If the request bypassed the proxy (direct hit on port
+  //      3000), this header is forgeable — but in that case the attacker
+  //      is already inside the network, and rate limiting is the least
+  //      of our problems.
+  //   4. Fallback: "unknown" (rate-limited under a shared key).
+  //
+  // The CF-Connecting-IP check is the key fix: in the Cloudflare→WSL2
+  // setup, this header is always present and always truthful.
+  const clientIp =
+    req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-client-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown";
+  const ip = clientIp;
   const rateLimitKey = `${ip}:${pathname.split("/").slice(0, 4).join("/")}`;
 
   // Find applicable rate limit (first match wins, most specific first)

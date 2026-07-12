@@ -425,7 +425,7 @@ function OrderDetailDrawer({
                 <a
                   href={order.link}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
