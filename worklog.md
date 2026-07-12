@@ -11740,3 +11740,56 @@ Stage Summary:
 - Lección para el futuro: si se necesita allowlist estricto de scripts
   en prod, migrar a nonces (Next.js 16 + next.config.ts nonce config)
   en lugar de combinar `'unsafe-inline'` con `'strict-dynamic'`.
+
+---
+Task ID: LOADING-LOOP-DEPLOY-ALERT
+Agent: main (orchestrator)
+Task: Diagnosticar por qué el usuario SIGUE viendo el bucle tras el fix local
+
+Work Log:
+- Usuario reportó "lo sigo viendo igual" + screenshot.
+- Analicé screenshot con VLM: Chrome con 2 tabs, URL bar muestra
+  `novsmm.shop`, página en blanco con spinner azul + texto "Cargando...".
+- CRÍTICO: `novsmm.shop` NO es localhost:3000. Resuelve a Cloudflare
+  (104.21.67.14, 172.67.167.154). Es el SITIO DESPLEGADO EN PRODUCCIÓN.
+- Verifiqué con curl:
+  · `curl -I https://novsmm.shop/` → CSP del sitio desplegado TODAVÍA
+    tiene `'strict-dynamic'`:
+      script-src 'self' 'unsafe-inline' 'strict-dynamic' https://www.paypal.com https://www.paypalobjects.com
+  · `cf-cache-status: HIT` — Cloudflare está sirviendo el HTML VIEJO
+    roto desde su caché edge.
+  · `x-nextjs-cache: HIT` — ISR de Next.js también cachea el HTML viejo.
+- Mi fix local en `src/middleware.ts` SÍ está correcto (verificado con
+  Playwright en localhost:3000 — la home carga 12K chars de contenido,
+  9 secciones, 0 errores CSP). Pero solo afecta al sandbox local.
+- El código del proyecto vive en GitHub: github.com/novafwsocial/novsmm
+- `.github/workflows/ci.yml` solo corre lint+build+security scan, NO
+  auto-despliega. El deploy es manual: "ssh into server → git pull →
+  npm run build → pm2 restart novsmm" (o docker compose, según
+  scripts/deploy.sh).
+- Ya hice `git push origin main` — commit 2d06722 (con el fix CSP)
+  está en GitHub. `git status`: "Your branch is up to date with
+  'origin/main'".
+
+Acción requerida del operador (NO la puedo hacer desde este sandbox):
+1. SSH al VPS donde corre novsmm.shop (probablemente /opt/novsmm)
+2. `git pull origin main`  (trae commit 2d06722 con el fix CSP)
+3. Rebuild: `docker compose build web` (o `npm run build` si no usa Docker)
+4. Restart: `docker compose up -d web` (o `pm2 restart novsmm`)
+5. PURGAR CACHÉ DE CLOUDFLARE (CRÍTICO — sin esto, los usuarios siguen
+   viendo el HTML viejo roto desde el edge de Cloudflare):
+   · https://dash.cloudflare.com → seleccionar novsmm.shop →
+     Caching → Configuration → Purge Everything
+   · O por API: POST https://api.cloudflare.com/client/v4/zones/{zone_id}/purge_cache
+     con header Authorization: Bearer {CF_API_TOKEN}, body {"purge_everything":true}
+6. Verificar: `curl -I https://novsmm.shop/ | grep content-security-policy`
+   NO debe contener 'strict-dynamic'. Y la página debe cargar completa.
+
+Stage Summary:
+- El fix es correcto y está en GitHub (commit 2d06722).
+- El bucle que el usuario sigue viendo es en novsmm.shop (prod), no en
+  localhost. Prod tiene la CSP vieja con 'strict-dynamic'.
+- NO se puede resolver solo desde este sandbox — requiere deploy al VPS
+  + purge de caché de Cloudflare por el operador.
+- El sandbox local (localhost:3000) SÍ funciona correctamente tras el
+  fix (verificado con Playwright: 12K chars, 9 secciones, 0 errores).
