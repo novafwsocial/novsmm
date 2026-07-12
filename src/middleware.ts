@@ -64,6 +64,13 @@ const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
   { pattern: /\/api\/auth\/register/, max: 10, windowMs: 60 * 60 * 1000 },
   // Auth password reset: 5 per hour
   { pattern: /\/api\/auth\/forgot-password/, max: 5, windowMs: 60 * 60 * 1000 },
+  // SECURITY FIX (S-C-005): License validation is a PUBLIC endpoint (no auth)
+  // that runs bcrypt.compare (intentionally slow, ~100ms at cost 12) on legacy
+  // licenses when the lookupHash doesn't match. Without a tight rate limit, a
+  // botnet could saturate the event loop with thousands of invalid-key requests,
+  // each triggering up to 3 bcrypt compares. 10/min/IP is generous for legit
+  // use (a client panel validates once on startup) but stops brute-force/DoS.
+  { pattern: /\/api\/public\/validate-license/, max: 10, windowMs: 60 * 1000 },
   // Wallet topup/withdraw: 10 per min
   { pattern: /\/api\/wallet\/(topup|withdraw)/, max: 10, windowMs: 60 * 1000 },
   // Orders: 20 per min
