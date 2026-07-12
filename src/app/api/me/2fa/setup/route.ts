@@ -47,7 +47,13 @@ export async function POST(req: NextRequest) {
   const payloadValue = write2FAPayload({
     secret: encryptedSecret,
     backupCodes: hashedBackupCodes,
-  });
+    // SECURITY (S-L-003): add createdAt so the verify route can reject
+    // pending setups older than 10 minutes. Without this, a pending 2FA
+    // setup persists indefinitely — if the user's session is later
+    // compromised, the attacker can complete the verify and lock the
+    // user out with a 2FA secret they control.
+    createdAt: Date.now(),
+  } as any);
 
   await db.setting.upsert({
     where: { key: `2fa:pending:${userId}` },

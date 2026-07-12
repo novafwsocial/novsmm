@@ -90,15 +90,26 @@ const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
 // removed in production. This closes the XSS vector that `'unsafe-inline'`
 // leaves open. Next.js 16 auto-applies the `x-nonce` request header to its
 // own injected inline scripts (RSC payload, streaming-SSR, bootstrap).
-function addSecurityHeaders(res: NextResponse, nonce?: string) {
+function addSecurityHeaders(res: NextResponse, nonce?: string, isHttps = false) {
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.headers.set("X-XSS-Protection", "1; mode=block");
-  res.headers.set(
-    "Strict-Transport-Security",
-    "max-age=31536000; includeSubDomains; preload"
-  );
+  // SECURITY FIX (S-L-002): removed X-XSS-Protection header — deprecated
+  // by all modern browsers (Chrome removed in v78, Firefox never
+  // implemented, Edge removed). With nonce-based CSP (S-H-002 fix),
+  // X-XSS-Protection is completely redundant and can actually introduce
+  // vulnerabilities in old browsers. https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-XSS-Protection
+  // SECURITY FIX (S-M-008): HSTS only set on HTTPS responses. Setting
+  // HSTS on HTTP is ineffective (the header is ignored by browsers on
+  // non-secure origins) and can cause warnings in security scanners.
+  // Cloudflare already adds HSTS at the edge, but we keep it here for
+  // defense-in-depth when the origin is accessed directly via HTTPS.
+  if (isHttps) {
+    res.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload"
+    );
+  }
   // FULL-WEB-IMPROVEMENT-1: Permissions-Policy — restricts browser features
   // the site does NOT use. Anything not explicitly allowed here is denied
   // to both first-party and third-party (iframe) contexts. We allow only
@@ -254,7 +265,7 @@ export function middleware(req: NextRequest) {
     const res = NextResponse.next({
       request: { headers: requestHeaders },
     });
-    addSecurityHeaders(res, nonce);
+    addSecurityHeaders(res, nonce, req.nextUrl.protocol === "https:");
 
     // PERF: Cache HTML pages at Cloudflare edge for 60s (s-maxage).
     // Stale-while-revalidate allows serving cached content while fetching fresh.
@@ -304,7 +315,7 @@ export function middleware(req: NextRequest) {
         res.headers.set("Vary", "Origin");
         res.headers.set("Access-Control-Max-Age", "86400"); // 24h cache preflight
       }
-      addSecurityHeaders(res);
+      addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
       return res;
     }
     const res = NextResponse.next();
@@ -315,7 +326,7 @@ export function middleware(req: NextRequest) {
       res.headers.set("Access-Control-Allow-Credentials", "false");
       res.headers.set("Vary", "Origin");
     }
-    addSecurityHeaders(res);
+    addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
     // Pass IP to downstream API routes
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
@@ -456,7 +467,7 @@ export function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-  addSecurityHeaders(res);
+  addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
 
   // CRITICAL: Never cache auth/session endpoints — they must be per-session.
   // Without this, Cloudflare might cache /api/auth/csrf or /api/auth/session,

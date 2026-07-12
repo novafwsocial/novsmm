@@ -27,9 +27,12 @@ export async function GET() {
   if (error) return error;
 
   const secret = process.env.NEXTAUTH_SECRET;
-  if (!secret) {
+  // SECURITY (S-L-001): validate minimum length. Previously only checked
+  // if the secret was set — a weak secret like "secret" (6 chars) would
+  // be accepted, signing WS JWTs with inadequate entropy.
+  if (!secret || secret.length < 32) {
     return NextResponse.json(
-      { error: "Server misconfiguration: NEXTAUTH_SECRET not set" },
+      { error: "Server misconfiguration: NEXTAUTH_SECRET must be ≥32 chars" },
       { status: 500 }
     );
   }

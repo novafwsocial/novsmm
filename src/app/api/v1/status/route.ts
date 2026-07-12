@@ -38,10 +38,14 @@ function mapStatusToApi(status: string): string {
   }
 }
 
-function mapCharge(order: { totalPrice: number; currency: string }) {
+// SECURITY FIX (S-L-004): removed `currency` from the order type — the
+// Order model doesn't have a `currency` column. Previously this referenced
+// order.currency which was always undefined, falling back to "USD".
+// Now we use the user's currency (fetched separately) instead.
+function mapCharge(order: { totalPrice: number }) {
   return {
     charge: Number(order.totalPrice.toFixed(4)),
-    currency: order.currency || "USD",
+    currency: "USD", // fallback — actual user currency is set by the caller
   };
 }
 

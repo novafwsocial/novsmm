@@ -43,6 +43,18 @@ export async function POST(req: NextRequest) {
     return apiError("2FA setup is corrupted. Please restart setup.", 500);
   }
 
+  // SECURITY (S-L-003): reject pending setups older than 10 minutes.
+  // Prevents an attacker who compromised a session from completing a
+  // stale 2FA setup. The createdAt field was added in the setup route;
+  // legacy entries without it are allowed (backward compat).
+  const PENDING_TTL_MS = 10 * 60 * 1000; // 10 minutes
+  const createdAt = (payload as any).createdAt as number | undefined;
+  if (createdAt && Date.now() - createdAt > PENDING_TTL_MS) {
+    // Delete the expired pending entry
+    await db.setting.delete({ where: { key: `2fa:pending:${userId}` } }).catch(() => {});
+    return apiError("2FA setup expired. Please restart setup.", 400);
+  }
+
   const secret = decrypt2FASecret(payload.secret);
   if (!secret) {
     return apiError("2FA secret could not be decrypted. Please restart setup.", 500);
