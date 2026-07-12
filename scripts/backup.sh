@@ -155,7 +155,7 @@ if [ "$ENCRYPT_FILES" = true ]; then
   for f in "$PG_FILE" "$UPLOADS_FILE" "$CONFIG_FILE"; do
     if [ -f "$f" ]; then
       # AES-256-GCM. The salt + IV are embedded in the .enc file (openssl format).
-      # Decrypt with: openssl enc -d -aes-256-gcm -in file.enc -out file -pass env:BACKUP_ENCRYPTION_KEY
+      # FIX (L-001): Decrypt with: openssl enc -d -aes-256-gcm -salt -pbkdf2 -in file.enc -out file -pass env:BACKUP_ENCRYPTION_KEY
       if openssl enc -aes-256-gcm -salt -pbkdf2 -in "$f" -out "${f}.enc" -pass env:BACKUP_ENCRYPTION_KEY 2>/dev/null; then
         # Replace the plaintext file with the encrypted version
         rm -f "$f"

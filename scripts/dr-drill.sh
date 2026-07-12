@@ -192,7 +192,11 @@ echo "╔═══════════════════════�
 if [ "$DRILL_FAIL" -eq 0 ]; then
   echo "║  ✅ DR DRILL PASSED                                           ║"
   echo "║  Backup es restorable y datos verificados                     ║"
-  echo "║  Checks passed: $DRILL_PASS / $((DRILL_PASS + DRILL_FAIL))                                        ║"
+  # FIX (L-004): alignment was broken because $DRILL_PASS is variable-length.
+  # Now pad the string to a fixed width before printing.
+  CHECKS_STR="Checks passed: $DRILL_PASS / $((DRILL_PASS + DRILL_FAIL))"
+  PADDED=$(printf "%-62s" "$CHECKS_STR")
+  echo "║  ${PADDED}║"
   DRILL_RESULT="passed"
 else
   echo "║  ❌ DR DRILL FAILED                                           ║"

@@ -34,7 +34,9 @@ info() { echo -e "${BLUE}ℹ️  INFO${NC} — $1"; }
 echo "════════════════════════════════════════════════════════════════"
 echo "  NOVSMM — Pre-Deployment Validation"
 echo "  Host: $(hostname)"
-echo "  IP:   $(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo 'unknown')"
+# FIX (L-007): was `curl -s ifconfig.me` — leaks server IP to a third
+# party. Now uses `hostname -I` for local IP (no external request).
+echo "  IP:   $(hostname -I 2>/dev/null | awk '{print $1}' || echo 'unknown')"
 echo "  Date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "════════════════════════════════════════════════════════════════"
 echo ""

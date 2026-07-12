@@ -73,7 +73,9 @@ fi
 # CIS PostgreSQL 6.9: pg_hba.conf — require scram-sha-256 + reject trust
 if [ -f "$PG_HBA" ]; then
   # Backup
+  # FIX (L-002): rotate backups — keep only the 5 most recent
   sudo cp "$PG_HBA" "${PG_HBA}.bak.$(date +%s)"
+  ls -t "${PG_HBA}".bak.* 2>/dev/null | tail -n +6 | xargs -r sudo rm -f
 
   # FIX (H-006): replace \b word boundaries with [[:space:]] patterns that
   # work on both GNU sed and BSD sed. \b is a GNU extension that doesn't
@@ -229,7 +231,8 @@ echo "  ✅ Ulimit hardening applied ($LIMITS_CONF)"
 # CIS 3: Disable unnecessary services (if running)
 echo ""
 echo "📋 Checking for unnecessary services..."
-for svc in telnet rsh-server rlogin-server tftp-server xinetd; do
+# FIX (L-003): corrected service names for Debian/Ubuntu
+for svc in telnetd rsh-redone-server in.rlogind tftpd-hpa openbsd-inetd; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     sudo systemctl disable --now "$svc"
     echo "  ✅ Disabled: $svc"

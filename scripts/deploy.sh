@@ -245,6 +245,11 @@ DEPLOY_PHASE="migrated"
 # Verificar tablas
 TABLES=$(docker compose exec -T postgres psql -U novsmm -d novsmm -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' \n')
 info "Tablas creadas: $TABLES"
+# FIX (L-005): sanitize TABLES — if psql failed, TABLES could be
+# non-numeric, causing "integer expression expected" in the -ge check.
+case "$TABLES" in
+  ''|*[!0-9]*) TABLES=0 ;;
+esac
 if [ "${TABLES:-0}" -ge 25 ]; then
   ok "PostgreSQL tiene $TABLES tablas"
 else

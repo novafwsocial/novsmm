@@ -34,7 +34,9 @@ services:
     mem_limit: 512m
     cpus: 1.0
     # CIS: Read-only root filesystem (writes go to volumes)
-    read_only: false  # PostgreSQL needs to write to data dir
+    # FIX (L-013): removed `read_only: false` — it's the default and the
+    # comment was misleading (sounded like we were disabling something).
+    # PostgreSQL needs write access to its data dir, which is the default.
     tmpfs:
       - /tmp:size=64m
       - /run:size=16m

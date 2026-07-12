@@ -68,6 +68,16 @@ jobs:
         env:
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
+      # FIX (L-009): cache .next/cache for faster incremental builds
+      - name: Cache .next/cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ hashFiles('src/**') }}
+          restore-keys: |
+            next-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
+            next-cache-${{ runner.os }}-
+
       - name: Build Next.js
         run: bun run build
         env:
@@ -75,6 +85,15 @@ jobs:
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci-dummy-secret-32-chars-minimum' }}
           NEXTAUTH_URL: https://novsmm.shop
           LICENSE_ENCRYPTION_KEY: ${{ secrets.LICENSE_ENCRYPTION_KEY || 'ci-dummy-license-key-32-chars' }}
+
+      # FIX (L-010): upload build artifacts on failure for debugging
+      - name: Upload build artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: .next/
+          retention-days: 7
 
   # ── Stage 3: Security Scan ──
   security:

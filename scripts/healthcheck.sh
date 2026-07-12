@@ -171,7 +171,13 @@ run_check() {
 
 # ── Ejecutar ──
 if [ "$WATCH" = true ]; then
+  # FIX (L-012): write a PID file so the watch process can be killed cleanly.
+  PIDFILE="/var/run/novsmm-health.pid"
+  echo $$ > "$PIDFILE" 2>/dev/null || true
   info "Modo watch activo (interval: ${INTERVAL}s). Ctrl+C para detener."
+  info "PID: $$ (guardado en $PIDFILE)"
+  # Cleanup PID file on exit
+  trap 'rm -f "$PIDFILE" 2>/dev/null; exit 0' INT TERM EXIT
   while true; do
     echo ""
     run_check || true
