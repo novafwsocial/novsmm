@@ -327,11 +327,17 @@ export function middleware(req: NextRequest) {
       res.headers.set("Vary", "Origin");
     }
     addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
-    // Pass IP to downstream API routes
+    // SEC FIX (H-001): pass IP to downstream via REQUEST headers (not response).
+    // Previously was res.headers.set() which doesn't propagate to route handlers.
+    // Now we use NextResponse.next({ request: { headers } }) to inject the header.
     const forwarded = req.headers.get("x-forwarded-for");
     const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
-    res.headers.set("x-client-ip", ip);
-    return res;
+    const apiReqHeaders = new Headers(req.headers);
+    apiReqHeaders.set("x-client-ip", ip);
+    return NextResponse.next({
+      request: { headers: apiReqHeaders },
+      headers: res.headers,
+    });
   }
 
   // ── CSRF protection: verify Origin on state-changing requests ──
@@ -481,9 +487,14 @@ export function middleware(req: NextRequest) {
     res.headers.set("Expires", "0");
   }
 
-  // Pass IP to downstream API routes via header
-  res.headers.set("x-client-ip", ip);
-  return res;
+  // SEC FIX (H-001): pass IP via request headers, not response headers.
+  // Build new request headers with x-client-ip injected.
+  const finalReqHeaders = new Headers(req.headers);
+  finalReqHeaders.set("x-client-ip", ip);
+  return NextResponse.next({
+    request: { headers: finalReqHeaders },
+    headers: res.headers,
+  });
 }
 
 export const config = {

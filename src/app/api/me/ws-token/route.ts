@@ -38,9 +38,12 @@ export async function GET() {
   }
 
   // Generate a short-lived JWT for WS auth
-  // Contains: userId, exp (5 minutes). No sensitive data.
+  // Contains: sub (userId), exp (5 minutes). No sensitive data.
+  // SEC FIX (H-003): was { userId: user.id, ws: true } but the
+  // notifications-service verifies payload.id || payload.sub.
+  // Changed to use 'sub' claim (standard JWT claim for subject/user ID).
   const token = jwt.sign(
-    { userId: user.id, ws: true }, // `ws: true` distinguishes from NextAuth JWTs
+    { sub: user.id, ws: true }, // `ws: true` distinguishes from NextAuth JWTs
     secret,
     { expiresIn: "5m" }
   );

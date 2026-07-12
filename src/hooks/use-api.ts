@@ -45,7 +45,11 @@ export function useSession() {
 // different data).
 export function useDashboard(range?: string) {
   return useQuery({
-    queryKey: ["dashboard", range ?? "default"],
+    // PERF FIX (R-H-002): was `range ?? "default"` — DashboardShell calls
+    // useDashboard() → key ["dashboard","default"], DashboardHome calls
+    // useDashboard("30d") → key ["dashboard","30d"]. Two different keys
+    // = 2 fetches. Now default to "30d" so both share the same cache.
+    queryKey: ["dashboard", range ?? "30d"],
     queryFn: () =>
       api.get<any>(range ? `/api/dashboard?range=${range}` : "/api/dashboard"),
     refetchInterval: 60 * 1000, // 60s — reduced from 30s for performance
