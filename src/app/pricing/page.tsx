@@ -43,6 +43,53 @@ export const metadata: Metadata = {
   },
 };
 
+// SEO FIX (U-M-008): JSON-LD Product + Offer structured data for the pricing
+// page. Google uses this to display price + availability in search results.
+// Without it, /pricing is just a plain page — with it, Google can show
+// rich price snippets (e.g. "From $0" or "$29/mo") in SERPs.
+const pricingJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "Product",
+  name: "NOVSMM Platform",
+  description:
+    "Automation infrastructure for social media marketing at scale — order automation, reseller marketplace, and payments.",
+  brand: { "@type": "Brand", name: "NOVSMM" },
+  offers: [
+    {
+      "@type": "Offer",
+      name: "Starter",
+      price: "0",
+      priceCurrency: "USD",
+      description: "Free forever — no credit card required. Includes core platform features.",
+      url: SITE_ORIGIN,
+    },
+    {
+      "@type": "Offer",
+      name: "Pro",
+      price: "29",
+      priceCurrency: "USD",
+      description: "$29/month — advanced automation, API access, priority support. Save 20% yearly.",
+      url: SITE_ORIGIN,
+    },
+    {
+      "@type": "Offer",
+      name: "Enterprise",
+      price: "0",
+      priceCurrency: "USD",
+      description: "Custom pricing — white-label, dedicated infrastructure, SLA. Contact sales.",
+      url: SITE_ORIGIN,
+    },
+  ],
+};
+
 export default function PricingPage() {
-  return <PricingClient />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(pricingJsonLd) }}
+      />
+      <PricingClient />
+    </>
+  );
 }

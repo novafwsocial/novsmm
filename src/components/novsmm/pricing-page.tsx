@@ -238,7 +238,7 @@ export function PricingClient() {
                     strength={0.2}
                     onClick={() => setView("register")}
                     className={cn(
-                      "mt-6 inline-flex w-full items-center justify-center gap-2 rounded-xl px-5 py-3 text-sm font-medium transition-colors",
+                      "mt-6 inline-flex w-full items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-medium transition-colors",
                       tier.highlighted
                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
                         : "border border-border bg-background text-foreground hover:bg-muted"
@@ -330,7 +330,7 @@ export function PricingClient() {
               as="button"
               strength={0.25}
               onClick={() => setView("register")}
-              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              className="mt-5 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
             >
               Get started free
               <ArrowRight className="h-4 w-4" />

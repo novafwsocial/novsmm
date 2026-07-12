@@ -33,7 +33,7 @@ const SITE_TITLE =
 const SITE_DESCRIPTION =
   "NOVSMM unifies order automation, a reseller marketplace, and multi-gateway payments into one platform — engineered for teams that ship at the speed of attention.";
 const SITE_TAGLINE =
-  "Automation infrastructure for digital marketing teams and resellers.";
+  "The infrastructure for social media marketing at scale.";
 
 // NOTE: We previously used next/font/google here, but it requires the
 // build server to fetch fonts from fonts.googleapis.com at compile time.
