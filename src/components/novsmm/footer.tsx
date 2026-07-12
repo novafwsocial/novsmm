@@ -55,9 +55,11 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Solutions",
     links: [
-      { label: "Resellers", anchor: "#services" },
+      // U-M-006: was 6 links all pointing to #services or #marketplace.
+      // Now each points to the most relevant section for that audience.
+      { label: "Resellers", anchor: "#marketplace" },
       { label: "Agencies", anchor: "#services" },
-      { label: "Enterprises", anchor: "#services" },
+      { label: "Enterprises", anchor: "#security" },
       { label: "Creators", anchor: "#services" },
       { label: "Wholesale", anchor: "#marketplace" },
       { label: "Affiliates", anchor: "#affiliates" },
@@ -321,8 +323,13 @@ export function Footer() {
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 EN · USD
               </div>
+              {/* U-M-012: removed "SOC 2 · PCI DSS · GDPR" — NOVSMM is not
+                  SOC 2 certified, PCI DSS compliant, or GDPR audited.
+                  Displaying these certifications without holding them is
+                  a legal misrepresentation. Replaced with a neutral
+                  "Privacy-first" label that's honest. */}
               <span className="text-[11px] text-muted-foreground">
-                SOC 2 · PCI DSS · GDPR
+                Privacy-first · Secure by design
               </span>
             </div>
           </div>

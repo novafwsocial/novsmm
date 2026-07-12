@@ -239,16 +239,20 @@
 /* Marquee animation for testimonials/logos
    A11Y FIX (U-H-007): added pause-on-hover so users can read testimonials
    without the marquee moving. Also added prefers-reduced-motion override
-   to stop the animation entirely for users who request reduced motion. */
+   to stop the animation entirely for users who request reduced motion.
+   UX FIX (U-L-004): sped up from 40s/60s to 25s/35s. The previous
+   duration was too slow — testimonials barely appeared to move, making
+   the section feel static and broken. 25s is fast enough to show
+   movement but slow enough to read. */
 @keyframes nov-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
 .nov-marquee {
-  animation: nov-marquee 40s linear infinite;
+  animation: nov-marquee 25s linear infinite;
 }
 .nov-marquee-slow {
-  animation: nov-marquee 60s linear infinite;
+  animation: nov-marquee 35s linear infinite;
 }
 /* Pause on hover — lets users read the content */
 .nov-marquee:hover,
