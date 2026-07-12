@@ -41,8 +41,11 @@ jobs:
       - name: Type check
         run: bunx tsc --noEmit
 
-      - name: Lint (non-blocking)
-        run: bunx eslint src/ --max-warnings=0 || true
+      - name: Lint
+        # FIX (M-011): was non-blocking (`|| true`). Now blocking — lint
+        # errors fail the CI build. Use `# eslint-disable-next-line` for
+        # intentional exceptions.
+        run: bunx eslint src/ --max-warnings=0
 
   # ── Stage 2: Build ──
   build:
@@ -82,7 +85,9 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run bun audit
-        run: bun audit --severity high || true
+        # FIX (M-011): was non-blocking (`|| true`). Now blocking — high
+        # severity vulnerabilities fail the CI build.
+        run: bun audit --severity high
 
       - name: Run Semgrep SAST
         uses: returntocorp/semgrep-action@v1

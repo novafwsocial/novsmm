@@ -78,12 +78,12 @@ run_check() {
   done
   
   # ── PostgreSQL ──
-  if docker compose exec -T postgres pg_isready -U novsmm -d novsmm &>/dev/null 2>&1; then
+  if docker compose exec -T --timeout 10 postgres pg_isready -U novsmm -d novsmm &>/dev/null 2>&1; then
     ok "PostgreSQL: ready"
     CHECKS_PASS=$((CHECKS_PASS+1))
     
     # Connection count
-    CONNS=$(docker compose exec -T postgres psql -U novsmm -d novsmm -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' \n')
+    CONNS=$(docker compose exec -T --timeout 10 postgres psql -U novsmm -d novsmm -t -c "SELECT count(*) FROM pg_stat_activity;" 2>/dev/null | tr -d ' \n')
     info "PostgreSQL connections: $CONNS"
   else
     fail "PostgreSQL: NOT ready"
@@ -92,13 +92,13 @@ run_check() {
   fi
   
   # ── Redis ──
-  PONG=$(docker compose exec -T redis redis-cli ping 2>/dev/null | tr -d ' \n\r')
+  PONG=$(docker compose exec -T --timeout 10 redis redis-cli ping 2>/dev/null | tr -d ' \n\r')
   if [ "$PONG" = "PONG" ]; then
     ok "Redis: PONG"
     CHECKS_PASS=$((CHECKS_PASS+1))
     
     # Memory
-    REDIS_MEM=$(docker compose exec -T redis redis-cli INFO memory 2>/dev/null | grep "^used_memory:" | cut -d: -f2 | tr -d ' \r')
+    REDIS_MEM=$(docker compose exec -T --timeout 10 redis redis-cli INFO memory 2>/dev/null | grep "^used_memory:" | cut -d: -f2 | tr -d ' \r')
     REDIS_MAX=256000000  # 256MB
     if [ "${REDIS_MEM:-0}" -gt "$REDIS_MAX" ]; then
       warn "Redis memory: $((REDIS_MEM/1024/1024))MB (> 256MB limit)"

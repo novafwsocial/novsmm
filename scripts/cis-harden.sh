@@ -199,8 +199,19 @@ net.ipv4.tcp_max_orphans = 8192
 EOF
 
 # Apply sysctl changes
-sudo sysctl --system > /dev/null 2>&1
-echo "  ✅ Kernel sysctl hardening applied ($SYSCTL_CONF)"
+# FIX (M-012): in WSL2, many sysctl keys are read-only (controlled by the
+# Windows host kernel). `sysctl --system` silently fails on those keys.
+# We now check the result and warn (not fail) if some keys couldn't be set.
+SYSCTL_OUTPUT=$(sudo sysctl --system 2>&1)
+SYSCTL_ERRORS=$(echo "$SYSCTL_OUTPUT" | grep -i "cannot\|denied\|permission\|read-only" || true)
+if [ -n "$SYSCTL_ERRORS" ]; then
+  echo "  ⚠️  Some sysctl keys couldn't be set (common in WSL2/containers):"
+  echo "$SYSCTL_ERRORS" | head -5 | sed 's/^/    /'
+  echo "  ℹ️  This is expected in WSL2 — the Windows host kernel controls these."
+  echo "  ✅ Kernel sysctl hardening applied with warnings ($SYSCTL_CONF)"
+else
+  echo "  ✅ Kernel sysctl hardening applied ($SYSCTL_CONF)"
+fi
 
 # CIS 2: Set ulimits for the novsmm user
 LIMITS_CONF="/etc/security/limits.d/99-novsmm.conf"

@@ -166,7 +166,10 @@ else
 fi
 
 log "Construyendo imágenes (esto puede tardar varios minutos)..."
-docker compose build --progress=plain 2>&1 | tail -5
+# FIX (M-001): was `tail -5` — only showed last 5 lines of build output.
+# Next.js build errors are 20-50 lines (stack trace + file + line).
+# Now show last 50 lines so errors are diagnosable.
+docker compose build --progress=plain 2>&1 | tail -50
 ok "Imágenes construidas"
 DEPLOY_PHASE="built"
 

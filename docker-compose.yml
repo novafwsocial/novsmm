@@ -166,7 +166,10 @@ services:
     volumes:
       - uploads:/app/storage/uploads
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\" || exit 1"]
+      # FIX (M-008): was `node -e "process.exit(0)"` — always exits 0, so
+      # the healthcheck was a no-op. Now checks if the worker process is
+      # actually running by looking for the tsx process in the process list.
+      test: ["CMD-SHELL", "pgrep -f 'worker.ts' > /dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

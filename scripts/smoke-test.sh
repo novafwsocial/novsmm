@@ -53,7 +53,9 @@ STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" "${BASE_URL}/api/h
 READY=$(curl -s --max-time 10 "${BASE_URL}/api/health/ready" 2>/dev/null)
 # P1-024 (applied here too): jq with python3 fallback
 if command -v jq &>/dev/null; then
-  echo "$READY" | jq -r '"  DB: \(.checks.database.healthy) (\(.checks.database.latencyMs // "?")ms)\n  Redis: \(.checks.database.healthy)"' 2>/dev/null || echo "  ⚠️ No se pudo parsear health/ready"
+  # FIX (M-003): Redis line was using .checks.database.healthy (copy-paste
+  # bug) instead of .checks.redis.healthy. Now shows the correct Redis status.
+  echo "$READY" | jq -r '"  DB: \(.checks.database.healthy) (\(.checks.database.latencyMs // "?")ms)\n  Redis: \(.checks.redis.healthy // "n/a") (\(.checks.redis.latencyMs // "?")ms)"' 2>/dev/null || echo "  ⚠️ No se pudo parsear health/ready"
 else
   echo "$READY" | python3 -c "
 import json,sys
@@ -154,6 +156,27 @@ else
   echo "  ⚠️ Login con credenciales de prueba falló (esperado si no configuraste admin)"
   echo "  ℹ️ Configura el admin con: docker compose exec web bun run prisma/seed.ts"
 fi
+
+echo ""
+
+# ── 7. FLUJOS CRÍTICOS (M-004) ──
+echo "=== 7. FLUJOS CRÍTICOS ==="
+
+# Register: should reject invalid email
+REG_STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/auth/register" -H "Content-Type: application/json" -H "Origin: ${BASE_URL}" -d '{"email":"invalid","password":"short","username":"x"}' 2>/dev/null || echo "000")
+[ "$REG_STATUS" = "422" ] && ok "Register rejects invalid email: 422" || fail "Register invalid email: expected 422, got $REG_STATUS"
+
+# Order: should reject unauthenticated
+ORDER_STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/orders" -H "Content-Type: application/json" -H "Origin: ${BASE_URL}" -d '{"serviceId":"test","quantity":1}' 2>/dev/null || echo "000")
+[ "$ORDER_STATUS" = "401" ] && ok "Order requires auth: 401" || fail "Order unauthenticated: expected 401, got $ORDER_STATUS"
+
+# Wallet topup: should reject unauthenticated
+WALLET_STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" -X POST "${BASE_URL}/api/wallet/topup" -H "Content-Type: application/json" -H "Origin: ${BASE_URL}" -d '{"amount":10,"method":"paypal"}' 2>/dev/null || echo "000")
+[ "$WALLET_STATUS" = "401" ] && ok "Wallet topup requires auth: 401" || fail "Wallet topup unauthenticated: expected 401, got $WALLET_STATUS"
+
+# Public API v1: should reject missing API key
+API_STATUS=$(curl -s --max-time 10 -o /dev/null -w "%{http_code}" "${BASE_URL}/api/v1/services" 2>/dev/null || echo "000")
+[ "$API_STATUS" = "401" ] && ok "API v1 requires key: 401" || fail "API v1 no key: expected 401, got $API_STATUS"
 
 echo ""
 
