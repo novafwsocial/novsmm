@@ -15,6 +15,17 @@
 
 set -euo pipefail
 
+# FIX (M-005): acquire exclusive lock to prevent race condition when
+# multiple backup runs overlap (e.g., cron fired while previous run
+# still running). flock exits immediately (non-blocking) if the lock
+# is already held — the second instance prints a warning and exits 0.
+LOCK_FILE="/tmp/novsmm-backup.lock"
+exec 200>"$LOCK_FILE"
+if ! flock -n 200; then
+  echo "⚠️  Another backup is already running. Skipping this run."
+  exit 0
+fi
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 ok()   { echo -e "${GREEN}  ✅${NC} $1"; }
 fail() { echo -e "${RED}  ❌${NC} $1"; }
