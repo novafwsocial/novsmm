@@ -11650,3 +11650,93 @@ Stage Summary:
 - #9 DONE — 7 landing components migrated from framer-motion to motion/react (footer, marketplace, payments, stats, testimonials, security, faq). framer-motion kept for dashboard/admin. motion@12.42.2 installed.
 - #10 DONE — new /pricing route with 3 tiers, billing toggle, comparison table, SEO metadata, CTAs linking to register view.
 - Build PASSES (✓ 27.8s, 110/110 pages, /pricing static). No regressions. No new runtime deps beyond `motion`.
+
+---
+Task ID: LOADING-LOOP-CSP-FIX
+Agent: main (orchestrator)
+Task: Diagnosticar y arreglar el bucle de carga en la home ("/")
+
+Work Log:
+- Usuario reportó "sigues con el bucle" — la página se quedaba trabada en
+  el spinner de "Loading…" del loading.tsx y nunca avanzaba.
+- Inicié dev server (Next.js 16 + Turbopack) en puerto 3000, verifiqué
+  que la SSR devuelve HTTP 200 y HTML completo (337 KB) con todo el
+  contenido de la landing dentro de un `<div hidden id="S:0">`.
+- Identifiqué que el HTML incluía los scripts de reemplazo de streaming
+  SSR (`$RC("B:0","S:0")`, `$RC("B:1","S:1")`, etc.) — el servidor SÍ
+  envía la instrucción de reemplazar el fallback de Suspense
+  (loading.tsx) por el contenido real.
+- Lancé chromium headless vía Playwright (node + playwright-core global)
+  para inspeccionar el render real del lado del cliente.
+- Capturé los console errors del navegador — todos eran del tipo:
+    "Executing inline script violates the following Content Security
+     Policy directive 'script-src 'self' 'unsafe-inline' 'strict-dynamic'
+     https://www.paypal.com https://www.paypalobjects.com'."
+  Repetidos ~30 veces.
+- RAÍZ DEL BUG: la CSP de middleware.ts tenía ambas keywords
+  `'unsafe-inline'` y `'strict-dynamic'` en script-src. Según el spec
+  de CSP3 (https://www.w3.org/TR/CSP3/#strict-dynamic-usage), cuando
+  `'strict-dynamic'` está presente, el navegador IGNORA
+  `'unsafe-inline'` (y `'unsafe-eval'`, y la lista de hosts).
+  - La intención del autor original era permitir los scripts inline de
+    Next.js (RSC payload `__next_f.push`, scripts `$RC`/`$RV`/`$RB` de
+    streaming-SSR, bootstrap `requestAnimationFrame`) vía
+    `'unsafe-inline'`, Y permitir que el SDK de PayPal cargara sus
+    propias dependencias vía `'strict-dynamic'`.
+  - Pero por el spec, `'unsafe-inline'` fue silenciado — todos los
+    scripts inline de Next.js fueron bloqueados.
+  - Sin esos scripts, el `<Suspense fallback=<Loading>>` nunca se
+    reemplaza por el contenido real (`S:0` div permanece `hidden`),
+    y la página queda atrapada en el spinner "Loading…" para siempre.
+
+Fix:
+- Edité `src/middleware.ts` (función `addSecurityHeaders`):
+  · Removí `'strict-dynamic'` del `script-src` de la CSP.
+  · Añadí `'unsafe-eval'` (necesario para dev mode: HMR y algunos
+    polyfills lo usan; en prod se puede revisar).
+  · Mantuve `'unsafe-inline'` (ahora sí efectiva) para los scripts
+    inline de Next.js.
+  · Mantuve la lista explícita de hosts (`https://www.paypal.com`,
+    `https://www.paypalobjects.com`) — el SDK de PayPal se carga como
+    `<script src=...>` clásico, no inline, así que sigue funcionando.
+  · Añadí un comentario extenso explicando el gotcha del spec CSP3
+    para que nadie vuelva a meter `'strict-dynamic'` sin darse cuenta.
+
+Verificación con navegador (chromium headless):
+- Antes del fix:
+  · body text: "Skip to content Loading…" — SOLO el spinner visible.
+  · loadingTextCount: 1, spinnerSvgs: 1, ariaBusy: 9, pulseCount: 18.
+  · console errors: >30, todos CSP "Executing inline script...".
+  · page errors: 0 (React nunca llegó a hidratar).
+  · API requests: 0 (los hooks nunca se ejecutaron).
+- Después del fix:
+  · body text: 12,009 caracteres — toda la landing visible (NOVSMM,
+    Platform, Services, Marketplace, Payments, Security, hero, dashboard
+    preview, lista de servicios con 11 plataformas, offers board, etc.).
+  · fullScreenLoadingVisible: false.
+  · loadingTextInBody: 0, spinnerSvgs: 0, ariaBusy: 0, pulseCount: 0.
+  · sectionsCount: 9 (Services, Marketplace, Payments, Stats,
+    Testimonials, Security, ApiDocs, Affiliate, Faq).
+  · h1Count: 1, h2Count: 9.
+  · CSP errors: 0.
+  · console errors: 0.
+  · page errors: 0.
+  · API requests: 6 normales
+    (2x /api/auth/session — refetch normal de TanStack Query;
+     /api/status, /api/public/settings, /api/public/offers,
+     /api/cms?type=faq&limit=50).
+  · Repeticiones sospechosas: ninguna (el 2x de auth/session es el
+    comportamiento normal de useQuery al montar el componente y al
+    quedar stale).
+
+Stage Summary:
+- BUG RESUELTO: la home ya carga completamente, sin bucle de carga.
+- Root cause: CSP con `'strict-dynamic'` silenciaba `'unsafe-inline'`,
+  bloqueando los scripts inline de hidratación de Next.js 16 (RSC
+  payload + streaming-SSR replacement).
+- Fix: 1 archivo modificado (src/middleware.ts), 1 cambio semántico
+  (remover `'strict-dynamic'`, añadir `'unsafe-eval'`).
+- Sin cambios en código de aplicación. Sin nuevos deps. Sin migraciones.
+- Lección para el futuro: si se necesita allowlist estricto de scripts
+  en prod, migrar a nonces (Next.js 16 + next.config.ts nonce config)
+  en lugar de combinar `'unsafe-inline'` con `'strict-dynamic'`.

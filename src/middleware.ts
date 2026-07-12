@@ -149,17 +149,34 @@ function addSecurityHeaders(res: NextResponse) {
   // X-DNS-Prefetch-Control — opt into DNS prefetching for asset origins
   // (fonts.gstatic.com etc.). Helps TTFB on first visit.
   res.headers.set("X-DNS-Prefetch-Control", "on");
-  // CSP — Next.js 16 requires 'unsafe-inline' for script-src because it
-  // injects inline scripts (__NEXT_DATA__, hydration) without nonce support
-  // in the App Router. 'strict-dynamic' is added so that trusted scripts
-  // (PayPal SDK) can load their own dependencies.
-  // NOTE: The nonce approach requires Next.js nonce configuration in
-  // next.config.ts + layout.tsx which is a larger migration. For now,
-  // 'unsafe-inline' + 'strict-dynamic' is the safe baseline.
+  // CSP — Next.js 16 (App Router + Turbopack) injects MANY inline scripts:
+  //   • The RSC payload (<script>self.__next_f.push([1,"..."])</script>)
+  //   • The streaming-SSR replacement scripts ($RC, $RV, $RB) that swap
+  //     <Suspense fallback=<Loading>> for the real revealed content
+  //   • requestAnimationFrame / setTimeout bootstrap snippets
+  // If these inline scripts are blocked by CSP, hydration never runs and
+  // the page is stuck forever on the loading.tsx spinner — that was the
+  // root cause of the "loading loop" bug.
+  //
+  // CRITICAL CSP SPEC GOTCHA: when 'strict-dynamic' is present in a
+  // directive, the browser IGNORES 'unsafe-inline' (and 'unsafe-eval',
+  // host allowlists). See https://www.w3.org/TR/CSP3/#strict-dynamic-usage
+  //   "If 'strict-dynamic' is present in a source list, then:
+  //    - 'self' and 'unsafe-inline' have no effect."
+  // The previous CSP had both `'unsafe-inline' 'strict-dynamic'`, which
+  // meant 'unsafe-inline' was silently ignored — every Next.js inline
+  // script was blocked, and the page never hydrated.
+  //
+  // FIX: drop 'strict-dynamic' so 'unsafe-inline' actually takes effect.
+  // PayPal's SDK still loads because it's a classic <script src=...> from
+  // https://www.paypal.com (an explicit host allowlist entry), not an
+  // inline script. If a future third-party script needs to load its own
+  // dependencies, add those host origins explicitly to script-src instead
+  // of relying on 'strict-dynamic'.
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'strict-dynamic' https://www.paypal.com https://www.paypalobjects.com; " +
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.paypal.com https://www.paypalobjects.com; " +
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: blob:; " +
       "font-src 'self' data: https://fonts.gstatic.com; " +
