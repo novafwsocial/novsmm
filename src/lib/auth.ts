@@ -10,7 +10,7 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/api-utils";
-import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
+import { verify2FAToken, decrypt2FASecret, read2FAPayload } from "@/lib/two-factor";
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 import { decryptJSON } from "@/lib/crypto-utils";
 
@@ -18,16 +18,17 @@ import { decryptJSON } from "@/lib/crypto-utils";
  * Safely decrypt + parse a 2FA Setting payload (OWASP A08-2, P3).
  * Returns null on any failure (corrupted ciphertext, malformed JSON,
  * missing fields). The caller MUST handle null as a fail-closed case.
+ *
+ * SECURITY FIX (S-C-002): delegates to `read2FAPayload` (from two-factor.ts)
+ * which handles BOTH the new encrypted format (write2FAPayload/encryptJSON)
+ * and the legacy plain-JSON format transparently. This fixes the 2FA lockout
+ * bug where setup/verify wrote plain JSON but login expected AES-encrypted.
  */
 function decryptJSONSafe<T = any>(value: string | null | undefined): T | null {
   if (!value) return null;
-  try {
-    const parsed = decryptJSON(value);
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed as T;
-  } catch {
-    return null;
-  }
+  const payload = read2FAPayload(value);
+  if (!payload) return null;
+  return payload as unknown as T;
 }
 
 /**
@@ -246,13 +247,20 @@ const providers: Provider[] = [
             twoFactorOk = true;
             usedBackupCode = true;
             // Rotate: remove the used code so it's single-use.
+            // SECURITY FIX (S-C-002): use write2FAPayload for consistent
+            // encrypted format (was encryptJSON direct — worked, but
+            // write2FAPayload is the canonical helper).
             const remaining = codes.filter((_, i) => i !== matchedIndex);
-            const newPayload = { ...payload, backupCodes: remaining };
             try {
-              const { encryptJSON } = await import("./crypto-utils");
+              const { write2FAPayload } = await import("./two-factor");
               await db.setting.update({
                 where: { key: `2fa:${user.id}` },
-                data: { value: encryptJSON(newPayload) },
+                data: {
+                  value: write2FAPayload({
+                    secret: payload.secret,
+                    backupCodes: remaining,
+                  }),
+                },
               });
             } catch {
               // best-effort — don't block login on rotation failure
