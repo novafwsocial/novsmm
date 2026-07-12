@@ -2,10 +2,16 @@
 // This file is 4,790 lines and contains 20+ admin sub-components. A previous
 // partial split attempt left dead duplicates in ./admin/ (now deleted). A
 // full extraction is feasible but risky without a full test suite — deferred.
+//
+// PERF FIX (P-M-008): the AdminPanel is already lazy-loaded via next/dynamic
+// in app-view.tsx (line 29), so it's NOT in the initial landing bundle.
+// The 4,794-line chunk only loads when an admin opens the admin tab.
+// To further reduce the per-tab render cost, we wrap each AdminX component
+// in React.memo below so switching tabs doesn't re-render the inactive ones.
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, lazy, Suspense, memo } from "react";
 import {
   ShieldCheck,
   Users,
@@ -462,7 +468,10 @@ function AdminStat({ icon, label, value, delta }: { icon: React.ReactNode; label
 }
 
 /* ─────────── Users ─────────── */
-function AdminUsers() {
+// PERF (P-M-008): memo prevents re-render when switching tabs (the parent
+// AdminPanel re-renders on tab change, but memoized children skip if props
+// haven't changed — and these take no props).
+const AdminUsers = memo(function AdminUsers() {
   const { data } = useAdminUsers();
   const updateUser = useUpdateUser();
   const bulkAction = useBulkAction();
@@ -751,7 +760,7 @@ function AdminUsers() {
       )}
     </Reveal>
   );
-}
+});
 
 /**
  * Impersonation modal — prompts the admin for their password, then
@@ -929,7 +938,8 @@ function IconBtn({ icon: Icon, danger, onClick }: { icon: any; danger?: boolean;
 }
 
 /* ─────────── Services ─────────── */
-function AdminServices() {
+// PERF (P-M-008): memo prevents re-render on tab switch.
+const AdminServices = memo(function AdminServices() {
   const { data } = useAdminServices();
   const createService = useCreateService();
   const updateService = useUpdateService();
@@ -1098,7 +1108,7 @@ function AdminServices() {
       )}
     </Reveal>
   );
-}
+});
 
 /** Unified service modal — handles both create and edit modes.
  *
@@ -3280,7 +3290,8 @@ function CouponModal({
 }
 
 /* ─────────── Orders (admin) ─────────── */
-function AdminOrders() {
+// PERF (P-M-008): memo prevents re-render on tab switch.
+const AdminOrders = memo(function AdminOrders() {
   const { data } = useAdminOverview();
   const createOrder = useCreateManualOrder();
   const [showCreate, setShowCreate] = useState(false);
@@ -3372,7 +3383,7 @@ function AdminOrders() {
       )}
     </Reveal>
   );
-}
+});
 
 function CreateManualOrderModal({
   onClose,
@@ -4408,7 +4419,8 @@ function EmailTemplateEditor({
 }
 
 /* ─────────── CMS / Blog / FAQ ─────────── */
-function AdminCms() {
+// PERF (P-M-008): memo prevents re-render on tab switch.
+const AdminCms = memo(function AdminCms() {
   const { toast } = useToast();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4576,7 +4588,7 @@ function AdminCms() {
       )}
     </Reveal>
   );
-}
+});
 
 function CmsEditor({
   item,

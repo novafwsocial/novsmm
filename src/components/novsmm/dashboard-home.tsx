@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useDashboard, useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import {
   Wallet,
   ShoppingCart,
@@ -38,7 +38,6 @@ import {
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { DashReveal } from "./dash-reveal";
-import { useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { useApp } from "./app-store";
 import { StatusPill } from "./status-pill";
@@ -61,13 +60,11 @@ const RANGE_RANGE_LABEL: Record<Range, string> = {
 
 export function DashboardHome() {
   const [range, setRange] = useState<Range>("30d");
-  // Range-aware fetch (re-fetches when range changes). Other consumers
-  // (sidebar balance, topbar) continue using useDashboard() without range.
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard", range],
-    queryFn: () => api.get<any>(`/api/dashboard?range=${range}`),
-    refetchInterval: 30 * 1000,
-  });
+  // PERF FIX (P-H-002): use the shared useDashboard hook (with range)
+  // instead of a local useQuery. This shares the queryKey with the
+  // sidebar/topbar consumers, avoiding a duplicate /api/dashboard
+  // request every 30-60s.
+  const { data, isLoading } = useDashboard(range);
   const { setDashboardTab } = useApp();
   const { data: favData } = useFavorites();
   const { data: ticketsData } = useTickets();

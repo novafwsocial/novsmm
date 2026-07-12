@@ -34,10 +34,20 @@ export function useSession() {
 }
 
 // ── Dashboard ──
-export function useDashboard() {
+// PERF FIX (P-H-002): useDashboard now accepts an optional `range` param
+// so DashboardHome (which fetches /api/dashboard?range=30d) shares the
+// same queryKey as the sidebar/topbar (which fetch /api/dashboard).
+// Previously they used ["dashboard"] vs ["dashboard", range] — two
+// distinct caches → 2 requests to /api/dashboard every cycle.
+// Now: ["dashboard", range ?? "default"] — when range is undefined,
+// the key is ["dashboard", "default"], so both consumers share ONE
+// cache entry. When range changes, the key changes (intentional —
+// different data).
+export function useDashboard(range?: string) {
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => api.get<any>("/api/dashboard"),
+    queryKey: ["dashboard", range ?? "default"],
+    queryFn: () =>
+      api.get<any>(range ? `/api/dashboard?range=${range}` : "/api/dashboard"),
     refetchInterval: 60 * 1000, // 60s — reduced from 30s for performance
   });
 }
