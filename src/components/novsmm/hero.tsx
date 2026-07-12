@@ -102,6 +102,16 @@ export function Hero() {
               <ArrowRight className="h-4 w-4" />
             </span>
           </Magnetic>
+          {/* FIX (U-C-001): Pricing was unreachable from the hero. Adding a
+              "View pricing" link gives price-conscious visitors a clear next
+              step without forcing them to scroll looking for it. */}
+          <a
+            href="/pricing"
+            className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted"
+          >
+            View pricing
+            <ArrowRight className="h-3.5 w-3.5" />
+          </a>
           <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted">
               <Play className="h-3.5 w-3.5 fill-current" />

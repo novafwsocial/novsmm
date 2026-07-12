@@ -98,10 +98,16 @@ export default function Home() {
               {/* id="main-content" — target of the skip-to-content link in layout.tsx (a11y) */}
               <main id="main-content" className="flex-1">
                 <Hero />
+                {/* FIX (U-H-006): Stats moved to 2nd position (was 5th).
+                    Showing credibility numbers (6,300+ services, 1,200
+                    orders/min, 99.99% uptime) immediately after the Hero
+                    builds trust before the visitor scrolls into the
+                    detailed Services/Marketplace/Payments sections.
+                    +5-10% time-on-page per UX audit. */}
+                <Stats />
                 <Services />
                 <Marketplace />
                 <Payments />
-                <Stats />
                 <Testimonials />
                 <Security />
                 <ApiDocsSection />

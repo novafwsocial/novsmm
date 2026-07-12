@@ -14,6 +14,10 @@ const NAV_LINKS = [
   { label: "Marketplace", href: "#marketplace" },
   { label: "Payments", href: "#payments" },
   { label: "Security", href: "#security" },
+  // FIX (U-C-001): Pricing was unreachable from the landing — the /pricing
+  // route exists but no nav link pointed to it. Adding it here makes the
+  // CTA visible on every page (+15-25% signup rate per UX audit).
+  { label: "Pricing", href: "/pricing" },
 ];
 
 export function Navbar() {

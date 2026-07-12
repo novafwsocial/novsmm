@@ -45,6 +45,9 @@ const COLUMNS: FooterColumn[] = [
       { label: "Services", tab: "marketplace" },
       { label: "Marketplace", anchor: "#marketplace" },
       { label: "Payments", anchor: "#payments" },
+      // FIX (U-C-001): Pricing was unreachable from the footer. Adding it
+      // here makes the /pricing route discoverable from every page.
+      { label: "Pricing", externalUrl: "/pricing" },
       { label: "Analytics", tab: "analytics" },
       { label: "API", externalUrl: "/api-docs" },
     ],
@@ -188,7 +191,10 @@ export function Footer() {
               Ship at the speed of attention.
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground text-pretty sm:text-lg">
-              Join 184,500+ resellers, agencies, and enterprises running their
+              {/* FIX (U-C-003): removed fake "184,500+ resellers" claim —
+                  risk of FTC penalty + Google penalty for fake social proof.
+                  Replaced with an honest value-prop statement. */}
+              Join the resellers, agencies, and enterprises running their
               social media marketing on NOVSMM infrastructure.
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">

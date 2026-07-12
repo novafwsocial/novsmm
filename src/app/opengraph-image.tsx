@@ -155,7 +155,7 @@ export default function OpenGraphImage() {
             zIndex: 1,
           }}
         >
-          {["99.99% uptime SLA", "SOC 2 controls", "242+ services", "8 gateways"].map(
+          {["99.99% uptime SLA", "SOC 2 controls", "242+ services", "4 gateways"].map(
             (chip) => (
               <div
                 key={chip}
