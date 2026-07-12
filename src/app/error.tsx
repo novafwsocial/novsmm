@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { AlertTriangle, RotateCcw } from "lucide-react";
 import { useEffect } from "react";
 
@@ -19,6 +18,13 @@ import { useEffect } from "react";
  * (a Next.js-generated hash safe to show users). The full `error.message`
  * is logged to the server via the effect below (it runs in the browser,
  * so we use console.error which the APM/Sentry integration picks up).
+ *
+ * PERF FIX (U-M-002): removed framer-motion import. This error page is
+ * a route-level error boundary that loads on ANY unhandled error — it
+ * was pulling framer-motion (~30KB) into the error chunk just for a
+ * fade+scale animation. Replaced with CSS animation class
+ * (error-boundary-enter, defined in globals.css — same class used by
+ * error-boundary.tsx).
  */
 export default function GlobalError({
   error,
@@ -37,11 +43,7 @@ export default function GlobalError({
     <html>
       <body>
         <div className="flex min-h-screen items-center justify-center bg-background p-4">
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="max-w-md rounded-3xl border border-border/60 bg-background p-8 text-center nov-ring-lg"
-          >
+          <div className="error-boundary-enter max-w-md rounded-3xl border border-border/60 bg-background p-8 text-center nov-ring-lg">
             <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-amber-500/10">
               <AlertTriangle className="h-8 w-8 text-amber-600" />
             </div>
@@ -63,7 +65,7 @@ export default function GlobalError({
               <RotateCcw className="h-4 w-4" />
               Try again
             </button>
-          </motion.div>
+          </div>
         </div>
       </body>
     </html>

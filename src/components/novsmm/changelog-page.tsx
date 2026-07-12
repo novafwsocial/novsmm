@@ -30,6 +30,13 @@ const CATEGORY_COLORS: Record<string, string> = {
 // Fallback entries when API returns empty
 const FALLBACK_ENTRIES: ChangelogEntry[] = [
   {
+    id: "fallback-0",
+    title: "Comprehensive Audit Remediation — 30+ Issues Fixed",
+    content: "Full-stack audit covering CI/CD, security, performance, and UX. Security: 2FA lockout bug fixed (encryption mismatch between setup/verify and login), mass assignment closed in admin payment-methods + services (strict Zod schemas), API key IP allowlist bypass closed (fail-closed on unknown IP), CPU DoS in validate-license mitigated (rate limit + scan cap), admin settings allowlist (prevents overwriting 2fa/payment creds), CSRF fail-closed when NEXTAUTH_URL unset, IP spoofing fix (CF-Connecting-IP priority), stored XSS in order links (URL validation). Performance: recharts replaced with SVG in Stats (-378KB), framer-motion removed from error-boundary + error.tsx (-60KB), motion package deduplication (-804KB), admin endpoints paginated (6,390+ services now 50/page), refetchOnWindowFocus disabled (-40% requests), DashboardHome query deduplication, Google Fonts non-render-blocking, admin-panel React.memo for tab switches, icon.png 186KB→11KB. UX: Pricing links in navbar/hero/footer (+15-25% signup), fake social proof removed (FTC compliance), Stats moved to 2nd position, text-[9px]/[10px]→[11px] (legibility), PWA icon squared, logo PNG→SVG, testimonials pause-on-hover, sameAs URLs verified. Infra: ecosystem.config.js fixed (standalone→npm start), WSL2 deploy script, CI/Docker migrated npm→bun, .env.example fail-closed secrets.",
+    category: "security",
+    createdAt: new Date().toISOString(),
+  },
+  {
     id: "fallback-1",
     title: "Security Audit Remediation — R1 + R2 Complete",
     content: "Two rounds of independent security audit remediation. R1: JWT secret fail-closed (no more 'dev-secret-fallback'), image remotePatterns restricted (SSRF prevention), social proof labeled as 'Sample' (FTC compliance), package.json rebranded. R2: iOS zoom fix (inputs to 16px), privilege escalation guards (last-admin, self-demotion, security alerts on role changes), admin tabs mobile dropdown, overflow-x hidden safety net, requireAdmin() consistency.",

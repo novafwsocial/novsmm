@@ -236,7 +236,10 @@
   background: oklch(0.5 0.005 285 / 0.32);
 }
 
-/* Marquee animation for testimonials/logos */
+/* Marquee animation for testimonials/logos
+   A11Y FIX (U-H-007): added pause-on-hover so users can read testimonials
+   without the marquee moving. Also added prefers-reduced-motion override
+   to stop the animation entirely for users who request reduced motion. */
 @keyframes nov-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
@@ -246,6 +249,19 @@
 }
 .nov-marquee-slow {
   animation: nov-marquee 60s linear infinite;
+}
+/* Pause on hover — lets users read the content */
+.nov-marquee:hover,
+.nov-marquee-slow:hover {
+  animation-play-state: paused;
+}
+
+/* Respect prefers-reduced-motion: stop marquee entirely */
+@media (prefers-reduced-motion: reduce) {
+  .nov-marquee,
+  .nov-marquee-slow {
+    animation: none !important;
+  }
 }
 
 /* Shimmer for live indicators */

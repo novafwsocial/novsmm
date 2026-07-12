@@ -188,9 +188,14 @@ const ORG_JSON_LD = {
   description: SITE_DESCRIPTION,
   slogan: SITE_TAGLINE,
   sameAs: [
-    "https://twitter.com/novsmm",
-    "https://github.com/novsmm",
-    "https://www.linkedin.com/company/novsmm",
+    // SEO FIX (U-H-008): verified social media URLs only.
+    // Previously listed twitter.com/novsmm (unverified), github.com/novsmm
+    // (404 — the real org is github.com/novafwsocial), and linkedin.com/
+    // company/novsmm (unverified). Google penalizes sameAs entries that
+    // 404 — only list profiles that actually exist and are claimed.
+    "https://github.com/novafwsocial",
+    // TODO: add twitter.com/novsmm and linkedin.com/company/novsmm
+    // here once the accounts are created and claimed.
   ],
   contactPoint: [
     {

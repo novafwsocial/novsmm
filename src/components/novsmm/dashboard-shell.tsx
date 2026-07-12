@@ -35,6 +35,7 @@ import { useApp, type DashboardTab } from "./app-store";
 import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
+import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import { Logo } from "./logo";
 import { Counter } from "./counter";
 import {
@@ -69,7 +70,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { data: notifData } = useNotifications();
   const { data: dashData } = useDashboard();
   const { toast } = useToast();
-  const [statusState, setStatusState] = useState<"operational" | "degraded">("operational");
+  // PERF (P-M-007): statusState is now derived from useCachedFetch below —
+  // no more useState + setInterval polling.
 
   const openPalette = useCallback(() => {
     setPaletteNonce((n) => n + 1);
@@ -82,25 +84,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Poll /api/status every 60s for the topbar status pill
-  useEffect(() => {
-    let cancelled = false;
-    const tick = () => {
-      api
-        .get("/api/status")
-        .then((d: any) => {
-          if (cancelled) return;
-          setStatusState(d?.status === "operational" ? "operational" : "degraded");
-        })
-        .catch(() => {});
-    };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+  // PERF FIX (P-M-007): use useCachedFetch instead of manual setInterval polling.
+  // Previously this component polled /api/status every 60s with its own
+  // setInterval, while Hero and Stats on the landing page also fetched
+  // /api/status via useCachedFetch (30s cache). Now all three share the
+  // same in-memory cache → 1 request per 30s instead of 2 separate polls.
+  const statusData = useCachedFetch<any>("/api/status");
+  const statusState = statusData?.status === "operational" ? "operational" : "degraded";
 
   // ⌘K / Ctrl+K → open the command palette
   useEffect(() => {
