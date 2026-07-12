@@ -305,9 +305,14 @@ echo ""
 if [ $FAIL -eq 0 ]; then
   echo -e "  ${GREEN}✅ ENTORNO LISTO PARA DEPLOYMENT${NC}"
   echo "  Ejecuta: docker compose up -d --build"
+  exit 0
 else
   echo -e "  ${RED}❌ HAY ${FAIL} PROBLEMAS QUE DEBES RESOLVER ANTES DEL DEPLOYMENT${NC}"
   echo "  Revisa los FAIL anteriores."
+  # FIX (H-003): exit with non-zero so CI/CD pipelines and wrapper scripts
+  # can detect the failure. Previously this script always exited 0 even
+  # when FAILs were detected, making it useless as a pre-deploy gate.
+  exit 1
 fi
 echo ""
 echo "════════════════════════════════════════════════════════════════"

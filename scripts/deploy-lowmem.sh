@@ -125,8 +125,13 @@ done
 echo ""
 
 if [ $WAITED -ge $MAX_WAIT ]; then
-  warn "App not responding after ${MAX_WAIT}s — check logs:"
-  warn "  docker compose -f docker-compose.lowmem.yml logs web"
+  # FIX (H-004): abort the deploy instead of just warning. Previously
+  # this continued to run migrations + seed on a broken deploy, which
+  # could corrupt the DB or leave the system in an inconsistent state.
+  fail "App not responding after ${MAX_WAIT}s — aborting deploy."
+  echo "  Check logs: docker compose -f docker-compose.lowmem.yml logs web"
+  echo "  Rollback: docker compose -f docker-compose.lowmem.yml down"
+  exit 1
 fi
 
 # ── 7. Run migrations ──

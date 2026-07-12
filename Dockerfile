@@ -3,13 +3,19 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Stage 1: Install ALL dependencies (for build)
 # Stage 2: Build the Next.js app
-# Stage 3: Production runner (minimal image, non-root user, healthcheck)
+# Stage 3: Install PRODUCTION-only dependencies (for runner)
+# Stage 4: Production runner (minimal image, non-root user, healthcheck)
 #
 # FIX (C-004): switched from npm to bun to match the project's actual
 # package manager (bun.lock is committed, package-lock.json is not).
 # Benefits: faster installs (~10x), smaller image (bun's install graph
 # is more efficient), and no more drift between local dev (bun) and
 # Docker (npm).
+#
+# FIX (H-002): previously the runner copied node_modules from the builder
+# stage, which included dev deps (eslint, typescript, tsx, etc. — ~200MB
+# extra + attack surface). Now a separate prod-deps stage installs only
+# production dependencies, and the runner copies from there.
 #
 # CIS Docker Benchmark compliance:
 #   - Runs as non-root user (nextjs:1001)
@@ -34,7 +40,16 @@ COPY . .
 RUN bunx prisma generate
 RUN NODE_OPTIONS="--max-old-space-size=2048" bun run build
 
-# ── Stage 3: Production runner (CIS-hardened) ──
+# ── Stage 3: Production-only dependencies ──
+# FIX (H-002): separate stage that installs ONLY production deps (no eslint,
+# typescript, tsx, etc.). The runner copies node_modules from HERE, not
+# from the builder. Saves ~200MB and removes dev tools from the prod image.
+FROM oven/bun:1.1-debian AS prod-deps
+WORKDIR /app
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile --production
+
+# ── Stage 4: Production runner (CIS-hardened) ──
 FROM oven/bun:1.1-debian AS runner
 
 # CIS 4.1: Create non-root user (UID 1001 — avoids conflicts with host users)
@@ -52,10 +67,11 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/* && \
     apt-get purge -y --auto-remove
 
-# Copy build artifacts
+# Copy build artifacts + PRODUCTION-ONLY node_modules
 COPY --from=builder --chown=nextjs:nextjs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nextjs /app/.next ./.next
-COPY --from=builder --chown=nextjs:nextjs /app/node_modules ./node_modules
+# FIX (H-002): copy from prod-deps (no dev deps) instead of builder
+COPY --from=prod-deps --chown=nextjs:nextjs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nextjs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nextjs /app/public ./public
 COPY --from=builder --chown=nextjs:nextjs /app/next.config.ts ./next.config.ts
