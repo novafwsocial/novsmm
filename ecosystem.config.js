@@ -17,20 +17,45 @@
  *
  * This is an ALTERNATIVE to Docker. Use one or the other, not both.
  * Docker (docker-compose.yml) is recommended for production.
+ *
+ * FIX (C-003): previously this file pointed `script` at
+ * `.next/standalone/server.js`, but `next.config.ts` does NOT set
+ * `output: 'standalone'` — so that file never exists and `pm2 start
+ * ecosystem.config.js` crashed immediately. The user's working command
+ * `pm2 start "npm run start" --name novsmm` runs `next start -p 3000`
+ * via npm, which works because `next start` only needs the standard
+ * `.next/` build output (BUILD_ID + server/ + static/).
+ *
+ * This config now uses the SAME approach: `script: "npm"`, `args:
+ * "run start"`. That way `pm2 start ecosystem.config.js` is equivalent
+ * to the user's manual command, and survives `npm`/`bun` differences
+ * (the npm wrapper just calls `next start -p 3000` from package.json).
+ *
+ * To use bun explicitly (faster startup, less memory), set:
+ *   interpreter: "/usr/bin/bun", script: "node_modules/.bin/next", args: "start -p 3000"
+ * — but require bun >= 1.1.258 which supports `bun next`. For maximum
+ * compatibility we default to npm.
+ * ─────────────────────────────────────────────────────────────────────────────
  */
 
 module.exports = {
   apps: [
     {
-      name: "novsmm-web",
-      script: ".next/standalone/server.js",
+      name: "novsmm",
+      // Run `next start` via npm so it picks up the same binary the user's
+      // manual `pm2 start "npm run start"` uses. This is the most portable
+      // setup — works whether the host has node, bun, or both.
+      script: "npm",
+      args: "run start",
+      cwd: __dirname,
       env: {
         NODE_ENV: "production",
         PORT: 3000,
         HOSTNAME: "0.0.0.0",
       },
-      instances: "max", // One per CPU core
-      exec_mode: "cluster",
+      instances: 1, // Next.js handles concurrency internally; cluster mode would
+      // duplicate the build cache + DB pool — not needed.
+      exec_mode: "fork",
       max_memory_restart: "1G",
       error_file: "./logs/web-error.log",
       out_file: "./logs/web-out.log",
@@ -44,8 +69,11 @@ module.exports = {
     },
     {
       name: "novsmm-worker",
-      script: "src/workers/worker.ts",
-      interpreter: "bun",
+      // The worker is a TypeScript file — use tsx (via npx) so PM2 doesn't
+      // need a separate bun install. Equivalent to `npm run worker:prod`.
+      script: "npm",
+      args: "run worker:prod",
+      cwd: __dirname,
       env: {
         NODE_ENV: "production",
       },
@@ -62,8 +90,11 @@ module.exports = {
     },
     {
       name: "novsmm-notifications",
-      script: "mini-services/notifications-service/index.ts",
-      interpreter: "bun",
+      // Notifications mini-service — also run via npm script for portability.
+      // Reads NOTIFICATIONS_SERVICE_PORT from env (default 3003).
+      script: "npm",
+      args: "run notifications:prod",
+      cwd: __dirname,
       env: {
         NODE_ENV: "production",
         NOTIFICATIONS_SERVICE_PORT: 3003,
