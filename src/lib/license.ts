@@ -150,8 +150,26 @@ export async function validateLicense(
   }
 
   // Check domain
-  if (lic.domain && options.domain && !options.domain.includes(lic.domain)) {
-    return { valid: false, reason: "Domain not allowed for this license" };
+  // SECURITY FIX (S-H-005): previously used `options.domain.includes(lic.domain)`
+  // which is a SUBSTRING match — if the license is for "novsmm.com", an
+  // attacker could use "evil-novsmm.com" and pass the check because
+  // "evil-novsmm.com".includes("novsmm.com") === true.
+  // Now we do proper hostname matching: exact match OR suffix match with
+  // a dot boundary (so "app.novsmm.com" matches a license for "novsmm.com"
+  // but "evil-novsmm.com" does NOT).
+  if (lic.domain && options.domain) {
+    try {
+      const requestedHost = new URL(options.domain.startsWith("http") ? options.domain : `https://${options.domain}`).hostname.toLowerCase();
+      const licensedHost = lic.domain.toLowerCase().replace(/^https?:\/\//, "").split("/")[0];
+      const isAllowed =
+        requestedHost === licensedHost ||
+        requestedHost.endsWith(`.${licensedHost}`);
+      if (!isAllowed) {
+        return { valid: false, reason: "Domain not allowed for this license" };
+      }
+    } catch {
+      return { valid: false, reason: "Invalid domain in request" };
+    }
   }
   // Check IP allowlist
   if (lic.ipAllowlist && options.ip) {

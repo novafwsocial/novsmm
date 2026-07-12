@@ -4,6 +4,7 @@ import { apiError, apiOk, getBaseUrl } from "@/lib/api-utils";
 import { sendEmail } from "@/lib/notify";
 import { sanitizeEmail } from "@/lib/sanitize";
 import crypto from "crypto";
+import bcrypt from "bcryptjs";
 
 /**
  * Hash a verification token with SHA-256 before storing or looking up.
@@ -18,8 +19,24 @@ function hashToken(token: string): string {
 }
 
 /**
+ * Constant-time delay helper — resolves after approximately `ms` milliseconds.
+ * Used to make the "user not found" path take the same time as the "user
+ * found" path, preventing timing-based email enumeration.
+ */
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/**
  * POST /api/auth/forgot-password
  * Generates a reset token, stores it in VerificationToken, sends email.
+ *
+ * SECURITY FIX (S-M-002): timing side-channel fix. Previously the
+ * "user not found" path returned immediately (~5ms) while the "user
+ * found" path did DB writes + email (~100-500ms). An attacker could
+ * enumerate valid emails by measuring response time. Now both paths
+ * take approximately the same time by doing a constant-time bcrypt
+ * hash (~100ms) when the user doesn't exist.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -30,13 +47,16 @@ export async function POST(req: NextRequest) {
       return apiError("Valid email is required", 422);
     }
 
-    // Find user (don't reveal if email exists — security best practice)
+    // Find user
     const user = await db.user.findUnique({
       where: { email: email.toLowerCase() },
     });
 
     if (!user) {
-      // Return success even if user doesn't exist (prevents email enumeration)
+      // SECURITY (S-M-002): do a bcrypt hash to waste ~100ms so the
+      // response time matches the "user found" path. This prevents
+      // timing-based email enumeration. The hash result is discarded.
+      await bcrypt.hash(crypto.randomBytes(16).toString("hex"), 10).catch(() => {});
       return apiOk({ message: "If that email exists, a reset link has been sent." });
     }
 

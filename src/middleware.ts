@@ -84,7 +84,13 @@ const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
 ];
 
 // ── Security headers ──
-function addSecurityHeaders(res: NextResponse) {
+// SECURITY FIX (S-H-002): addSecurityHeaders now accepts an optional `nonce`
+// parameter. When provided (for page routes, not API), the CSP uses
+// `'nonce-${nonce}'` instead of `'unsafe-inline'`, and `'unsafe-eval'` is
+// removed in production. This closes the XSS vector that `'unsafe-inline'`
+// leaves open. Next.js 16 auto-applies the `x-nonce` request header to its
+// own injected inline scripts (RSC payload, streaming-SSR, bootstrap).
+function addSecurityHeaders(res: NextResponse, nonce?: string) {
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
@@ -161,29 +167,22 @@ function addSecurityHeaders(res: NextResponse) {
   //   • The streaming-SSR replacement scripts ($RC, $RV, $RB) that swap
   //     <Suspense fallback=<Loading>> for the real revealed content
   //   • requestAnimationFrame / setTimeout bootstrap snippets
-  // If these inline scripts are blocked by CSP, hydration never runs and
-  // the page is stuck forever on the loading.tsx spinner — that was the
-  // root cause of the "loading loop" bug.
   //
-  // CRITICAL CSP SPEC GOTCHA: when 'strict-dynamic' is present in a
-  // directive, the browser IGNORES 'unsafe-inline' (and 'unsafe-eval',
-  // host allowlists). See https://www.w3.org/TR/CSP3/#strict-dynamic-usage
-  //   "If 'strict-dynamic' is present in a source list, then:
-  //    - 'self' and 'unsafe-inline' have no effect."
-  // The previous CSP had both `'unsafe-inline' 'strict-dynamic'`, which
-  // meant 'unsafe-inline' was silently ignored — every Next.js inline
-  // script was blocked, and the page never hydrated.
-  //
-  // FIX: drop 'strict-dynamic' so 'unsafe-inline' actually takes effect.
-  // PayPal's SDK still loads because it's a classic <script src=...> from
-  // https://www.paypal.com (an explicit host allowlist entry), not an
-  // inline script. If a future third-party script needs to load its own
-  // dependencies, add those host origins explicitly to script-src instead
-  // of relying on 'strict-dynamic'.
+  // SECURITY FIX (S-H-002): when a nonce is available (page routes), we
+  // use `'nonce-${nonce}'` instead of `'unsafe-inline'`. Next.js 16 auto-
+  // applies the `x-nonce` header to its own injected scripts. In production,
+  // `'unsafe-eval'` is also removed (only needed in dev for HMR).
+  // When no nonce is available (API routes), we keep `'unsafe-inline'`
+  // (API routes don't render HTML, so inline scripts aren't a concern).
+  const isProduction = process.env.NODE_ENV === "production";
+  const scriptSrc = nonce
+    ? `'self' 'nonce-${nonce}' ${isProduction ? "" : "'unsafe-eval'"} https://www.paypal.com https://www.paypalobjects.com`
+    : `'self' 'unsafe-inline' ${isProduction ? "" : "'unsafe-eval'"} https://www.paypal.com https://www.paypalobjects.com`;
+
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.paypal.com https://www.paypalobjects.com; " +
+      `script-src ${scriptSrc}; ` +
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: blob:; " +
       "font-src 'self' data: https://fonts.gstatic.com; " +
@@ -244,8 +243,18 @@ export function middleware(req: NextRequest) {
 
   // Skip non-API routes (let Next.js handle pages/static)
   if (!pathname.startsWith("/api/")) {
-    const res = NextResponse.next();
-    addSecurityHeaders(res);
+    // SECURITY FIX (S-H-002): generate a per-request nonce for page routes.
+    // The nonce is set on the request headers so Next.js can auto-apply it
+    // to its own injected inline scripts, and layout.tsx can read it to
+    // nonce custom inline scripts (JSON-LD, font loader, etc.).
+    const nonce = crypto.randomUUID().replace(/-/g, "");
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-nonce", nonce);
+
+    const res = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    addSecurityHeaders(res, nonce);
 
     // PERF: Cache HTML pages at Cloudflare edge for 60s (s-maxage).
     // Stale-while-revalidate allows serving cached content while fetching fresh.
