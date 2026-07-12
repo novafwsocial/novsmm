@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from "@/lib/app-providers";
@@ -35,21 +34,16 @@ const SITE_DESCRIPTION =
 const SITE_TAGLINE =
   "Automation infrastructure for digital marketing teams and resellers.";
 
-const inter = Inter({
-  variable: "--font-inter",
-  subsets: ["latin"],
-  display: "swap",
-  weight: ["400", "500", "600", "700"], // only needed weights (not all 9)
-  preload: true,
-});
-
-const jetbrainsMono = JetBrains_Mono({
-  variable: "--font-mono",
-  subsets: ["latin"],
-  display: "swap",
-  weight: ["400", "500"], // only needed weights
-  preload: false, // mono font is rare, don't preload
-});
+// NOTE: We previously used next/font/google here, but it requires the
+// build server to fetch fonts from fonts.googleapis.com at compile time.
+// In restricted-network VPS environments (e.g. behind Cloudflare proxy
+// without outbound DNS to Google), the build fails with:
+//   "Failed to fetch 'Inter' from Google Fonts."
+//   "Turbopack build failed with 2 errors: next/font: error"
+// Fix: load fonts via <link> tags in <head> below. The browser fetches
+// them at runtime (through Cloudflare → Google Fonts CDN), so the build
+// server no longer needs network access to Google. CSS variables
+// --font-inter and --font-mono are defined directly in globals.css.
 
 export const viewport: Viewport = {
   // BROAD-FIX-BATCH-1: aligned with the canonical PWA manifest theme_color
@@ -234,6 +228,14 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="dns-prefetch" href="https://fonts.gstatic.com" />
+        {/* Google Fonts loaded via <link> instead of next/font/google so the
+            build server doesn't need to fetch from fonts.googleapis.com
+            (which fails in restricted-network VPS environments). The browser
+            fetches these at runtime through Cloudflare. */}
+        <link
+          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+          rel="stylesheet"
+        />
         {/* JSON-LD: Organization + WebSite structured data for rich results */}
         <script
           type="application/ld+json"
@@ -245,7 +247,8 @@ export default function RootLayout({
         />
       </head>
       <body
-        className={`${inter.variable} ${jetbrainsMono.variable} font-sans antialiased bg-background text-foreground`}
+        className="font-sans antialiased bg-background text-foreground"
+        style={{ fontFamily: "'Inter', system-ui, -apple-system, sans-serif" }}
       >
         {/* Accessibility: skip-to-content link. Hidden visually, appears on
             keyboard focus. First focusable element so Tab lands here first. */}
