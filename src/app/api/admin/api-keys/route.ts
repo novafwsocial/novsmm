@@ -6,6 +6,27 @@ import { generateApiKey, generateApiPublicId } from "@/lib/license";
 import bcrypt from "bcryptjs";
 
 /**
+ * Valid API key permissions.
+ * SECURITY FIX (S-M-006): previously `permissions` was accepted as any
+ * string from the request body — an admin could inject arbitrary
+ * permission strings like "superadmin" or "delete_all". Now the
+ * permissions string is validated: each comma-separated value must be
+ * one of the known permissions below.
+ */
+const VALID_PERMISSIONS = ["read", "order", "balance", "refill", "cancel"] as const;
+const VALID_PERMISSIONS_SET = new Set(VALID_PERMISSIONS);
+
+function validatePermissions(permissions: string): string | null {
+  const parts = permissions.split(",").map((s) => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (!VALID_PERMISSIONS_SET.has(p as any)) {
+      return null; // invalid permission found
+    }
+  }
+  return parts.join(",");
+}
+
+/**
  * GET /api/admin/api-keys — paginated list of all API keys (admin view,
  * shows public IDs only).
  *
@@ -74,6 +95,20 @@ export async function POST(req: NextRequest) {
     return apiError("User ID and key name are required", 422);
   }
 
+  // SECURITY (S-M-006): validate permissions against the known enum.
+  // Default to "read" if not provided.
+  const rawPermissions = permissions ?? "read";
+  if (typeof rawPermissions !== "string") {
+    return apiError("Permissions must be a comma-separated string", 422);
+  }
+  const validatedPermissions = validatePermissions(rawPermissions);
+  if (validatedPermissions === null) {
+    return apiError(
+      `Invalid permissions. Valid values: ${VALID_PERMISSIONS.join(", ")}`,
+      422
+    );
+  }
+
   const user = await db.user.findUnique({ where: { id: userId } });
   if (!user) return apiError("User not found", 404);
 
@@ -102,7 +137,7 @@ export async function POST(req: NextRequest) {
       lookupHash,
       name,
       userId,
-      permissions: permissions ?? "read,order",
+      permissions: validatedPermissions,
       status: "active",
       ipAllowlist: normalizedAllowlist,
       // ASVS V13.1.3: 90-day default expiry — forces key rotation

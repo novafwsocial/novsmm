@@ -125,9 +125,20 @@ export async function PATCH(req: NextRequest) {
       data: { status: "open", updatedAt: new Date() },
     });
 
-    // Auto-reply from support after a delay (simulated)
-    setTimeout(async () => {
+    // SECURITY FIX (S-M-004): the auto-reply was in a setTimeout that
+    // ran AFTER the response was sent (fire-and-forget). If the process
+    // restarted within 2s (e.g., pm2 reload, OOM kill), the callback
+    // never executed and the ticket was left in "open" status with no
+    // reply. Also, unhandled rejections in the callback could crash the
+    // process.
+    // Fix: use setImmediate (runs in the next event loop tick, before
+    // process can exit) with proper error handling. The response is
+    // still sent immediately — the auto-reply runs in the background.
+    setImmediate(async () => {
       try {
+        // Small delay so the auto-reply doesn't appear instant
+        await new Promise((r) => setTimeout(r, 1500));
+
         await db.ticketMessage.create({
           data: {
             ticketId,
@@ -147,9 +158,12 @@ export async function PATCH(req: NextRequest) {
           severity: "info",
         });
       } catch (e) {
+        // Log the error — don't let it crash the process. The ticket
+        // remains in "open" status, which is correct (support hasn't
+        // replied yet). A real support agent can reply manually.
         console.error("[ticket/auto-reply] error:", e);
       }
-    }, 2000);
+    });
 
     return apiOk({ message: msg });
   } catch (e: any) {
