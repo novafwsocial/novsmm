@@ -79,15 +79,47 @@ export async function GET(req: NextRequest) {
   // Total revenue = sum of all sale transactions (absolute value)
   const revenueTotal = Math.abs(totalRevenue._sum.amount ?? 0);
 
-  // ── 30-day revenue + orders series ──
-  const recentTxns = await db.transaction.findMany({
-    where: {
-      userId,
-      createdAt: { gte: thirtyDaysAgo },
-    },
-    select: { amount: true, type: true, createdAt: true },
-  });
+  // todayStart needed by the hourlyOrders query in the Promise.all below
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
 
+  // PERF FIX (P-M-003): the 4 data-fetching queries below were sequential
+  // (4 round-trips to the DB). They're all independent — they only need
+  // `userId` and `now`, not each other's results. Running them in parallel
+  // via Promise.all cuts latency from ~4x query time to ~1x.
+  const [recentTxns, todayOrders, platformBreakdownRaw, referralTxns] =
+    await Promise.all([
+      // 30-day revenue + orders series
+      db.transaction.findMany({
+        where: {
+          userId,
+          createdAt: { gte: thirtyDaysAgo },
+        },
+        select: { amount: true, type: true, createdAt: true },
+      }),
+      // Hourly orders (today)
+      db.order.findMany({
+        where: { userId, createdAt: { gte: todayStart } },
+        select: { createdAt: true },
+      }),
+      // Marketplace breakdown (by platform)
+      db.order.groupBy({
+        by: ["platform"],
+        where: { userId, status: "completed" },
+        _count: { id: true },
+      }),
+      // Referrals (last 14 days)
+      db.transaction.findMany({
+        where: {
+          userId,
+          type: "referral",
+          createdAt: { gte: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) },
+        },
+        select: { amount: true, createdAt: true },
+      }),
+    ]);
+
+  // ── 30-day revenue + orders series ──
   const series: { d: number; revenue: number; orders: number }[] = [];
   for (let i = 29; i >= 0; i--) {
     const dayStart = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
@@ -106,12 +138,6 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Hourly orders (today) ──
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
-  const todayOrders = await db.order.findMany({
-    where: { userId, createdAt: { gte: todayStart } },
-    select: { createdAt: true },
-  });
   const hourlyOrders: { h: string; v: number }[] = [];
   for (let h = 0; h < 24; h++) {
     const count = todayOrders.filter((o) => new Date(o.createdAt).getHours() === h).length;
@@ -119,11 +145,6 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Marketplace breakdown (by platform) ──
-  const platformBreakdownRaw = await db.order.groupBy({
-    by: ["platform"],
-    where: { userId, status: "completed" },
-    _count: { id: true },
-  });
   const colors: Record<string, string> = {
     Instagram: "#E1306C",
     TikTok: "#111111",
@@ -141,14 +162,6 @@ export async function GET(req: NextRequest) {
   }));
 
   // ── Referrals (last 14 days) ──
-  const referralTxns = await db.transaction.findMany({
-    where: {
-      userId,
-      type: "referral",
-      createdAt: { gte: new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000) },
-    },
-    select: { amount: true, createdAt: true },
-  });
   const referralSeries: { d: number; revenue: number }[] = [];
   for (let i = 13; i >= 0; i--) {
     const dayStart = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);

@@ -167,6 +167,7 @@ export function useServices(params?: {
         `/api/services${q ? `?${q}` : ""}`
       ),
     placeholderData: (prev: any) => prev,
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — catalog data changes infrequently
   });
 }
 
@@ -188,6 +189,7 @@ export function useAllServices(search?: string) {
   return useQuery({
     queryKey: ["all-services", search],
     queryFn: () => api.get<{ services: any[] }>(`/api/services${q}`),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — catalog data
   });
 }
 
@@ -239,6 +241,7 @@ export function usePaymentMethods() {
   return useQuery({
     queryKey: ["payment-methods"],
     queryFn: () => api.get<{ methods: any[] }>("/api/payment-methods"),
+    staleTime: 5 * 60 * 1000, // PERF (P-M-001): 5min — payment methods rarely change
   });
 }
 
@@ -305,6 +308,7 @@ export function useAdminServices() {
   return useQuery({
     queryKey: ["admin-services"],
     queryFn: () => api.get<{ services: any[] }>("/api/admin/services"),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — catalog data
   });
 }
 
@@ -312,6 +316,7 @@ export function useAdminProviders() {
   return useQuery({
     queryKey: ["admin-providers"],
     queryFn: () => api.get<{ providers: any[] }>("/api/admin/providers"),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — providers change infrequently
   });
 }
 
@@ -319,6 +324,7 @@ export function useAdminPaymentMethods() {
   return useQuery({
     queryKey: ["admin-payment-methods"],
     queryFn: () => api.get<{ methods: any[] }>("/api/admin/payment-methods"),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — payment methods change infrequently
   });
 }
 
