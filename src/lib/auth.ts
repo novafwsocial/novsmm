@@ -562,10 +562,12 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
   return {
     adapter: PrismaAdapter(db),
     session: { strategy: "jwt" },
-    // trustHost: true makes NextAuth derive the base URL from the request
-    // (Host + X-Forwarded-Proto headers) instead of requiring NEXTAUTH_URL.
-    // This is essential when behind a gateway/proxy with a different external URL.
-    ...(({ trustHost: true }) as any),
+    // SECURITY FIX (A-003): removed trustHost: true — it made NextAuth
+    // derive the base URL from the forgeable Host header, enabling
+    // host-header injection attacks (password-reset poisoning → account
+    // takeover). Now NextAuth uses NEXTAUTH_URL from env (already set in
+    // .env as https://novsmm.shop), which is a server-side constant that
+    // cannot be spoofed by the client.
     pages: {
       signIn: "/",
     },

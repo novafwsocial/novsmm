@@ -60,8 +60,15 @@ function detectBrowserLang(): Language {
 }
 
 export function LanguageProvider({ children }: { children: ReactNode }) {
+  // SECURITY FIX (A-002): initialize translations with English defaults
+  // instead of empty object. Previously, the SSR HTML contained raw
+  // translation keys like "landing.hero.title" because t() returned the
+  // key when translations was {}. Now SSR renders English text, and
+  // useEffect updates to the user's preferred language on mount.
   const [lang, setLangState] = useState<Language>("en");
-  const [translations, setTranslations] = useState<Record<string, string>>({});
+  const [translations, setTranslations] = useState<Record<string, string>>(
+    () => getTranslations("en") as unknown as Record<string, string>
+  );
 
   // Load language on mount
   useEffect(() => {
