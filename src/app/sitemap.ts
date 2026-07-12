@@ -3,16 +3,23 @@ import type { MetadataRoute } from "next";
 /**
  * NOVSMM Sitemap — served at /sitemap.xml by Next.js.
  *
- * Covers the single-route SPA landing page plus all anchored landing
- * sections (the deep-links users can scroll to or share). The legal pages
- * and dashboard are intentionally NOT included — they're client-side views
- * gated behind auth/state, not crawlable landing destinations.
+ * Covers the single-route SPA landing page plus all public pages. The legal
+ * pages and dashboard are intentionally NOT included — they're client-side
+ * views gated behind auth/state, not crawlable landing destinations.
  *
  * Priority + changeFrequency are hints (Google mostly ignores them) but
  * they're useful signals for other crawlers (Bing, Yandex).
  *
- * The site URL is resolved the same way as in layout.tsx so canonical URLs
- * stay consistent across metadata, OG tags, and the sitemap.
+ * SECURITY/SEO FIX (U-L-008): previously the sitemap included #anchor URLs
+ * like "https://novsmm.shop/#services". Per RFC 3986, fragments are NOT part
+ * of a URL's canonical form — they're client-side only. Google's sitemap
+ * spec (https://developers.google.com/search/docs/crawling-indexing/sitemaps/build-sitemap)
+ * does NOT support #fragments. They were causing:
+ *   - GSC "Coverage" warnings about non-standard URLs
+ *   - Wasted crawl budget on duplicate "/" entries
+ * The #anchor entries have been removed. Google discovers section deep-links
+ * automatically via its "named anchors" extraction — they don't need to be
+ * in the sitemap.
  */
 const SITE_URL =
   process.env.NEXT_PUBLIC_SITE_URL ||
@@ -29,51 +36,34 @@ const SITE_ORIGIN = (() => {
 const now = new Date();
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  // Top-level landing page (the only crawlable route — the rest of the app
-  // is client-side rendered behind auth/state).
-  const routes: MetadataRoute.Sitemap = [
+  return [
+    // Top-level landing page
     {
       url: SITE_ORIGIN,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 1,
     },
-  ];
-
-  // Anchored landing sections — these are same-page anchors (#services etc.)
-  // that we expose to crawlers as deep links. They share the route URL "/"
-  // but we add the #anchor so Google can show section deep-links in SERPs.
-  // Note: per RFC, fragments are technically not part of a URL's canonical
-  // form — but Google DOES support #section URLs in sitemaps as of 2023,
-  // and they help with sitelink display.
-  const sections = [
-    { anchor: "services", priority: 0.9 },
-    { anchor: "marketplace", priority: 0.9 },
-    { anchor: "payments", priority: 0.8 },
-    { anchor: "stats", priority: 0.7 },
-    { anchor: "testimonials", priority: 0.6 },
-    { anchor: "security", priority: 0.8 },
-    { anchor: "api-docs", priority: 0.7 },
-    { anchor: "affiliates", priority: 0.7 },
-    { anchor: "faq", priority: 0.6 },
-  ];
-
-  for (const s of sections) {
-    routes.push({
-      url: `${SITE_ORIGIN}/#${s.anchor}`,
+    // Public pricing page
+    {
+      url: `${SITE_ORIGIN}/pricing`,
       lastModified: now,
       changeFrequency: "monthly",
-      priority: s.priority,
-    });
-  }
-
-  // Public API docs page (formatted HTML, crawlable)
-  routes.push({
-    url: `${SITE_ORIGIN}/api-docs`,
-    lastModified: now,
-    changeFrequency: "weekly",
-    priority: 0.6,
-  });
-
-  return routes;
+      priority: 0.9,
+    },
+    // Public API docs page (formatted HTML, crawlable)
+    {
+      url: `${SITE_ORIGIN}/api-docs`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.6,
+    },
+    // Changelog page
+    {
+      url: `${SITE_ORIGIN}/changelog`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.5,
+    },
+  ];
 }

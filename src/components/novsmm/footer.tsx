@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowRight, Globe2 } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
@@ -91,6 +91,12 @@ export function Footer() {
   const { toast } = useToast();
   const [statusOpen, setStatusOpen] = useState(false);
   const [legalPageOpen, setLegalPageOpen] = useState<LegalPageType | null>(null);
+  // PERF FIX (P-L-003): compute year in useEffect to avoid hydration
+  // mismatch. `new Date().getFullYear()` runs on both server and client —
+  // if the server is in a different timezone, the year could differ by 1
+  // around New Year's Eve, causing a React hydration warning.
+  const [year, setYear] = useState(2026);
+  useEffect(() => setYear(new Date().getFullYear()), []);
 
   const showToast = (label: string, message?: string) =>
     toast({
@@ -285,7 +291,9 @@ export function Footer() {
           {/* bottom bar */}
           <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>© {new Date().getFullYear()} NOVSMM, Inc.</span>
+              {/* U-L-002: removed "Inc." — implies US incorporation that
+                  probably doesn't exist. Just "NOVSMM" is cleaner. */}
+              <span>© {year} NOVSMM</span>
               <button
                 type="button"
                 onClick={() => setLegalPageOpen("terms")}
@@ -331,7 +339,10 @@ export function Footer() {
           whileInView={{ opacity: 1 }}
           viewport={{ once: true }}
           transition={{ duration: 1 }}
-          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.03]"
+          // U-L-007: opacity was 0.03 — invisible on some monitors (especially
+          // low-contrast IPS panels and anti-glare screens). Bumped to 0.04 so
+          // the wordmark is barely visible (the design intent) but not invisible.
+          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04]"
         >
           NOVSMM
         </motion.div>

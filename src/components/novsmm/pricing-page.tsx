@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { Logo } from "./logo";
@@ -119,6 +119,9 @@ function CellValue({ v }: { v: string | boolean }) {
 export function PricingClient() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const { setView } = useApp();
+  // PERF (P-L-003): avoid hydration mismatch with getFullYear
+  const [year, setYear] = useState(2026);
+  useEffect(() => setYear(new Date().getFullYear()), []);
 
   return (
     <div className="flex min-h-screen flex-col bg-background">
@@ -344,7 +347,7 @@ export function PricingClient() {
             <span>NOVSMM</span>
           </Link>
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} NOVSMM. All rights reserved.
+            © {year} NOVSMM. All rights reserved.
           </p>
         </div>
       </footer>
