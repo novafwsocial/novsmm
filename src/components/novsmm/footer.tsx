@@ -319,10 +319,25 @@ export function Footer() {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              {/* UX FIX (U-M-005): was a decorative pill with no action.
+                  Now links to the pricing page (which shows currency
+                  options) when authed, or shows a tooltip when not. */}
+              <button
+                onClick={() => {
+                  const { setView, authed } = useApp.getState();
+                  if (authed) {
+                    setView("dashboard");
+                    setTimeout(() => useApp.getState().setDashboardTab("profile"), 100);
+                  } else {
+                    setView("register");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Change language or currency"
+              >
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 EN · USD
-              </div>
+              </button>
               {/* U-M-012: removed "SOC 2 · PCI DSS · GDPR" — NOVSMM is not
                   SOC 2 certified, PCI DSS compliant, or GDPR audited.
                   Displaying these certifications without holding them is

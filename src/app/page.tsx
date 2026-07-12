@@ -9,6 +9,7 @@ import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
 import { StickyCTA } from "@/components/novsmm/sticky-cta";
 import { SocialProof } from "@/components/novsmm/social-proof";
 import { LandingJsonLd } from "@/components/novsmm/landing-json-ld";
+import { LandingCommandPalette } from "@/components/novsmm/landing-command-palette";
 
 /**
  * PERF: Lazy-load below-the-fold landing sections.
@@ -122,6 +123,8 @@ export default function Home() {
         <WhatsAppWidget />
         <StickyCTA />
         <SocialProof />
+        {/* UX (U-M-004): Command palette available on landing too */}
+        <LandingCommandPalette />
       </div>
     </SmoothScroll>
     </ErrorBoundary>

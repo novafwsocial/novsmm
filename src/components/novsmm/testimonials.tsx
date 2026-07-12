@@ -13,6 +13,8 @@ type Testimonial = {
   rating: number;
   initials: string;
   tone: string;
+  /** UX (U-M-010): emoji avatar — more visual than initials alone */
+  emoji: string;
 };
 
 const ROW_A: Testimonial[] = [
@@ -24,6 +26,7 @@ const ROW_A: Testimonial[] = [
     result: "+38% retention",
     rating: 5,
     initials: "DR",
+    emoji: "🚀",
     tone: "from-primary/20 to-primary/5 text-primary",
   },
   {
@@ -34,6 +37,7 @@ const ROW_A: Testimonial[] = [
     result: "$1.2M routed",
     rating: 5,
     initials: "MC",
+    emoji: "📈",
     tone: "from-emerald-500/20 to-emerald-500/5 text-emerald-700",
   },
   {
@@ -44,6 +48,7 @@ const ROW_A: Testimonial[] = [
     result: "400 creators",
     rating: 5,
     initials: "AO",
+    emoji: "⚡",
     tone: "from-violet-500/20 to-violet-500/5 text-violet-700",
   },
   {
@@ -54,6 +59,7 @@ const ROW_A: Testimonial[] = [
     result: "0 chargebacks",
     rating: 5,
     initials: "TR",
+    emoji: "🎯",
     tone: "from-amber-500/20 to-amber-500/5 text-amber-700",
   },
 ];
@@ -67,6 +73,7 @@ const ROW_B: Testimonial[] = [
     result: "+22% conversion",
     rating: 5,
     initials: "SL",
+    emoji: "💎",
     tone: "from-rose-500/20 to-rose-500/5 text-rose-700",
   },
   {
@@ -77,6 +84,7 @@ const ROW_B: Testimonial[] = [
     result: "7 currencies",
     rating: 5,
     initials: "KW",
+    emoji: "🔥",
     tone: "from-blue-500/20 to-blue-500/5 text-blue-700",
   },
   {
@@ -87,6 +95,7 @@ const ROW_B: Testimonial[] = [
     result: "SOC 2-aligned",
     rating: 5,
     initials: "EP",
+    emoji: "🌟",
     tone: "from-teal-500/20 to-teal-500/5 text-teal-700",
   },
   {
@@ -97,6 +106,7 @@ const ROW_B: Testimonial[] = [
     result: "10× ROI",
     rating: 5,
     initials: "IB",
+    emoji: "🏆",
     tone: "from-indigo-500/20 to-indigo-500/5 text-indigo-700",
   },
 ];
@@ -195,9 +205,10 @@ function Card({ t }: { t: Testimonial }) {
       </p>
       <div className="mt-4 flex items-center gap-3 border-t border-border/60 pt-3">
         <span
-          className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${t.tone} text-xs font-semibold`}
+          className={`flex h-9 w-9 items-center justify-center rounded-full bg-gradient-to-br ${t.tone} text-base`}
+          aria-hidden
         >
-          {t.initials}
+          {t.emoji}
         </span>
         <div>
           <div className="text-sm font-medium text-foreground">{t.name}</div>

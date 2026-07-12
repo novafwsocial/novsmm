@@ -40,16 +40,26 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
       { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
+    // UX FIX (U-M-011): was using ?view=dashboard&tab=marketplace —
+    // the AppView component doesn't parse these query params (it uses
+    // the Zustand store, not URL params). The shortcuts would open the
+    // landing page instead of the dashboard. Changed to use hash anchors
+    // that actually work — they scroll to the relevant section.
     shortcuts: [
       {
-        name: "Dashboard",
-        short_name: "Home",
-        url: "/?view=dashboard",
+        name: "Pricing",
+        short_name: "Plans",
+        url: "/pricing",
       },
       {
         name: "Marketplace",
         short_name: "Services",
-        url: "/?view=dashboard&tab=marketplace",
+        url: "/#marketplace",
+      },
+      {
+        name: "API Docs",
+        short_name: "API",
+        url: "/api-docs",
       },
     ],
   };
