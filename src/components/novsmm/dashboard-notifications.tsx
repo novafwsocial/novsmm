@@ -67,7 +67,13 @@ export function DashboardNotifications() {
       }
 
       socket = io(`/?XTransformPort=3003${wsToken ? `&token=${wsToken}` : ""}`, {
-        transports: ["websocket", "polling"],
+        // PERF FIX (P-L-005): was ["websocket", "polling"] — polling
+        // fallback causes HTTP request storms when WS is unavailable
+        // (each poll = 1 HTTP request every few seconds). WebSocket-only
+        // is the correct mode for a dashboard that already has reconnection
+        // with exponential backoff. If WS is truly unavailable, the
+        // reconnection logic handles it gracefully.
+        transports: ["websocket"],
         reconnection: true,
         // PERF FIX (P-M-004): was 10 — too low for long dashboard sessions.
         // If the user's network drops briefly (e.g., switching wifi, sleep/

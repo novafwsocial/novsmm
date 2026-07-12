@@ -294,9 +294,14 @@
    - touch-action: prevent 300ms tap delay on touch targets
    ───────────────────────────────────────────────────────────── */
 
-/* Skip rendering for below-the-fold sections (huge perf win on mobile) */
+/* Skip rendering for below-the-fold sections (huge perf win on mobile)
+   PERF FIX (P-L-004): was `section { content-visibility: auto }` which
+   applied to ALL <section> elements — including the hero, which is
+   above-the-fold and should always render immediately. Now scoped to
+   sections with the .lazy-section class, applied only to below-the-fold
+   sections (Services, Marketplace, Payments, Stats, etc.). */
 @media (max-width: 768px) {
-  section {
+  section.lazy-section {
     content-visibility: auto;
     contain-intrinsic-size: auto 400px;
   }
