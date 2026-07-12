@@ -66,7 +66,11 @@ export function DashboardNotifications() {
         // Token fetch failed — fall back to unauthenticated
       }
 
-      socket = io(`/?XTransformPort=3003${wsToken ? `&token=${wsToken}` : ""}`, {
+      socket = io(`/?XTransformPort=3003`, {
+        // SEC FIX (R-L-004): token was passed via query string (?token=...)
+        // which appears in server logs, browser history, and proxy logs.
+        // Now passed via socket.io auth handshake (not visible in URL).
+        auth: wsToken ? { token: wsToken } : undefined,
         // PERF FIX (P-L-005): was ["websocket", "polling"] — polling
         // fallback causes HTTP request storms when WS is unavailable
         // (each poll = 1 HTTP request every few seconds). WebSocket-only

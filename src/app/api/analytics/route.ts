@@ -138,11 +138,17 @@ export async function GET(req: NextRequest) {
   }
 
   // ── Hourly orders (today) ──
-  const hourlyOrders: { h: string; v: number }[] = [];
-  for (let h = 0; h < 24; h++) {
-    const count = todayOrders.filter((o) => new Date(o.createdAt).getHours() === h).length;
-    hourlyOrders.push({ h: `${h}:00`, v: count });
+  // PERF FIX (R-L-002): was 24 filter passes (24×N). Now single pass
+  // with a Map — O(N) instead of O(24×N). Negligible for small N but
+  // cleaner and scales better.
+  const hourCounts = new Array(24).fill(0);
+  for (const o of todayOrders) {
+    hourCounts[new Date(o.createdAt).getHours()]++;
   }
+  const hourlyOrders: { h: string; v: number }[] = hourCounts.map((v, h) => ({
+    h: `${h}:00`,
+    v,
+  }));
 
   // ── Marketplace breakdown (by platform) ──
   const colors: Record<string, string> = {

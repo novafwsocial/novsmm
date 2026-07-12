@@ -99,7 +99,7 @@ export function Footer() {
   // mismatch. `new Date().getFullYear()` runs on both server and client —
   // if the server is in a different timezone, the year could differ by 1
   // around New Year's Eve, causing a React hydration warning.
-  const [year, setYear] = useState(2026);
+  const [year, setYear] = useState(() => new Date().getFullYear());
   useEffect(() => setYear(new Date().getFullYear()), []);
 
   const showToast = (label: string, message?: string) =>

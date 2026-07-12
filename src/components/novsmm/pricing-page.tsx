@@ -120,7 +120,7 @@ export function PricingClient() {
   const [billing, setBilling] = useState<Billing>("monthly");
   const { setView } = useApp();
   // PERF (P-L-003): avoid hydration mismatch with getFullYear
-  const [year, setYear] = useState(2026);
+  const [year, setYear] = useState(() => new Date().getFullYear());
   useEffect(() => setYear(new Date().getFullYear()), []);
 
   return (

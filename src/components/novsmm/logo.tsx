@@ -14,15 +14,17 @@ import { cn } from "@/lib/utils";
 export function Logo({
   className,
   showWord = true,
+  alt = "NOVSMM",
 }: {
   className?: string;
   showWord?: boolean;
+  alt?: string;
 }) {
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <img
         src="/logo.svg"
-        alt="NOVSMM logo"
+        alt={alt}
         width={32}
         height={32}
         className="h-7 w-7 shrink-0 rounded-full"
