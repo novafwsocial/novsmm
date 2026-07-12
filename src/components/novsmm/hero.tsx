@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLanguage } from "./language-provider";
 import {
   ArrowRight,
   Play,
@@ -22,6 +23,7 @@ import { useCachedFetch } from "@/hooks/use-cached-fetch";
 
 export function Hero() {
   const { setView } = useApp();
+  const { t } = useLanguage();
   const sectionRef = useRef<HTMLElement>(null);
 
   // Live orders/min — fetched from /api/status (public). Falls back to 1200
@@ -64,7 +66,7 @@ export function Hero() {
               <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
               <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
             </span>
-            Now processing
+            {t("landing.hero.badge")}
             <span className="text-foreground">
               <Counter to={ordersPerMin} duration={2.2} /> orders/min
             </span>
@@ -77,18 +79,15 @@ export function Hero() {
           className="mx-auto mt-7 max-w-4xl text-center text-[clamp(2.4rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.03em] text-balance"
           style={{ animation: "heroFadeBlur 1s 0.06s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
-          The infrastructure for{" "}
-          <span className="nov-text-gradient">social media marketing</span> at
-          scale.
+          {t("landing.hero.title")}{" "}
+          <span className="nov-text-gradient">{t("landing.hero.titleHighlight")}</span> {t("landing.hero.titleEnd")}
         </h1>
 
         <p
           className="mx-auto mt-6 max-w-2xl text-center text-lg leading-relaxed text-muted-foreground text-pretty sm:text-xl"
           style={{ animation: "heroFadeUp 0.9s 0.16s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
-          NOVSMM unifies order automation, a reseller marketplace, and payments
-          into one platform — engineered for teams that ship at the speed of
-          attention.
+          {t("landing.hero.subtitle")}
         </p>
 
         {/* CTAs */}
@@ -98,7 +97,7 @@ export function Hero() {
         >
           <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
             <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-              Start free
+              {t("landing.hero.startFree")}
               <ArrowRight className="h-4 w-4" />
             </span>
           </Magnetic>
@@ -109,13 +108,13 @@ export function Hero() {
             href="/pricing"
             className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted"
           >
-            View pricing
+            {t("landing.hero.viewPricing")}
             <ArrowRight className="h-3.5 w-3.5" />
           </a>
           <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
             <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted">
               <Play className="h-3.5 w-3.5 fill-current" />
-              Sign in
+              {t("landing.hero.signIn")}
             </span>
           </Magnetic>
         </div>
@@ -126,9 +125,9 @@ export function Hero() {
           style={{ animation: "heroFade 0.9s 0.4s both" }}
         >
           {[
-            "No credit card required",
-            "99.99% uptime SLA",
-            "SOC 2 controls",
+            t("landing.hero.noCardRequired"),
+            t("landing.hero.uptimeSLA"),
+            t("landing.hero.soc2"),
           ].map((t) => (
             <span key={t} className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />

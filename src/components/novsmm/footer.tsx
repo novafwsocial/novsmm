@@ -8,6 +8,7 @@ import { Magnetic } from "./magnetic";
 import { Reveal } from "./reveal";
 import { useApp, type DashboardTab } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "./language-provider";
 import { StatusPage } from "./status-page";
 import { LegalPages, type LegalPageType } from "./legal-pages";
 import { DashReveal } from "./dash-reveal";
@@ -91,6 +92,7 @@ const COLUMNS: FooterColumn[] = [
 export function Footer() {
   const { setView, setDashboardTab, authed } = useApp();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [statusOpen, setStatusOpen] = useState(false);
   const [legalPageOpen, setLegalPageOpen] = useState<LegalPageType | null>(null);
   // PERF FIX (P-L-003): compute year in useEffect to avoid hydration
@@ -170,7 +172,7 @@ export function Footer() {
           }}
           className="footer-link-3d text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          {link.label}
+          {t(link.label)}
         </a>
       );
     }
@@ -180,7 +182,7 @@ export function Footer() {
         onClick={() => handleLink(link)}
         className="footer-link-3d text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        {link.label}
+        {t(link.label)}
       </button>
     );
   };
@@ -196,31 +198,31 @@ export function Footer() {
         <Reveal blur>
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-[clamp(2rem,4.5vw,3.4rem)] font-semibold leading-[1.06] tracking-[-0.02em] text-balance">
-              Ship at the speed of attention.
+              {t("landing.footer.tagline")}
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground text-pretty sm:text-lg">
               {/* FIX (U-C-003): removed fake "184,500+ resellers" claim —
                   risk of FTC penalty + Google penalty for fake social proof.
                   Replaced with an honest value-prop statement. */}
               Join the resellers, agencies, and enterprises running their
-              social media marketing on NOVSMM infrastructure.
+              {t("landing.footer.tagline")}
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
                 <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                  Start free
+                  {t("landing.footer.startFree")}
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </Magnetic>
               <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
                 <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-7 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
-                  Sign in
+                  {t("landing.footer.signIn")}
                 </span>
               </Magnetic>
             </div>
             <div className="mt-6 inline-flex items-center gap-2 text-xs text-muted-foreground">
               <Globe2 className="h-3.5 w-3.5" />
-              Available in 60+ countries · 12 currencies · 24/7 support
+              {t("landing.footer.availableIn")}
             </div>
           </div>
         </Reveal>
@@ -272,13 +274,13 @@ export function Footer() {
 
             {COLUMNS.map((c, idx) => (
               <DashReveal
-                key={c.title}
+                key={t(c.title)}
                 className="footer-col-reveal"
                 delay={0.05 * (idx + 1)}
               >
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
-                    {c.title}
+                    {t(c.title)}
                   </div>
                   <ul className="mt-4 flex flex-col gap-2.5">
                     {c.links.map((l) => (
@@ -295,7 +297,7 @@ export function Footer() {
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               {/* U-L-002: removed "Inc." — implies US incorporation that
                   probably doesn't exist. Just "NOVSMM" is cleaner. */}
-              <span>© {year} NOVSMM</span>
+              <span>© {year} {t("landing.footer.copyright")}</span>
               <button
                 type="button"
                 onClick={() => setLegalPageOpen("terms")}
@@ -344,7 +346,7 @@ export function Footer() {
                   a legal misrepresentation. Replaced with a neutral
                   "Privacy-first" label that's honest. */}
               <span className="text-[11px] text-muted-foreground">
-                Privacy-first · Secure by design
+                {t("landing.footer.privacyFirst")}
               </span>
             </div>
           </div>

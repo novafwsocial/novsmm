@@ -107,6 +107,14 @@ export const metadata: Metadata = {
   // Canonical URL — explicit per-page override happens in each route's metadata
   alternates: {
     canonical: "/",
+    // i18n (U-C-004): hreflang tags for multi-language SEO
+    languages: {
+      "en": "/",
+      "es": "/",
+      "pt": "/",
+      "fr": "/",
+      "x-default": "/",
+    },
   },
   // Robots — full indexing, follow all links, no archive restriction
   robots: {

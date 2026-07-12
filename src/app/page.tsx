@@ -10,6 +10,7 @@ import { StickyCTA } from "@/components/novsmm/sticky-cta";
 import { SocialProof } from "@/components/novsmm/social-proof";
 import { LandingJsonLd } from "@/components/novsmm/landing-json-ld";
 import { LandingCommandPalette } from "@/components/novsmm/landing-command-palette";
+import { LanguageProvider } from "@/components/novsmm/language-provider";
 
 /**
  * PERF: Lazy-load below-the-fold landing sections.
@@ -85,6 +86,7 @@ export default function Home() {
   return (
     <ErrorBoundary>
     <SmoothScroll>
+      <LanguageProvider>
       <div className="relative flex min-h-screen flex-col bg-background">
         {/* FULL-WEB-IMPROVEMENT-1: Landing-page JSON-LD (WebApplication,
             Service, FAQPage, BreadcrumbList). Server-rendered as static
@@ -126,6 +128,7 @@ export default function Home() {
         {/* UX (U-M-004): Command palette available on landing too */}
         <LandingCommandPalette />
       </div>
+      </LanguageProvider>
     </SmoothScroll>
     </ErrorBoundary>
   );
