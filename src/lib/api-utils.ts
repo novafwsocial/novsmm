@@ -76,6 +76,13 @@ export async function getAuthSession() {
 function extractUser(session: any): AuthUser | null {
   if (!session?.user) return null;
   const u = session.user as any;
+  // A-3 FIX: If the JWT was invalidated (e.g. passwordChangedAt check in jwt
+  // callback returned {}), the session callback may still populate user.name
+  // and user.email from the token's standard claims, but user.id will be
+  // undefined. Without this check, downstream code calls db.user.findUnique
+  // with id: undefined → Prisma throws → HTTP 500. Return null instead so
+  // requireAuth() returns a clean 401.
+  if (!u.id) return null;
   return {
     id: u.id,
     email: u.email,

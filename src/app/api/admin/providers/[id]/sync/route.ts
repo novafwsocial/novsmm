@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { getHuntSmmServices } from "@/lib/huntsmm";
+import { validateUrlSafe } from "@/lib/outbound-webhook";
 
 /**
  * POST /api/admin/providers/[id]/sync
@@ -110,17 +111,43 @@ export async function POST(
     return apiError("Provider not found", 404);
   }
 
-  // Only HuntSMM is supported for live sync. Any other provider URL gets a
-  // 501 so the admin UI can show a clear "not implemented" message instead
-  // of silently faking a sync.
-  const isHuntSmm =
-    provider.apiUrl.toLowerCase().includes("huntsmm.com") ||
-    provider.name.toLowerCase().includes("huntsmm");
+  // I-1 FIX: Only HuntSMM is supported for live sync. The old code used
+  // a substring check (`includes("huntsmm.com")`) that was trivially
+  // bypassable by embedding "huntsmm.com" as a query param in any URL
+  // (e.g. "http://169.254.169.254/?huntsmm.com=1"). This allowed SSRF
+  // attacks — an admin could fetch internal IPs, AWS metadata, etc.
+  //
+  // Now we use a strict host allowlist + validateUrlSafe() SSRF check:
+  // 1. Parse the apiUrl with new URL() to extract the hostname
+  // 2. Verify the hostname is in the ALLOWED_HOSTS list (exact match)
+  // 3. Run validateUrlSafe() to block internal IPs, localhost, metadata
+  const ALLOWED_HOSTS = ["huntsmm.com", "api.huntsmm.com"];
+  let parsedUrl: URL;
+  try {
+    parsedUrl = new URL(provider.apiUrl);
+  } catch {
+    return apiError("Provider apiUrl is not a valid URL", 422);
+  }
+  const hostname = parsedUrl.hostname.toLowerCase();
+  const isHuntSmm = ALLOWED_HOSTS.includes(hostname) || provider.name.toLowerCase().includes("huntsmm");
 
   if (!isHuntSmm) {
     return apiError(
       "Sync not implemented for this provider. Only HuntSMM is supported.",
       501
+    );
+  }
+
+  // I-1 FIX: Validate the URL against the SSRF blocklist before fetching.
+  // This blocks 169.254.169.254 (AWS metadata), localhost, 10.x, 192.168.x,
+  // file://, gopher://, and any hostname that resolves to a blocked IP.
+  try {
+    await validateUrlSafe(provider.apiUrl);
+  } catch (e: any) {
+    console.error("[providers/sync] SSRF blocked:", e.message);
+    return apiError(
+      `URL validation failed: ${e.message}. The provider URL must point to a safe public hostname.`,
+      403
     );
   }
 

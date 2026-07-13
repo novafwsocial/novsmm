@@ -939,6 +939,20 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         return token;
       },
       async session({ session, token }) {
+        // A-3 FIX: If the jwt callback returned {} (e.g. passwordChangedAt
+        // check failed, account suspended, user deleted), token.id is
+        // undefined. In that case, clear session.user so the frontend and
+        // requireAuth() treat the session as logged-out (returns null → 401)
+        // instead of returning a partial session with undefined fields (which
+        // caused HTTP 500 when downstream code did db.user.findUnique with
+        // id: undefined).
+        if (!token.id) {
+          // Return the session with user set to null/empty so NextAuth
+          // treats it as unauthenticated. Setting session.user = null as
+          // any forces the session to look logged-out.
+          (session as any).user = null;
+          return session;
+        }
         if (session.user) {
           (session.user as any).id = token.id;
           (session.user as any).role = token.role;
