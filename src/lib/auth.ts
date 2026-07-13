@@ -629,10 +629,15 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         // The username generation is handled by the `events.createUser` event
         // (see below), which fires AFTER PrismaAdapter creates the user.
         //
-        // The ONLY thing we do here is a defensive fallback: if a user already
-        // exists (from a prior partial OAuth attempt) but has no username, we
-        // generate one now so the jwt callback has a valid username to work
-        // with.
+        // FIX (OAuthAccountNotLinked): When a user with the same email already
+        // exists (e.g. they registered with email+password first, then tried
+        // to sign in with Google), NextAuth refuses to link the OAuth account
+        // automatically → error "OAuthAccountNotLinked". This is a security
+        // measure to prevent account takeover, but for our use case we WANT
+        // to link them (the user owns both the email and the Google account).
+        // We manually create the Account row here, linking the OAuth provider
+        // to the existing user, so PrismaAdapter doesn't try to create a new
+        // user and trigger the "OAuthAccountNotLinked" error.
         if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
           console.log(`[auth] signIn callback: provider=${account.provider}, user.email=${user.email}, user.id=${user.id}`);
           try {
@@ -645,28 +650,71 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             const dbUser = await db.user.findUnique({ where: { email } });
             console.log(`[auth] signIn callback: dbUser=${dbUser ? `found (id=${dbUser.id}, username=${dbUser.username})` : "not found"}`);
 
-            if (dbUser && !dbUser.username) {
-              // Defensive fallback: user exists (from a prior attempt where
-              // events.createUser may have failed) but has no username.
-              const baseUsername = (dbUser.name || email.split("@")[0])
-                .toLowerCase()
-                .replace(/[^a-z0-9_]/g, "")
-                .slice(0, 20) || "user";
-              let username = baseUsername;
-              let suffix = 1;
-              while (await db.user.findUnique({ where: { username } })) {
-                username = `${baseUsername}${suffix++}`;
-              }
-              await db.user.update({
-                where: { id: dbUser.id },
-                data: { username },
-              });
-              console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
-            }
+            if (dbUser) {
+              // User already exists — check if they have an Account row for
+              // this provider. If not, create one to link them (avoids
+              // OAuthAccountNotLinked error).
+              if (account.providerAccountId) {
+                const existingAccount = await db.account.findUnique({
+                  where: {
+                    provider_providerAccountId: {
+                      provider: account.provider,
+                      providerAccountId: account.providerAccountId,
+                    },
+                  },
+                });
 
-            // NOTE: We do NOT attach id/role/username to the user object here.
-            // PrismaAdapter will set user.id after creating the user, and the
-            // jwt callback will refresh role/username/etc from the DB.
+                if (!existingAccount) {
+                  console.log(`[auth] signIn callback: linking ${account.provider} account to existing user ${dbUser.id}`);
+                  await db.account.create({
+                    data: {
+                      userId: dbUser.id,
+                      type: account.type ?? "oauth",
+                      provider: account.provider,
+                      providerAccountId: account.providerAccountId,
+                      access_token: account.access_token ?? null,
+                      refresh_token: account.refresh_token ?? null,
+                      expires_at: account.expires_at ?? null,
+                      token_type: account.token_type ?? null,
+                      scope: account.scope ?? null,
+                      id_token: account.id_token ?? null,
+                      session_state: (account as any).session_state ?? null,
+                    },
+                  });
+                  console.log(`[auth] signIn callback: account linked successfully`);
+                } else {
+                  console.log(`[auth] signIn callback: account already linked`);
+                }
+              }
+
+              // Attach the existing user's id/role/username to the user object
+              // so the jwt callback uses the correct user (not a new one).
+              (user as any).id = dbUser.id;
+              (user as any).role = dbUser.role;
+              (user as any).username = dbUser.username ?? "";
+
+              if (!dbUser.username) {
+                // Defensive fallback: user exists but has no username.
+                const baseUsername = (dbUser.name || email.split("@")[0])
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_]/g, "")
+                  .slice(0, 20) || "user";
+                let username = baseUsername;
+                let suffix = 1;
+                while (await db.user.findUnique({ where: { username } })) {
+                  username = `${baseUsername}${suffix++}`;
+                }
+                await db.user.update({
+                  where: { id: dbUser.id },
+                  data: { username },
+                });
+                (user as any).username = username;
+                console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
+              }
+            }
+            // If dbUser is null, PrismaAdapter will create the user + account
+            // automatically after signIn returns true. The events.createUser
+            // handler will generate the username.
           } catch (e) {
             console.error("[auth] OAuth signIn error:", e);
             return false;
