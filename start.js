@@ -16,9 +16,41 @@
  * FIX: Also adds a manual .env parser as fallback in case @next/env
  * fails to load certain vars (e.g. if the .env has Windows line
  * endings or unusual quoting).
+ *
+ * FIX (OAuth ETIMEDOUT): Force Node.js to use IPv4 for DNS resolution.
+ * Node.js 18+ prefers IPv6 (AAAA records) by default. If the host has
+ * IPv6 configured but the IPv6 route is broken (common in WSL2), HTTP
+ * requests to Google/other OAuth providers time out even though curl
+ * works (curl falls back to IPv4 automatically). Setting
+ * dns.setDefaultResultOrder("ipv4first") makes Node.js try IPv4 first.
  */
+const dns = require("dns");
+
+// Force IPv4-first DNS resolution — fixes OAuth ETIMEDOUT in WSL2
+// where IPv6 is configured but the route is broken.
+if (dns.setDefaultResultOrder) {
+  dns.setDefaultResultOrder("ipv4first");
+}
+// Also set the family hint to prefer IPv4
+if (dns.lookup) {
+  const originalLookup = dns.lookup;
+  dns.lookup = function (hostname, options, callback) {
+    if (typeof options === "function") {
+      callback = options;
+      options = {};
+    }
+    options = options || {};
+    if (options.family === undefined) {
+      options.family = 4; // prefer IPv4
+    }
+    return originalLookup.call(this, hostname, options, callback);
+  };
+}
+
 const fs = require("fs");
 const path = require("path");
+
+console.log("[start] DNS set to IPv4-first (fixes OAuth ETIMEDOUT in WSL2)");
 
 // ── Method 1: @next/env (the official Next.js env loader) ──
 try {
