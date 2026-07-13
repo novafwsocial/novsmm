@@ -15,37 +15,40 @@ import {
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { Magnetic } from "./magnetic";
+import { useLanguage } from "./language-provider";
 
+// i18n (U-C-007): FEATURES holds icon + translation keys; strings are looked
+// up at render time via t().
 const FEATURES = [
   {
     icon: Layers,
-    title: "7 REST endpoints",
-    desc: "Services, orders, status, cancel, refill, refill_status, balance — full coverage.",
+    titleKey: "landing.apiDocs.feature.endpoints.title",
+    descKey: "landing.apiDocs.feature.endpoints.desc",
   },
   {
     icon: GitBranch,
-    title: "Multi-order batching",
-    desc: "Submit up to 100 orders in a single request. Atomic failure, partial success.",
+    titleKey: "landing.apiDocs.feature.batching.title",
+    descKey: "landing.apiDocs.feature.batching.desc",
   },
   {
     icon: RefreshCw,
-    title: "Drip-feed scheduling",
-    desc: "Split delivery into chunks with configurable runs and intervals.",
+    titleKey: "landing.apiDocs.feature.dripFeed.title",
+    descKey: "landing.apiDocs.feature.dripFeed.desc",
   },
   {
     icon: ShieldCheck,
-    title: "Refill requests",
-    desc: "Trigger re-delivery on completed orders when counts drop within 30 days.",
+    titleKey: "landing.apiDocs.feature.refill.title",
+    descKey: "landing.apiDocs.feature.refill.desc",
   },
   {
     icon: Webhook,
-    title: "Signed webhooks",
-    desc: "HMAC-signed events for order status changes — replay-safe and idempotent.",
+    titleKey: "landing.apiDocs.feature.webhooks.title",
+    descKey: "landing.apiDocs.feature.webhooks.desc",
   },
   {
     icon: KeyRound,
-    title: "Scoped API keys",
-    desc: "Per-key permissions: read, order, wallet, marketplace. Rotate without downtime.",
+    titleKey: "landing.apiDocs.feature.keys.title",
+    descKey: "landing.apiDocs.feature.keys.desc",
   },
 ];
 
@@ -103,6 +106,7 @@ function CodeBlock({
 }
 
 export function ApiDocsSection() {
+  const { t } = useLanguage();
   return (
     <section id="api-docs" className="relative py-24 sm:py-32">
       <div
@@ -115,14 +119,14 @@ export function ApiDocsSection() {
       />
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Developer API"
+          eyebrow={t("landing.apiDocs.eyebrow")}
           title={
             <>
-              Build with the
-              <br className="hidden sm:block" /> NOVSMM API.
+              {t("landing.apiDocs.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.apiDocs.titleLine2")}
             </>
           }
-          description="A PerfectPanel / JAP-compatible REST contract — drop-in compatible with your existing bots, panels, and automation tooling. Bearer auth, scoped keys, signed webhooks."
+          description={t("landing.apiDocs.description")}
         />
 
         <div className="mt-14 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -135,7 +139,7 @@ export function ApiDocsSection() {
               <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border/60 bg-background p-4">
                 <CheckCircle2 className="h-4 w-4 text-emerald-500" />
                 <span className="text-sm text-muted-foreground">
-                  Compatible with existing SMM panel tooling — no SDK install required.
+                  {t("landing.apiDocs.compatNote")}
                 </span>
               </div>
             </div>
@@ -145,16 +149,16 @@ export function ApiDocsSection() {
           <Reveal blur delay={0.08}>
             <div className="flex h-full flex-col rounded-3xl border border-border/60 bg-background p-6 nov-ring sm:p-8">
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                What you get
+                {t("landing.apiDocs.whatYouGet")}
               </div>
               <div className="mt-2 text-lg font-semibold">
-                Everything a reseller integration needs
+                {t("landing.apiDocs.everythingYouNeed")}
               </div>
 
               <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {FEATURES.map((f, i) => (
                   <motion.li
-                    key={f.title}
+                    key={f.titleKey}
                     initial={{ opacity: 0, y: 12 }}
                     whileInView={{ opacity: 1, y: 0 }}
                     viewport={{ once: true, margin: "-10%" }}
@@ -170,10 +174,10 @@ export function ApiDocsSection() {
                     </span>
                     <div className="flex-1">
                       <div className="text-sm font-semibold text-foreground">
-                        {f.title}
+                        {t(f.titleKey)}
                       </div>
                       <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                        {f.desc}
+                        {t(f.descKey)}
                       </p>
                     </div>
                   </motion.li>
@@ -187,12 +191,12 @@ export function ApiDocsSection() {
                   onClick={() => window.open("/api-docs", "_blank")}
                 >
                   <span className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                    View full API docs
+                    {t("landing.apiDocs.viewDocs")}
                     <ArrowUpRight className="h-4 w-4" />
                   </span>
                 </Magnetic>
                 <span className="text-xs text-muted-foreground">
-                  v1.0.0 · 60 req/min per key
+                  {t("landing.apiDocs.versionNote")}
                 </span>
               </div>
             </div>

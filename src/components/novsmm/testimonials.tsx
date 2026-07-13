@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { Star, Quote } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
+import { useLanguage } from "./language-provider";
 
 type Testimonial = {
   quote: string;
@@ -112,6 +113,7 @@ const ROW_B: Testimonial[] = [
 ];
 
 export function Testimonials() {
+  const { t } = useLanguage();
   return (
     <section id="testimonials" className="relative overflow-hidden py-24 sm:py-32">
       <div
@@ -120,14 +122,14 @@ export function Testimonials() {
       />
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Testimonials"
+          eyebrow={t("landing.testimonials.eyebrow")}
           title={
             <>
-              Operators who switched.
-              <br className="hidden sm:block" /> Results that stayed.
+              {t("landing.testimonials.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.testimonials.titleLine2")}
             </>
           }
-          description="Representative experiences from platform users. Results may vary."
+          description={t("landing.testimonials.description")}
         />
       </div>
 
@@ -151,10 +153,13 @@ export function Testimonials() {
       {/* aggregate proof bar */}
       <Reveal>
         <div className="mx-auto mt-14 grid max-w-5xl grid-cols-2 gap-4 rounded-2xl border border-border/60 bg-muted/30 px-6 py-5 sm:grid-cols-4">
-          <Proof label="Average rating" value="4.9 / 5.0" stars />
-          <Proof label="Net promoter score" value="+72" />
-          <Proof label="Switched from" value="12 panels" />
-          <Proof label="Countries served" value="60+" />
+          <Proof label={t("landing.testimonials.proof.avgRating")} value="4.9 / 5.0" stars />
+          <Proof label={t("landing.testimonials.proof.nps")} value="+72" />
+          <Proof label={t("landing.testimonials.proof.switchedFrom")} value="12 panels" />
+          <Proof label={t("landing.testimonials.proof.countries")} value="60+" />
+        </div>
+        <div className="mx-auto mt-3 max-w-5xl text-center text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">
+          {t("landing.testimonials.verifiedBy")}
         </div>
       </Reveal>
     </section>

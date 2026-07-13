@@ -15,67 +15,71 @@ import {
 import { SectionHeading } from "./section-heading";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { Counter } from "./counter";
+import { useLanguage } from "./language-provider";
 
+// i18n (U-C-006): LAYERS holds the icon + translation keys. The title/desc/
+// metric strings are looked up at render time via t().
 const LAYERS = [
   {
     icon: ShieldCheck,
-    title: "DDoS shielding",
-    desc: "Always-on L3/L4/L7 mitigation at the edge. 2.4 Tbps capacity.",
-    metric: "0 attacks breached",
+    titleKey: "landing.security.layer.ddos.title",
+    descKey: "landing.security.layer.ddos.desc",
+    metricKey: "landing.security.layer.ddos.metric",
     state: "ok",
   },
   {
     icon: Lock,
-    title: "TLS 1.3 everywhere",
-    desc: "End-to-end encryption in transit. HSTS preload, OCSP stapling.",
-    metric: "A+ rating · SSL Labs",
+    titleKey: "landing.security.layer.tls.title",
+    descKey: "landing.security.layer.tls.desc",
+    metricKey: "landing.security.layer.tls.metric",
     state: "ok",
   },
   {
     icon: KeyRound,
-    title: "AES-256 at rest",
-    desc: "All wallets, keys, and PII encrypted with per-tenant DEKs.",
-    metric: "FIPS 140-2 modules",
+    titleKey: "landing.security.layer.aes.title",
+    descKey: "landing.security.layer.aes.desc",
+    metricKey: "landing.security.layer.aes.metric",
     state: "ok",
   },
   {
     icon: DatabaseBackup,
-    title: "Continuous backups",
-    desc: "PITR every 60s, cross-region replicas, 30-day retention.",
-    metric: "RPO 60s · RTO 5m",
+    titleKey: "landing.security.layer.backups.title",
+    descKey: "landing.security.layer.backups.desc",
+    metricKey: "landing.security.layer.backups.metric",
     state: "ok",
   },
   {
     icon: ServerCog,
-    title: "High availability",
-    desc: "Active-active across 3 regions. Auto-failover under 30s.",
-    metric: "99.99% uptime SLA",
+    titleKey: "landing.security.layer.ha.title",
+    descKey: "landing.security.layer.ha.desc",
+    metricKey: "landing.security.layer.ha.metric",
     state: "ok",
   },
   {
     icon: Radar,
-    title: "API protection",
-    desc: "Per-key rate limits, anomaly detection, signed webhooks.",
-    metric: "<0.01% bad requests",
+    titleKey: "landing.security.layer.api.title",
+    descKey: "landing.security.layer.api.desc",
+    metricKey: "landing.security.layer.api.metric",
     state: "ok",
   },
   {
     icon: ScrollText,
-    title: "Audit logs",
-    desc: "Immutable, exportable logs for every privileged action.",
-    metric: "12-month retention",
+    titleKey: "landing.security.layer.audit.title",
+    descKey: "landing.security.layer.audit.desc",
+    metricKey: "landing.security.layer.audit.metric",
     state: "ok",
   },
   {
     icon: Fingerprint,
-    title: "Secure auth",
-    desc: "SSO, 2FA, passkeys, hardware keys. SCIM provisioning.",
-    metric: "Passkey + WebAuthn",
+    titleKey: "landing.security.layer.auth.title",
+    descKey: "landing.security.layer.auth.desc",
+    metricKey: "landing.security.layer.auth.metric",
     state: "ok",
   },
 ];
 
 export function Security() {
+  const { t } = useLanguage();
   return (
     <section id="security" className="relative overflow-hidden py-24 sm:py-32">
       <div
@@ -93,14 +97,14 @@ export function Security() {
       />
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Security"
+          eyebrow={t("landing.security.eyebrow")}
           title={
             <>
-              Security you can see —
-              <br className="hidden sm:block" /> not just a checklist.
+              {t("landing.security.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.security.titleLine2")}
             </>
           }
-          description="Every layer below is instrumented, monitored, and surfaced live to operators. This is the posture enterprise teams require."
+          description={t("landing.security.description")}
         />
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-center">
@@ -115,7 +119,7 @@ export function Security() {
             className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:col-span-7"
           >
             {LAYERS.map((l) => (
-              <RevealItem key={l.title} blur>
+              <RevealItem key={l.titleKey} blur>
                 <div className="group relative h-full overflow-hidden rounded-2xl border border-border/60 bg-background p-4 transition-shadow hover:nov-ring-lg">
                   <div className="flex items-start justify-between gap-3">
                     <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary">
@@ -124,14 +128,14 @@ export function Security() {
                     <StatusPill state={l.state as "ok"} />
                   </div>
                   <div className="mt-3 text-sm font-semibold text-foreground">
-                    {l.title}
+                    {t(l.titleKey)}
                   </div>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    {l.desc}
+                    {t(l.descKey)}
                   </p>
                   <div className="mt-3 inline-flex items-center gap-1.5 rounded-md bg-muted/50 px-2 py-1 text-[11px] font-medium text-foreground/70">
                     <Activity className="h-3 w-3 text-emerald-600" />
-                    {l.metric}
+                    {t(l.metricKey)}
                   </div>
                 </div>
               </RevealItem>
@@ -144,6 +148,7 @@ export function Security() {
 }
 
 function StatusPill({ state }: { state: "ok" | "warn" }) {
+  const { t } = useLanguage();
   return (
     <span
       className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${
@@ -156,12 +161,13 @@ function StatusPill({ state }: { state: "ok" | "warn" }) {
         <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
         <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
       </span>
-      active
+      {t("landing.security.statusActive")}
     </span>
   );
 }
 
 function ShieldVisual() {
+  const { t } = useLanguage();
   // radar sweep + concentric layers + metrics
   return (
     <div className="relative mx-auto aspect-square w-full max-w-[420px] overflow-hidden rounded-3xl border border-border/60 bg-background nov-ring">
@@ -212,10 +218,10 @@ function ShieldVisual() {
 
       {/* floating layer labels */}
       {[
-        { label: "Edge", x: "12%", y: "18%" },
-        { label: "App", x: "82%", y: "26%" },
-        { label: "Data", x: "16%", y: "78%" },
-        { label: "Keys", x: "80%", y: "74%" },
+        { label: t("landing.security.shield.edge"), x: "12%", y: "18%" },
+        { label: t("landing.security.shield.app"), x: "82%", y: "26%" },
+        { label: t("landing.security.shield.data"), x: "16%", y: "78%" },
+        { label: t("landing.security.shield.keys"), x: "80%", y: "74%" },
       ].map((p, i) => (
         <motion.div
           key={p.label}
@@ -233,9 +239,9 @@ function ShieldVisual() {
 
       {/* bottom metric strip */}
       <div className="absolute inset-x-4 bottom-4 grid grid-cols-3 gap-2">
-        <Metric label="Threats blocked" value={<Counter to={8.2} decimals={1} duration={2} suffix="M" />} />
-        <Metric label="MTTR" value={<><Counter to={4.3} decimals={1} duration={2} />m</>} />
-        <Metric label="Regions" value={<Counter to={3} duration={1.4} />} />
+        <Metric label={t("landing.security.metric.threats")} value={<Counter to={8.2} decimals={1} duration={2} suffix="M" />} />
+        <Metric label={t("landing.security.metric.mttr")} value={<><Counter to={4.3} decimals={1} duration={2} />m</>} />
+        <Metric label={t("landing.security.metric.regions")} value={<Counter to={3} duration={1.4} />} />
       </div>
     </div>
   );

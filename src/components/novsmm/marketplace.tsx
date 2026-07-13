@@ -14,37 +14,9 @@ import {
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
 import { Counter } from "./counter";
+import { useLanguage } from "./language-provider";
 
-const FLOW = [
-  {
-    icon: Store,
-    title: "Provider supply",
-    desc: "Approved providers list services at wholesale rates.",
-    chip: "wholesale",
-  },
-  {
-    icon: Repeat2,
-    title: "Reseller markup",
-    desc: "Set margins per service, per client tier, per currency.",
-    chip: "your margin",
-  },
-  {
-    icon: Users,
-    title: "Buyer checkout",
-    // BROAD-FIX-BATCH-1: the previous "12+ gateways" copy was inflated —
-    // NOVSMM ships exactly 5 canonical payment methods (Stripe, PayPal,
-    // Mercado Pago, NowPayments, Manual). Aligned to match reality so the
-    // landing page doesn't over-promise.
-    desc: "Customers buy at your retail price across 5 gateways.",
-    chip: "retail",
-  },
-  {
-    icon: Wallet,
-    title: "Instant settlement",
-    desc: "Profit settles to your wallet the moment an order starts.",
-    chip: "profit",
-  },
-];
+const FLOW_ICONS = [Store, Repeat2, Users, Wallet];
 
 // Hardcoded fallback offers — used when /api/public/offers returns no rows
 // (e.g. fresh install with no marketplace activity yet). They are clearly
@@ -92,9 +64,37 @@ function usePublicOffers() {
 }
 
 export function Marketplace() {
+  const { t } = useLanguage();
   const liveOffers = usePublicOffers();
   const offers = liveOffers ?? SAMPLE_OFFERS;
   const isLive = liveOffers !== null && liveOffers.length > 0;
+
+  const FLOW = [
+    {
+      icon: FLOW_ICONS[0],
+      title: t("landing.marketplace.flow.supply.title"),
+      desc: t("landing.marketplace.flow.supply.desc"),
+      chip: t("landing.marketplace.flow.supply.chip"),
+    },
+    {
+      icon: FLOW_ICONS[1],
+      title: t("landing.marketplace.flow.markup.title"),
+      desc: t("landing.marketplace.flow.markup.desc"),
+      chip: t("landing.marketplace.flow.markup.chip"),
+    },
+    {
+      icon: FLOW_ICONS[2],
+      title: t("landing.marketplace.flow.checkout.title"),
+      desc: t("landing.marketplace.flow.checkout.desc"),
+      chip: t("landing.marketplace.flow.checkout.chip"),
+    },
+    {
+      icon: FLOW_ICONS[3],
+      title: t("landing.marketplace.flow.settlement.title"),
+      desc: t("landing.marketplace.flow.settlement.desc"),
+      chip: t("landing.marketplace.flow.settlement.chip"),
+    },
+  ];
 
   return (
     <section id="marketplace" className="relative py-24 sm:py-32">
@@ -105,14 +105,14 @@ export function Marketplace() {
       />
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Marketplace"
+          eyebrow={t("landing.marketplace.eyebrow")}
           title={
             <>
-              Buy wholesale. Resell at your price.
-              <br className="hidden sm:block" /> Keep the margin.
+              {t("landing.marketplace.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.marketplace.titleLine2")}
             </>
           }
-          description="An open marketplace where resellers compete on price, publish their own offers, and watch profit settle in real time — without touching infrastructure."
+          description={t("landing.marketplace.description")}
         />
 
         <div className="mt-14 grid grid-cols-1 gap-6 lg:grid-cols-2">
@@ -120,10 +120,10 @@ export function Marketplace() {
           <Reveal blur>
             <div className="relative h-full overflow-hidden rounded-3xl border border-border/60 bg-background p-6 nov-ring sm:p-8">
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                The flow
+                {t("landing.marketplace.flow.label")}
               </div>
               <div className="mt-2 text-lg font-semibold">
-                From supply to settled profit in one continuous loop
+                {t("landing.marketplace.flow.title")}
               </div>
 
               <div className="mt-7 flex flex-col gap-4">
@@ -169,7 +169,7 @@ export function Marketplace() {
               {/* loopback */}
               <div className="mt-4 flex items-center justify-center gap-2 rounded-full border border-dashed border-border bg-muted/20 px-4 py-2 text-xs text-muted-foreground">
                 <Repeat2 className="h-3.5 w-3.5" />
-                Profit recycles into balance — fund the next order instantly.
+                {t("landing.marketplace.flow.loopback")}
               </div>
             </div>
           </Reveal>
@@ -180,10 +180,10 @@ export function Marketplace() {
               <div className="flex items-center justify-between">
                 <div>
                   <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                    Live offers board
+                    {t("landing.marketplace.offers.label")}
                   </div>
                   <div className="mt-2 text-lg font-semibold">
-                    Compete on price. Win the order.
+                    {t("landing.marketplace.offers.title")}
                   </div>
                 </div>
                 <div className="flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
@@ -191,13 +191,13 @@ export function Marketplace() {
                     <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   </span>
-                  {isLive ? "live" : "sample"}
+                  {isLive ? t("landing.marketplace.offers.statusLive") : t("landing.marketplace.offers.statusSample")}
                 </div>
               </div>
 
               {!isLive && (
                 <div className="mt-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-700 dark:text-amber-300">
-                  Showing sample offers — publish your own from the dashboard to populate the live board.
+                  {t("landing.marketplace.offers.sampleNotice")}
                 </div>
               )}
 
@@ -220,9 +220,9 @@ export function Marketplace() {
                         {o.serviceName}
                       </div>
                       <div className="mt-0.5 flex items-center gap-2 text-[11px] text-muted-foreground tabular-nums">
-                        <span>cost ${o.cost.toFixed(2)}</span>
+                        <span>{t("landing.marketplace.offers.cost")} ${o.cost.toFixed(2)}</span>
                         <ArrowRight className="h-3 w-3" />
-                        <span>retail ${o.price.toFixed(2)}</span>
+                        <span>{t("landing.marketplace.offers.retail")} ${o.price.toFixed(2)}</span>
                       </div>
                     </div>
                     <div className="flex flex-col items-end">
@@ -231,7 +231,7 @@ export function Marketplace() {
                       </span>
                       <span className="mt-0.5 inline-flex items-center gap-0.5 text-[11px] font-medium text-emerald-600">
                         <TrendingUp className="h-3 w-3" />
-                        {o.sales} sold
+                        {o.sales} {t("landing.marketplace.offers.sold")}
                       </span>
                     </div>
                   </motion.div>
@@ -246,7 +246,7 @@ export function Marketplace() {
                   </span>
                   <div>
                     <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Wallet balance
+                      {t("landing.marketplace.offers.walletLabel")}
                     </div>
                     <div className="text-lg font-semibold tabular-nums">
                       $<Counter to={8420.5} decimals={2} duration={2.4} />
@@ -254,7 +254,7 @@ export function Marketplace() {
                   </div>
                 </div>
                 <button className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                  Withdraw
+                  {t("landing.marketplace.offers.withdraw")}
                   <ArrowRight className="h-3.5 w-3.5" />
                 </button>
               </div>

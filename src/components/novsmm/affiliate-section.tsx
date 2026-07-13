@@ -19,37 +19,40 @@ import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { Counter } from "./counter";
 import { Magnetic } from "./magnetic";
 import { useApp } from "./app-store";
+import { useLanguage } from "./language-provider";
 
 type StatusStats = {
   totalUsers: number;
   totalRevenue: number;
 };
 
+// i18n (U-C-008): STEPS holds icon + chip + translation keys. Strings are
+// looked up at render time via t().
 const STEPS = [
   {
     icon: Link2,
-    title: "Share your link",
-    desc: "Get a unique referral link from your dashboard. Post it anywhere — Twitter, Telegram, your panel footer.",
+    titleKey: "landing.affiliates.step1.title",
+    descKey: "landing.affiliates.step1.desc",
     chip: "1",
   },
   {
     icon: UserPlus,
-    title: "They sign up & order",
-    desc: "Anyone who registers through your link is tagged as your referral — for life. No attribution windows.",
+    titleKey: "landing.affiliates.step2.title",
+    descKey: "landing.affiliates.step2.desc",
     chip: "2",
   },
   {
     icon: InfinityIcon,
-    title: "You earn 10% forever",
-    desc: "Every order they place earns you 10% commission — credited to your wallet in real time, withdrawable any time.",
+    titleKey: "landing.affiliates.step3.title",
+    descKey: "landing.affiliates.step3.desc",
     chip: "3",
   },
 ];
 
 const PAYOUT_METHODS = [
-  { label: "Wallet balance", note: "Instant · no fees" },
-  { label: "PayPal", note: "$50 minimum" },
-  { label: "USDT (TRC-20)", note: "$50 minimum" },
+  { labelKey: "landing.affiliates.payout.wallet.label", label: "Wallet balance", noteKey: "landing.affiliates.payout.wallet.note" },
+  { label: "PayPal", noteKey: "landing.affiliates.payout.paypal.note" },
+  { label: "USDT (TRC-20)", noteKey: "landing.affiliates.payout.usdt.note" },
 ];
 
 const DEFAULT_STATS: StatusStats = {
@@ -59,6 +62,7 @@ const DEFAULT_STATS: StatusStats = {
 
 export function AffiliateSection() {
   const { setView, setDashboardTab, authed } = useApp();
+  const { t } = useLanguage();
   const [stats, setStats] = useState<StatusStats>(DEFAULT_STATS);
 
   // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
@@ -99,14 +103,14 @@ export function AffiliateSection() {
       />
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Affiliates"
+          eyebrow={t("landing.affiliates.eyebrow")}
           title={
             <>
-              Earn 10% commission
-              <br className="hidden sm:block" /> on every referral.
+              {t("landing.affiliates.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.affiliates.titleLine2")}
             </>
           }
-          description="Lifetime attribution, real-time payouts, no caps. The NOVSMM affiliate program is the highest-paying referral system in the SMM ecosystem."
+          description={t("landing.affiliates.description")}
         />
 
         {/* Stats row */}
@@ -122,7 +126,7 @@ export function AffiliateSection() {
                 <span className="text-primary">+</span>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                affiliates earning today
+                {t("landing.affiliates.stats.affiliates")}
               </div>
             </div>
           </RevealItem>
@@ -134,7 +138,7 @@ export function AffiliateSection() {
                 <span className="text-emerald-500">+</span>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                paid out to affiliates
+                {t("landing.affiliates.stats.paidOut")}
               </div>
             </div>
           </RevealItem>
@@ -145,7 +149,7 @@ export function AffiliateSection() {
                 <Counter to={10} duration={1.6} />%
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
-                lifetime commission
+                {t("landing.affiliates.stats.commission")}
               </div>
             </div>
           </RevealItem>
@@ -156,17 +160,17 @@ export function AffiliateSection() {
           <Reveal blur>
             <div className="relative h-full overflow-hidden rounded-3xl border border-border/60 bg-background p-6 nov-ring sm:p-8">
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Commission structure
+                {t("landing.affiliates.commission.label")}
               </div>
               <div className="mt-2 text-lg font-semibold">
-                10% lifetime · $50 minimum payout
+                {t("landing.affiliates.commission.title")}
               </div>
 
               {/* Visual: bar showing 10% slice */}
               <div className="mt-6">
                 <div className="flex items-end justify-between text-xs text-muted-foreground">
-                  <span>Your share</span>
-                  <span>Their order</span>
+                  <span>{t("landing.affiliates.commission.yourShare")}</span>
+                  <span>{t("landing.affiliates.commission.theirOrder")}</span>
                 </div>
                 <div className="mt-2 flex h-12 overflow-hidden rounded-xl border border-border/60">
                   <motion.div
@@ -185,13 +189,11 @@ export function AffiliateSection() {
                     transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
                     className="flex items-center justify-center bg-muted text-[11px] font-medium text-muted-foreground"
                   >
-                    customer order
+                    {t("landing.affiliates.commission.customerOrder")}
                   </motion.div>
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
-                  Example: a $100 order credits you{" "}
-                  <span className="font-semibold text-foreground">$10.00</span> —
-                  instantly, every time, forever.
+                  {t("landing.affiliates.commission.example").replace("{amount}", "$10.00")}
                 </div>
               </div>
 
@@ -199,7 +201,7 @@ export function AffiliateSection() {
               <div className="mt-6 border-t border-border/60 pt-5">
                 <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                   <Wallet className="h-3.5 w-3.5" />
-                  Payout methods
+                  {t("landing.affiliates.payout.label")}
                 </div>
                 <ul className="mt-3 flex flex-col gap-2">
                   {PAYOUT_METHODS.map((m) => (
@@ -209,9 +211,9 @@ export function AffiliateSection() {
                     >
                       <span className="flex items-center gap-2 text-sm font-medium text-foreground">
                         <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        {m.label}
+                        {m.labelKey ? t(m.labelKey) : m.label}
                       </span>
-                      <span className="text-xs text-muted-foreground">{m.note}</span>
+                      <span className="text-xs text-muted-foreground">{t(m.noteKey)}</span>
                     </li>
                   ))}
                 </ul>
@@ -223,14 +225,14 @@ export function AffiliateSection() {
           <Reveal blur delay={0.08}>
             <div className="flex h-full flex-col rounded-3xl border border-border/60 bg-background p-6 nov-ring sm:p-8">
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                How it works
+                {t("landing.affiliates.howItWorks.label")}
               </div>
-              <div className="mt-2 text-lg font-semibold">Three steps to forever income</div>
+              <div className="mt-2 text-lg font-semibold">{t("landing.affiliates.howItWorks.title")}</div>
 
               <div className="mt-6 flex flex-col gap-4">
                 {STEPS.map((s, i) => (
                   <motion.div
-                    key={s.title}
+                    key={s.titleKey}
                     initial={{ opacity: 0, x: 16 }}
                     whileInView={{ opacity: 1, x: 0 }}
                     viewport={{ once: true, margin: "-10%" }}
@@ -248,11 +250,11 @@ export function AffiliateSection() {
                       <div className="flex items-center gap-2">
                         <s.icon className="h-4 w-4 text-primary" />
                         <div className="text-sm font-semibold text-foreground">
-                          {s.title}
+                          {t(s.titleKey)}
                         </div>
                       </div>
                       <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                        {s.desc}
+                        {t(s.descKey)}
                       </p>
                     </div>
                   </motion.div>
@@ -262,12 +264,12 @@ export function AffiliateSection() {
               <div className="mt-auto pt-6">
                 <Magnetic as="button" strength={0.3} onClick={handleCta}>
                   <span className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-6 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                    {authed ? "Open your referral dashboard" : "Become an affiliate"}
+                    {authed ? t("landing.affiliates.cta.openDashboard") : t("landing.affiliates.cta.become")}
                     <ArrowRight className="h-4 w-4" />
                   </span>
                 </Magnetic>
                 <p className="mt-3 text-center text-xs text-muted-foreground">
-                  No approval process · Instant activation · Withdraw anytime
+                  {t("landing.affiliates.cta.note")}
                 </p>
               </div>
             </div>
