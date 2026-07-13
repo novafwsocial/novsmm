@@ -10,6 +10,7 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/api-utils";
+import { createNotification } from "@/lib/notify";
 import { verify2FAToken, decrypt2FASecret, read2FAPayload } from "@/lib/two-factor";
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 import { decryptJSON } from "@/lib/crypto-utils";
@@ -607,6 +608,76 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
     },
     providers: [...providers, ...extraProviders],
     callbacks: {
+      async signIn({ user, account, profile }) {
+        // FIX (OAuth): When a user signs in via OAuth (Google, Facebook, etc.),
+        // PrismaAdapter tries to create a User row automatically. But our User
+        // model requires a `username` field (unique, no default) — the auto-
+        // creation fails silently, and the user ends up without a session.
+        //
+        // This signIn callback intercepts OAuth logins, finds or creates the
+        // user with a proper username, and attaches the DB user ID to the
+        // user object so the jwt callback can use it.
+        if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
+          try {
+            const email = user.email?.toLowerCase();
+            if (!email) return false;
+
+            // Find existing user by email
+            let dbUser = await db.user.findUnique({ where: { email } });
+
+            if (!dbUser) {
+              // Create new user from OAuth profile
+              // Generate a unique username from the email or name
+              const baseUsername = (user.name || email.split("@")[0])
+                .toLowerCase()
+                .replace(/[^a-z0-9_]/g, "")
+                .slice(0, 20) || "user";
+              let username = baseUsername;
+              let suffix = 1;
+              // Ensure username uniqueness
+              while (await db.user.findUnique({ where: { username } })) {
+                username = `${baseUsername}${suffix++}`;
+              }
+
+              dbUser = await db.user.create({
+                data: {
+                  email,
+                  name: user.name || null,
+                  username,
+                  image: user.image || null,
+                  role: "user",
+                  status: "active",
+                  // passwordHash is null — OAuth-only account
+                },
+              });
+
+              // Send welcome notification
+              await createNotification({
+                userId: dbUser.id,
+                type: "system",
+                title: "Welcome to NOVSMM 🎉",
+                message: `Hi ${dbUser.name || dbUser.username}! Your workspace is ready. Top up your wallet to place your first order.`,
+                severity: "success",
+              }).catch(() => {});
+
+              await audit(dbUser.id, "register", "user", dbUser.id, {
+                provider: account.provider,
+                email,
+              }).catch(() => {});
+            }
+
+            // Attach the DB user ID and other fields to the user object
+            // so the jwt callback can use them
+            (user as any).id = dbUser.id;
+            (user as any).role = dbUser.role;
+            (user as any).username = dbUser.username;
+          } catch (e) {
+            console.error("[auth] OAuth signIn error:", e);
+            return false;
+          }
+        }
+        return true;
+      },
       async jwt({ token, user }) {
         if (user) {
           token.id = (user as any).id;
