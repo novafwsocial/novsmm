@@ -1,22 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-} from "recharts";
+import { MiniAreaChart } from "./mini-area-chart";
 import { ArrowUpRight, TrendingUp, ShoppingCart, DollarSign, Repeat2, Gift, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
@@ -115,26 +100,7 @@ export function DashboardAnalytics() {
               <Legend />
             </div>
             <div className="mt-4 h-[260px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="aRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="aOrd" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#10b981" stopOpacity={0.2} />
-                      <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="d" hide />
-                  <YAxis hide />
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12, boxShadow: "0 8px 24px -8px rgba(0,0,0,0.12)" }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#aRev)" animationDuration={1000} />
-                  <Area type="monotone" dataKey="orders" stroke="#10b981" strokeWidth={2} fill="url(#aOrd)" animationDuration={1200} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <MiniAreaChart data={series} height={260} color="#0052ff" formatValue={(v) => `$${v.toFixed(2)}`} />
             </div>
           </div>
         </Reveal>
@@ -148,25 +114,27 @@ export function DashboardAnalytics() {
             <div className="text-base font-semibold">Marketplace share</div>
             {marketplaceBreakdown.length > 0 ? (
               <div>
-                <div className="mx-auto mt-2 h-[150px] w-full">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={marketplaceBreakdown}
-                        dataKey="value"
-                        nameKey="name"
-                        innerRadius={42}
-                        outerRadius={66}
-                        paddingAngle={2}
-                        animationDuration={1100}
-                      >
-                        {marketplaceBreakdown.map((e: any) => (
-                          <Cell key={e.name} fill={e.color} stroke="none" />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} formatter={(v: number, n: string) => [`${v} orders`, n]} />
-                    </PieChart>
-                  </ResponsiveContainer>
+                {/* P-002: PieChart replaced with CSS conic-gradient donut */}
+                <div className="mx-auto mt-2 h-[150px] w-full flex items-center justify-center">
+                  {(() => {
+                    const total = marketplaceBreakdown.reduce((s: number, e: any) => s + e.value, 0) || 1;
+                    const segments = marketplaceBreakdown.map((e: any) => ({ ...e, pct: (e.value / total) * 100 }));
+                    let cumulative = 0;
+                    const gradient = segments.map((s: any) => {
+                      const start = cumulative;
+                      cumulative += s.pct;
+                      return `${s.color} ${start}% ${cumulative}%`;
+                    }).join(", ");
+                    return (
+                      <div className="relative h-[120px] w-[120px]">
+                        <div
+                          className="h-full w-full rounded-full"
+                          style={{ background: `conic-gradient(${gradient})` }}
+                        />
+                        <div className="absolute inset-[20%] rounded-full bg-background" />
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className="mt-3 flex flex-col gap-1.5">
                   {marketplaceBreakdown.map((m: any) => (
@@ -204,16 +172,19 @@ export function DashboardAnalytics() {
                 <ArrowUpRight className="h-3 w-3" /> live
               </span>
             </div>
-            <div className="mt-4 h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={hourlyOrders} margin={{ top: 4, right: 4, left: -16, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="h" tick={{ fontSize: 10, fill: "rgb(107 114 128)" }} interval={2} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 10, fill: "rgb(107 114 128)" }} axisLine={false} tickLine={false} />
-                  <Tooltip cursor={{ fill: "rgba(0,0,0,0.04)" }} contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Bar dataKey="v" radius={[4, 4, 0, 0]} fill="#0052ff" maxBarSize={18} animationDuration={1000} />
-                </BarChart>
-              </ResponsiveContainer>
+            {/* P-002: BarChart replaced with CSS flex bars */}
+            <div className="mt-4 h-[200px] w-full flex items-end gap-[2px]">
+              {(() => {
+                const maxV = Math.max(...hourlyOrders.map((h: any) => h.v), 1);
+                return hourlyOrders.map((h: any, i: number) => (
+                  <div key={i} className="flex-1 group relative" title={`${h.h}:00 — ${h.v} orders`}>
+                    <div
+                      className="w-full rounded-t-md bg-primary/80 transition-all group-hover:bg-primary"
+                      style={{ height: `${(h.v / maxV) * 100}%`, minHeight: h.v > 0 ? "2px" : "0" }}
+                    />
+                  </div>
+                ));
+              })()}
             </div>
           </div>
         </Reveal>
@@ -231,14 +202,7 @@ export function DashboardAnalytics() {
               <span className="font-medium text-emerald-600">{formatPrice(referrals.total, currency)}</span> earned · 5% lifetime
             </div>
             <div className="mt-4 h-[120px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={referrals.series} margin={{ top: 4, right: 4, left: -24, bottom: 0 }}>
-                  <XAxis dataKey="d" hide />
-                  <YAxis hide />
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Line type="monotone" dataKey="revenue" stroke="#10b981" strokeWidth={2} dot={false} animationDuration={1200} />
-                </LineChart>
-              </ResponsiveContainer>
+              <MiniAreaChart data={referrals.series.map((s: any) => ({ d: s.d, revenue: s.revenue }))} height={120} color="#10b981" formatValue={(v) => `$${v.toFixed(2)}`} />
             </div>
             <button onClick={handleShareReferral} className="mt-3 w-full rounded-lg border border-border py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
               Share referral link

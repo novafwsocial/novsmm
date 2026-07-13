@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import "./globals.css";
+import "./fm-animations.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from "@/lib/app-providers";
 import { SwRegister } from "@/components/novsmm/sw-register";

@@ -58,14 +58,7 @@ import {
   ExternalLink,
   Ticket,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  CartesianGrid,
-  XAxis,
-} from "recharts";
+import { MiniAreaChart } from "./mini-area-chart";
 import { useApp, type AdminTab } from "./app-store";
 import { Counter } from "./counter";
 import { PaymentLogo } from "./payment-logo";
@@ -302,20 +295,7 @@ function AdminOverview() {
             <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Platform revenue · 30d</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">$<Counter to={s?.revenue30d ?? 0} duration={2} /></div>
             <div className="chart-container mt-4 h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="admRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="d" hide />
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#admRev)" animationDuration={1200} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <MiniAreaChart data={series} height={220} color="#0052ff" formatValue={(v) => `$${v.toFixed(2)}`} />
             </div>
           </div>
         </Reveal>

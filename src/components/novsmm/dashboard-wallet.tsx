@@ -16,14 +16,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  CartesianGrid,
-} from "recharts";
+import { MiniAreaChart } from "./mini-area-chart";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
@@ -126,20 +119,7 @@ export function DashboardWallet() {
               </div>
             </div>
             <div className="mt-4 h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="wIn" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="d" hide />
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#wIn)" animationDuration={1000} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <MiniAreaChart data={series} height={200} color="#0052ff" formatValue={(v) => `$${v.toFixed(2)}`} />
             </div>
           </div>
         </Reveal>

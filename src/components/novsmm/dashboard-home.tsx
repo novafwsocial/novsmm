@@ -27,14 +27,7 @@ import {
   ChevronRight,
   Lock,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  CartesianGrid,
-} from "recharts";
+import { MiniAreaChart } from "./mini-area-chart";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { DashReveal } from "./dash-reveal";
@@ -174,35 +167,7 @@ export function DashboardHome() {
                 </div>
               </div>
               <div className="chart-container mt-5 h-[220px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={series} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0052ff" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                    <XAxis dataKey="d" hide />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 10,
-                        border: "1px solid rgba(0,0,0,0.08)",
-                        fontSize: 12,
-                      }}
-                      labelStyle={{ display: "none" }}
-                      formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#0052ff"
-                      strokeWidth={2}
-                      fill="url(#revArea)"
-                      animationDuration={800}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <MiniAreaChart data={series} height={220} color="#0052ff" formatValue={(v) => `$${v.toFixed(2)}`} />
               </div>
             </div>
           </Reveal>
