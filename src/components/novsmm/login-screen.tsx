@@ -215,9 +215,10 @@ export function LoginScreen() {
         return;
       }
 
-      // Success — session cookie is now set. Do a full page reload so the
-      // app-view picks up the new session and shows the dashboard.
-      window.location.reload();
+      // Success — session cookie is now set. Redirect to /?authed=1 so the
+      // app-view forces the dashboard view even if session polling hasn't
+      // picked up the new cookie yet (fixes "login redirects to landing" bug).
+      window.location.href = "/?authed=1";
     } catch (err: any) {
       clearTimeout(safetyTimeout);
       setError("Login failed. Please check your connection and try again.");

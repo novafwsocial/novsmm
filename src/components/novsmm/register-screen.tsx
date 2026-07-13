@@ -136,17 +136,19 @@ export function RegisterScreen() {
         email: form.email,
         password: form.password,
         redirect: false,
-        callbackUrl: "/",
       });
 
       // 3. If login succeeded, set onboarding flag + reload to pick up session
       if (result && !result.error) {
         // Set a flag so app-view.tsx knows to show onboarding after reload
         sessionStorage.setItem("novsmm_show_onboarding", "true");
-        window.location.href = "/";
+        // FIX: redirect to /?authed=1 so the frontend forces dashboard view
+        // even if the session polling hasn't picked up the new cookie yet.
+        window.location.href = "/?authed=1";
       } else {
-        // Login failed after registration — go to login screen
-        setView("login");
+        // Login failed after registration — show error + go to login screen
+        setError("Account created! Please sign in with your credentials.");
+        setTimeout(() => setView("login"), 1500);
       }
     } catch (e: any) {
       setError(e.message || "Registration failed. Please try again.");

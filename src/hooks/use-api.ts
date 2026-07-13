@@ -19,6 +19,7 @@ export function useSession() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
+          cache: "no-store",
         });
         clearTimeout(timeoutId);
         if (!res.ok) return { user: null };
@@ -28,7 +29,13 @@ export function useSession() {
         return { user: null };
       }
     },
-    staleTime: 30 * 1000,
+    // FIX: staleTime: 0 + refetchOnMount: "always" ensures the session is
+    // ALWAYS refetched on mount. Previously staleTime: 30s meant that after
+    // a login redirect (window.location.href), the old { user: null } data
+    // was served from cache for 30s — making it look like login failed.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }
