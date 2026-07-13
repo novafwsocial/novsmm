@@ -164,7 +164,7 @@ export function WhatsAppWidget() {
                   }}
                   rows={2}
                   placeholder="Type your message…"
-                  className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:shadow-[0_0_0_3px_rgba(37,211,102,0.2)]"
+                  className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:shadow-[0_0_0_3px_rgba(37,211,102,0.2)]"
                 />
                 <button
                   onClick={openWhatsApp}

@@ -219,6 +219,13 @@ export async function POST(req: NextRequest) {
       throw e;
     }
 
+    // P-005 FIX: Invalidate user cache so the balance change is visible immediately.
+    try {
+      const { cacheInvalidate } = await import("@/lib/cache");
+      await cacheInvalidate(`user:${userId}`);
+      await cacheInvalidate(`dashboard:${userId}:*`);
+    } catch {}
+
     // ── Notification + audit + background job ──
     await createNotification({
       userId,

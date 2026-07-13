@@ -438,7 +438,7 @@ function SelectField({
         <select
           value={value}
           onChange={onChange}
-          className="h-11 w-full appearance-none bg-transparent text-sm text-foreground focus:outline-none"
+          className="h-11 w-full appearance-none bg-transparent text-base text-foreground focus:outline-none"
         >
           {options.map((o, i) => (
             <option key={o} value={o}>

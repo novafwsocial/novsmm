@@ -813,7 +813,7 @@ function CommandPalette({
             }}
             onKeyDown={onKeyDown}
             placeholder="Type a command or search…"
-            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+            className="w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             autoComplete="off"
             spellCheck={false}
             role="combobox"

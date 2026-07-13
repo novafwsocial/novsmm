@@ -155,6 +155,15 @@ export function Navbar() {
               {l.label}
             </a>
           ))}
+
+          {/* F-003 FIX: Language selector visible on mobile. Previously the
+              LanguageSwitcher was only in the `hidden lg:flex` desktop block,
+              so mobile users (core LATAM/Brazil market) couldn't change language. */}
+          <div className="mt-2 flex items-center justify-between rounded-2xl px-4 py-3 border-t border-border/60">
+            <span className="text-sm text-muted-foreground">Language</span>
+            <LanguageSwitcher />
+          </div>
+
           <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3">
             {showAuthedNav ? (
               <>

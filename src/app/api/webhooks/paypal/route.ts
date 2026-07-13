@@ -343,6 +343,14 @@ async function handleCaptureCompleted(event: any) {
     return;
   }
 
+  // P-005 FIX: Invalidate user cache so the balance update is visible
+  // immediately (jwt callback caches balance for 30s).
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${txn.userId}`);
+    await cacheInvalidate(`dashboard:${txn.userId}:*`);
+  } catch {}
+
   // ── Notify the user ──
   await createNotification({
     userId: txn.userId,

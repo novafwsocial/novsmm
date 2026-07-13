@@ -753,7 +753,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         // to the existing user, so PrismaAdapter doesn't try to create a new
         // user and trigger the "OAuthAccountNotLinked" error.
         if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
-          console.log(`[auth] signIn callback: provider=${account.provider}, user.email=${user.email}, user.id=${user.id}`);
+          console.log(`[auth] signIn callback: provider=${account.provider}, userId=${user.id ?? "(none)"}`);
           try {
             const email = user.email?.toLowerCase();
             if (!email) {
@@ -1065,7 +1065,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
       // username here and update the DB. By the time the jwt callback
       // runs (which refreshes from DB), the username is already set.
       async createUser({ user }) {
-        console.log(`[auth] events.createUser: user.id=${user.id}, user.email=${user.email}`);
+        console.log(`[auth] events.createUser: userId=${user.id}`);
         if (!user?.id || !user?.email) {
           console.error("[auth] events.createUser: missing user.id or user.email");
           return;

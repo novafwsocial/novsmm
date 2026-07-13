@@ -204,6 +204,13 @@ export async function POST(req: NextRequest) {
           return apiOk({ received: true });
         }
 
+        // P-005 FIX: Invalidate user cache so the balance update is visible immediately.
+        try {
+          const { cacheInvalidate } = await import("@/lib/cache");
+          await cacheInvalidate(`user:${txn.userId}`);
+          await cacheInvalidate(`dashboard:${txn.userId}:*`);
+        } catch {}
+
         await createNotification({
           userId: txn.userId,
           type: "recharge",

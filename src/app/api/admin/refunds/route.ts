@@ -103,6 +103,13 @@ export async function POST(req: NextRequest) {
     }),
   ]);
 
+  // P-005 FIX: Invalidate user cache so the balance change is visible immediately.
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${txn.userId}`);
+    await cacheInvalidate(`dashboard:${txn.userId}:*`);
+  } catch {}
+
   // Notify the user
   await createNotification({
     userId: txn.userId,

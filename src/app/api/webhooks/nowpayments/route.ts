@@ -196,6 +196,13 @@ async function handlePaymentConfirmed(
     return;
   }
 
+  // P-005 FIX: Invalidate user cache so the balance update is visible immediately.
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${txn.userId}`);
+    await cacheInvalidate(`dashboard:${txn.userId}:*`);
+  } catch {}
+
   // ── Notify the user ──
   await createNotification({
     userId: txn.userId,
@@ -301,6 +308,13 @@ async function handlePaymentRefunded(
     console.log("[webhooks/nowpayments] Refund already processed — skipping", { txnId: txn.id });
     return;
   }
+
+  // P-005 FIX: Invalidate user cache for the refund balance change.
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${txn.userId}`);
+    await cacheInvalidate(`dashboard:${txn.userId}:*`);
+  } catch {}
 
   await createNotification({
     userId: txn.userId,

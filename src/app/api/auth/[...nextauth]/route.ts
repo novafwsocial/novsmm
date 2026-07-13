@@ -26,9 +26,15 @@ async function handleRequest(
   const params = await ctx.params;
   const nextauthPath = params?.nextauth?.join("/") ?? "";
 
+  // MAS-005 FIX: Log the path WITHOUT query params — the OAuth callback URL
+  // contains `code` and `state` query params that are sensitive (the code
+  // is a one-time authorization grant). Logging the full URL exposes these
+  // in server logs. Now we strip the query string.
+  const safePath = url.split("?")[0];
+
   // Log ALL auth requests (not just google) — shorter format for non-OAuth
   if (nextauthPath.includes("callback/") || nextauthPath.includes("signin/")) {
-    console.log(`[auth-route] ${method} /api/auth/${nextauthPath} | url=${url}`);
+    console.log(`[auth-route] ${method} /api/auth/${nextauthPath}`);
   }
 
   try {
@@ -37,12 +43,14 @@ async function handleRequest(
     // where ctx is { params: { nextauth: string[] } }
     const result = await NextAuth(req as any, { params: { nextauth: params.nextauth } } as any, options);
 
-    // DIAGNOSTIC: log the response status + Location header for OAuth callbacks
-    // so we can see where NextAuth is redirecting after the callback.
+    // MAS-005 FIX: Log only the status + path (no Location query params).
+    // The Location header may contain the OAuth code/state on error redirects.
     if (nextauthPath.includes("callback/")) {
       const status = result?.status ?? "(unknown)";
-      const location = result?.headers?.get?.("location") ?? "(no redirect)";
-      console.log(`[auth-route] callback result: status=${status}, location=${location}`);
+      const location = result?.headers?.get?.("location");
+      // Strip query params from the Location header for safe logging
+      const safeLocation = location ? location.split("?")[0] : "(no redirect)";
+      console.log(`[auth-route] callback result: status=${status}, location=${safeLocation}`);
     }
 
     return result;
