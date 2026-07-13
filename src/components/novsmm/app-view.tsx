@@ -60,6 +60,10 @@ function useUrlParamHandlers() {
 
     const verify = params.get("verify");
     const reset = params.get("reset");
+    // FIX (OAuth): NextAuth redirects to /?error=... when OAuth fails.
+    // Previously the frontend ignored this param, so the user just saw
+    // the landing page with no explanation. Now we show a toast.
+    const oauthError = params.get("error");
 
     if (verify) {
       (async () => {
@@ -81,6 +85,28 @@ function useUrlParamHandlers() {
     if (reset) {
       setResetToken(reset);
       stripParam("reset");
+    }
+
+    if (oauthError) {
+      // Map common NextAuth error codes to human-readable messages.
+      const errorMessages: Record<string, string> = {
+        OAuthSignin: "Could not start Google sign-in. Please try again.",
+        OAuthCallback: "Google sign-in failed. The credentials may be misconfigured.",
+        OAuthCreateAccount: "Could not create your account with Google. Please try again or use email sign-up.",
+        EmailCreateAccount: "Could not create your account. Please try again.",
+        Callback: "Sign-in callback failed. Please try again.",
+        Configuration: "Server configuration error. Please contact support.",
+        AccessDenied: "Access denied. If this is unexpected, please contact support.",
+        Verification: "The sign-in link is invalid or expired.",
+        default: "Sign-in failed. Please try again or use a different method.",
+      };
+      const message = errorMessages[oauthError] ?? errorMessages.default;
+      toast({
+        title: "Sign-in failed",
+        description: message,
+        variant: "destructive",
+      });
+      stripParam("error");
     }
   }, []);
 

@@ -610,57 +610,29 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
     callbacks: {
       async signIn({ user, account, profile }) {
         // FIX (OAuth): When a user signs in via OAuth (Google, Facebook, etc.),
-        // PrismaAdapter creates a User row automatically — but WITHOUT username
-        // (it's now String? @unique to allow null). This signIn callback:
-        // 1. Finds the user by email (PrismaAdapter may have just created them)
-        // 2. If username is null, generates one and updates the DB
-        // 3. Attaches DB user's id, role, username to the user object
-        //    so the jwt callback can use them
+        // PrismaAdapter creates the User row automatically AFTER signIn returns
+        // true. We must NOT create the user here — doing so causes a unique-
+        // constraint violation (P2002) when PrismaAdapter then tries to create
+        // the same user, which silently kills the OAuth flow and the session
+        // is never set (user gets redirected back to the landing page).
+        //
+        // The username generation is handled by the `events.createUser` event
+        // (see below), which fires AFTER PrismaAdapter creates the user.
+        //
+        // The ONLY thing we do here is a defensive fallback: if a user already
+        // exists (from a prior partial OAuth attempt) but has no username, we
+        // generate one now so the jwt callback has a valid username to work
+        // with.
         if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
           try {
             const email = user.email?.toLowerCase();
             if (!email) return false;
 
-            // Find existing user by email (PrismaAdapter may have just created them)
-            let dbUser = await db.user.findUnique({ where: { email } });
+            const dbUser = await db.user.findUnique({ where: { email } });
 
-            if (!dbUser) {
-              // PrismaAdapter didn't create the user — create manually
-              const baseUsername = (user.name || email.split("@")[0])
-                .toLowerCase()
-                .replace(/[^a-z0-9_]/g, "")
-                .slice(0, 20) || "user";
-              let username = baseUsername;
-              let suffix = 1;
-              while (await db.user.findUnique({ where: { username } })) {
-                username = `${baseUsername}${suffix++}`;
-              }
-
-              dbUser = await db.user.create({
-                data: {
-                  email,
-                  name: user.name || null,
-                  username,
-                  image: user.image || null,
-                  role: "user",
-                  status: "active",
-                },
-              });
-
-              await createNotification({
-                userId: dbUser.id,
-                type: "system",
-                title: "Welcome to NOVSMM 🎉",
-                message: `Hi ${dbUser.name || dbUser.username}! Your workspace is ready. Top up your wallet to place your first order.`,
-                severity: "success",
-              }).catch(() => {});
-
-              await audit(dbUser.id, "register", "user", dbUser.id, {
-                provider: account.provider,
-                email,
-              }).catch(() => {});
-            } else if (!dbUser.username) {
-              // User exists but has no username (created by PrismaAdapter)
+            if (dbUser && !dbUser.username) {
+              // Defensive fallback: user exists (from a prior attempt where
+              // events.createUser may have failed) but has no username.
               const baseUsername = (dbUser.name || email.split("@")[0])
                 .toLowerCase()
                 .replace(/[^a-z0-9_]/g, "")
@@ -670,25 +642,15 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               while (await db.user.findUnique({ where: { username } })) {
                 username = `${baseUsername}${suffix++}`;
               }
-
-              dbUser = await db.user.update({
+              await db.user.update({
                 where: { id: dbUser.id },
                 data: { username },
               });
-
-              await createNotification({
-                userId: dbUser.id,
-                type: "system",
-                title: "Welcome to NOVSMM 🎉",
-                message: `Hi ${dbUser.name || dbUser.username}! Your workspace is ready. Top up your wallet to place your first order.`,
-                severity: "success",
-              }).catch(() => {});
             }
 
-            // Attach the DB user ID and other fields to the user object
-            (user as any).id = dbUser.id;
-            (user as any).role = dbUser.role;
-            (user as any).username = dbUser.username;
+            // NOTE: We do NOT attach id/role/username to the user object here.
+            // PrismaAdapter will set user.id after creating the user, and the
+            // jwt callback will refresh role/username/etc from the DB.
           } catch (e) {
             console.error("[auth] OAuth signIn error:", e);
             return false;
@@ -816,6 +778,8 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             // This eliminates the DB hit on every authenticated request.
             // The cache is invalidated on balance/role/profile changes via
             // cacheInvalidate("user:{id}") in the relevant API routes.
+            // FIX (OAuth nullable username): added `username` to the cache
+            // payload so it gets refreshed alongside balance/role/etc.
             const cached = await cacheGet<{
               balance: number;
               heldBalance: number;
@@ -825,6 +789,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               language: string;
               country: string;
               name: string | null;
+              username: string | null;
               lifetimeEarnings: number;
             }>(cacheKey);
 
@@ -837,12 +802,17 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               token.language = cached.language;
               token.country = cached.country;
               token.name = cached.name;
+              token.username = cached.username ?? "";
               token.lifetimeEarnings = cached.lifetimeEarnings;
             } else {
               // Cache miss — fetch from DB and cache for 30s
+              // FIX (OAuth nullable username): added `username` to the
+              // select so the token picks up the username generated by
+              // events.createUser (which runs after PrismaAdapter creates
+              // the user but before this refresh on the first jwt call).
               const dbUser = await db.user.findUnique({
                 where: { id: userId },
-                select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, lifetimeEarnings: true },
+                select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, username: true, lifetimeEarnings: true },
               });
               if (dbUser) {
                 token.balance = dbUser.balance;
@@ -853,6 +823,11 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 token.language = dbUser.language;
                 token.country = dbUser.country;
                 token.name = dbUser.name;
+                // FIX (OAuth nullable username): refresh username from DB
+                // so the token picks up the username generated by
+                // events.createUser (which runs after PrismaAdapter creates
+                // the user). Coerce null → "" for type honesty.
+                token.username = dbUser.username ?? "";
                 token.lifetimeEarnings = dbUser.lifetimeEarnings;
 
                 // Cache for 30 seconds — short enough that balance updates
@@ -892,6 +867,57 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
       },
     },
     events: {
+      // FIX (OAuth): PrismaAdapter creates the User row WITHOUT username
+      // (username is `String? @unique` to allow this). This event fires
+      // RIGHT AFTER PrismaAdapter creates the user, so we generate a
+      // username here and update the DB. By the time the jwt callback
+      // runs (which refreshes from DB), the username is already set.
+      async createUser({ user }) {
+        if (!user?.id || !user?.email) return;
+        try {
+          // Re-fetch to check if username is already set (defensive —
+          // a prior createUser event may have already run).
+          const existing = await db.user.findUnique({
+            where: { id: user.id },
+            select: { username: true, name: true, email: true },
+          });
+          if (!existing) return;
+          if (existing.username) return; // already has a username
+
+          const baseUsername = (existing.name || existing.email.split("@")[0])
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "")
+            .slice(0, 20) || "user";
+          let username = baseUsername;
+          let suffix = 1;
+          while (await db.user.findUnique({ where: { username } })) {
+            username = `${baseUsername}${suffix++}`;
+          }
+
+          await db.user.update({
+            where: { id: user.id },
+            data: { username },
+          });
+
+          await createNotification({
+            userId: user.id,
+            type: "system",
+            title: "Welcome to NOVSMM 🎉",
+            message: `Hi ${existing.name || username}! Your workspace is ready. Top up your wallet to place your first order.`,
+            severity: "success",
+          }).catch(() => {});
+
+          await audit(user.id, "register", "user", user.id, {
+            provider: "oauth",
+            email: existing.email,
+          }).catch(() => {});
+        } catch (e) {
+          console.error("[auth] createUser event error:", e);
+          // Don't throw — the user is already created, they can still log in.
+          // The signIn callback's defensive fallback will generate the
+          // username on the next login attempt.
+        }
+      },
       async signOut({ token }) {
         if (token?.id) {
           await audit(token.id as string, "logout", "user", token.id as string);
