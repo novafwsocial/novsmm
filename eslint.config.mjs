@@ -193,6 +193,8 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "skills",
     "tool-results/**",
     "mini-services/**",
+    "src/__tests__/**", // vitest tests use different patterns
+    "vitest.config.ts",
   ],
 }];
 
