@@ -15697,3 +15697,34 @@ Stage Summary:
 - 3 fixes applied across 4 files.
 - The `?authed=1` param now forces the frontend to show the dashboard immediately after OAuth redirect, without waiting for session polling.
 - User action: `git pull` + `npm run build` + restart. Google login will now redirect to `/?authed=1` → frontend forces dashboard view → user sees the dashboard.
+
+---
+Task ID: OAUTH-DIAGNOSTIC-LOGGING
+Agent: main (Z.ai Code)
+Task: User reports Google login STILL redirects to landing page. Screenshot showed URL `https://novsmm.shop/?callbackUrl=https://novsmm.shop/?authed=1` with no visible error toast. Need to add server-side logging to diagnose why OAuth callback fails.
+
+Work Log:
+- Analyzed screenshot: URL `/?callbackUrl=https://novsmm.shop/?authed=1` — this is NextAuth's signIn page redirect with the callbackUrl preserved. The `?error=` param was likely present but stripped by the frontend's error handler (added in commit f19ca4e), and the toast auto-dismissed before the screenshot.
+- The OAuth flow is failing somewhere, but we can't see WHERE without server logs. Added comprehensive diagnostic logging across 4 files:
+  1. getConfiguredOAuthProviders(): logs which providers are configured, whether credentials came from env or DB, and errors if decryption fails (indicates LICENSE_ENCRYPTION_KEY mismatch)
+  2. signIn callback: logs provider, email, user.id, whether dbUser was found, and username generation
+  3. events.createUser: logs when the event fires, if user is missing, if user already has username, and the generated username
+  4. [...nextauth]/route.ts: logs GET/POST requests to google signin/callback URLs + try/catch wrapper
+- Created new diagnostic endpoint: GET /api/auth/debug-oauth — returns a JSON report of:
+  - Which env vars are set (GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, etc.)
+  - Which DB settings exist (oauth:google, etc.) and whether they decrypt successfully
+  - Whether LICENSE_ENCRYPTION_KEY is set, its length and format (hex/base64/invalid)
+  - The NEXTAUTH_URL and the expected Google redirect URI
+  - Safe to expose (only booleans, no secrets)
+- tsc --noEmit exits 0.
+- Committed as d1c41e4 and pushed to origin/main.
+
+Stage Summary:
+- Added 5 diagnostic logging points + 1 diagnostic endpoint to help identify why OAuth fails.
+- User should: git pull → npm run build → restart → visit https://novsmm.shop/api/auth/debug-oauth → share the JSON output → try Google login → share the [auth] log lines from the server terminal.
+- The debug output will reveal one of these likely causes:
+  (a) Google provider not configured (no env vars, no DB row, or decryption fails)
+  (b) LICENSE_ENCRYPTION_KEY changed since credentials were saved (decryption returns null)
+  (c) Google redirect URI mismatch (debug endpoint shows the expected URI)
+  (d) PrismaAdapter error during user creation (logs will show the error)
+  (e) signIn callback or events.createUser throwing (logs will show the error)
