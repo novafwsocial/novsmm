@@ -15728,3 +15728,38 @@ Stage Summary:
   (c) Google redirect URI mismatch (debug endpoint shows the expected URI)
   (d) PrismaAdapter error during user creation (logs will show the error)
   (e) signIn callback or events.createUser throwing (logs will show the error)
+
+---
+Task ID: FIX-SESSION-STALETIME-ROOT-CAUSE
+Agent: main (Z.ai Code)
+Task: User reports login and registration still redirect to landing page. Screenshot showed URL `/?callbackUrl=...` — the user lands on the landing page instead of the dashboard after login/register.
+
+Work Log:
+- Re-analyzed the OAuth/credentials flow. Found the ROOT CAUSE: the `useSession` hook in `src/hooks/use-api.ts` had `staleTime: 30 * 1000` (30 seconds). After a successful login, the frontend called `window.location.reload()` — but TanStack Query served the OLD cached session (`{ user: null }`) for 30 seconds instead of fetching the new session from the server. So the frontend thought the user wasn't logged in and showed the landing page.
+- This explains why BOTH credentials login AND registration failed (both use `window.location.reload()` after success, and both relied on `useSession` picking up the new session — which it didn't because of the stale cache).
+- Fix 1: `src/hooks/use-api.ts` useSession():
+  - `staleTime: 30s` → `0` (always refetch on mount)
+  - `refetchOnMount: "always"` (force refetch even if data is cached)
+  - `refetchOnWindowFocus: true` (refetch when user returns to the tab)
+  - `cache: "no-store"` on the fetch call (bypass browser HTTP cache entirely)
+  This ensures the session is ALWAYS fresh after a login redirect.
+- Fix 2: `src/components/novsmm/login-screen.tsx`:
+  - `window.location.reload()` → `window.location.href = "/?authed=1"`
+  The `?authed=1` param tells `app-view.tsx` to force the dashboard view even if the session polling hasn't completed yet.
+- Fix 3: `src/components/novsmm/register-screen.tsx`:
+  - `window.location.href = "/"` → `"/?authed=1"`
+  - Removed `callbackUrl: "/"` from `signIn("credentials", ...)` (not needed with `redirect: false`)
+  - If auto-login fails after registration, now shows an error message ("Account created! Please sign in with your credentials.") + redirects to login screen after 1.5s (instead of a silent redirect that looked like a failure)
+- Verified `tsc --noEmit` exits 0.
+- End-to-end browser verification in sandbox (SQLite):
+  * Registration: `POST /api/auth/register 201` + `POST /api/auth/callback/credentials 200` + redirect to onboarding ("Welcome to NOVSMM" screen with Reseller/Agency/Creator/Enterprise options) ✅
+  * Login: `POST /api/auth/callback/credentials 200` + dashboard rendered, user shown as "FF Final Fix Test finalfixtest@novsmm.test" ✅
+  * The `?authed=1` param forces dashboard view on redirect ✅
+- Committed as d30e29f and pushed to origin/main.
+
+Stage Summary:
+- ROOT CAUSE: TanStack Query's `staleTime: 30s` on the `useSession` hook caused the old `{ user: null }` session to be served from cache for 30 seconds after a login redirect. The frontend thought the user wasn't logged in and showed the landing page.
+- 3 fixes applied across 3 files (use-api.ts, login-screen.tsx, register-screen.tsx).
+- Session is now ALWAYS refetched on mount (staleTime: 0, refetchOnMount: "always", cache: "no-store").
+- Login/register redirects use `/?authed=1` to force the dashboard view immediately.
+- User action: `git pull` + `npm run build` + restart. Both credentials login AND registration will now redirect to the dashboard correctly.
