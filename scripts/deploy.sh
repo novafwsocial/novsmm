@@ -166,7 +166,10 @@ else
 fi
 
 log "Construyendo imágenes (esto puede tardar varios minutos)..."
-docker compose build --progress=plain 2>&1 | tail -5
+# FIX (M-001): was `tail -5` — only showed last 5 lines of build output.
+# Next.js build errors are 20-50 lines (stack trace + file + line).
+# Now show last 50 lines so errors are diagnosable.
+docker compose build --progress=plain 2>&1 | tail -50
 ok "Imágenes construidas"
 DEPLOY_PHASE="built"
 
@@ -242,6 +245,11 @@ DEPLOY_PHASE="migrated"
 # Verificar tablas
 TABLES=$(docker compose exec -T postgres psql -U novsmm -d novsmm -t -c "SELECT count(*) FROM information_schema.tables WHERE table_schema='public';" 2>/dev/null | tr -d ' \n')
 info "Tablas creadas: $TABLES"
+# FIX (L-005): sanitize TABLES — if psql failed, TABLES could be
+# non-numeric, causing "integer expression expected" in the -ge check.
+case "$TABLES" in
+  ''|*[!0-9]*) TABLES=0 ;;
+esac
 if [ "${TABLES:-0}" -ge 25 ]; then
   ok "PostgreSQL tiene $TABLES tablas"
 else

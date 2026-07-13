@@ -6,18 +6,52 @@ import { generateApiKey, generateApiPublicId } from "@/lib/license";
 import bcrypt from "bcryptjs";
 
 /**
- * GET /api/admin/api-keys — list all API keys (admin view, shows public IDs only).
+ * Valid API key permissions.
+ * SECURITY FIX (S-M-006): previously `permissions` was accepted as any
+ * string from the request body — an admin could inject arbitrary
+ * permission strings like "superadmin" or "delete_all". Now the
+ * permissions string is validated: each comma-separated value must be
+ * one of the known permissions below.
+ */
+const VALID_PERMISSIONS = ["read", "order", "balance", "refill", "cancel"] as const;
+const VALID_PERMISSIONS_SET = new Set(VALID_PERMISSIONS);
+
+function validatePermissions(permissions: string): string | null {
+  const parts = permissions.split(",").map((s) => s.trim()).filter(Boolean);
+  for (const p of parts) {
+    if (!VALID_PERMISSIONS_SET.has(p as any)) {
+      return null; // invalid permission found
+    }
+  }
+  return parts.join(",");
+}
+
+/**
+ * GET /api/admin/api-keys — paginated list of all API keys (admin view,
+ * shows public IDs only).
+ *
+ * PERF FIX (P-H-004): added server-side pagination. Query params:
+ * page (default 1), limit (default 50, max 200).
  */
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const keys = await db.apiKey.findMany({
-    include: {
-      user: { select: { name: true, email: true, username: true } },
-    },
-    orderBy: { createdAt: "desc" },
-  });
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
+
+  const [keys, total] = await Promise.all([
+    db.apiKey.findMany({
+      include: {
+        user: { select: { name: true, email: true, username: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.apiKey.count(),
+  ]);
 
   // Never expose the hash or the full key — only the publicId
   const safe = keys.map((k) => ({
@@ -31,10 +65,20 @@ export async function GET(req: NextRequest) {
     ipAllowlist: k.ipAllowlist,
     createdAt: k.createdAt,
     revokedAt: k.revokedAt,
-    user: k.user,
+    user: k.user
+      ? { ...k.user, username: k.user.username ?? "" }
+      : k.user,
   }));
 
-  return apiOk({ apiKeys: safe });
+  return apiOk({
+    apiKeys: safe,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
 }
 
 /**
@@ -51,6 +95,20 @@ export async function POST(req: NextRequest) {
 
   if (!userId || !name) {
     return apiError("User ID and key name are required", 422);
+  }
+
+  // SECURITY (S-M-006): validate permissions against the known enum.
+  // Default to "read" if not provided.
+  const rawPermissions = permissions ?? "read";
+  if (typeof rawPermissions !== "string") {
+    return apiError("Permissions must be a comma-separated string", 422);
+  }
+  const validatedPermissions = validatePermissions(rawPermissions);
+  if (validatedPermissions === null) {
+    return apiError(
+      `Invalid permissions. Valid values: ${VALID_PERMISSIONS.join(", ")}`,
+      422
+    );
   }
 
   const user = await db.user.findUnique({ where: { id: userId } });
@@ -81,7 +139,7 @@ export async function POST(req: NextRequest) {
       lookupHash,
       name,
       userId,
-      permissions: permissions ?? "read,order",
+      permissions: validatedPermissions,
       status: "active",
       ipAllowlist: normalizedAllowlist,
       // ASVS V13.1.3: 90-day default expiry — forces key rotation

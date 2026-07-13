@@ -132,7 +132,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">Senior Full-Stack Engineer</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Engineering</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Next.js 16 + TypeScript + PostgreSQL + Redis. You'll own the dashboard and API surface end-to-end. Minimum 5 years production experience.</p>
             </div>
@@ -142,7 +142,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">DevOps / SRE Engineer</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Infrastructure</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Docker, CI/CD, Prometheus, Grafana, AlertManager. You'll own deployment pipelines, monitoring, and incident response. On-call rotation required.</p>
             </div>
@@ -152,7 +152,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">Payment Integrations Engineer</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Engineering</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Stripe, Mercado Pago, PayPal, NowPayments, crypto gateways. You'll build and maintain payment flows, webhook handlers, and reconciliation logic.</p>
             </div>
@@ -162,7 +162,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                   <div className="text-sm font-semibold text-foreground">Customer Success Manager</div>
                   <div className="text-xs text-muted-foreground">Remote · Full-time · Operations</div>
                 </div>
-                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-medium text-primary">Open</span>
+                <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
               <p className="mt-2 text-xs text-muted-foreground">Manage enterprise reseller accounts, handle escalations, and drive product feedback. Fluent English + Spanish required.</p>
             </div>
@@ -213,7 +213,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             NOVSMM is a social media marketing infrastructure platform that provides resellers,
             agencies, and enterprises with a unified control surface for order fulfillment,
             payment processing, and real-time analytics across 16+ social platforms. The platform
-            processes millions of orders with a 99.99% uptime SLA and is compatible with the
+            processes millions of orders with a 99.9% uptime target and is compatible with the
             PerfectPanel / JAP reseller API ecosystem.
           </p>
         </section>
@@ -299,7 +299,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">Reseller Partner</div>
-                <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-medium text-primary-foreground">$49/mo</span>
+                <span className="rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">$49/mo</span>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Self-service child panel with subdomain + API key</li>
@@ -312,7 +312,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">Agency Partner</div>
-                <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-medium text-primary-foreground">$149/mo</span>
+                <span className="rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">$149/mo</span>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Everything in Reseller, plus:</li>
@@ -326,7 +326,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             <div className="rounded-xl border-2 border-primary/40 bg-primary/5 p-5">
               <div className="flex items-center justify-between">
                 <div className="text-base font-semibold text-foreground">Enterprise Partner</div>
-                <span className="rounded-full bg-primary px-3 py-0.5 text-[10px] font-medium text-primary-foreground">$499/mo</span>
+                <span className="rounded-full bg-primary px-3 py-0.5 text-[11px] font-medium text-primary-foreground">$499/mo</span>
               </div>
               <ul className="mt-3 space-y-1.5 text-xs text-muted-foreground">
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Everything in Agency, plus:</li>
@@ -381,7 +381,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">Regulatory compliance</h2>
           <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">GDPR (EU):</strong> Self-service account deletion with personal data anonymization. Data processing agreements available upon request. Users can export their data and request erasure at any time.</span></li>
-            <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">PCI DSS:</strong> All payment card processing is handled by PCI-DSS Level 1 certified providers (Stripe, PayPal). NOVSMM never stores, transmits, or processes raw card data. Card data is tokenized at the provider level.</span></li>
+            <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">PCI DSS:</strong> All payment card processing is handled by PCI-DSS Level 1 certified payment providers (PayPal, Mercado Pago). NOVSMM never stores, transmits, or processes raw card data. Card data is tokenized at the provider level.</span></li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">Data encryption:</strong> All credentials, API keys, and payment method configurations are encrypted at rest using AES-256-GCM with random IVs and authentication tags. Encryption keys are derived from a server-side master key stored in environment variables.</span></li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> <span><strong className="text-foreground">Audit trail:</strong> All administrative actions (user management, role changes, refunds, impersonation) are logged with userId, action, entity, IP address, and User-Agent. Logs are retained for 365 days.</span></li>
           </ul>
@@ -771,7 +771,7 @@ export function LegalPages({
   const pageData = page ? PAGES[page] : null;
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {pageData && (
         <motion.div
           initial={{ opacity: 0 }}

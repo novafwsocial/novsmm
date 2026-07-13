@@ -3,6 +3,13 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # Runs on every push to main + every PR to main.
 # Stages: lint → typecheck → build → security scan → deploy (main only)
+#
+# FIX (C-004): this pipeline now uses bun (the project's actual package
+# manager — bun.lock is committed, package-lock.json is not). Previously
+# it used `npm install --legacy-peer-deps` which (a) generated a
+# package-lock.json that doesn't match bun.lock, causing drift, and
+# (b) failed the "cache: npm" step because there was no lock file to cache.
+# ─────────────────────────────────────────────────────────────────────────────
 name: CI
 
 on:
@@ -23,20 +30,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: bun install --frozen-lockfile
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: bunx tsc --noEmit
 
-      - name: Lint (non-blocking)
-        run: npx eslint src/ --max-warnings=0 || true
+      - name: Lint
+        # FIX (M-011): was non-blocking (`|| true`). Now blocking — lint
+        # errors fail the CI build. Use `# eslint-disable-next-line` for
+        # intentional exceptions.
+        run: bunx eslint src/ --max-warnings=0
 
   # ── Stage 2: Build ──
   build:
@@ -46,27 +55,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
         with:
-          node-version: 22
-          cache: npm
+          bun-version: latest
 
       - name: Install dependencies
-        run: npm install --legacy-peer-deps
+        run: bun install --frozen-lockfile
 
       - name: Generate Prisma Client
-        run: npx prisma generate
+        run: bunx prisma generate
         env:
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
 
+      # FIX (L-009): cache .next/cache for faster incremental builds
+      - name: Cache .next/cache
+        uses: actions/cache@v4
+        with:
+          path: .next/cache
+          key: next-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}-${{ hashFiles('src/**') }}
+          restore-keys: |
+            next-cache-${{ runner.os }}-${{ hashFiles('bun.lock') }}-
+            next-cache-${{ runner.os }}-
+
       - name: Build Next.js
-        run: npm run build
+        run: bun run build
         env:
           DATABASE_URL: postgresql://dummy:dummy@localhost:5432/dummy
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET || 'ci-dummy-secret-32-chars-minimum' }}
           NEXTAUTH_URL: https://novsmm.shop
           LICENSE_ENCRYPTION_KEY: ${{ secrets.LICENSE_ENCRYPTION_KEY || 'ci-dummy-license-key-32-chars' }}
+
+      # FIX (L-010): upload build artifacts on failure for debugging
+      - name: Upload build artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-output
+          path: .next/
+          retention-days: 7
 
   # ── Stage 3: Security Scan ──
   security:
@@ -76,8 +103,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Run npm audit
-        run: npm audit --audit-level=high || true
+      - name: Run bun audit
+        # FIX (M-011): was non-blocking (`|| true`). Now blocking — high
+        # severity vulnerabilities fail the CI build.
+        run: bun audit --severity high
 
       - name: Run Semgrep SAST
         uses: returntocorp/semgrep-action@v1
@@ -99,4 +128,5 @@ jobs:
           echo "✅ Build passed"
           echo "✅ Security scan passed"
           echo "🚀 Ready for manual deploy:"
-          echo "   ssh into server → cd ~/novsmm → git pull → npm run build → pm2 restart novsmm"
+          echo "   WSL2:    ./scripts/deploy-wsl2.sh"
+          echo "   VPS:     ./scripts/deploy.sh (Docker) or ./scripts/deploy-lowmem.sh"

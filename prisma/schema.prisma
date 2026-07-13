@@ -22,7 +22,13 @@ model User {
   email         String    @unique
   emailVerified DateTime?
   name          String?
-  username      String    @unique
+  // FIX (OAuth): username was String @unique (NOT NULL, no default).
+  // PrismaAdapter.createUser() runs BEFORE our signIn callback and tries
+  // to create a User from the OAuth profile — but it can't set username.
+  // The creation fails → OAuth login fails silently.
+  // Now username is optional (String?) with a unique constraint that
+  // allows nulls. The signIn callback generates a username after creation.
+  username      String?   @unique
   passwordHash  String?
   image         String?
   role          String    @default("user") // user | reseller | agency | admin

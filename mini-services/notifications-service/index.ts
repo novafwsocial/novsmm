@@ -86,13 +86,16 @@ function verifyJwt(token: string): string | null {
     const [headerB64, payloadB64, signatureB64] = parts
     const signedData = `${headerB64}.${payloadB64}`
 
-    // Verify signature (HS256)
+    // SEC FIX (M-002): use timingSafeEqual instead of === to prevent
+    // timing attacks on JWT signature comparison.
     const expectedSig = crypto
       .createHmac('sha256', secret)
       .update(signedData)
       .digest('base64url')
 
-    if (expectedSig !== signatureB64) {
+    const expectedBuf = Buffer.from(expectedSig)
+    const actualBuf = Buffer.from(signatureB64)
+    if (expectedBuf.length !== actualBuf.length || !crypto.timingSafeEqual(expectedBuf, actualBuf)) {
       console.error('[notifications] JWT signature mismatch')
       return null
     }
@@ -160,8 +163,11 @@ const httpServer = createServer()
 const io = new Server(httpServer, {
   path: '/',
   cors: {
-    origin: '*',
+    // SEC FIX (M-001): was origin: '*' — any website could connect to
+    // the WS service. Now restricted to the app origin from env.
+    origin: process.env.NEXTAUTH_URL || 'http://localhost:3000',
     methods: ['GET', 'POST'],
+    credentials: true,
   },
   pingTimeout: 60_000,
   pingInterval: 25_000,

@@ -140,7 +140,7 @@ export default function TwitterImage() {
             zIndex: 1,
           }}
         >
-          {["99.99% uptime", "SOC 2", "8 gateways"].map((chip) => (
+          {["99.99% uptime", "SOC 2", "4 gateways"].map((chip) => (
             <div
               key={chip}
               style={{

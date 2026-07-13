@@ -19,6 +19,7 @@ export function useSession() {
           credentials: "include",
           headers: { "Content-Type": "application/json" },
           signal: controller.signal,
+          cache: "no-store",
         });
         clearTimeout(timeoutId);
         if (!res.ok) return { user: null };
@@ -28,16 +29,36 @@ export function useSession() {
         return { user: null };
       }
     },
-    staleTime: 30 * 1000,
+    // FIX: staleTime: 0 + refetchOnMount: "always" ensures the session is
+    // ALWAYS refetched on mount. Previously staleTime: 30s meant that after
+    // a login redirect (window.location.href), the old { user: null } data
+    // was served from cache for 30s — making it look like login failed.
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
     retry: false,
   });
 }
 
 // ── Dashboard ──
-export function useDashboard() {
+// PERF FIX (P-H-002): useDashboard now accepts an optional `range` param
+// so DashboardHome (which fetches /api/dashboard?range=30d) shares the
+// same queryKey as the sidebar/topbar (which fetch /api/dashboard).
+// Previously they used ["dashboard"] vs ["dashboard", range] — two
+// distinct caches → 2 requests to /api/dashboard every cycle.
+// Now: ["dashboard", range ?? "default"] — when range is undefined,
+// the key is ["dashboard", "default"], so both consumers share ONE
+// cache entry. When range changes, the key changes (intentional —
+// different data).
+export function useDashboard(range?: string) {
   return useQuery({
-    queryKey: ["dashboard"],
-    queryFn: () => api.get<any>("/api/dashboard"),
+    // PERF FIX (R-H-002): was `range ?? "default"` — DashboardShell calls
+    // useDashboard() → key ["dashboard","default"], DashboardHome calls
+    // useDashboard("30d") → key ["dashboard","30d"]. Two different keys
+    // = 2 fetches. Now default to "30d" so both share the same cache.
+    queryKey: ["dashboard", range ?? "30d"],
+    queryFn: () =>
+      api.get<any>(range ? `/api/dashboard?range=${range}` : "/api/dashboard"),
     refetchInterval: 60 * 1000, // 60s — reduced from 30s for performance
   });
 }
@@ -157,6 +178,7 @@ export function useServices(params?: {
         `/api/services${q ? `?${q}` : ""}`
       ),
     placeholderData: (prev: any) => prev,
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — catalog data changes infrequently
   });
 }
 
@@ -178,6 +200,7 @@ export function useAllServices(search?: string) {
   return useQuery({
     queryKey: ["all-services", search],
     queryFn: () => api.get<{ services: any[] }>(`/api/services${q}`),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — catalog data
   });
 }
 
@@ -229,6 +252,7 @@ export function usePaymentMethods() {
   return useQuery({
     queryKey: ["payment-methods"],
     queryFn: () => api.get<{ methods: any[] }>("/api/payment-methods"),
+    staleTime: 5 * 60 * 1000, // PERF (P-M-001): 5min — payment methods rarely change
   });
 }
 
@@ -295,6 +319,7 @@ export function useAdminServices() {
   return useQuery({
     queryKey: ["admin-services"],
     queryFn: () => api.get<{ services: any[] }>("/api/admin/services"),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — catalog data
   });
 }
 
@@ -302,6 +327,7 @@ export function useAdminProviders() {
   return useQuery({
     queryKey: ["admin-providers"],
     queryFn: () => api.get<{ providers: any[] }>("/api/admin/providers"),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — providers change infrequently
   });
 }
 
@@ -309,6 +335,7 @@ export function useAdminPaymentMethods() {
   return useQuery({
     queryKey: ["admin-payment-methods"],
     queryFn: () => api.get<{ methods: any[] }>("/api/admin/payment-methods"),
+    staleTime: 2 * 60 * 1000, // PERF (P-M-001): 2min — payment methods change infrequently
   });
 }
 

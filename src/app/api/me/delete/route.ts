@@ -118,7 +118,9 @@ export async function POST(req: NextRequest) {
     await audit(userId, "delete_account", "user", userId, {
       reason: "gdpr_self_service",
       originalEmail: userRecord.email,
-      originalUsername: userRecord.username,
+      // FIX (OAuth nullable username): coerce null → "<no-username>" so the
+      // audit-log search index has a searchable string for OAuth-only users.
+      originalUsername: userRecord.username ?? "<no-username>",
       anonymizedEmail,
       sessionRevoked: true,
     });

@@ -108,6 +108,13 @@ const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
   { pattern: /\/api\/auth\/register/, max: 10, windowMs: 60 * 60 * 1000 },
   // Auth password reset: 5 per hour
   { pattern: /\/api\/auth\/forgot-password/, max: 5, windowMs: 60 * 60 * 1000 },
+  // SECURITY FIX (S-C-005): License validation is a PUBLIC endpoint (no auth)
+  // that runs bcrypt.compare (intentionally slow, ~100ms at cost 12) on legacy
+  // licenses when the lookupHash doesn't match. Without a tight rate limit, a
+  // botnet could saturate the event loop with thousands of invalid-key requests,
+  // each triggering up to 3 bcrypt compares. 10/min/IP is generous for legit
+  // use (a client panel validates once on startup) but stops brute-force/DoS.
+  { pattern: /\/api\/public\/validate-license/, max: 10, windowMs: 60 * 1000 },
   // Wallet topup/withdraw: 10 per min
   { pattern: /\/api\/wallet\/(topup|withdraw)/, max: 10, windowMs: 60 * 1000 },
   // Orders: 20 per min
@@ -121,15 +128,32 @@ const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
 ];
 
 // ── Security headers ──
-function addSecurityHeaders(res: NextResponse) {
+// SECURITY FIX (S-H-002): addSecurityHeaders now accepts an optional `nonce`
+// parameter. When provided (for page routes, not API), the CSP uses
+// `'nonce-${nonce}'` instead of `'unsafe-inline'`, and `'unsafe-eval'` is
+// removed in production. This closes the XSS vector that `'unsafe-inline'`
+// leaves open. Next.js 16 auto-applies the `x-nonce` request header to its
+// own injected inline scripts (RSC payload, streaming-SSR, bootstrap).
+function addSecurityHeaders(res: NextResponse, nonce?: string, isHttps = false) {
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");
   res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  res.headers.set("X-XSS-Protection", "1; mode=block");
-  res.headers.set(
-    "Strict-Transport-Security",
-    "max-age=31536000; includeSubDomains; preload"
-  );
+  // SECURITY FIX (S-L-002): removed X-XSS-Protection header — deprecated
+  // by all modern browsers (Chrome removed in v78, Firefox never
+  // implemented, Edge removed). With nonce-based CSP (S-H-002 fix),
+  // X-XSS-Protection is completely redundant and can actually introduce
+  // vulnerabilities in old browsers. https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-XSS-Protection
+  // SECURITY FIX (S-M-008): HSTS only set on HTTPS responses. Setting
+  // HSTS on HTTP is ineffective (the header is ignored by browsers on
+  // non-secure origins) and can cause warnings in security scanners.
+  // Cloudflare already adds HSTS at the edge, but we keep it here for
+  // defense-in-depth when the origin is accessed directly via HTTPS.
+  if (isHttps) {
+    res.headers.set(
+      "Strict-Transport-Security",
+      "max-age=31536000; includeSubDomains; preload"
+    );
+  }
   // FULL-WEB-IMPROVEMENT-1: Permissions-Policy — restricts browser features
   // the site does NOT use. Anything not explicitly allowed here is denied
   // to both first-party and third-party (iframe) contexts. We allow only
@@ -193,17 +217,27 @@ function addSecurityHeaders(res: NextResponse) {
   // X-DNS-Prefetch-Control — opt into DNS prefetching for asset origins
   // (fonts.gstatic.com etc.). Helps TTFB on first visit.
   res.headers.set("X-DNS-Prefetch-Control", "on");
-  // CSP — Next.js 16 requires 'unsafe-inline' for script-src because it
-  // injects inline scripts (__NEXT_DATA__, hydration) without nonce support
-  // in the App Router. 'strict-dynamic' is added so that trusted scripts
-  // (PayPal SDK) can load their own dependencies.
-  // NOTE: The nonce approach requires Next.js nonce configuration in
-  // next.config.ts + layout.tsx which is a larger migration. For now,
-  // 'unsafe-inline' + 'strict-dynamic' is the safe baseline.
+  // CSP — Next.js 16 (App Router + Turbopack) injects MANY inline scripts:
+  //   • The RSC payload (<script>self.__next_f.push([1,"..."])</script>)
+  //   • The streaming-SSR replacement scripts ($RC, $RV, $RB) that swap
+  //     <Suspense fallback=<Loading>> for the real revealed content
+  //   • requestAnimationFrame / setTimeout bootstrap snippets
+  //
+  // SECURITY FIX (S-H-002): when a nonce is available (page routes), we
+  // use `'nonce-${nonce}'` instead of `'unsafe-inline'`. Next.js 16 auto-
+  // applies the `x-nonce` header to its own injected scripts. In production,
+  // `'unsafe-eval'` is also removed (only needed in dev for HMR).
+  // When no nonce is available (API routes), we keep `'unsafe-inline'`
+  // (API routes don't render HTML, so inline scripts aren't a concern).
+  const isProduction = process.env.NODE_ENV === "production";
+  const scriptSrc = nonce
+    ? `'self' 'nonce-${nonce}' ${isProduction ? "" : "'unsafe-eval'"} https://www.paypal.com https://www.paypalobjects.com`
+    : `'self' 'unsafe-inline' ${isProduction ? "" : "'unsafe-eval'"} https://www.paypal.com https://www.paypalobjects.com`;
+
   res.headers.set(
     "Content-Security-Policy",
     "default-src 'self'; " +
-      "script-src 'self' 'unsafe-inline' 'strict-dynamic' https://www.paypal.com https://www.paypalobjects.com; " +
+      `script-src ${scriptSrc}; ` +
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
       "img-src 'self' data: https: blob:; " +
       "font-src 'self' data: https://fonts.gstatic.com; " +
@@ -264,8 +298,18 @@ export function middleware(req: NextRequest) {
 
   // Skip non-API routes (let Next.js handle pages/static)
   if (!pathname.startsWith("/api/")) {
-    const res = NextResponse.next();
-    addSecurityHeaders(res);
+    // SECURITY FIX (S-H-002): generate a per-request nonce for page routes.
+    // The nonce is set on the request headers so Next.js can auto-apply it
+    // to its own injected inline scripts, and layout.tsx can read it to
+    // nonce custom inline scripts (JSON-LD, font loader, etc.).
+    const nonce = crypto.randomUUID().replace(/-/g, "");
+    const requestHeaders = new Headers(req.headers);
+    requestHeaders.set("x-nonce", nonce);
+
+    const res = NextResponse.next({
+      request: { headers: requestHeaders },
+    });
+    addSecurityHeaders(res, nonce, req.nextUrl.protocol === "https:");
 
     // PERF: Cache HTML pages at Cloudflare edge for 60s (s-maxage).
     // Stale-while-revalidate allows serving cached content while fetching fresh.
@@ -315,7 +359,7 @@ export function middleware(req: NextRequest) {
         res.headers.set("Vary", "Origin");
         res.headers.set("Access-Control-Max-Age", "86400"); // 24h cache preflight
       }
-      addSecurityHeaders(res);
+      addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
       return res;
     }
     const res = NextResponse.next();
@@ -326,12 +370,18 @@ export function middleware(req: NextRequest) {
       res.headers.set("Access-Control-Allow-Credentials", "false");
       res.headers.set("Vary", "Origin");
     }
-    addSecurityHeaders(res);
-    // Pass IP to downstream API routes (A-1: uses resolveClientIp for
-    // cf-connecting-ip priority + anti-spoofing)
+    addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
+    // SEC FIX (H-001): pass IP to downstream via REQUEST headers (not response).
+    // Previously was res.headers.set() which doesn't propagate to route handlers.
+    // Now we use NextResponse.next({ request: { headers } }) to inject the header.
+    // A-1 FIX: uses resolveClientIp for cf-connecting-ip priority + anti-spoofing
     const ip = resolveClientIp(req);
-    res.headers.set("x-client-ip", ip);
-    return res;
+    const apiReqHeaders = new Headers(req.headers);
+    apiReqHeaders.set("x-client-ip", ip);
+    return NextResponse.next({
+      request: { headers: apiReqHeaders },
+      headers: res.headers,
+    });
   }
 
   // ── CSRF protection: verify Origin on state-changing requests ──
@@ -383,14 +433,36 @@ export function middleware(req: NextRequest) {
             { status: 403 }
           );
         }
+      } else {
+        // SECURITY FIX (S-H-003): NEXTAUTH_URL is not set.
+        // In PRODUCTION, fail-closed — reject the request. Allowing any
+        // Origin when the trusted host is unknown opens a CSRF hole: an
+        // attacker site could POST to /api/wallet/withdraw with the
+        // victim's session cookie and the request would be accepted.
+        // In DEV, allow through (NEXTAUTH_URL is commonly unset during
+        // local development — developers use localhost:3000 directly).
+        if (process.env.NODE_ENV === "production") {
+          console.error(
+            "[CSRF] NEXTAUTH_URL is not set in production — rejecting state-changing request. " +
+              "Set NEXTAUTH_URL in .env to fix this."
+          );
+          return NextResponse.json(
+            { error: "CSRF check failed — server misconfiguration (NEXTAUTH_URL not set)" },
+            { status: 500 }
+          );
+        }
+        // Dev mode: allow through with a console warning.
+        console.warn(
+          "[CSRF] NEXTAUTH_URL not set in dev mode — allowing any Origin. Set NEXTAUTH_URL for production."
+        );
       }
-      // If NEXTAUTH_URL is not set (e.g., dev mode), we fall back to allowing
-      // any Origin — but log a warning. Production MUST set NEXTAUTH_URL.
     }
   }
 
-  // Get client IP (A-1: uses resolveClientIp for cf-connecting-ip priority
-  // + anti-spoofing — no longer trusts x-forwarded-for first entry in prod)
+  // Get client IP for rate limiting.
+  // A-1 FIX: uses resolveClientIp for cf-connecting-ip priority + anti-spoofing.
+  // In production without TRUST_PROXY, x-forwarded-for is NOT trusted
+  // (client-forgeable). cf-connecting-ip (Cloudflare) is always trusted.
   const ip = resolveClientIp(req);
   const rateLimitKey = `${ip}:${pathname.split("/").slice(0, 4).join("/")}`;
 
@@ -422,7 +494,7 @@ export function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-  addSecurityHeaders(res);
+  addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
 
   // CRITICAL: Never cache auth/session endpoints — they must be per-session.
   // Without this, Cloudflare might cache /api/auth/csrf or /api/auth/session,
@@ -436,9 +508,14 @@ export function middleware(req: NextRequest) {
     res.headers.set("Expires", "0");
   }
 
-  // Pass IP to downstream API routes via header
-  res.headers.set("x-client-ip", ip);
-  return res;
+  // SEC FIX (H-001): pass IP via request headers, not response headers.
+  // Build new request headers with x-client-ip injected.
+  const finalReqHeaders = new Headers(req.headers);
+  finalReqHeaders.set("x-client-ip", ip);
+  return NextResponse.next({
+    request: { headers: finalReqHeaders },
+    headers: res.headers,
+  });
 }
 
 export const config = {

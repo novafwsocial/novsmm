@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
-import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
+import { verify2FAToken, decrypt2FASecret, read2FAPayload, write2FAPayload } from "@/lib/two-factor";
 import { raiseSecurityAlert } from "@/lib/security-alert";
 
 /**
@@ -11,6 +11,11 @@ import { raiseSecurityAlert } from "@/lib/security-alert";
  * SECURITY (OWASP A04-3, P1): accepts a backup code as an alternative to
  * the TOTP, so a user with a lost TOTP device can still disable 2FA without
  * support intervention.
+ *
+ * SECURITY FIX (S-C-002): uses `read2FAPayload`/`write2FAPayload` for
+ * consistent encrypted format, matching the login flow. Previously this
+ * route read plain JSON but wrote encrypted JSON on backup-code rotation —
+ * an inconsistency that contributed to the 2FA lockout bug.
  */
 export async function POST(req: NextRequest) {
   const { session, error } = await requireAuth();
@@ -33,14 +38,9 @@ export async function POST(req: NextRequest) {
     return apiError("2FA is not enabled", 400);
   }
 
-  // SECURITY (OWASP A08-2, P3): parse defensively.
-  let payload: { secret?: string; backupCodes?: string[] } | null = null;
-  try {
-    payload = JSON.parse(active.value);
-    if (!payload || typeof payload !== "object") payload = null;
-  } catch {
-    payload = null;
-  }
+  // SECURITY (OWASP A08-2, P3): use read2FAPayload which handles both the
+  // new encrypted format and legacy plain-JSON format transparently.
+  const payload = read2FAPayload(active.value);
   if (!payload || !payload.secret) {
     return apiError("2FA setup is corrupted. Contact support.", 500);
   }
@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   if (!verified && backupCode) {
     const bcrypt = await import("bcryptjs");
     const normalized = String(backupCode).trim().toUpperCase();
-    const codes: string[] = Array.isArray(payload.backupCodes) ? payload.backupCodes : [];
+    const codes: string[] = payload.backupCodes;
     let matchedIndex = -1;
     for (let i = 0; i < codes.length; i++) {
       try {
@@ -77,10 +77,13 @@ export async function POST(req: NextRequest) {
       // Rotate the used backup code out (single-use).
       const remaining = codes.filter((_, i) => i !== matchedIndex);
       try {
-        const { encryptJSON } = await import("@/lib/crypto-utils");
+        const rotatedValue = write2FAPayload({
+          secret: payload.secret,
+          backupCodes: remaining,
+        });
         await db.setting.update({
           where: { key: `2fa:${userId}` },
-          data: { value: encryptJSON({ ...payload, backupCodes: remaining }) },
+          data: { value: rotatedValue },
         });
       } catch {
         // best-effort — disable below still proceeds

@@ -127,7 +127,11 @@ info "Configurando datasource de Prometheus en Grafana..."
 # GRAFANA_USER/GRAFANA_PASSWORD already validated above (non-default, >= 8 chars)
 
 # Verify Grafana credentials actually work before configuring datasource
-if ! curl -sf -o /dev/null --max-time 5 -u "${GRAFANA_USER}:${GRAFANA_PASSWORD}" http://localhost:3001/api/health 2>/dev/null; then
+# FIX (H-005): previously used /api/health which is a PUBLIC endpoint in
+# Grafana — it returns 200 regardless of credentials, so the "validation"
+# was a no-op. Now we use /api/user which requires authentication.
+# Also use 127.0.0.1 instead of localhost to avoid DNS resolution delays.
+if ! curl -sf -o /dev/null --max-time 5 -u "${GRAFANA_USER}:${GRAFANA_PASSWORD}" http://127.0.0.1:3001/api/user 2>/dev/null; then
   fail "No se pudo autenticar a Grafana con las credenciales proporcionadas."
   echo "  Verifica GRAFANA_USER y GRAFANA_PASSWORD en .env."
   exit 1

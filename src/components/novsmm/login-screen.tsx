@@ -215,9 +215,10 @@ export function LoginScreen() {
         return;
       }
 
-      // Success — session cookie is now set. Do a full page reload so the
-      // app-view picks up the new session and shows the dashboard.
-      window.location.reload();
+      // Success — session cookie is now set. Redirect to /?authed=1 so the
+      // app-view forces the dashboard view even if session polling hasn't
+      // picked up the new cookie yet (fixes "login redirects to landing" bug).
+      window.location.href = "/?authed=1";
     } catch (err: any) {
       clearTimeout(safetyTimeout);
       setError("Login failed. Please check your connection and try again.");
@@ -228,7 +229,10 @@ export function LoginScreen() {
   const handleSocial = async (provider: SocialProviderId) => {
     setSocialLoading(provider);
     setError(null);
-    await signIn(provider, { callbackUrl: "/" });
+    // FIX: callbackUrl includes ?authed=1 so the frontend knows this is a
+    // post-OAuth redirect and should force-redirect to the dashboard even
+    // if the session polling hasn't picked up the new cookie yet.
+    await signIn(provider, { callbackUrl: "/?authed=1" });
   };
 
   return (
@@ -444,16 +448,16 @@ export function LoginScreen() {
         <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-primary" />
-            SOC 2 controls
+            SOC 2-aligned controls
           </span>
           <span>·</span>
           <span>256-bit encryption</span>
           <span>·</span>
-          <span>99.99% uptime</span>
+          <span>99.9% uptime</span>
         </div>
       </motion.div>
 
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showForgot && (
           <ForgotPasswordModal onClose={() => setShowForgot(false)} />
         )}

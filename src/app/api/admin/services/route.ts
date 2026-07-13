@@ -1,22 +1,68 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
-import { createServiceSchema } from "@/lib/validations";
+import { createServiceSchema, updateServiceSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 
-/** GET /api/admin/services — all services including paused. */
-export async function GET() {
+/** GET /api/admin/services — paginated list of all services including paused.
+ *
+ * PERF FIX (P-H-003): previously this route loaded ALL services (6,390+ rows)
+ * with includes on every request → 3-5MB JSON response, 500ms+ query time.
+ * Now supports server-side pagination + search + platform filter.
+ *
+ * Query params:
+ *   page     — 1-based page number (default 1)
+ *   limit    — rows per page (default 50, max 200)
+ *   search   — case-insensitive search on name/platform (optional)
+ *   platform — filter by platform (optional)
+ *
+ * Response: { services, pagination: { page, limit, total, totalPages } }
+ */
+export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
 
-  const services = await db.service.findMany({
-    include: {
-      provider: true,
-      serviceProviders: { include: { provider: true }, orderBy: { priority: "asc" } },
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
+  const search = searchParams.get("search")?.trim() ?? "";
+  const platform = searchParams.get("platform")?.trim() ?? "";
+
+  const where = {
+    ...(search
+      ? {
+          OR: [
+            { name: { contains: search } },
+            { platform: { contains: search } },
+          ],
+        }
+      : {}),
+    ...(platform ? { platform } : {}),
+  };
+
+  const [services, total] = await Promise.all([
+    db.service.findMany({
+      where,
+      include: {
+        provider: true,
+        serviceProviders: { include: { provider: true }, orderBy: { priority: "asc" } },
+      },
+      orderBy: { platform: "asc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.service.count({ where }),
+  ]);
+
+  return apiOk({
+    services,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     },
-    orderBy: { platform: "asc" },
   });
-  return apiOk({ services });
 }
 
 /** POST /api/admin/services — create a new service. */
@@ -74,6 +120,11 @@ export async function POST(req: NextRequest) {
  * The legacy `providerId` (single-provider field on Service) is still updated
  * when supplied — it remains for backward compatibility with code that hasn't
  * migrated to multi-provider yet.
+ *
+ * SECURITY FIX (S-C-004): the request body is now validated with
+ * `updateServiceSchema` (strict Zod). Previously the route spread the raw
+ * `body` into Prisma's update() with only a hand-maintained whitelist —
+ * fragile and prone to mass assignment if a new column were added.
  */
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAdmin();
@@ -81,55 +132,48 @@ export async function PATCH(req: NextRequest) {
   const adminId = (session!.user as any).id;
 
   const body = await req.json();
-  const { id, providers, ...data } = body;
-  if (!id) return apiError("Service ID required", 422);
+  const parsed = updateServiceSchema.safeParse(body);
+  if (!parsed.success) {
+    return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
+  }
+  const { id, providers, ...data } = parsed.data;
 
-  // Validate providers array (optional). Each entry must have a providerId +
-  // numeric priority 1-5. providerServiceId and cost are optional.
+  // Build the normalized providers array (now validated by Zod).
   let normalizedProviders: any[] | null = null;
   if (providers !== undefined) {
-    if (!Array.isArray(providers)) {
-      return apiError("`providers` must be an array", 422);
-    }
-    normalizedProviders = [];
-    for (const p of providers) {
-      if (!p || typeof p.providerId !== "string") {
-        return apiError("Each provider mapping requires a providerId", 422);
-      }
-      const priority = Number(p.priority ?? 1);
-      if (!Number.isInteger(priority) || priority < 1 || priority > 5) {
-        return apiError("Priority must be an integer 1-5", 422);
-      }
-      normalizedProviders.push({
-        providerId: p.providerId,
-        priority,
-        providerServiceId:
-          p.providerServiceId !== undefined && p.providerServiceId !== ""
-            ? String(p.providerServiceId)
-            : null,
-        cost:
-          p.cost !== undefined && p.cost !== null && p.cost !== ""
-            ? Number(p.cost)
-            : null,
-      });
-    }
+    normalizedProviders = providers.map((p) => ({
+      providerId: p.providerId,
+      priority: p.priority,
+      providerServiceId:
+        p.providerServiceId !== undefined && p.providerServiceId !== ""
+          ? String(p.providerServiceId)
+          : null,
+      cost: p.cost !== undefined && p.cost !== null ? Number(p.cost) : null,
+    }));
   }
 
   // Wrap the service update + provider-mapping sync in a single tx so they
   // commit atomically.
   const service = await db.$transaction(async (tx) => {
+    const updateData: any = {};
+    if (data.name !== undefined) updateData.name = data.name;
+    if (data.platform !== undefined) updateData.platform = data.platform;
+    if (data.category !== undefined) updateData.category = data.category;
+    if (data.cost !== undefined) updateData.cost = data.cost;
+    if (data.price !== undefined) updateData.price = data.price;
+    if (data.minQty !== undefined) updateData.minQty = data.minQty;
+    if (data.maxQty !== undefined) updateData.maxQty = data.maxQty;
+    if (data.rate !== undefined) updateData.rate = data.rate;
+    if (data.status !== undefined) updateData.status = data.status;
+    if (data.providerId !== undefined) {
+      updateData.provider = data.providerId
+        ? { connect: { id: data.providerId } }
+        : { disconnect: true };
+    }
+
     const updated = await tx.service.update({
       where: { id },
-      data: {
-        ...(data.name ? { name: data.name } : {}),
-        ...(data.platform ? { platform: data.platform } : {}),
-        ...(data.cost !== undefined ? { cost: data.cost } : {}),
-        ...(data.price !== undefined ? { price: data.price } : {}),
-        ...(data.status ? { status: data.status } : {}),
-        ...(data.minQty !== undefined ? { minQty: data.minQty } : {}),
-        ...(data.maxQty !== undefined ? { maxQty: data.maxQty } : {}),
-        ...(data.providerId ? { provider: { connect: { id: data.providerId } } } : {}),
-      },
+      data: updateData,
     });
 
     if (normalizedProviders) {

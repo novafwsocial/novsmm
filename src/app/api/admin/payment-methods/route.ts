@@ -65,8 +65,12 @@ export async function POST(req: NextRequest) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid input", 422);
   }
 
-  // Extract config fields (credentials) and encrypt before storing
-  const { config, ...methodData } = body;
+  // SECURITY FIX (S-C-003): use `parsed.data` (validated + strict) instead
+  // of the raw `body`. Previously this spread `...methodData` from the raw
+  // body into Prisma's create(), allowing mass assignment of fields like
+  // `id`, `sortOrder`, `status`, `createdAt`. Now only schema-allowed
+  // fields are passed to Prisma.
+  const { config, ...methodData } = parsed.data;
   const configStr = config ? encryptJSON(config) : null;
 
   try {

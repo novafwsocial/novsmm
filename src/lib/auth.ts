@@ -10,7 +10,8 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/api-utils";
-import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
+import { createNotification } from "@/lib/notify";
+import { verify2FAToken, decrypt2FASecret, read2FAPayload } from "@/lib/two-factor";
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 import { decryptJSON } from "@/lib/crypto-utils";
 
@@ -18,16 +19,17 @@ import { decryptJSON } from "@/lib/crypto-utils";
  * Safely decrypt + parse a 2FA Setting payload (OWASP A08-2, P3).
  * Returns null on any failure (corrupted ciphertext, malformed JSON,
  * missing fields). The caller MUST handle null as a fail-closed case.
+ *
+ * SECURITY FIX (S-C-002): delegates to `read2FAPayload` (from two-factor.ts)
+ * which handles BOTH the new encrypted format (write2FAPayload/encryptJSON)
+ * and the legacy plain-JSON format transparently. This fixes the 2FA lockout
+ * bug where setup/verify wrote plain JSON but login expected AES-encrypted.
  */
 function decryptJSONSafe<T = any>(value: string | null | undefined): T | null {
   if (!value) return null;
-  try {
-    const parsed = decryptJSON(value);
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed as T;
-  } catch {
-    return null;
-  }
+  const payload = read2FAPayload(value);
+  if (!payload) return null;
+  return payload as unknown as T;
 }
 
 /**
@@ -278,13 +280,20 @@ const providers: Provider[] = [
             twoFactorOk = true;
             usedBackupCode = true;
             // Rotate: remove the used code so it's single-use.
+            // SECURITY FIX (S-C-002): use write2FAPayload for consistent
+            // encrypted format (was encryptJSON direct — worked, but
+            // write2FAPayload is the canonical helper).
             const remaining = codes.filter((_, i) => i !== matchedIndex);
-            const newPayload = { ...payload, backupCodes: remaining };
             try {
-              const { encryptJSON } = await import("./crypto-utils");
+              const { write2FAPayload } = await import("./two-factor");
               await db.setting.update({
                 where: { key: `2fa:${user.id}` },
-                data: { value: encryptJSON(newPayload) },
+                data: {
+                  value: write2FAPayload({
+                    secret: payload.secret,
+                    backupCodes: remaining,
+                  }),
+                },
               });
             } catch {
               // best-effort — don't block login on rotation failure
@@ -482,6 +491,8 @@ export async function getConfiguredSocialProviders(): Promise<
  */
 async function getConfiguredOAuthProviders(): Promise<Provider[]> {
   const configured = await getConfiguredSocialProviders();
+  // DIAGNOSTIC LOG: helps debug "Google login redirects to landing" issues.
+  console.log(`[auth] getConfiguredOAuthProviders: configured=[${configured.join(",")}]`);
   const oauthProviders: Provider[] = [];
 
   // For each configured provider, look up the credentials (env var first,
@@ -503,12 +514,20 @@ async function getConfiguredOAuthProviders(): Promise<Provider[]> {
           if (creds?.clientId && creds?.clientSecret) {
             clientId = creds.clientId;
             clientSecret = creds.clientSecret;
+            console.log(`[auth] ${provider}: loaded credentials from DB (clientId: ${String(clientId).slice(0, 8)}...)`);
+          } else {
+            console.error(`[auth] ${provider}: DB setting exists but decryption returned null — LICENSE_ENCRYPTION_KEY may have changed!`);
           }
+        } else {
+          console.error(`[auth] ${provider}: getConfiguredSocialProviders said it's configured but no DB row found (race condition?)`);
         }
-      } catch {
+      } catch (e) {
+        console.error(`[auth] ${provider}: error reading DB credentials:`, e);
         // DB might not be available — skip this provider
         continue;
       }
+    } else {
+      console.log(`[auth] ${provider}: using env var credentials (clientId: ${String(clientId).slice(0, 8)}...)`);
     }
 
     if (!clientId || !clientSecret) continue;
@@ -586,10 +605,12 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
   return {
     adapter: PrismaAdapter(db),
     session: { strategy: "jwt" },
-    // trustHost: true makes NextAuth derive the base URL from the request
-    // (Host + X-Forwarded-Proto headers) instead of requiring NEXTAUTH_URL.
-    // This is essential when behind a gateway/proxy with a different external URL.
-    ...(({ trustHost: true }) as any),
+    // SECURITY FIX (A-003): removed trustHost: true — it made NextAuth
+    // derive the base URL from the forgeable Host header, enabling
+    // host-header injection attacks (password-reset poisoning → account
+    // takeover). Now NextAuth uses NEXTAUTH_URL from env (already set in
+    // .env as https://novsmm.shop), which is a server-side constant that
+    // cannot be spoofed by the client.
     pages: {
       signIn: "/",
     },
@@ -629,11 +650,122 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
     },
     providers: [...providers, ...extraProviders],
     callbacks: {
+      async signIn({ user, account, profile }) {
+        // FIX (OAuth): When a user signs in via OAuth (Google, Facebook, etc.),
+        // PrismaAdapter creates the User row automatically AFTER signIn returns
+        // true. We must NOT create the user here — doing so causes a unique-
+        // constraint violation (P2002) when PrismaAdapter then tries to create
+        // the same user, which silently kills the OAuth flow and the session
+        // is never set (user gets redirected back to the landing page).
+        //
+        // The username generation is handled by the `events.createUser` event
+        // (see below), which fires AFTER PrismaAdapter creates the user.
+        //
+        // FIX (OAuthAccountNotLinked): When a user with the same email already
+        // exists (e.g. they registered with email+password first, then tried
+        // to sign in with Google), NextAuth refuses to link the OAuth account
+        // automatically → error "OAuthAccountNotLinked". This is a security
+        // measure to prevent account takeover, but for our use case we WANT
+        // to link them (the user owns both the email and the Google account).
+        // We manually create the Account row here, linking the OAuth provider
+        // to the existing user, so PrismaAdapter doesn't try to create a new
+        // user and trigger the "OAuthAccountNotLinked" error.
+        if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
+          console.log(`[auth] signIn callback: provider=${account.provider}, user.email=${user.email}, user.id=${user.id}`);
+          try {
+            const email = user.email?.toLowerCase();
+            if (!email) {
+              console.error("[auth] signIn callback: no email from OAuth provider");
+              return false;
+            }
+
+            const dbUser = await db.user.findUnique({ where: { email } });
+            console.log(`[auth] signIn callback: dbUser=${dbUser ? `found (id=${dbUser.id}, username=${dbUser.username})` : "not found"}`);
+
+            if (dbUser) {
+              // User already exists — check if they have an Account row for
+              // this provider. If not, create one to link them (avoids
+              // OAuthAccountNotLinked error).
+              if (account.providerAccountId) {
+                const existingAccount = await db.account.findUnique({
+                  where: {
+                    provider_providerAccountId: {
+                      provider: account.provider,
+                      providerAccountId: account.providerAccountId,
+                    },
+                  },
+                });
+
+                if (!existingAccount) {
+                  console.log(`[auth] signIn callback: linking ${account.provider} account to existing user ${dbUser.id}`);
+                  await db.account.create({
+                    data: {
+                      userId: dbUser.id,
+                      type: account.type ?? "oauth",
+                      provider: account.provider,
+                      providerAccountId: account.providerAccountId,
+                      access_token: account.access_token ?? null,
+                      refresh_token: account.refresh_token ?? null,
+                      expires_at: account.expires_at ?? null,
+                      token_type: account.token_type ?? null,
+                      scope: account.scope ?? null,
+                      id_token: account.id_token ?? null,
+                      session_state: (account as any).session_state ?? null,
+                    },
+                  });
+                  console.log(`[auth] signIn callback: account linked successfully`);
+                } else {
+                  console.log(`[auth] signIn callback: account already linked`);
+                }
+              }
+
+              // Attach the existing user's id/role/username to the user object
+              // so the jwt callback uses the correct user (not a new one).
+              (user as any).id = dbUser.id;
+              (user as any).role = dbUser.role;
+              (user as any).username = dbUser.username ?? "";
+
+              if (!dbUser.username) {
+                // Defensive fallback: user exists but has no username.
+                const baseUsername = (dbUser.name || email.split("@")[0])
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_]/g, "")
+                  .slice(0, 20) || "user";
+                let username = baseUsername;
+                let suffix = 1;
+                while (await db.user.findUnique({ where: { username } })) {
+                  username = `${baseUsername}${suffix++}`;
+                }
+                await db.user.update({
+                  where: { id: dbUser.id },
+                  data: { username },
+                });
+                (user as any).username = username;
+                console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
+              }
+            }
+            // If dbUser is null, PrismaAdapter will create the user + account
+            // automatically after signIn returns true. The events.createUser
+            // handler will generate the username.
+          } catch (e) {
+            console.error("[auth] OAuth signIn error:", e);
+            return false;
+          }
+        }
+        return true;
+      },
       async jwt({ token, user }) {
         if (user) {
           token.id = (user as any).id;
           token.role = (user as any).role;
-          token.username = (user as any).username;
+          // FIX (OAuth nullable username): User.username is `string | null`
+          // (nullable to allow OAuth users to be created before the signIn
+          // callback generates a username). Coerce to "" so the JWT/session
+          // always carries a string — this keeps AuthUser.username and
+          // AppSession.user.username honest as `string` rather than
+          // `string | null`, and prevents null leaking to the frontend in
+          // the brief window before username is generated.
+          token.username = (user as any).username ?? "";
           // Preserve impersonation context from the "impersonate" provider
           if ((user as any).realAdminId) {
             token.realAdminId = (user as any).realAdminId;
@@ -724,7 +856,8 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 token.language = impersonated.language;
                 token.country = impersonated.country;
                 token.name = impersonated.name;
-                token.username = impersonated.username;
+                // FIX (OAuth nullable username): coerce null → ""
+                token.username = impersonated.username ?? "";
                 token.email = impersonated.email;
                 token.lifetimeEarnings = impersonated.lifetimeEarnings;
               }
@@ -741,6 +874,8 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             // This eliminates the DB hit on every authenticated request.
             // The cache is invalidated on balance/role/profile changes via
             // cacheInvalidate("user:{id}") in the relevant API routes.
+            // FIX (OAuth nullable username): added `username` to the cache
+            // payload so it gets refreshed alongside balance/role/etc.
             const cached = await cacheGet<{
               balance: number;
               heldBalance: number;
@@ -750,6 +885,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               language: string;
               country: string;
               name: string | null;
+              username: string | null;
               lifetimeEarnings: number;
             }>(cacheKey);
 
@@ -762,12 +898,17 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               token.language = cached.language;
               token.country = cached.country;
               token.name = cached.name;
+              token.username = cached.username ?? "";
               token.lifetimeEarnings = cached.lifetimeEarnings;
             } else {
               // Cache miss — fetch from DB and cache for 30s
+              // FIX (OAuth nullable username): added `username` to the
+              // select so the token picks up the username generated by
+              // events.createUser (which runs after PrismaAdapter creates
+              // the user but before this refresh on the first jwt call).
               const dbUser = await db.user.findUnique({
                 where: { id: userId },
-                select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, lifetimeEarnings: true },
+                select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, username: true, lifetimeEarnings: true },
               });
               if (dbUser) {
                 token.balance = dbUser.balance;
@@ -778,6 +919,11 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 token.language = dbUser.language;
                 token.country = dbUser.country;
                 token.name = dbUser.name;
+                // FIX (OAuth nullable username): refresh username from DB
+                // so the token picks up the username generated by
+                // events.createUser (which runs after PrismaAdapter creates
+                // the user). Coerce null → "" for type honesty.
+                token.username = dbUser.username ?? "";
                 token.lifetimeEarnings = dbUser.lifetimeEarnings;
 
                 // Cache for 30 seconds — short enough that balance updates
@@ -817,6 +963,68 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
       },
     },
     events: {
+      // FIX (OAuth): PrismaAdapter creates the User row WITHOUT username
+      // (username is `String? @unique` to allow this). This event fires
+      // RIGHT AFTER PrismaAdapter creates the user, so we generate a
+      // username here and update the DB. By the time the jwt callback
+      // runs (which refreshes from DB), the username is already set.
+      async createUser({ user }) {
+        console.log(`[auth] events.createUser: user.id=${user.id}, user.email=${user.email}`);
+        if (!user?.id || !user?.email) {
+          console.error("[auth] events.createUser: missing user.id or user.email");
+          return;
+        }
+        try {
+          // Re-fetch to check if username is already set (defensive —
+          // a prior createUser event may have already run).
+          const existing = await db.user.findUnique({
+            where: { id: user.id },
+            select: { username: true, name: true, email: true },
+          });
+          if (!existing) {
+            console.error(`[auth] events.createUser: user ${user.id} not found in DB (PrismaAdapter may have failed)`);
+            return;
+          }
+          if (existing.username) {
+            console.log(`[auth] events.createUser: user already has username "${existing.username}", skipping`);
+            return;
+          }
+
+          const baseUsername = (existing.name || existing.email.split("@")[0])
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "")
+            .slice(0, 20) || "user";
+          let username = baseUsername;
+          let suffix = 1;
+          while (await db.user.findUnique({ where: { username } })) {
+            username = `${baseUsername}${suffix++}`;
+          }
+
+          await db.user.update({
+            where: { id: user.id },
+            data: { username },
+          });
+          console.log(`[auth] events.createUser: generated username "${username}" for user ${user.id}`);
+
+          await createNotification({
+            userId: user.id,
+            type: "system",
+            title: "Welcome to NOVSMM 🎉",
+            message: `Hi ${existing.name || username}! Your workspace is ready. Top up your wallet to place your first order.`,
+            severity: "success",
+          }).catch(() => {});
+
+          await audit(user.id, "register", "user", user.id, {
+            provider: "oauth",
+            email: existing.email,
+          }).catch(() => {});
+        } catch (e) {
+          console.error("[auth] createUser event error:", e);
+          // Don't throw — the user is already created, they can still log in.
+          // The signIn callback's defensive fallback will generate the
+          // username on the next login attempt.
+        }
+      },
       async signOut({ token }) {
         if (token?.id) {
           await audit(token.id as string, "logout", "user", token.id as string);

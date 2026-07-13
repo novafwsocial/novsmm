@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { apiOk, apiError, getBaseUrl } from "@/lib/api-utils";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { createNotification } from "@/lib/notify";
+import { checkWebhookIp } from "@/lib/webhook-ip-check";
 
 /**
  * POST /api/webhooks/paypal — PayPal webhook handler.
@@ -31,6 +32,13 @@ import { createNotification } from "@/lib/notify";
  * https://developer.paypal.com/docs/api/webhooks/v1/#verify-webhook-signature
  */
 export async function POST(req: NextRequest) {
+  // SECURITY (S-M-007): optional IP allowlist (defense-in-depth on top of
+  // signature verification). Skipped if WEBHOOK_IP_ALLOWLIST env var is unset.
+  const ipCheck = checkWebhookIp(req);
+  if (!ipCheck.allowed) {
+    return apiError("Forbidden", 403);
+  }
+
   const rawBody = await req.text();
 
   // ── Parse the event first so we can log it even if verification fails ──

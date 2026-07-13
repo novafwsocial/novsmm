@@ -4,37 +4,42 @@ import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 
 /**
  * GET /api/notifications — current user's notifications + broadcast (system) ones.
+ *
+ * PERF FIX (P-M-002): previously the findMany and count queries ran
+ * sequentially (2 round-trips to the DB). Now they run in parallel via
+ * Promise.all — cuts latency from ~2x query time to ~1x.
  */
 export async function GET(req: NextRequest) {
   const { session, error } = await requireAuth();
   if (error) return error;
   const userId = (session!.user as any).id;
 
-  const notifications = await db.notification.findMany({
-    where: {
-      OR: [{ userId }, { userId: null }],
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-    select: {
-      id: true,
-      type: true,
-      title: true,
-      message: true,
-      amount: true,
-      severity: true,
-      read: true,
-      createdAt: true,
-      userId: true,
-    },
-  });
-
-  const unreadCount = await db.notification.count({
-    where: {
-      userId,
-      read: false,
-    },
-  });
+  const [notifications, unreadCount] = await Promise.all([
+    db.notification.findMany({
+      where: {
+        OR: [{ userId }, { userId: null }],
+      },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: {
+        id: true,
+        type: true,
+        title: true,
+        message: true,
+        amount: true,
+        severity: true,
+        read: true,
+        createdAt: true,
+        userId: true,
+      },
+    }),
+    db.notification.count({
+      where: {
+        userId,
+        read: false,
+      },
+    }),
+  ]);
 
   return apiOk({ notifications, unreadCount });
 }

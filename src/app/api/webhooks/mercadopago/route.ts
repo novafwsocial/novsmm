@@ -3,6 +3,7 @@ import crypto from "crypto";
 import { db } from "@/lib/db";
 import { apiOk, apiError } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
+import { checkWebhookIp } from "@/lib/webhook-ip-check";
 
 /**
  * POST /api/webhooks/mercadopago — Mercado Pago webhook handler.
@@ -17,6 +18,13 @@ import { createNotification } from "@/lib/notify";
  * See: https://www.mercadopago.com.mx/developers/es/docs/your-integrations/notifications/webhooks
  */
 export async function POST(req: NextRequest) {
+  // SECURITY (S-M-007): optional IP allowlist (defense-in-depth on top of
+  // signature verification). Skipped if WEBHOOK_IP_ALLOWLIST env var is unset.
+  const ipCheck = checkWebhookIp(req);
+  if (!ipCheck.allowed) {
+    return apiError("Forbidden", 403);
+  }
+
   const body = await req.text();
   const signature = req.headers.get("x-signature") || "";
   const webhookSecret = process.env.MP_WEBHOOK_SECRET;

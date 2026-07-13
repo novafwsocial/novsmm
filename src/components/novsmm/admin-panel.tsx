@@ -1,7 +1,17 @@
+// TODO: Split into separate files (see EXHAUSTIVE_AUDIT_FINAL.md #6)
+// This file is 4,790 lines and contains 20+ admin sub-components. A previous
+// partial split attempt left dead duplicates in ./admin/ (now deleted). A
+// full extraction is feasible but risky without a full test suite — deferred.
+//
+// PERF FIX (P-M-008): the AdminPanel is already lazy-loaded via next/dynamic
+// in app-view.tsx (line 29), so it's NOT in the initial landing bundle.
+// The 4,794-line chunk only loads when an admin opens the admin tab.
+// To further reduce the per-tab render cost, we wrap each AdminX component
+// in React.memo below so switching tabs doesn't re-render the inactive ones.
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useMemo, useEffect, useCallback } from "react";
+import { useState, useMemo, useEffect, useCallback, lazy, Suspense, memo } from "react";
 import {
   ShieldCheck,
   Users,
@@ -458,7 +468,10 @@ function AdminStat({ icon, label, value, delta }: { icon: React.ReactNode; label
 }
 
 /* ─────────── Users ─────────── */
-function AdminUsers() {
+// PERF (P-M-008): memo prevents re-render when switching tabs (the parent
+// AdminPanel re-renders on tab change, but memoized children skip if props
+// haven't changed — and these take no props).
+const AdminUsers = memo(function AdminUsers() {
   const { data } = useAdminUsers();
   const updateUser = useUpdateUser();
   const bulkAction = useBulkAction();
@@ -601,7 +614,7 @@ function AdminUsers() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
-                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-[10px] font-semibold text-primary-foreground">
+                        <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/60 text-[11px] font-semibold text-primary-foreground">
                           {(u.name ?? "?").split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                         </div>
                         <div>
@@ -747,7 +760,7 @@ function AdminUsers() {
       )}
     </Reveal>
   );
-}
+});
 
 /**
  * Impersonation modal — prompts the admin for their password, then
@@ -892,7 +905,7 @@ function RoleBadge({ role }: { role: string }) {
     Agency: "bg-emerald-500/10 text-emerald-700",
     Reseller: "bg-amber-500/10 text-amber-700",
   };
-  return <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[10px] font-medium", cls[role] ?? "bg-muted text-muted-foreground")}>{role}</span>;
+  return <span className={cn("inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", cls[role] ?? "bg-muted text-muted-foreground")}>{role}</span>;
 }
 
 function UserStatus({ status }: { status: string }) {
@@ -903,7 +916,7 @@ function UserStatus({ status }: { status: string }) {
   };
   const dot: Record<string, string> = { active: "bg-emerald-500", suspended: "bg-red-500", pending: "bg-amber-500" };
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", map[status])}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", map[status])}>
       <span className={cn("h-1.5 w-1.5 rounded-full", dot[status])} />
       {status}
     </span>
@@ -925,7 +938,8 @@ function IconBtn({ icon: Icon, danger, onClick }: { icon: any; danger?: boolean;
 }
 
 /* ─────────── Services ─────────── */
-function AdminServices() {
+// PERF (P-M-008): memo prevents re-render on tab switch.
+const AdminServices = memo(function AdminServices() {
   const { data } = useAdminServices();
   const createService = useCreateService();
   const updateService = useUpdateService();
@@ -1005,7 +1019,7 @@ function AdminServices() {
                   <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">${s.price.toFixed(2)}</td>
                   <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">{s.minQty} / {s.maxQty.toLocaleString()}</td>
                   <td className="px-4 py-3">
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", s.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", s.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
                       <span className={cn("h-1.5 w-1.5 rounded-full", s.status === "active" ? "bg-emerald-500" : "bg-amber-500")} />
                       {s.status}
                     </span>
@@ -1094,7 +1108,7 @@ function AdminServices() {
       )}
     </Reveal>
   );
-}
+});
 
 /** Unified service modal — handles both create and edit modes.
  *
@@ -1215,7 +1229,7 @@ function ServiceModal({
             <div className="mb-2 flex items-center justify-between">
               <div>
                 <div className="text-xs font-semibold text-foreground">Providers (failover)</div>
-                <div className="text-[10px] text-muted-foreground">
+                <div className="text-[11px] text-muted-foreground">
                   Tried in priority order on every order. If #1 fails, #2 takes over.
                 </div>
               </div>
@@ -1241,7 +1255,7 @@ function ServiceModal({
                       <div className="flex items-start gap-2">
                         <div className="grid flex-1 grid-cols-2 gap-2">
                           <label className="block">
-                            <span className="mb-0.5 block text-[10px] text-muted-foreground">Provider</span>
+                            <span className="mb-0.5 block text-[11px] text-muted-foreground">Provider</span>
                             <select
                               value={p.providerId}
                               onChange={(e) => updateProvider(idx, { providerId: e.target.value })}
@@ -1253,7 +1267,7 @@ function ServiceModal({
                             </select>
                           </label>
                           <label className="block">
-                            <span className="mb-0.5 block text-[10px] text-muted-foreground">Priority</span>
+                            <span className="mb-0.5 block text-[11px] text-muted-foreground">Priority</span>
                             <select
                               value={p.priority}
                               onChange={(e) => updateProvider(idx, { priority: Number(e.target.value) })}
@@ -1265,7 +1279,7 @@ function ServiceModal({
                             </select>
                           </label>
                           <label className="block">
-                            <span className="mb-0.5 block text-[10px] text-muted-foreground">Provider service ID</span>
+                            <span className="mb-0.5 block text-[11px] text-muted-foreground">Provider service ID</span>
                             <input
                               type="text"
                               value={p.providerServiceId}
@@ -1275,7 +1289,7 @@ function ServiceModal({
                             />
                           </label>
                           <label className="block">
-                            <span className="mb-0.5 block text-[10px] text-muted-foreground">Cost / 1k (optional)</span>
+                            <span className="mb-0.5 block text-[11px] text-muted-foreground">Cost / 1k (optional)</span>
                             <input
                               type="number"
                               value={String(p.cost ?? "")}
@@ -1294,7 +1308,7 @@ function ServiceModal({
                         </button>
                       </div>
                       {provider && (
-                        <div className="mt-1 text-[10px] text-muted-foreground">
+                        <div className="mt-1 text-[11px] text-muted-foreground">
                           {provider.name} · {provider.apiUrl}
                         </div>
                       )}
@@ -1364,7 +1378,7 @@ function AdminProviders() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", p.status === "healthy" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", p.status === "healthy" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
                   <span className={cn("h-1.5 w-1.5 rounded-full", p.status === "healthy" ? "bg-emerald-500" : "bg-amber-500")} />
                   {p.status}
                 </span>
@@ -1373,11 +1387,11 @@ function AdminProviders() {
             </div>
             <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Latency</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Latency</div>
                 <div className={cn("font-semibold tabular-nums", p.latency < 150 ? "text-emerald-600" : "text-amber-600")}>{p.latency}ms</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Services</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Services</div>
                 <div className="font-semibold tabular-nums text-foreground">{p._count?.services ?? 0}</div>
               </div>
             </div>
@@ -1496,10 +1510,10 @@ function AdminPayments() {
                   <PaymentLogo name={m.name} size={40} />
                   <div>
                     <div className="text-sm font-semibold text-foreground">{m.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
+                    <div className="text-[11px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
                   </div>
                 </div>
-                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", m.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", m.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>
                   <span className={cn("h-1.5 w-1.5 rounded-full", m.status === "active" ? "bg-emerald-500" : "bg-amber-500")} />
                   {m.status}
                 </span>
@@ -1789,7 +1803,7 @@ function AdminSecurity() {
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
                 <l.icon className="h-4 w-4" />
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                   <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -1853,26 +1867,26 @@ function AdminRoles() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold capitalize text-foreground">{r.name}</span>
                       {r.isSystem && (
-                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[9px] font-medium text-primary">SYSTEM</span>
+                        <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[11px] font-medium text-primary">SYSTEM</span>
                       )}
                     </div>
                     <div className="text-[11px] text-muted-foreground">{r.description}</div>
                   </div>
                 </div>
-                <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold tabular-nums text-muted-foreground">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground">
                   {r.userCount} users
                 </span>
               </div>
               {/* Permissions grid */}
               <div className="mt-3 flex flex-wrap gap-1">
                 {r.permissions?.map((p: any) => (
-                  <span key={p.resource} className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 text-[10px] font-medium text-foreground/70">
+                  <span key={p.resource} className="inline-flex items-center gap-1 rounded-md bg-muted/50 px-2 py-0.5 text-[11px] font-medium text-foreground/70">
                     <span className="text-muted-foreground">{p.resource}:</span>
                     {p.actions}
                   </span>
                 ))}
                 {(!r.permissions || r.permissions.length === 0) && (
-                  <span className="text-[10px] text-muted-foreground">No specific permissions (inherits all)</span>
+                  <span className="text-[11px] text-muted-foreground">No specific permissions (inherits all)</span>
                 )}
               </div>
               <div className="mt-3 flex gap-2">
@@ -2041,7 +2055,7 @@ function RoleModal({
               <div className="flex flex-col gap-2">
                 {group.resources.map((resource) => (
                   <div key={resource} className="rounded-lg bg-muted/30 px-2 py-1.5">
-                    <div className="mb-1 font-mono text-[10px] text-muted-foreground">{resource}</div>
+                    <div className="mb-1 font-mono text-[11px] text-muted-foreground">{resource}</div>
                     <div className="flex flex-wrap gap-1.5">
                       {PERMISSION_ACTIONS.map((action) => {
                         const checked = perms[resource]?.has(action) ?? false;
@@ -2049,7 +2063,7 @@ function RoleModal({
                           <label
                             key={action}
                             className={cn(
-                              "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                              "inline-flex cursor-pointer items-center gap-1 rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors",
                               checked ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground hover:bg-muted"
                             )}
                           >
@@ -2252,7 +2266,7 @@ function AdminApiKeys() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", k.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700")}>
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", k.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-red-500/10 text-red-700")}>
                         {k.status}
                       </span>
                     </td>
@@ -2412,11 +2426,11 @@ function AdminLicenses() {
                       <div className="text-[11px] text-muted-foreground">{l.customerEmail}</div>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium capitalize text-primary">{l.plan}</span>
+                      <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium capitalize text-primary">{l.plan}</span>
                     </td>
                     <td className="px-4 py-3 text-xs text-muted-foreground">{l.domain ?? "—"}</td>
                     <td className="px-4 py-3">
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", l.status === "active" ? "bg-emerald-500/10 text-emerald-700" : l.status === "suspended" ? "bg-amber-500/10 text-amber-700" : "bg-red-500/10 text-red-700")}>
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", l.status === "active" ? "bg-emerald-500/10 text-emerald-700" : l.status === "suspended" ? "bg-amber-500/10 text-amber-700" : "bg-red-500/10 text-red-700")}>
                         {l.status}
                       </span>
                     </td>
@@ -2515,7 +2529,7 @@ function AdminCurrencies() {
                   <td className="px-4 py-3 text-lg">{c.symbol}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{c.rate.toFixed(4)}</td>
                   <td className="px-4 py-3">
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", c.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground")}>
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", c.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground")}>
                       {c.status}
                     </span>
                   </td>
@@ -2597,7 +2611,7 @@ function AdminLanguages() {
                   <td className="px-4 py-3 text-muted-foreground">{l.name}</td>
                   <td className="px-4 py-3 text-muted-foreground">{l.nativeName}</td>
                   <td className="px-4 py-3">
-                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", l.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground")}>
+                    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", l.status === "active" ? "bg-emerald-500/10 text-emerald-700" : "bg-muted text-muted-foreground")}>
                       {l.status}
                     </span>
                   </td>
@@ -2667,7 +2681,7 @@ function AdminWebhooks() {
                     <div className="text-[11px] text-muted-foreground">{new Date(w.createdAt).toLocaleString()}</div>
                   </div>
                 </div>
-                <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium capitalize", w.status === "processed" ? "bg-emerald-500/10 text-emerald-700" : w.status === "failed" ? "bg-red-500/10 text-red-700" : "bg-amber-500/10 text-amber-700")}>
+                <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", w.status === "processed" ? "bg-emerald-500/10 text-emerald-700" : w.status === "failed" ? "bg-red-500/10 text-red-700" : "bg-amber-500/10 text-amber-700")}>
                   {w.status}
                 </span>
               </div>
@@ -2837,7 +2851,7 @@ function AdminPromotions() {
                   <div className="text-sm font-semibold text-foreground">{p.name}</div>
                   <div className="text-[11px] text-muted-foreground">{p.description || "—"}</div>
                 </div>
-                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                   p.status === "active" ? "bg-emerald-500/10 text-emerald-700" :
                   p.status === "scheduled" ? "bg-amber-500/10 text-amber-700" :
                   p.status === "ended" ? "bg-muted text-muted-foreground" :
@@ -2847,11 +2861,11 @@ function AdminPromotions() {
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border/60 pt-3 text-xs">
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Discount</div>
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Discount</div>
                   <div className="font-semibold tabular-nums text-primary">{p.discount}%</div>
                 </div>
                 <div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Window</div>
+                  <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Window</div>
                   <div className="text-[11px] text-foreground">
                     {new Date(p.startsAt).toLocaleDateString()} → {new Date(p.endsAt).toLocaleDateString()}
                   </div>
@@ -3059,7 +3073,7 @@ function AdminCoupons() {
                     <td className="px-4 py-3">
                       <span
                         className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                           c.status === "active"
                             ? "bg-emerald-500/10 text-emerald-700"
                             : c.status === "expired"
@@ -3276,7 +3290,8 @@ function CouponModal({
 }
 
 /* ─────────── Orders (admin) ─────────── */
-function AdminOrders() {
+// PERF (P-M-008): memo prevents re-render on tab switch.
+const AdminOrders = memo(function AdminOrders() {
   const { data } = useAdminOverview();
   const createOrder = useCreateManualOrder();
   const [showCreate, setShowCreate] = useState(false);
@@ -3327,7 +3342,7 @@ function AdminOrders() {
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.quantity.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums">${o.totalPrice.toFixed(2)}</td>
                     <td className="px-4 py-3">
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                         o.priority === "highest" ? "bg-violet-500/10 text-violet-700" :
                         o.priority === "priority" ? "bg-blue-500/10 text-blue-700" :
                         "bg-muted text-muted-foreground")}>
@@ -3336,7 +3351,7 @@ function AdminOrders() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                         o.status === "completed" ? "bg-emerald-500/10 text-emerald-700" :
                         o.status === "cancelled" ? "bg-red-500/10 text-red-700" :
                         "bg-amber-500/10 text-amber-700")}>
@@ -3368,7 +3383,7 @@ function AdminOrders() {
       )}
     </Reveal>
   );
-}
+});
 
 function CreateManualOrderModal({
   onClose,
@@ -3658,7 +3673,7 @@ function AdminSocialAuth() {
     twitter: { clientId: "", clientSecret: "" },
   });
   const [statuses, setStatuses] = useState<
-    Record<SocialAuthProvider, { configured: boolean; source: "db" | "env" | null }>
+    Record<SocialAuthProvider, { configured: boolean; source: "db" | "env" | null; maskedClientId?: string }>
   >({
     google: { configured: false, source: null },
     facebook: { configured: false, source: null },
@@ -3679,7 +3694,7 @@ function AdminSocialAuth() {
           facebook: data.facebook ?? { configured: false, source: null },
           github: data.github ?? { configured: false, source: null },
           twitter: data.twitter ?? { configured: false, source: null },
-        });
+        } as any);
       }
     } catch {
       // Network error — leave status as-is.
@@ -3784,7 +3799,7 @@ function AdminSocialAuth() {
                   </div>
                   <span
                     className={cn(
-                      "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                      "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
                       status.configured
                         ? "bg-emerald-500/10 text-emerald-700"
                         : "bg-muted text-muted-foreground"
@@ -3792,6 +3807,11 @@ function AdminSocialAuth() {
                   >
                     {status.configured ? "Enabled" : "Disabled"}
                   </span>
+                  {status.configured && status.maskedClientId && (
+                    <span className="text-[11px] text-muted-foreground" title="Saved Client ID (masked)">
+                      ID: {status.maskedClientId}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-3">
@@ -4127,7 +4147,7 @@ function AdminEmailTemplates() {
                       </td>
                       <td className="px-4 py-3">
                         <span className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
                           t.isActive
                             ? "bg-emerald-500/10 text-emerald-700"
                             : "bg-muted text-muted-foreground"
@@ -4144,7 +4164,7 @@ function AdminEmailTemplates() {
                           <IconBtn icon={Pencil} onClick={() => setEditing(t)} />
                           <button
                             onClick={() => toggleActive(t)}
-                            className="rounded-lg border border-border px-2.5 py-1 text-[10px] font-medium text-foreground hover:bg-muted"
+                            className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-foreground hover:bg-muted"
                           >
                             {t.isActive ? "Disable" : "Enable"}
                           </button>
@@ -4360,14 +4380,14 @@ function EmailTemplateEditor({
               <Eye className="h-3.5 w-3.5" /> Live preview (sample variables)
             </div>
             <div className="rounded-xl border border-border bg-muted/30 p-4">
-              <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+              <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                 Subject
               </div>
               <div className="mt-1 text-sm font-medium text-foreground break-words">
                 {previewSubject || <span className="text-muted-foreground/50">—</span>}
               </div>
               <div className="mt-3 border-t border-border/60 pt-3">
-                <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   Body
                 </div>
                 <pre className="mt-1 whitespace-pre-wrap font-sans text-sm text-foreground">
@@ -4375,7 +4395,7 @@ function EmailTemplateEditor({
                 </pre>
               </div>
             </div>
-            <div className="text-[10px] text-muted-foreground">
+            <div className="text-[11px] text-muted-foreground">
               Sample variables used: name=Alex, orderId=A-10432, serviceName=Instagram followers (HQ),
               quantity=1000, total=9.99, ticketId=T-201, balance=12.50, amount=5.00, referredName=Jordan
             </div>
@@ -4404,7 +4424,8 @@ function EmailTemplateEditor({
 }
 
 /* ─────────── CMS / Blog / FAQ ─────────── */
-function AdminCms() {
+// PERF (P-M-008): memo prevents re-render on tab switch.
+const AdminCms = memo(function AdminCms() {
   const { toast } = useToast();
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -4504,14 +4525,14 @@ function AdminCms() {
                         <div className="text-[11px] text-muted-foreground font-mono">/{item.slug}</div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                           {item.type.replace("_", " ")}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs text-muted-foreground">{item.category}</td>
                       <td className="px-4 py-3">
                         <span className={cn(
-                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                          "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                           item.status === "published"
                             ? "bg-emerald-500/10 text-emerald-700"
                             : item.status === "archived"
@@ -4572,7 +4593,7 @@ function AdminCms() {
       )}
     </Reveal>
   );
-}
+});
 
 function CmsEditor({
   item,

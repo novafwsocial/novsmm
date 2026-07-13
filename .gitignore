@@ -54,4 +54,9 @@ server.log
 # Skills directory
 /skills/tool-results/
 upload/
-db/custom.db
+
+# Sandbox artifacts
+/tool-results/
+/db/custom.db
+/db/*.db
+/db/*.db-journal

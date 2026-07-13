@@ -109,9 +109,21 @@ export async function validateApiKey(req: NextRequest): Promise<{
       req.headers.get("x-client-ip") ||
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown";
+    // SECURITY FIX (S-C-001): fail-closed when IP is unknown.
+    // Previously the check was `!allowedIps.includes(clientIp) && clientIp !== "unknown"`
+    // which meant an unknown IP SKIPPED the allowlist entirely — an attacker
+    // could bypass the IP restriction by simply not sending X-Forwarded-For
+    // (or stripping the header before the request reaches the proxy).
+    //
+    // Now: if the key has an IP allowlist configured but we can't determine
+    // the client IP, we REJECT the request. A key with an allowlist must
+    // NEVER be usable from an unknown source.
+    if (clientIp === "unknown") {
+      return null; // Allowlist configured but IP unknown — fail-closed
+    }
     const allowedIps = apiKey.ipAllowlist.split(",").map((ip: string) => ip.trim());
-    if (!allowedIps.includes(clientIp) && clientIp !== "unknown") {
-      return null; // IP not allowed — reject
+    if (!allowedIps.includes(clientIp)) {
+      return null; // IP not in allowlist — reject
     }
   }
 

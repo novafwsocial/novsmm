@@ -140,7 +140,7 @@ export function PasswordStrength({ value }: { value: string }) {
   const { score, label, color, tips } = scorePassword(value);
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       {value.length > 0 && (
         <motion.div
           initial={{ opacity: 0, height: 0 }}

@@ -16,12 +16,16 @@ const createRoleSchema = z.object({
   color: z.string().default("#64748b"),
 });
 
+// SECURITY FIX (S-M-001): validate resource + actions against the known
+// enums. Previously these were z.string() — an admin could inject any
+// arbitrary string as a resource or action, polluting the permissions
+// table with garbage or creating unexpected permission grants.
 const updatePermissionsSchema = z.object({
   roleId: z.string(),
   permissions: z.array(
     z.object({
-      resource: z.string(),
-      actions: z.string(),
+      resource: z.enum(RESOURCES as [string, ...string[]]),
+      actions: z.enum(ACTIONS as [string, ...string[]]),
     })
   ),
 });

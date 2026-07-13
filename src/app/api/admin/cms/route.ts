@@ -52,6 +52,15 @@ export async function POST(req: NextRequest) {
     return apiError("type and title are required", 422);
   }
 
+  // SECURITY (S-L-005): validate body size — max 100KB. Without this,
+  // an admin could create a post with 100MB of markdown, and every GET
+  // to /api/cms?slug=... would serve it to all visitors (storage bloat
+  // + bandwidth cost).
+  const MAX_BODY_SIZE = 100_000;
+  if (contentBody && typeof contentBody === "string" && contentBody.length > MAX_BODY_SIZE) {
+    return apiError(`Body too long (max ${MAX_BODY_SIZE / 1000}KB)`, 422);
+  }
+
   const validTypes = ["blog_post", "faq", "announcement", "page"];
   if (!validTypes.includes(type)) {
     return apiError(`type must be one of: ${validTypes.join(", ")}`, 422);

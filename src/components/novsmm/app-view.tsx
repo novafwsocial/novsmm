@@ -8,6 +8,7 @@ import { useApp } from "./app-store";
 import { LoginScreen } from "./login-screen";
 import { RegisterScreen } from "./register-screen";
 import { OnboardingScreen } from "./onboarding-screen";
+import { WelcomeScreen } from "./welcome-screen";
 import { DashboardShell } from "./dashboard-shell";
 import { DashboardHome } from "./dashboard-home";
 import { useToast } from "@/hooks/use-toast";
@@ -60,6 +61,10 @@ function useUrlParamHandlers() {
 
     const verify = params.get("verify");
     const reset = params.get("reset");
+    // FIX (OAuth): NextAuth redirects to /?error=... when OAuth fails.
+    // Previously the frontend ignored this param, so the user just saw
+    // the landing page with no explanation. Now we show a toast.
+    const oauthError = params.get("error");
 
     if (verify) {
       (async () => {
@@ -81,6 +86,28 @@ function useUrlParamHandlers() {
     if (reset) {
       setResetToken(reset);
       stripParam("reset");
+    }
+
+    if (oauthError) {
+      // Map common NextAuth error codes to human-readable messages.
+      const errorMessages: Record<string, string> = {
+        OAuthSignin: "Could not start Google sign-in. Please try again.",
+        OAuthCallback: "Google sign-in failed. The credentials may be misconfigured.",
+        OAuthCreateAccount: "Could not create your account with Google. Please try again or use email sign-up.",
+        EmailCreateAccount: "Could not create your account. Please try again.",
+        Callback: "Sign-in callback failed. Please try again.",
+        Configuration: "Server configuration error. Please contact support.",
+        AccessDenied: "Access denied. If this is unexpected, please contact support.",
+        Verification: "The sign-in link is invalid or expired.",
+        default: "Sign-in failed. Please try again or use a different method.",
+      };
+      const message = errorMessages[oauthError] ?? errorMessages.default;
+      toast({
+        title: "Sign-in failed",
+        description: message,
+        variant: "destructive",
+      });
+      stripParam("error");
     }
   }, []);
 
@@ -235,8 +262,8 @@ function ResetPasswordModal({
  *   lands on "/" with a session but hasn't explicitly asked to see the landing).
  */
 export function AppView({ landing }: { landing: ReactNode }) {
-  const { data: session, isLoading } = useSession();
-  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding, setOnboardingStep } = useApp();
+  const { data: session, isLoading, refetch: refetchSession } = useSession();
+  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding, setOnboardingStep, welcomeVariant, setWelcomeVariant } = useApp();
   const { resetToken, setResetToken } = useUrlParamHandlers();
 
   // Sync auth state with session
@@ -247,13 +274,69 @@ export function AppView({ landing }: { landing: ReactNode }) {
       setAuthed(isAuthed, session?.user as any);
     }
 
-    // C-3 fix: Check if we just registered and need to show onboarding
+    // C-3 fix: Check if we just registered and need to show onboarding.
+    // FIX: Show the "register" welcome screen FIRST (celebratory), then
+    // proceed to onboarding. The welcome screen's onComplete will trigger
+    // the onboarding flow via the novsmm_show_onboarding flag being preserved.
     const showOnboarding = typeof window !== "undefined" && sessionStorage.getItem("novsmm_show_onboarding") === "true";
+    if (showOnboarding && isAuthed && view !== "onboarding" && welcomeVariant !== "register") {
+      // Show the register welcome screen first — when the user clicks
+      // "Continue", the welcomeVariant clears and we fall through to the
+      // onboarding check again (the flag is still set).
+      setWelcomeVariant("register");
+      // Don't remove the onboarding flag yet — it's consumed after the welcome
+      return;
+    }
+    // If welcome was just dismissed (welcomeVariant became null) but the
+    // onboarding flag is still set, now show the onboarding flow.
     if (showOnboarding && isAuthed && view !== "onboarding") {
       sessionStorage.removeItem("novsmm_show_onboarding");
       setOnboardingStep(0);
       setView("onboarding");
       return;
+    }
+
+    // FIX (OAuth redirect): After a successful OAuth login, NextAuth redirects
+    // to /?authed=1 (we set this as the callbackUrl in login/register screens).
+    // When we see this param, we set a "post-login" flag in sessionStorage
+    // that prevents the "session lost → redirect to landing" logic from
+    // firing for 10 seconds, giving the session cookie time to be detected.
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("authed") === "1") {
+        // Set a post-login flag with a timestamp (valid for 10 seconds)
+        sessionStorage.setItem("novsmm_post_login", Date.now().toString());
+        // FIX: Set a "show welcome" flag so the welcome screen appears once
+        // the session is detected. We don't call setWelcomeVariant here
+        // because isAuthed might still be false at this point (the session
+        // cookie hasn't been detected yet). The flag is consumed below when
+        // isAuthed becomes true.
+        if (!showOnboarding) {
+          sessionStorage.setItem("novsmm_show_welcome_login", "true");
+        }
+        setBrowsingLanding(false);
+        if (view !== "dashboard") {
+          setView("dashboard");
+        }
+        // Strip the param so a manual refresh doesn't force-redirect again
+        params.delete("authed");
+        const newSearch = params.toString();
+        const newPath = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}${window.location.hash}`;
+        window.history.replaceState({}, document.title, newPath);
+        return;
+      }
+    }
+
+    // FIX: Show the "login" welcome screen once the session is detected AND
+    // the novsmm_show_welcome_login flag is set (from the ?authed=1 redirect).
+    if (
+      isAuthed &&
+      welcomeVariant === null &&
+      typeof window !== "undefined" &&
+      sessionStorage.getItem("novsmm_show_welcome_login") === "true"
+    ) {
+      sessionStorage.removeItem("novsmm_show_welcome_login");
+      setWelcomeVariant("login");
     }
 
     // Only auto-redirect to dashboard on the very first load when the user
@@ -271,12 +354,35 @@ export function AppView({ landing }: { landing: ReactNode }) {
       setBrowsingLanding(false);
       setView("dashboard");
     }
-    // If session is lost (e.g. token expired), return to landing.
-    if (!isAuthed && !isLoading && (view === "dashboard" || view === "onboarding")) {
-      setView("landing");
-      setBrowsingLanding(false);
+
+    // FIX: Check if we're in a post-login grace period (10 seconds after
+    // login redirect). During this period, DON'T redirect to landing even
+    // if the session hasn't been detected yet — the cookie might still be
+    // propagating. If the grace period expires and there's still no session,
+    // THEN redirect to landing.
+    const postLoginTs = typeof window !== "undefined" ? sessionStorage.getItem("novsmm_post_login") : null;
+    const inPostLoginGrace = postLoginTs && (Date.now() - parseInt(postLoginTs, 10)) < 10_000;
+
+    if (inPostLoginGrace && isAuthed) {
+      // Session detected during grace period — clear the flag
+      sessionStorage.removeItem("novsmm_post_login");
     }
-  }, [session, isLoading, view, authed, browsingLanding, setAuthed, setAuthLoading, setView, setBrowsingLanding, setOnboardingStep]);
+
+    // If session is lost (e.g. token expired), return to landing.
+    // BUT: skip this redirect if we're in the post-login grace period and
+    // the session is still loading — the cookie might not be detected yet.
+    if (!isAuthed && !isLoading && (view === "dashboard" || view === "onboarding")) {
+      if (inPostLoginGrace) {
+        // Grace period active but session not detected yet — force a refetch.
+        // The cookie might not have been detected on the first fetch.
+        refetchSession();
+      } else {
+        // No grace period, session definitively lost — redirect to landing
+        setView("landing");
+        setBrowsingLanding(false);
+      }
+    }
+  }, [session, isLoading, view, authed, browsingLanding, setAuthed, setAuthLoading, setView, setBrowsingLanding, setOnboardingStep, refetchSession]);
 
   const isAuthed = !!session?.user;
 
@@ -342,6 +448,18 @@ export function AppView({ landing }: { landing: ReactNode }) {
         {content}
       </div>
 
+      {/* Welcome screen overlay — shown after successful login or registration.
+          Two variants: "login" (welcome back, auto-advances after 3s) and
+          "register" (celebratory, waits for user to click Continue). */}
+      {welcomeVariant && isAuthed && session?.user && (
+        <WelcomeScreen
+          variant={welcomeVariant}
+          userName={(session.user as any).name || (session.user as any).email || "there"}
+          userEmail={(session.user as any).email || ""}
+          onComplete={() => setWelcomeVariant(null)}
+        />
+      )}
+
       {/* Reset password modal — overlay regardless of session state */}
       {resetToken && (
         <ResetPasswordModal
@@ -372,7 +490,7 @@ function BackToDashboardButton() {
     return (
       <button
         onClick={() => setDismissed(false)}
-        className="fixed bottom-20 right-5 z-50 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105"
+        className="fixed bottom-24 right-5 z-50 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg transition-transform hover:scale-105"
       >
         <LayoutDashboard className="h-4 w-4" />
         Back to dashboard
@@ -381,8 +499,8 @@ function BackToDashboardButton() {
   }
 
   return (
-    <div className="fixed bottom-20 right-5 z-50 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 p-3 pr-4 shadow-xl backdrop-blur-md">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+    <div className="fixed bottom-24 right-5 z-50 flex max-w-[calc(100vw-2.5rem)] items-center gap-3 rounded-2xl border border-border/60 bg-background/95 p-3 pr-4 shadow-xl backdrop-blur-md">
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
         <LayoutDashboard className="h-5 w-5" />
       </div>
       <div className="min-w-0">
@@ -391,14 +509,14 @@ function BackToDashboardButton() {
       </div>
       <button
         onClick={handleBack}
-        className="ml-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+        className="ml-2 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
       >
         Dashboard
         <ArrowRight className="h-3.5 w-3.5" />
       </button>
       <button
         onClick={() => setDismissed(true)}
-        className="ml-1 flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
+        className="ml-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted"
         aria-label="Dismiss"
       >
         <X className="h-4 w-4" />

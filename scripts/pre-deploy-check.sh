@@ -34,7 +34,9 @@ info() { echo -e "${BLUE}ℹ️  INFO${NC} — $1"; }
 echo "════════════════════════════════════════════════════════════════"
 echo "  NOVSMM — Pre-Deployment Validation"
 echo "  Host: $(hostname)"
-echo "  IP:   $(curl -s --max-time 5 ifconfig.me 2>/dev/null || echo 'unknown')"
+# FIX (L-007): was `curl -s ifconfig.me` — leaks server IP to a third
+# party. Now uses `hostname -I` for local IP (no external request).
+echo "  IP:   $(hostname -I 2>/dev/null | awk '{print $1}' || echo 'unknown')"
 echo "  Date: $(date '+%Y-%m-%d %H:%M:%S')"
 echo "════════════════════════════════════════════════════════════════"
 echo ""
@@ -305,9 +307,14 @@ echo ""
 if [ $FAIL -eq 0 ]; then
   echo -e "  ${GREEN}✅ ENTORNO LISTO PARA DEPLOYMENT${NC}"
   echo "  Ejecuta: docker compose up -d --build"
+  exit 0
 else
   echo -e "  ${RED}❌ HAY ${FAIL} PROBLEMAS QUE DEBES RESOLVER ANTES DEL DEPLOYMENT${NC}"
   echo "  Revisa los FAIL anteriores."
+  # FIX (H-003): exit with non-zero so CI/CD pipelines and wrapper scripts
+  # can detect the failure. Previously this script always exited 0 even
+  # when FAILs were detected, making it useless as a pre-deploy gate.
+  exit 1
 fi
 echo ""
 echo "════════════════════════════════════════════════════════════════"

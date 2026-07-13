@@ -136,7 +136,7 @@ export function DashboardSubscriptions() {
       </Reveal>
 
       {/* Create modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showCreate && (
           <CreateSubscriptionModal onClose={() => setShowCreate(false)} />
         )}
@@ -227,7 +227,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
         </div>
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
             status.cls,
           )}
         >
@@ -239,30 +239,30 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
       {/* Target + range */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Target</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Target</div>
           <div className="mt-0.5 truncate font-medium text-foreground">@{s.username}</div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Per-post qty</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Per-post qty</div>
           <div className="mt-0.5 font-medium text-foreground">
             {s.minQuantity.toLocaleString()}–{s.maxQuantity.toLocaleString()}
           </div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Expiry</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Expiry</div>
           <div className={cn("mt-0.5 font-medium", expired ? "text-red-600" : "text-foreground")}>
             {new Date(s.expiry).toLocaleDateString()}
           </div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Total spent</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total spent</div>
           <div className="mt-0.5 font-semibold tabular-nums text-emerald-600">${s.totalSpent.toFixed(2)}</div>
         </div>
       </div>
 
       {/* Progress */}
       <div>
-        <div className="mb-1.5 flex items-center justify-between text-[10px] text-muted-foreground">
+        <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
           <span className="uppercase tracking-wider">Posts covered</span>
           <span className="tabular-nums">
             {s.postsProcessed} / {s.posts} · {progressPct}%
@@ -282,7 +282,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
       </div>
 
       {/* Last checked + last post */}
-      <div className="flex flex-wrap items-center gap-3 text-[10px] text-muted-foreground">
+      <div className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
           <Clock className="h-3 w-3" />
           {s.lastCheckedAt

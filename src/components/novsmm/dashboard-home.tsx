@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useDashboard, useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import {
   Wallet,
   ShoppingCart,
@@ -38,7 +38,6 @@ import {
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { DashReveal } from "./dash-reveal";
-import { useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { useApp } from "./app-store";
 import { StatusPill } from "./status-pill";
@@ -61,13 +60,11 @@ const RANGE_RANGE_LABEL: Record<Range, string> = {
 
 export function DashboardHome() {
   const [range, setRange] = useState<Range>("30d");
-  // Range-aware fetch (re-fetches when range changes). Other consumers
-  // (sidebar balance, topbar) continue using useDashboard() without range.
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard", range],
-    queryFn: () => api.get<any>(`/api/dashboard?range=${range}`),
-    refetchInterval: 30 * 1000,
-  });
+  // PERF FIX (P-H-002): use the shared useDashboard hook (with range)
+  // instead of a local useQuery. This shares the queryKey with the
+  // sidebar/topbar consumers, avoiding a duplicate /api/dashboard
+  // request every 30-60s.
+  const { data, isLoading } = useDashboard(range);
   const { setDashboardTab } = useApp();
   const { data: favData } = useFavorites();
   const { data: ticketsData } = useTickets();
@@ -343,7 +340,7 @@ export function DashboardHome() {
                   <PlatformLogo platform={f.service?.platform ?? "Other"} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">{f.service?.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
+                    <div className="text-[11px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
                   </div>
                 </div>
               )) : (
@@ -368,7 +365,7 @@ export function DashboardHome() {
                   <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", t.priority === "high" ? "bg-red-500" : "bg-amber-500")} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium text-foreground">#{t.publicId} · {t.subject}</div>
-                    <div className="text-[10px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
+                    <div className="text-[11px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
                   </div>
                 </div>
               )) : (

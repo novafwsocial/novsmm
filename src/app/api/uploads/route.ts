@@ -1,9 +1,12 @@
 import { NextRequest } from "next/server";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { sanitizeFilename } from "@/lib/sanitize";
-import { writeFile, mkdir, readFile } from "fs/promises";
+import { mkdir } from "fs/promises";
+import { createWriteStream } from "fs";
 import { join } from "path";
 import { existsSync } from "fs";
+import { pipeline } from "stream/promises";
+import { Readable } from "stream";
 
 const ALLOWED_MIME = [
   "image/jpeg", "image/png", "image/gif", "image/webp",
@@ -48,8 +51,16 @@ export async function POST(req: NextRequest) {
 
     const filename = `${Date.now()}-${safeName}`;
     const filepath = join(uploadDir, filename);
-    const bytes = await file.arrayBuffer();
-    await writeFile(filepath, Buffer.from(bytes));
+
+    // PERF FIX (P-M-005): stream the file to disk instead of loading it
+    // entirely into memory. Previously used file.arrayBuffer() which
+    // allocates the full file size (up to 5MB) in RAM per concurrent
+    // upload. With many concurrent uploads, this could cause OOM kills.
+    // Now we pipe the readable stream directly to a write stream — only
+    // a small buffer (64KB) is in memory at any time.
+    const fileStream = Readable.fromWeb(file.stream() as any);
+    const writeStream = createWriteStream(filepath);
+    await pipeline(fileStream, writeStream);
 
     // URL now points to the auth-checked API route, not a public static file
     const url = `/api/uploads/${userId}/${filename}`;

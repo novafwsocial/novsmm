@@ -202,7 +202,7 @@ export function DashboardWallet() {
                     </td>
                     <td className="px-5 py-3">
                       <span className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                         t.status === "completed"
                           ? "bg-emerald-500/10 text-emerald-700"
                           : t.status === "pending"
@@ -269,7 +269,7 @@ function PaymentMethodsList() {
             <PaymentLogo name={m.name} size={32} />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-foreground">{m.name}</div>
-              <div className="text-[10px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
+              <div className="text-[11px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
             </div>
             <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
@@ -292,7 +292,7 @@ const TYPE_META: Record<string, { label: string; cls: string; icon: any }> = {
 function TypePill({ type }: { type: string }) {
   const m = TYPE_META[type] ?? TYPE_META.sale;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium", m.cls)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", m.cls)}>
       <m.icon className="h-3 w-3" />
       {m.label}
     </span>
@@ -439,7 +439,7 @@ function TopupModal({ onClose }: { onClose: () => void }) {
             <>Top up ${amount.toFixed(2)}</>
           )}
         </button>
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Sandbox mode · no real charge · processes in ~2s
         </p>
       </motion.div>
@@ -561,7 +561,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             <>Withdraw {formatPrice(amount, currency)}</>
           )}
         </button>
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Withdrawals are reviewed by admin before processing · 1% fee applies
         </p>
       </motion.div>

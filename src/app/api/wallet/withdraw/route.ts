@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk } from "@/lib/api-utils";
 import { withdrawSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
+import { cacheInvalidate } from "@/lib/cache";
 import { nextPublicId } from "@/lib/ids";
 
 /**
@@ -86,6 +87,7 @@ export async function POST(req: NextRequest) {
       sendEmail: true,
     });
 
+    await cacheInvalidate(`dashboard:${userId}:*`).catch(() => {});
     return apiOk({ message: "Withdrawal requested. Pending admin approval." });
   } catch (e: any) {
     console.error("[wallet/withdraw] error:", e);

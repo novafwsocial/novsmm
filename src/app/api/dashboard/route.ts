@@ -120,7 +120,11 @@ export async function GET(req: NextRequest) {
   const revenueMonth = revenueRange;
 
   const responseData = {
-    user,
+    // FIX (OAuth nullable username): coerce null → "" so the frontend's
+    // `user.username: string` typing stays honest. After the signIn
+    // callback generates a username this is a no-op; before it does
+    // (brief OAuth window) the empty string avoids a null crash.
+    user: user ? { ...user, username: user.username ?? "" } : user,
     stats: {
       balance: user?.balance ?? 0,
       heldBalance: user?.heldBalance ?? 0,

@@ -4,6 +4,7 @@ import { apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { verifyNowPaymentsWebhook } from "@/lib/nowpayments";
 import { createNotification } from "@/lib/notify";
+import { checkWebhookIp } from "@/lib/webhook-ip-check";
 
 /**
  * POST /api/webhooks/nowpayments
@@ -28,6 +29,13 @@ import { createNotification } from "@/lib/notify";
  *  - refunded     → reverse the credit
  */
 export async function POST(req: NextRequest) {
+  // SECURITY (S-M-007): optional IP allowlist (defense-in-depth on top of
+  // signature verification). Skipped if WEBHOOK_IP_ALLOWLIST env var is unset.
+  const ipCheck = checkWebhookIp(req);
+  if (!ipCheck.allowed) {
+    return apiError("Forbidden", 403);
+  }
+
   // ── Read the raw body (needed for signature verification) ──
   const rawBody = await req.text();
 

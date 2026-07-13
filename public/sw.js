@@ -27,7 +27,13 @@
 // v3: bumped after mobile performance optimizations (Reveal CSS, dynamic imports, virtualization)
 const CACHE_VERSION = "novsmm-v4";
 const CACHE = CACHE_VERSION;
-const APP_SHELL = ["/", "/icon.png", "/manifest.webmanifest"];
+// PERF FIX (P-L-006): removed /icon.png from APP_SHELL precache.
+// Was 186KB (now 11KB after Lote A resize), but still unnecessary to
+// precache — the browser fetches it on first page load anyway via the
+// <link rel="icon"> tag. Precaching it during SW install delays
+// activation. /manifest.webmanifest is also fetched on load but is
+// tiny (1KB) — kept for reliability.
+const APP_SHELL = ["/", "/manifest.webmanifest"];
 
 // Track whether this is the first install vs an upgrade.
 let isFirstInstall = true;

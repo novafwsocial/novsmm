@@ -52,7 +52,12 @@ const webApplicationLd = {
   featureList: [
     "Real-time order automation across 11+ social platforms",
     "Open reseller marketplace with wholesale rates",
-    "8 integrated payment gateways (Stripe, PayPal, MercadoPago, NowPayments, and more)",
+    // FIX (U-C-005): removed "8 integrated payment gateways" claim — the
+    // actual count is 5 (Stripe, PayPal, MercadoPago, NowPayments, Manual).
+    // Stripe is also not yet wired up (no webhook route exists), so only
+    // 4 are functional. Listing "5 integrated payment gateways" matches
+    // the seeded PaymentMethod rows without overclaiming.
+    "5 integrated payment gateways (PayPal, MercadoPago, NowPayments, and more)",
     "Multi-currency wallet with instant top-up",
     "24/7 ticket support + 99.99% uptime SLA",
     "Public REST API with webhooks",
@@ -60,13 +65,11 @@ const webApplicationLd = {
     "Child panel infrastructure for resellers",
     "Affiliate program with 10% lifetime commission",
   ],
-  aggregateRating: {
-    "@type": "AggregateRating",
-    ratingValue: "4.9",
-    reviewCount: "1843",
-    bestRating: "5",
-    worstRating: "1",
-  },
+  // FIX (U-C-003): removed aggregateRating — there are no real Review
+  // entities backing the 4.9/1843 rating, which violates Google's
+  // structured data guidelines and risks a manual penalty
+  // (https://developers.google.com/search/docs/appearance/structured-data/review-snippet).
+  // Re-add when there's a genuine review system with verified purchases.
   publisher: { "@type": "Organization", name: "NOVSMM" },
 };
 
@@ -141,7 +144,7 @@ const faqLd = {
       name: "Do I need a credit card to start?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "No. You can create a free NOVSMM account without a credit card. Top up your wallet with any of the 8 supported payment gateways (Stripe, PayPal, MercadoPago, NowPayments, and more) when you're ready to place your first order.",
+        text: "No. You can create a free NOVSMM account without a credit card. Top up your wallet with any of the 4 supported payment gateways (PayPal, MercadoPago, NowPayments, and Manual bank transfer) when you're ready to place your first order.",
       },
     },
     {

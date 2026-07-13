@@ -7,23 +7,32 @@ import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { useApp } from "./app-store";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
+import { LanguageSwitcher } from "./language-switcher";
 
-const NAV_LINKS = [
-  { label: "Platform", href: "#hero" },
-  { label: "Services", href: "#services" },
-  { label: "Marketplace", href: "#marketplace" },
-  { label: "Payments", href: "#payments" },
-  { label: "Security", href: "#security" },
-];
+// A2-M-004 FIX: removed the top-level static NAV_LINKS — the dynamic
+// one inside Navbar() (with i18n translations) is the single source.
+// Keeping the static one caused confusion and dual maintenance.
 
 export function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
   const { setView, authed, setBrowsingLanding } = useApp();
   const { data: session } = useSession();
+  const { t } = useLanguage();
   const user = (session?.user as any) ?? {};
   const balance = user?.balance ?? 0;
   const currency = user?.currency ?? "USD";
+
+  // i18n (U-C-004): nav links now use translation keys
+  const NAV_LINKS = [
+    { label: t("landing.nav.platform"), href: "#hero" },
+    { label: t("landing.nav.services"), href: "#services" },
+    { label: t("landing.nav.marketplace"), href: "#marketplace" },
+    { label: t("landing.nav.payments"), href: "#payments" },
+    { label: t("landing.nav.security"), href: "#security" },
+    { label: t("landing.nav.pricing"), href: "/pricing" },
+  ];
 
   // If user is authed and browsing landing, show their balance + Dashboard button
   const showAuthedNav = authed;
@@ -91,23 +100,24 @@ export function Navbar() {
             </div>
             <Magnetic as="button" strength={0.25} onClick={goDashboard}>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                Dashboard
+                {t("landing.nav.dashboard")}
                 <ArrowRight className="h-3.5 w-3.5" />
               </span>
             </Magnetic>
           </div>
         ) : (
-          /* Not authed — show Sign in + Start free */
+          /* Not authed — show Language switcher + Sign in + Start free */
           <div className="hidden items-center gap-2 lg:flex">
+            <LanguageSwitcher />
             <button
               onClick={() => setView("login")}
               className="rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
-              Sign in
+              {t("landing.nav.signIn")}
             </button>
             <Magnetic as="button" strength={0.25} onClick={() => setView("register")}>
               <span className="inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                Start free
+                {t("landing.nav.startFree")}
                 <ArrowRight className="h-3.5 w-3.5" />
               </span>
             </Magnetic>
@@ -130,6 +140,10 @@ export function Navbar() {
           style={{
             animation: "mobileMenuIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
           }}
+          // A2-M-003 FIX: add dialog semantics for screen readers
+          role="dialog"
+          aria-modal="true"
+          aria-label="Navigation menu"
         >
           {NAV_LINKS.map((l) => (
             <a
@@ -157,7 +171,7 @@ export function Navbar() {
                   }}
                   className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
                 >
-                  Back to Dashboard
+                  {t("landing.nav.dashboard")}
                 </button>
               </>
             ) : (
@@ -169,7 +183,7 @@ export function Navbar() {
                   }}
                   className="rounded-2xl px-4 py-3 text-left text-base font-medium text-foreground/80"
                 >
-                  Sign in
+                  {t("landing.nav.signIn")}
                 </button>
                 <button
                   onClick={() => {
@@ -178,7 +192,7 @@ export function Navbar() {
                   }}
                   className="rounded-2xl bg-primary px-4 py-3 text-center text-base font-medium text-primary-foreground"
                 >
-                  Start free
+                  {t("landing.nav.startFree")}
                 </button>
               </>
             )}

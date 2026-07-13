@@ -72,7 +72,8 @@ export async function POST(req: NextRequest) {
       id: target.id,
       email: target.email,
       name: target.name,
-      username: target.username,
+      // FIX (OAuth nullable username): coerce null → ""
+      username: target.username ?? "",
       role: target.role,
     },
   });

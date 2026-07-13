@@ -6,6 +6,7 @@ import { ChevronDown, MessageCircle } from "lucide-react";
 import { Reveal } from "./reveal";
 import { SectionHeading } from "./section-heading";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 type FaqItem = {
   id: string;
@@ -22,6 +23,7 @@ type FaqItem = {
  * is hidden gracefully (returns null).
  */
 export function Faq() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<FaqItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [openIdx, setOpenIdx] = useState<number | null>(0);
@@ -54,9 +56,9 @@ export function Faq() {
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <Reveal>
           <SectionHeading
-            eyebrow="FAQ"
-            title="Frequently asked questions"
-            description="Answers to the most common questions about NOVSMM. Can't find what you're looking for? Our support team is one click away."
+            eyebrow={t("landing.faq.eyebrow")}
+            title={t("landing.faq.title")}
+            description={t("landing.faq.description")}
           />
         </Reveal>
 
@@ -123,10 +125,10 @@ export function Faq() {
             </div>
             <div className="flex-1">
               <div className="text-sm font-semibold text-foreground">
-                Still have questions?
+                {t("landing.faq.stillHaveQuestions")}
               </div>
               <div className="text-xs text-muted-foreground">
-                Our support team replies in minutes, 24/7.
+                {t("landing.faq.supportReplies")}
               </div>
             </div>
             <a
@@ -140,7 +142,7 @@ export function Faq() {
               }}
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
             >
-              <MessageCircle className="h-3.5 w-3.5" /> Chat with us
+              <MessageCircle className="h-3.5 w-3.5" /> {t("landing.faq.chatWithUs")}
             </a>
           </div>
         </Reveal>

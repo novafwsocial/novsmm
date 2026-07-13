@@ -11,6 +11,15 @@
 
 set -euo pipefail
 
+# FIX (M-006): acquire exclusive lock to prevent catastrophic race
+# condition. If two restore operations run simultaneously, they could
+# corrupt the database (one drops tables while the other is restoring).
+# flock blocks (waiting) until the lock is released — restore is a
+# critical operation and should never be skipped.
+LOCK_FILE="/tmp/novsmm-restore.lock"
+exec 200>"$LOCK_FILE"
+flock 200
+
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 BOLD='\033[1m'
 ok()   { echo -e "${GREEN}  ✅${NC} $1"; }
@@ -33,7 +42,7 @@ if [ -z "$BACKUP_FILE" ]; then
   echo "Backups disponibles en $BACKUP_DIR:"
   echo ""
   
-  BACKUPS=$(find "$BACKUP_DIR" -name "novsmm_db_*.sql.gz" -type f | sort -r)
+  BACKUPS=$(find "$BACKUP_DIR" -name "novsmm_db_*.sql.gz*" -type f | sort -r)
   
   if [ -z "$BACKUPS" ]; then
     fail "No hay backups en $BACKUP_DIR"

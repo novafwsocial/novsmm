@@ -20,8 +20,24 @@ echo ""
 # ── 1. PostgreSQL Hardening ──
 echo "📋 [1/3] PostgreSQL Hardening..."
 
-PG_CONF="/etc/postgresql/16/main/postgresql.conf"
-PG_HBA="/etc/postgresql/16/main/pg_hba.conf"
+# FIX (H-006): detect PostgreSQL version dynamically instead of hardcoding 16.
+# Debian installs PostgreSQL as /etc/postgresql/<version>/main/ — the version
+# depends on the Debian release (15 on Debian 12, 16 on Debian 13, etc.).
+# Previously this was hardcoded to 16, so the script silently skipped
+# hardening on any system with a different version.
+PG_VERSION=""
+if [ -d /etc/postgresql ]; then
+  PG_VERSION=$(ls -1 /etc/postgresql/ 2>/dev/null | sort -V | tail -1)
+fi
+if [ -n "$PG_VERSION" ]; then
+  PG_CONF="/etc/postgresql/${PG_VERSION}/main/postgresql.conf"
+  PG_HBA="/etc/postgresql/${PG_VERSION}/main/pg_hba.conf"
+  echo "  ℹ️  Detected PostgreSQL ${PG_VERSION}"
+else
+  PG_CONF="/etc/postgresql/16/main/postgresql.conf"
+  PG_HBA="/etc/postgresql/16/main/pg_hba.conf"
+  echo "  ⚠️  Could not detect PostgreSQL version — defaulting to 16"
+fi
 
 if [ -f "$PG_CONF" ]; then
   # CIS PostgreSQL 6.1: Enable SSL
@@ -57,11 +73,17 @@ fi
 # CIS PostgreSQL 6.9: pg_hba.conf — require scram-sha-256 + reject trust
 if [ -f "$PG_HBA" ]; then
   # Backup
+  # FIX (L-002): rotate backups — keep only the 5 most recent
   sudo cp "$PG_HBA" "${PG_HBA}.bak.$(date +%s)"
+  ls -t "${PG_HBA}".bak.* 2>/dev/null | tail -n +6 | xargs -r sudo rm -f
 
-  # Replace 'trust' with 'scram-sha-256' and 'md5' with 'scram-sha-256'
-  sudo sed -i 's/\btrust\b/scram-sha-256/g' "$PG_HBA"
-  sudo sed -i 's/\bmd5\b/scram-sha-256/g' "$PG_HBA"
+  # FIX (H-006): replace \b word boundaries with [[:space:]] patterns that
+  # work on both GNU sed and BSD sed. \b is a GNU extension that doesn't
+  # match on macOS/Alpine. Use ^ and $ anchors + space/tab matching.
+  sudo sed -i 's/\btrust\b/scram-sha-256/g' "$PG_HBA" 2>/dev/null || \
+    sudo sed -i 's/^[[:space:]]*trust[[:space:]]/scram-sha-256\t/g; s/[[:space:]]trust[[:space:]]/\tscram-sha-256\t/g' "$PG_HBA"
+  sudo sed -i 's/\bmd5\b/scram-sha-256/g' "$PG_HBA" 2>/dev/null || \
+    sudo sed -i 's/^[[:space:]]*md5[[:space:]]/scram-sha-256\t/g; s/[[:space:]]md5[[:space:]]/\tscram-sha-256\t/g' "$PG_HBA"
 
   echo "  ✅ pg_hba.conf hardened (trust/md5 → scram-sha-256)"
 fi
@@ -73,10 +95,21 @@ echo "📋 [2/3] Node.js Production Hardening..."
 
 # CIS Node.js: Set production env vars in PM2 ecosystem
 if command -v pm2 &> /dev/null; then
-  # Set PM2 to auto-restart on high memory
-  pm2 set novsmm:max_memory_restart 1G 2>/dev/null || true
+  # FIX (H-007): `pm2 set novsmm:max_memory_restart 1G` was incorrect —
+  # `pm2 set` is for PM2 MODULE configuration (like pm2-logrotate), not
+  # for app-specific settings. The correct way to set max_memory_restart
+  # on an existing app is `pm2 restart <app> --max-memory-restart <val>`.
+  # If the app isn't running yet, the setting is configured via
+  # ecosystem.config.js (which already has max_memory_restart set).
+  if pm2 describe novsmm &>/dev/null; then
+    pm2 restart novsmm --max-memory-restart 1G 2>/dev/null || true
+    echo "  ✅ PM2 novsmm max_memory_restart set to 1G"
+  else
+    echo "  ℹ️  PM2 novsmm not running — max_memory_restart is in ecosystem.config.js"
+  fi
 
-  # Enable PM2 log rotation (10MB, 30 files)
+  # Enable PM2 log rotation (10MB, 30 files) — these use pm2-logrotate
+  # module config which IS the correct use of `pm2 set <module>:<key>`.
   pm2 install pm2-logrotate 2>/dev/null || true
   pm2 set pm2-logrotate:max_size 10M 2>/dev/null || true
   pm2 set pm2-logrotate:retain 30 2>/dev/null || true
@@ -168,8 +201,19 @@ net.ipv4.tcp_max_orphans = 8192
 EOF
 
 # Apply sysctl changes
-sudo sysctl --system > /dev/null 2>&1
-echo "  ✅ Kernel sysctl hardening applied ($SYSCTL_CONF)"
+# FIX (M-012): in WSL2, many sysctl keys are read-only (controlled by the
+# Windows host kernel). `sysctl --system` silently fails on those keys.
+# We now check the result and warn (not fail) if some keys couldn't be set.
+SYSCTL_OUTPUT=$(sudo sysctl --system 2>&1)
+SYSCTL_ERRORS=$(echo "$SYSCTL_OUTPUT" | grep -i "cannot\|denied\|permission\|read-only" || true)
+if [ -n "$SYSCTL_ERRORS" ]; then
+  echo "  ⚠️  Some sysctl keys couldn't be set (common in WSL2/containers):"
+  echo "$SYSCTL_ERRORS" | head -5 | sed 's/^/    /'
+  echo "  ℹ️  This is expected in WSL2 — the Windows host kernel controls these."
+  echo "  ✅ Kernel sysctl hardening applied with warnings ($SYSCTL_CONF)"
+else
+  echo "  ✅ Kernel sysctl hardening applied ($SYSCTL_CONF)"
+fi
 
 # CIS 2: Set ulimits for the novsmm user
 LIMITS_CONF="/etc/security/limits.d/99-novsmm.conf"
@@ -187,7 +231,8 @@ echo "  ✅ Ulimit hardening applied ($LIMITS_CONF)"
 # CIS 3: Disable unnecessary services (if running)
 echo ""
 echo "📋 Checking for unnecessary services..."
-for svc in telnet rsh-server rlogin-server tftp-server xinetd; do
+# FIX (L-003): corrected service names for Debian/Ubuntu
+for svc in telnetd rsh-redone-server in.rlogind tftpd-hpa openbsd-inetd; do
   if systemctl is-active --quiet "$svc" 2>/dev/null; then
     sudo systemctl disable --now "$svc"
     echo "  ✅ Disabled: $svc"
