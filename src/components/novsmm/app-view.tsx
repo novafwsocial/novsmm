@@ -8,6 +8,7 @@ import { useApp } from "./app-store";
 import { LoginScreen } from "./login-screen";
 import { RegisterScreen } from "./register-screen";
 import { OnboardingScreen } from "./onboarding-screen";
+import { WelcomeScreen } from "./welcome-screen";
 import { DashboardShell } from "./dashboard-shell";
 import { DashboardHome } from "./dashboard-home";
 import { useToast } from "@/hooks/use-toast";
@@ -262,7 +263,7 @@ function ResetPasswordModal({
  */
 export function AppView({ landing }: { landing: ReactNode }) {
   const { data: session, isLoading, refetch: refetchSession } = useSession();
-  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding, setOnboardingStep } = useApp();
+  const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding, setOnboardingStep, welcomeVariant, setWelcomeVariant } = useApp();
   const { resetToken, setResetToken } = useUrlParamHandlers();
 
   // Sync auth state with session
@@ -273,8 +274,21 @@ export function AppView({ landing }: { landing: ReactNode }) {
       setAuthed(isAuthed, session?.user as any);
     }
 
-    // C-3 fix: Check if we just registered and need to show onboarding
+    // C-3 fix: Check if we just registered and need to show onboarding.
+    // FIX: Show the "register" welcome screen FIRST (celebratory), then
+    // proceed to onboarding. The welcome screen's onComplete will trigger
+    // the onboarding flow via the novsmm_show_onboarding flag being preserved.
     const showOnboarding = typeof window !== "undefined" && sessionStorage.getItem("novsmm_show_onboarding") === "true";
+    if (showOnboarding && isAuthed && view !== "onboarding" && welcomeVariant !== "register") {
+      // Show the register welcome screen first — when the user clicks
+      // "Continue", the welcomeVariant clears and we fall through to the
+      // onboarding check again (the flag is still set).
+      setWelcomeVariant("register");
+      // Don't remove the onboarding flag yet — it's consumed after the welcome
+      return;
+    }
+    // If welcome was just dismissed (welcomeVariant became null) but the
+    // onboarding flag is still set, now show the onboarding flow.
     if (showOnboarding && isAuthed && view !== "onboarding") {
       sessionStorage.removeItem("novsmm_show_onboarding");
       setOnboardingStep(0);
@@ -292,6 +306,14 @@ export function AppView({ landing }: { landing: ReactNode }) {
       if (params.get("authed") === "1") {
         // Set a post-login flag with a timestamp (valid for 10 seconds)
         sessionStorage.setItem("novsmm_post_login", Date.now().toString());
+        // FIX: Set a "show welcome" flag so the welcome screen appears once
+        // the session is detected. We don't call setWelcomeVariant here
+        // because isAuthed might still be false at this point (the session
+        // cookie hasn't been detected yet). The flag is consumed below when
+        // isAuthed becomes true.
+        if (!showOnboarding) {
+          sessionStorage.setItem("novsmm_show_welcome_login", "true");
+        }
         setBrowsingLanding(false);
         if (view !== "dashboard") {
           setView("dashboard");
@@ -303,6 +325,18 @@ export function AppView({ landing }: { landing: ReactNode }) {
         window.history.replaceState({}, document.title, newPath);
         return;
       }
+    }
+
+    // FIX: Show the "login" welcome screen once the session is detected AND
+    // the novsmm_show_welcome_login flag is set (from the ?authed=1 redirect).
+    if (
+      isAuthed &&
+      welcomeVariant === null &&
+      typeof window !== "undefined" &&
+      sessionStorage.getItem("novsmm_show_welcome_login") === "true"
+    ) {
+      sessionStorage.removeItem("novsmm_show_welcome_login");
+      setWelcomeVariant("login");
     }
 
     // Only auto-redirect to dashboard on the very first load when the user
@@ -413,6 +447,18 @@ export function AppView({ landing }: { landing: ReactNode }) {
       >
         {content}
       </div>
+
+      {/* Welcome screen overlay — shown after successful login or registration.
+          Two variants: "login" (welcome back, auto-advances after 3s) and
+          "register" (celebratory, waits for user to click Continue). */}
+      {welcomeVariant && isAuthed && session?.user && (
+        <WelcomeScreen
+          variant={welcomeVariant}
+          userName={(session.user as any).name || (session.user as any).email || "there"}
+          userEmail={(session.user as any).email || ""}
+          onComplete={() => setWelcomeVariant(null)}
+        />
+      )}
 
       {/* Reset password modal — overlay regardless of session state */}
       {resetToken && (

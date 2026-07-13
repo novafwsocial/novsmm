@@ -15793,3 +15793,26 @@ Stage Summary:
   (b) Set LICENSE_ENCRYPTION_KEY in .env to the same value used when credentials were saved, OR
   (c) Re-save Google credentials via the admin panel (re-encrypts with current key)
 - After the fix, visit https://novsmm.shop/api/auth/debug-oauth to verify the configuration. The google provider should appear in /api/auth/providers.
+
+---
+Task ID: WELCOME-SCREEN-COMPONENT
+Agent: subagent (welcome-screen builder)
+Task: Create the WelcomeScreen React component (post-auth transient overlay) at src/components/novsmm/welcome-screen.tsx
+
+Work Log:
+- Read worklog.md + existing auth surfaces (login-screen.tsx, register-screen.tsx, onboarding-screen.tsx, logo.tsx) to learn the design system, custom utility classes (nov-grid-bg, nov-radial-fade, nov-ring-lg, auth-card-3d, auth-card-inner, nov-shadow-blue), color tokens (primary = electric blue #0052FF, emerald accent), and motion conventions used across the app.
+- Confirmed custom classes exist in src/app/globals.css (nov-grid-bg, nov-radial-fade, nov-ring, nov-ring-lg, nov-shadow-blue, auth-card-3d, auth-card-inner + authCardIn keyframe + reduced-motion guards).
+- Built WelcomeScreen with the prescribed props interface (variant, userName, userEmail, onComplete) and exact import block (framer-motion motion/AnimatePresence/useReducedMotion, lucide icons, Logo).
+- Implemented two variants:
+  • register → "Welcome to NOVSMM 🎉", PartyPopper icon, 28-particle confetti field, 3 feature highlights (Wallet ready / 24/7 support / Global payments), waits for explicit Continue click.
+  • login → "Welcome back 👋", Hand icon with pulse ring, auto-advances after 3s with a visible countdown + linear progress bar; user can still click/Enter/Escape to advance immediately.
+- Visual: full-screen fixed overlay (z-[100]) on an explicit dark base (bg-neutral-950) so the first impression reads as premium/cinematic regardless of app theme; nov-grid-bg + nov-radial-fade pattern layer; primary + emerald glow blobs; vignette; auth-card-3d > auth-card-inner card with outer gradient glow ring and nov-ring-lg; gradient heading text (white → primary-200); verified-email emerald chip; primary Continue button with shine-sweep + pulsing boxShadow + Sparkles/ArrowRight.
+- Animations: container fade+blur(12px)→0 with staggered children (delayChildren 0.15, staggerChildren 0.1); icon spring scale 0→1 + rotate + gentle floating y-loop; text slide-up y=20→0 via itemVariants; register feature cards stagger in; confetti particles fall with drift + rotate + opacity keyframes + randomized repeatDelay.
+- Accessibility: role="dialog" aria-modal aria-labelledby on a <main>; sr-only context sentence; semantic <section>/<h1>/<p>; aria-label on icon + button; button is autoFocus + keyboard focusable; Enter + Escape key handlers advance; prefers-reduced-motion honored via useReducedMotion (disables confetti, floating loops, pulse ring, button pulse).
+- Robustness: completedRef guard prevents double onComplete (auto-advance vs click race); mounted gate avoids SSR/client random mismatch for confetti; firstName derived safely with "there" fallback; email chip truncates; no cn import (template strings only, per spec); no TODOs/placeholders.
+- Dev server recompiled cleanly (✓ Compiled) after each edit; bun run lint has a pre-existing toolchain error (typescript-eslint/utils FlatESLint constructor) unrelated to this file.
+
+Stage Summary:
+- File created: src/components/novsmm/welcome-screen.tsx (exported WelcomeScreen + WelcomeScreenProps).
+- Drop-in ready: parent renders <WelcomeScreen variant="login"|"register" userName=… userEmail=… onComplete={…} /> after successful auth, before the dashboard.
+- Production-ready, dark cinematic aesthetic, fully accessible, reduced-motion aware; no new dependencies (uses existing framer-motion + lucide-react + project utility classes).
