@@ -3673,7 +3673,7 @@ function AdminSocialAuth() {
     twitter: { clientId: "", clientSecret: "" },
   });
   const [statuses, setStatuses] = useState<
-    Record<SocialAuthProvider, { configured: boolean; source: "db" | "env" | null }>
+    Record<SocialAuthProvider, { configured: boolean; source: "db" | "env" | null; maskedClientId?: string }>
   >({
     google: { configured: false, source: null },
     facebook: { configured: false, source: null },
@@ -3694,7 +3694,7 @@ function AdminSocialAuth() {
           facebook: data.facebook ?? { configured: false, source: null },
           github: data.github ?? { configured: false, source: null },
           twitter: data.twitter ?? { configured: false, source: null },
-        });
+        } as any);
       }
     } catch {
       // Network error — leave status as-is.
@@ -3807,6 +3807,11 @@ function AdminSocialAuth() {
                   >
                     {status.configured ? "Enabled" : "Disabled"}
                   </span>
+                  {status.configured && status.maskedClientId && (
+                    <span className="text-[11px] text-muted-foreground" title="Saved Client ID (masked)">
+                      ID: {status.maskedClientId}
+                    </span>
+                  )}
                 </div>
 
                 <div className="flex flex-col gap-3">
