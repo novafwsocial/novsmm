@@ -15816,3 +15816,278 @@ Stage Summary:
 - File created: src/components/novsmm/welcome-screen.tsx (exported WelcomeScreen + WelcomeScreenProps).
 - Drop-in ready: parent renders <WelcomeScreen variant="login"|"register" userName=… userEmail=… onComplete={…} /> after successful auth, before the dashboard.
 - Production-ready, dark cinematic aesthetic, fully accessible, reduced-motion aware; no new dependencies (uses existing framer-motion + lucide-react + project utility classes).
+
+---
+Task ID: ANALYZE-LANDING-DESIGN
+Agent: subagent (general-purpose — landing design analyst)
+Task: Research-only analysis of the NOVSMM landing-page design system and comparison against the current welcome-screen.tsx, to inform a future redesign of the welcome screen so it matches the landing aesthetic.
+
+Work Log:
+- Read /home/z/my-project/worklog.md (15,818 lines) to confirm project context: NOVSMM is a world-class SaaS landing page for social-media-marketing automation; design directives from the master PDF are — pure white background, soft grays, black typography, electric blue (#0052FF) reserved for important actions only, emerald (#10B981) for positive states, NO exaggerated gradients, NO saturated colors, Apple/Stripe/Linear/Vercel quality bar.
+- Read /home/z/my-project/src/app/page.tsx to map the landing composition: SmoothScroll + LanguageProvider wrapping a flex column with ScrollProgress + AppView(landing=Navbar→main(Hero→Stats→Services→Marketplace→Payments→Testimonials→Security→ApiDocsSection→AffiliateSection→Faq)→Footer) + WhatsAppWidget + StickyCTA + SocialProof + LandingCommandPalette. Sections lazy-loaded with skeleton placeholders (above-the-fold Hero+Navbar load eagerly).
+- Read /home/z/my-project/src/app/globals.css (949 lines) end-to-end. Catalogued the full design-token block (`:root` + `.dark`), the custom utility classes (`nov-grid-bg`, `nov-radial-fade`, `nov-text-gradient`, `nov-grain`, `nov-glass`, `nov-ring`, `nov-ring-lg`, `nov-shadow-blue`, `nov-marquee[-slow]`, `nov-pulse-dot`), all hero/landing keyframes (`heroFadeUp`, `heroFade`, `heroFadeBlur`, `heroFadeUpBlur`, `navbarIn`, `mobileMenuIn`, `chipIn`), the 3D system (`perspective-*`, `preserve-3d`, `tilt-card`, `reveal-3d`, `float-3d`, `glow-3d`, `flip-card`), the dashboard motion set (`stat-card-3d`, `table-row-hover`, `tab-content-enter`, `dash-reveal`, `btn-press`, `badge-pulse`, `skeleton-shimmer`, `modal-3d-enter`, `chart-container`), the footer 3D set (`footer-link-3d`, `footer-col-reveal`, `status-badge-glow`, `footer-logo-float`), the auth-3D set (`auth-card-3d`, `auth-card-inner` + `authCardIn` keyframe, `auth-input-3d`, `social-btn-3d`), and the mobile + reduced-motion guards.
+- Read the prominent landing elements: hero.tsx (eyebrow pill + clamp hero H1 with nov-text-gradient highlight + 3 Magnetic CTAs + trust line + Tilt3D HeroDashboard frame with FloatingChip orbiters + glow blobs), navbar.tsx (fixed pill nav with scroll-triggered nov-glass+nov-ring transition, Magnetic primary CTAs), footer.tsx (final CTA band + 6-col link grid with footer-link-3d + status-badge-glow pill + giant ghost wordmark `text-foreground/[0.04]`), section-heading.tsx (eyebrow chip + clamp H2 + muted-foreground description), and the supporting primitives logo.tsx, reveal.tsx, magnetic.tsx, tilt-3d.tsx, hero-dashboard.tsx (light SVG dashboard preview).
+- Spot-checked card patterns in stats.tsx and services.tsx to confirm the recurring card recipe: `rounded-2xl border border-border/60 bg-background p-5 sm:p-6 transition-shadow hover:nov-ring-lg` with `bg-muted text-foreground group-hover:bg-primary/10 group-hover:text-primary` icon chips; eyebrow uppercase `tracking-[0.18em]` + `text-[11px]`.
+- Re-read /home/z/my-project/src/components/novsmm/welcome-screen.tsx (490 lines) in full. Cross-referenced every class/colour/value against the landing design DNA and noted every divergence (see report below).
+- Confirmed the welcome screen was intentionally built as a DARK cinematic overlay (`bg-neutral-950`, `text-white/*`, `border-white/10`, `bg-neutral-900/80`) per the prior WELCOME-SCREEN-COMPONENT worklog entry — this is the root mismatch with the light, minimal landing aesthetic.
+
+Stage Summary:
+- No files were modified (research-only task).
+- Detailed design-DNA report + welcome-screen diff + concrete recommendations delivered in the agent's final response (colors, typography, spacing, cards, buttons, animations, signature visual elements, and 15 specific class-level changes to bring the welcome screen into alignment with the landing page).
+- Ready for a follow-up task to implement the welcome-screen redesign using the report's recommendations.
+
+=== FULL ANALYSIS REPORT ===
+
+# NOVSMM Landing-Page Design DNA + Welcome-Screen Mismatch Report
+
+## 1. Landing-page design DNA
+
+### 1.1 Color palette (default LIGHT theme — `:root`)
+| Token | Value | Role |
+|---|---|---|
+| `--background` | `oklch(1 0 0)` (pure white) | Canvas |
+| `--foreground` | `oklch(0.18 0.004 285)` (near-black ink) | Body text, headings |
+| `--card` / `--popover` | `oklch(1 0 0)` | Card surfaces (white) |
+| `--primary` | `#0052FF` (electric blue) | CTAs, links, icons-on-hover, ring, selection tint (rgba(0,82,255,0.18)) |
+| `--primary-foreground` | `#ffffff` | Text on primary |
+| `--positive` | `#10B981` (emerald) | Positive states, "live" dots, uptime |
+| `--secondary` / `--muted` / `--accent` | `oklch(0.973)` / `0.975` / `0.968` (soft grays) | Surfaces, hovers |
+| `--muted-foreground` | `oklch(0.52 0.005 285)` | Subtitles, captions, eyebrows |
+| `--border` / `--input` | `oklch(0.928 0.003 285)` | Hairline borders |
+| `--ring` | `#0052FF` | Focus ring |
+| `--destructive` | `oklch(0.577 0.245 27.325)` | Errors |
+| chart-1..5 | blue / emerald / 3 muted oklch | Data viz only |
+
+Dark theme (`.dark`) exists (`--background: oklch(0.16)`, `--primary: #3b7bff`), but the landing is shipped in light mode only.
+
+**Rule:** Blue is reserved for actions/links/icons-on-hover only. Emerald for positive status. Everything else is grayscale.
+
+### 1.2 Typography
+- Font: **Inter** (`--font-inter`, `--font-sans`, `--font-display`); mono = JetBrains Mono.
+- Body features: `font-feature-settings: "cv11", "ss01"` + `font-variation-settings: "opsz" 32`; antialiased + optimizeLegibility.
+- Weights: `font-medium` (500) for nav/CTAs/labels, `font-semibold` (600) for headings + logo wordmark.
+- Tracking: hero H1 `tracking-[-0.03em]`; section H2/footer CTA `tracking-[-0.02em]`; eyebrows `tracking-[0.18em]`; column titles `tracking-[0.14em]` / `[0.16em]`; logo `tracking-tight`.
+- Sizes (fluid `clamp()` everywhere):
+  - Hero H1: `text-[clamp(2.4rem,6vw,4.75rem)]` `leading-[1.02]`
+  - Section H2: `text-[clamp(1.9rem,4vw,3rem)]` `leading-[1.08]`
+  - Footer CTA H2: `text-[clamp(2rem,4.5vw,3.4rem)]` `leading-[1.06]`
+  - Giant ghost wordmark: `text-[clamp(4rem,18vw,16rem)]` `leading-none`
+  - Subtitle: `text-lg sm:text-xl leading-relaxed text-pretty`
+  - Logo wordmark: `text-[17px]`
+  - Eyebrows: `text-[11px]` / `text-xs` `uppercase`
+  - Trust line / status pills: `text-xs` / `text-[11px]`
+- Numerals: `tabular-nums` on every counter / price / stat / balance.
+- Text-wrap utilities: `text-balance` (headings), `text-pretty` (paragraphs).
+
+### 1.3 Spacing patterns
+- Section container: `mx-auto max-w-7xl px-5 sm:px-8`.
+- Navbar: `max-w-6xl`.
+- Hero H1 max width: `max-w-4xl`; subtitle `max-w-2xl`; section heading `max-w-3xl`; footer CTA `max-w-3xl` (text) / `max-w-xl` (paragraph).
+- Vertical rhythm: section padding `py-24 sm:py-32`; hero `pt-32 pb-20 sm:pt-40 sm:pb-28`; footer CTA band `py-20 sm:py-28`; link-grid `py-12 sm:py-16`.
+- Inside-hero rhythm: `mt-7` (headline) → `mt-6` (subtitle) → `mt-9` (CTAs) → `mt-7` (trust) → `mt-16` (dashboard).
+- Card padding: `p-5 sm:p-6` (Stats/Services); `px-3.5 py-2.5` (FloatingChip); `px-3 py-1` / `px-3 py-1.5` (eyebrow chips).
+- Grid gaps: `gap-3 sm:gap-4` (card grids); `gap-2.5` (link lists); `gap-x-6 gap-y-2` (trust line); `gap-1` (navbar links).
+- Buttons: hero `px-7 py-3.5`; navbar `px-5 py-2.5`; ghost `px-4 py-2`.
+
+### 1.4 Card / panel styling
+- **Default card** (Stats, Services, Payments cards): `rounded-2xl border border-border/60 bg-background p-5 sm:p-6 transition-shadow hover:nov-ring-lg` (some add `hover:-translate-y-1`).
+- **Hero dashboard frame** (premium): `rounded-[20px] nov-ring-lg nov-grain bg-background` wrapped in `<Tilt3D maxTilt={6}>` + glow under (`bg-primary/10 blur-[80px]`).
+- **Navbar**: pill `rounded-full px-3 py-2`, transparent at top → on scroll becomes `nov-glass nov-ring border border-border/40`.
+- **FloatingChip** (orbits hero): `rounded-2xl border border-border/60 bg-background/90 px-3.5 py-2.5 nov-ring backdrop-blur-xl`.
+- **Eyebrow chip**: `inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1 text-[11px] font-medium uppercase tracking-[0.18em] text-muted-foreground backdrop-blur-md`.
+- **Status pill** (footer): `inline-flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700` + `status-badge-glow` ring.
+- **Hairline section separator**: `h-px bg-gradient-to-r from-transparent via-border to-transparent`.
+- **Footer**: no card chrome on link columns; transparent `bg-background` + `border-t border-border`.
+
+### 1.5 Buttons
+- **Primary** (hero / footer CTA): `inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue` — wrapped in `<Magnetic>`.
+- **Primary** (navbar / dashboard): same recipe at `px-5 py-2.5`.
+- **Secondary outline**: `inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted`.
+- **Ghost link**: `rounded-full px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground`.
+- **Mobile menu**: `rounded-2xl px-4 py-3 text-base font-medium`.
+- Conventions: **all landing CTAs are pill-shaped** (`rounded-full`), use `nov-shadow-blue` on hover only (no animated shadow loop), get `<Magnetic>` wrapping on primary actions, and use `ArrowRight` as the canonical trailing icon (no Sparkles inside buttons on the landing).
+
+### 1.6 Animation / transition patterns
+- Universal easing: `cubic-bezier(0.16, 1, 0.3, 1)` (ease-out-quint).
+- Hero entrance (CSS keyframes via inline `style={{ animation: ... }}`): `heroFadeUp` (0.7s), `heroFadeBlur` (1s), `heroFadeUpBlur` (1.1s), `heroFade` (0.9s), `navbarIn`, `mobileMenuIn`, `chipIn`. Staggered via `delay` seconds.
+- Scroll reveal: `<Reveal>` (IntersectionObserver + CSS transitions, NOT framer-motion) with `opacity/transform/filter` transitions; `<RevealStagger stagger={0.07}>` + `<RevealItem>`.
+- 3D system: `.tilt-card` + `.tilt-card-inner` (translateZ(40px)) driven by `<Tilt3D>` rAF mouse tracking; `.reveal-3d` (rotateX 15° → 0° on scroll-in); `float-3d` (6s orbit); `glow-3d` (4s electric-blue box-shadow pulse); `.flip-card`.
+- Magnetic hover: `<Magnetic>` translates element toward cursor (rAF-throttled, `strength` prop, disabled on touch / reduced-motion / saveData).
+- Marquees: `nov-marquee` (25s) / `nov-marquee-slow` (35s), pause-on-hover.
+- Status: `nov-pulse-dot` (emerald ripple 2s), `status-badge-glow` (3s), `badge-pulse` (2s opacity).
+- Footer: `footer-link-3d` (translateX+Z + blue left-bar grows on hover), `footer-col-reveal`, `footer-logo-float` (5s).
+- Mobile (max-width:768px): all 3D + hero entry animations disabled for performance.
+- Reduced motion: every effect gated by `prefers-reduced-motion: reduce`.
+
+### 1.7 Key visual elements
+- **`nov-grid-bg`**: 56×56 px linear grid in `oklch(0.5 0.005 285 / 0.045)` — barely-visible graph paper.
+- **`nov-radial-fade`**: radial mask `ellipse 80% 60% at 50% 0%` — fades grid to transparent at bottom 75%.
+- **Glow blobs**: large `rounded-full blur-[100px]`/`blur-[120px]`/`blur-[140px]` circles — always subtle (`bg-primary/[0.06]`, `bg-emerald-400/10`, `bg-primary/[0.05]`, `bg-primary/[0.18]` only on the dark welcome screen).
+- **`nov-grain`**: SVG fractalNoise overlay at opacity 0.035, `mix-blend-mode: multiply`.
+- **`nov-text-gradient`**: `linear-gradient(180deg, oklch(0.18) 0%, oklch(0.4) 100%)` clipped to text — dark-to-medium gray vertical gradient for headline highlights.
+- **`nov-glass`**: `bg(white/0.72)` + `backdrop-filter: blur(20px) saturate(180%)` — frosted-glass navbar.
+- **`nov-ring` / `nov-ring-lg`**: layered `box-shadow` rings (1px hairline + soft drop shadows at 8/24/32/64 px offsets).
+- **`nov-shadow-blue`**: blue-tinted `box-shadow` (`0 1px 2px rgba(0,82,255,0.2), 0 8px 24px -6px rgba(0,82,255,0.35)`).
+- **Giant ghost wordmark**: `text-foreground/[0.04]` massive "NOVSMM" behind footer — Stripe-style brand watermark.
+- **Top hairline separators** between sections.
+
+### 1.8 Overall "feel"
+- **Light, minimal, premium SaaS aesthetic** — Stripe / Linear / Vercel / Apple quality bar.
+- Pure white canvas + near-black ink + electric-blue punctuation + emerald "live" dots.
+- Generous whitespace, tabular numerals, hairline borders, soft shadow rings (never hard drop-shadows).
+- Cinematic via 3D tilt + glow blobs + blur-reveal entrances — but **never garish**: no saturated gradients, no rainbow confetti, single-accent restraint.
+- One continuous scroll experience; sections separated by hairline gradients.
+
+### 1.9 Signature design elements (the "NOVSMM look")
+1. **Pill-shaped everything** (buttons, navbar, chips — `rounded-full`).
+2. **`nov-grid-bg` + `nov-radial-fade` combo** behind hero and footer CTA.
+3. **`Tilt3D` + `<Magnetic>`** on hero dashboard frame and primary CTAs.
+4. **FloatingChip orbiters** around the hero dashboard (`float-3d` 6s).
+5. **Emerald `nov-pulse-dot`** for every "live"/"operational" indicator.
+6. **Giant ghost wordmark** (`text-foreground/[0.04]`) behind the footer.
+7. **`nov-text-gradient`** on a single keyword in the hero H1.
+8. **`nov-ring-lg` + `nov-grain`** on the premium hero dashboard card.
+
+---
+
+## 2. Welcome screen — what it currently does differently
+
+`src/components/novsmm/welcome-screen.tsx` (490 lines) is **intentionally a DARK cinematic overlay** regardless of app theme. Every visual decision diverges from the light landing DNA:
+
+| Aspect | Landing | Welcome screen (current) |
+|---|---|---|
+| Canvas | `bg-background` (pure white) | `bg-neutral-950` (near-black) |
+| Card surface | `border-border/60 bg-background` (white) | `border-white/10 bg-neutral-900/80 backdrop-blur-2xl` (dark glass) |
+| Card shape | `rounded-2xl` (cards) / `rounded-full` (chips) | `rounded-3xl` (16px) card, `rounded-2xl` feature chips, `rounded-xl` button — **not pill** |
+| Body text | `text-foreground` / `text-muted-foreground` | `text-white/80`, `text-white/55`, `text-white/45`, `text-white/40` |
+| Heading gradient | `nov-text-gradient` (dark gray vertical) | `bg-gradient-to-br from-white via-white to-primary-200` (light-to-blue) |
+| Borders | `border-border/60` (gray) | `border-white/10`, `border-white/8`, `border-white/15` (alpha-white) |
+| Email/status chip | `border-emerald-500/30 bg-emerald-500/10 text-emerald-700` (footer recipe) | `border-emerald-400/30 bg-emerald-400/10 text-emerald-300` (dark-tuned) |
+| Button radius | `rounded-full` (pill) | `rounded-xl` (8px square-ish) |
+| Button shadow | `hover:nov-shadow-blue` only (CSS) | Pulsing animated `boxShadow` loop via framer-motion + `ring-offset-neutral-900` |
+| Button icon | `ArrowRight` only | `Sparkles + text + ArrowRight` |
+| Primary CTA wrap | `<Magnetic>` | bare `<motion.button>` (no magnetic) |
+| Glow blob opacity | `bg-primary/[0.06]`, `bg-emerald-400/10` | `bg-primary/[0.18]`, `bg-emerald-400/15` (3× stronger) |
+| Outer halo | none on landing | `-inset-6 rounded-[40px] bg-gradient-to-b from-primary/20 via-transparent to-emerald-400/10 blur-2xl` (saturated multi-color) |
+| Logo container | bare `<Logo>` (navbar / footer) | `border border-white/10 bg-white/5 px-3 py-1.5 backdrop-blur-sm` chip wrapper |
+| Icon halo | `bg-muted text-primary` or `border-border/60 bg-muted/50` (Stats/Services) | `bg-gradient-to-br from-primary/40 to-emerald-400/30` + `bg-primary/30 blur-xl` (saturated) |
+| Feature card surface | `bg-muted border-border/60` | `bg-white/[0.03] border border-white/8` |
+| Animation lib | CSS keyframes + IntersectionObserver (`<Reveal>`) | framer-motion throughout (`motion.main/section/div/button/span`, `AnimatePresence`, `containerVariants` blur(12px)→0, `itemVariants` y=20→0, staggered children) |
+| Confetti | none (design directive bans saturated colors) | 28 particles in 6 colors: `bg-primary`, `bg-emerald-400`, `bg-amber-400`, `bg-rose-400`, `bg-sky-300`, `bg-white` |
+| Icon extras | none | pulse ring (`border-primary/40` expanding) on login variant; spring scale + rotate + floating y-loop |
+| Shine sweep | none on landing CTAs | `-translate-x-full → translate-x-full` white/25 sweep on hover |
+
+**Net effect:** the welcome screen reads as a different product — dark, saturated, confetti-heavy, framer-motion-driven — clashing with the restrained, light, CSS-driven landing.
+
+---
+
+## 3. Concrete recommendations to match the landing aesthetic
+
+### A. Canvas & card (priority 1)
+1. Change `bg-neutral-950` → `bg-background` on the root `<motion.main>`.
+2. Replace `border border-white/10 bg-neutral-900/80 backdrop-blur-2xl nov-ring-lg` on the inner card with `border border-border/60 bg-background/95 backdrop-blur-2xl nov-ring-lg` (keep the `auth-card-3d` / `auth-card-inner` 3D wrappers).
+3. Add a `h-px bg-gradient-to-r from-transparent via-border to-transparent` hairline above the heading (Stats-section separator pattern).
+
+### B. Text colors (priority 1)
+4. Replace every `text-white/*` with the landing's `text-foreground` / `text-muted-foreground` / `text-foreground/80` / `text-foreground/60` / `text-foreground/45` scales.
+5. Replace the heading gradient `from-white via-white to-primary-200` with either:
+   - `nov-text-gradient` (pure landing recipe), OR
+   - `bg-gradient-to-br from-foreground via-foreground to-primary bg-clip-text text-transparent` (keeps a brand-blue tip while staying on a light surface).
+
+### C. Button (priority 1)
+6. Change `rounded-xl` → `rounded-full` (pill) and `px-6 py-3.5` → `px-7 py-3.5`.
+7. Remove the framer-motion pulsing `boxShadow` loop; rely on `hover:nov-shadow-blue` (CSS) like landing CTAs.
+8. Change `focus-visible:ring-offset-neutral-900` → `focus-visible:ring-offset-background`.
+9. Wrap the primary CTA in `<Magnetic strength={0.3}>` to match hero CTAs.
+10. Drop the `Sparkles` icon inside the button (landing never uses it inside CTAs); keep just `ArrowRight` as the trailing icon, OR keep `Sparkles` only if a "celebratory" cue is desired for the register variant.
+
+### D. Chips & status pills (priority 2)
+11. Logo chip: change `border border-white/10 bg-white/5 backdrop-blur-sm` → `border border-border/60 bg-background/70 backdrop-blur-md` (eyebrow-chip recipe).
+12. Verified-email chip: change `border-emerald-400/30 bg-emerald-400/10 text-emerald-300` → `border-emerald-500/30 bg-emerald-500/10 text-emerald-700` (footer status-pill recipe).
+
+### E. Feature highlight cards (priority 2)
+13. Card surface: `bg-white/[0.03] border border-white/8` → `bg-muted border-border/60` (or `bg-background border-border/60` with `hover:nov-ring-lg`).
+14. Icon chip: keep `bg-primary/15 text-primary` OR upgrade to the Stats pattern `bg-muted text-foreground transition-colors group-hover:bg-primary/10 group-hover:text-primary` (add `group` to the card).
+
+### F. Icon halo (priority 2)
+15. Replace the dual-color `bg-gradient-to-br from-primary/40 to-emerald-400/30` and `from-primary/30 to-sky-400/20` halos with a single subtle `bg-primary/10 blur-xl` glow + a thin `border border-primary/20` ring.
+16. Inner icon container: replace `border-white/15 bg-neutral-950/60 backdrop-blur-sm` → `border-border/60 bg-muted` (Stats/Services pattern).
+17. Drop the pulse-ring (`border-primary/40` expanding) on the login variant — the landing uses `nov-pulse-dot` only for status dots, never for icon rings.
+
+### G. Glow blobs & outer halo (priority 2)
+18. Drop blob opacities to landing levels: `bg-primary/[0.18]` → `bg-primary/[0.06]`; `bg-emerald-400/15` → `bg-emerald-400/10`; `bg-primary/10` → `bg-primary/[0.05]`.
+19. Replace the outer halo ring `-inset-6 rounded-[40px] bg-gradient-to-b from-primary/20 via-transparent to-emerald-400/10 blur-2xl` with a single-color `bg-primary/[0.06] blur-[120px]` blob (hero recipe) — OR remove entirely.
+
+### H. Confetti (priority 3)
+20. Either (a) **remove confetti entirely** — the master PDF design directive explicitly bans saturated colors and the landing never uses amber / rose / sky, OR (b) desaturate to a 3-color brand-only palette: `bg-primary`, `bg-emerald-500`, `bg-foreground` (drop `bg-amber-400`, `bg-rose-400`, `bg-sky-300`, `bg-white`). Option (a) is recommended for full alignment.
+
+### I. Animation library alignment (priority 3)
+21. The landing deliberately uses CSS-only keyframes + `<Reveal>` (IntersectionObserver) for performance. Consider migrating the welcome screen's `containerVariants` / `itemVariants` (blur(12px)→0, staggered children) to either `<Reveal blur>` / `<RevealStagger>` or to the existing CSS keyframes (`heroFadeBlur`, `chipIn`, `heroFadeUp`). This reduces JS payload on first post-auth paint and aligns with the landing's "CSS-first motion" philosophy.
+22. If framer-motion is retained for the icon spring + confetti (legitimate use cases), keep it scoped to those elements only.
+
+### J. Optional brand-DNA reinforcements (priority 4)
+23. Add a giant ghost wordmark `NOVSMM` behind the card at `text-foreground/[0.04] text-[clamp(4rem,18vw,16rem)]` (footer pattern) — reinforces brand identity on the welcome screen.
+24. Add `nov-grain` to the card surface (hero-dashboard pattern) for the subtle noise texture.
+25. Wrap the card in `<Tilt3D maxTilt={4}>` (lighter than hero's 6°) for the signature mouse-tilt interaction.
+
+---
+
+## 4. Files consulted (no files modified)
+- `/home/z/my-project/worklog.md` (project context, prior task history)
+- `/home/z/my-project/src/app/page.tsx` (landing composition)
+- `/home/z/my-project/src/app/globals.css` (design tokens + all custom utilities + keyframes)
+- `/home/z/my-project/src/components/novsmm/welcome-screen.tsx` (target of comparison)
+- `/home/z/my-project/src/components/novsmm/hero.tsx` (hero DNA)
+- `/home/z/my-project/src/components/novsmm/navbar.tsx` (navbar DNA)
+- `/home/z/my-project/src/components/novsmm/footer.tsx` (footer DNA)
+- `/home/z/my-project/src/components/novsmm/section-heading.tsx` (eyebrow/H2 recipe)
+- `/home/z/my-project/src/components/novsmm/logo.tsx` (logo treatment)
+- `/home/z/my-project/src/components/novsmm/reveal.tsx` (scroll-reveal primitive)
+- `/home/z/my-project/src/components/novsmm/magnetic.tsx` (magnetic-hover primitive)
+- `/home/z/my-project/src/components/novsmm/tilt-3d.tsx` (3D-tilt primitive)
+- `/home/z/my-project/src/components/novsmm/hero-dashboard.tsx` (light SVG dashboard preview)
+- `/home/z/my-project/src/components/novsmm/stats.tsx` (card grid recipe confirmation)
+- `/home/z/my-project/src/components/novsmm/services.tsx` (ServiceCard recipe confirmation)
+
+
+---
+Task ID: REDESIGN-WELCOME-LIGHT
+Agent: subagent (frontend — welcome-screen redesign)
+Task: Rewrite `/home/z/my-project/src/components/novsmm/welcome-screen.tsx` so it matches the NOVSMM landing page's light, minimal, premium SaaS aesthetic (per the ANALYZE-LANDING-DESIGN report at line 15821 of this worklog).
+
+Work Log:
+- Read the full ANALYZE-LANDING-DESIGN report (worklog.md:15821–16052) which catalogued the landing DNA (light `bg-background` canvas, single-accent blue #0052FF, emerald for positive states, `nov-grid-bg`/`nov-radial-fade`, pill buttons, `Magnetic` CTAs, `hover:nov-shadow-blue` only, giant ghost wordmark `text-foreground/[0.04]`, eyebrow `tracking-[0.18em]`, `nov-text-gradient` heading, footer status-pill `border-emerald-500/30 bg-emerald-500/10 text-emerald-700`, Stats/Services card recipe `border-border/60 bg-muted/50` + `group-hover:bg-primary/10 group-hover:text-primary` icon chips) and the 25 concrete class-level changes required.
+- Re-read the current `welcome-screen.tsx` (490 lines, dark `bg-neutral-950` + confetti + pulsing framer-motion shadow loop) to extract the behavior contract: `WelcomeScreenProps` interface (`variant`, `userName`, `userEmail`, `onComplete`), 3s login auto-advance with countdown + progress bar, Enter/Escape key handlers, `useReducedMotion` support, double-complete `useRef` guard, 3 register feature cards (Wallet / 24-7 support / Global payments), role="dialog" + aria-modal + aria-labelledby + sr-only + autoFocus.
+- Read `hero.tsx` to confirm the exact pill-button + `<Magnetic>` recipe (`<Magnetic as="button" strength={0.3}><span className="... rounded-full bg-primary px-7 py-3.5 ... hover:nov-shadow-blue">…<ArrowRight/></span></Magnetic>`), the eyebrow chip + `nov-pulse-dot` pattern, the glow-blob opacities (`bg-primary/[0.06]`, `bg-emerald-400/10`, `bg-primary/[0.05]`), and the `Tilt3D`+`nov-grain`+`nov-ring-lg` hero-dashboard frame recipe.
+- Read `magnetic.tsx` to confirm the component accepts `as="div" | "button" | "a"`, `strength`, `onClick`, and applies a rAF-throttled translate transform (disabled on touch / reduced-motion / saveData). Chose `as="div"` wrapping a real `<button>` so the CTA keeps `autoFocus`, `type="button"`, `aria-label`, and `onClick` while still inheriting the magnetic hover transform from the parent div (the button moves with the div).
+- Read `logo.tsx` (vector `logo.svg`, `text-foreground` wordmark) and the footer giant-ghost-wordmark recipe (`text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04]`).
+- Grepped `globals.css` to confirm the existence and exact behavior of every utility class referenced: `.nov-grain` (fractalNoise overlay, opacity 0.035, multiply blend), `.nov-text-gradient` (linear-gradient 180° oklch(0.18)→oklch(0.4), clipped to text), `.nov-ring-lg` (layered hairline+drop box-shadow), `.nov-shadow-blue` (`0 1px 2px rgba(0,82,255,0.2), 0 8px 24px -6px rgba(0,82,255,0.35)`), `.nov-pulse-dot` (`nov-pulse-ring 2s infinite`), `@keyframes float-3d` (6s translateY/rotateY/rotateX orbit) + `.float-3d` class.
+- Wrote the complete rewrite (415 lines) to `/home/z/my-project/src/components/novsmm/welcome-screen.tsx` implementing every requirement in the task spec.
+
+Stage Summary:
+- File written: `/home/z/my-project/src/components/novsmm/welcome-screen.tsx` (415 lines, production-ready, no TODOs).
+- TypeScript verification: `npx tsc --noEmit` passes with zero errors (confirmed no welcome-screen-specific errors via `grep -i "welcome-screen"` on tsc output).
+- ESLint: `bun run lint` currently fails repo-wide due to a pre-existing environment incompatibility (`@typescript-eslint/utils` FlatESLint constructor TypeError against ESLint 10.6.0) — unrelated to this change; the welcome-screen file was authored against the same conventions used by the rest of the `novsmm/` components.
+- Dev server log check: only an unrelated NextAuth `JWEDecryptionFailed` 401 on `/api/notifications` (stale session cookie) — no welcome-screen runtime errors.
+
+Implementation map (spec requirement → delivered):
+1. Canvas: `bg-background` (white) on `<motion.main>` + `nov-grid-bg nov-radial-fade` background layer. ✅
+2. Card: `auth-card-3d` > `auth-card-inner` wrappers, light surface `border border-border/60 bg-background/95 backdrop-blur-2xl nov-ring-lg`, plus `nov-grain` texture. ✅
+3. Text colors: `text-foreground` / `text-foreground/80` / `text-muted-foreground` — zero `text-white/*`. ✅
+4. Heading: `nov-text-gradient` class, `text-3xl sm:text-4xl font-semibold tracking-[-0.03em] text-balance`. ✅
+5. Button: `rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground hover:nov-shadow-blue`, wrapped in `<Magnetic as="div" strength={0.3}>`, `ArrowRight` only (no Sparkles, no shine sweep, no pulsing shadow loop). ✅
+6. Logo chip: `border-border/60 bg-background/70 backdrop-blur-md rounded-full`. ✅
+7. Email chip: `border-emerald-500/30 bg-emerald-500/10 text-emerald-700 rounded-full` + `nov-pulse-dot` emerald status dot (footer status-pill recipe). ✅
+8. Feature cards: `rounded-2xl border border-border/60 bg-muted/50 p-4` with `group` + `group-hover:bg-primary/10 group-hover:text-primary` icon chips. ✅
+9. Icon halo: single `bg-primary/10 blur-xl` glow + `border border-primary/20` ring; inner container `border-border/60 bg-muted rounded-2xl` with `text-primary` icon. ✅
+10. Glow blobs: `bg-primary/[0.06]` and `bg-emerald-400/10` (login: `bg-primary/[0.05]`) — landing-level opacities. ✅
+11. Confetti: REMOVED entirely. Replaced with 7 subtle CSS-driven floating dots using the existing `float-3d` keyframe, brand-only palette (`bg-primary/15`, `bg-primary/20`, `bg-emerald-500/15`, `bg-emerald-500/20`), register-only, gated by `useReducedMotion`. ✅
+12. Animations: framer-motion retained but simplified — container `initial={{opacity:0, filter:"blur(8px)"}} animate={{opacity:1, filter:"blur(0px)"}} transition={{duration:0.5, ease:[0.16,1,0.3,1]}}` with `staggerChildren:0.08`; children `y:20→0`; icon spring scale `0→1` (stiffness 220, damping 16, gentle) + optional 3.4s y-float loop; pulsing button shadow loop REMOVED; `useReducedMotion` support preserved. ✅
+13. Giant ghost wordmark: `NOVSMM` centered behind the card at `text-[clamp(4rem,18vw,16rem)] font-bold leading-none tracking-tight text-foreground/[0.04]` (z-0, card at z-10). ✅
+14. Eyebrow: `text-[11px] uppercase tracking-[0.18em] text-muted-foreground` above the heading — "WELCOME" (register) / "WELCOME BACK" (login). ✅
+15. Props interface: unchanged `WelcomeScreenProps { variant; userName; userEmail; onComplete }`. ✅
+16. Behavior preserved: register waits for click; login auto-advances after 3000ms with countdown `{remaining}s` + linear progress bar; Enter/Escape key handlers; `useReducedMotion` support; double-complete `useRef` guard. ✅
+17. Imports: exactly the spec'd set — `motion, useReducedMotion` (framer-motion); `useEffect, useRef, useState` (react); `PartyPopper, ArrowRight, Wallet, Headphones, Globe, Hand` (lucide-react); `Logo`, `Magnetic`. Dropped `AnimatePresence`, `useMemo`, `CheckCircle2`, `Sparkles` (no longer needed — confetti removed, email chip uses `nov-pulse-dot`, firstName computed inline). ✅
+18. Accessibility: `role="dialog"`, `aria-modal="true"`, `aria-labelledby={headingId}`, `sr-only` context line, `autoFocus` on the CTA button, Enter/Escape window keydown listener. ✅
+
+Net visual result: the welcome screen now reads as a natural extension of the landing page — pure white canvas, near-black ink, single blue accent on the CTA + icon, emerald for the verified-email state, pill button with magnetic hover, giant ghost NOVSMM watermark, subtle grid + glow, restrained CSS-driven floating dots instead of rainbow confetti. Same NOVSMM DNA (grid background, ghost wordmark, pill buttons, single blue accent, emerald for positive states), same behavior contract.
