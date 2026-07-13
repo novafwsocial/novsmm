@@ -15650,3 +15650,26 @@ Stage Summary:
 - `tsc --noEmit` passes cleanly with both SQLite (sandbox) and PostgreSQL (user's WSL2) schema providers.
 - End-to-end browser verification confirms registration (HTTP 201 + auto-login + onboarding redirect) AND credentials login (HTTP 200 + session + dashboard) both work.
 - User action required: on their WSL2, run `git pull origin main` → `npx prisma db push` (already done) → `npm run build` (will now succeed) → restart PM2/process manager. The OAuth fix from the prior session will then be live and Google login will work end-to-end.
+
+---
+Task ID: FIX-OAUTH-PRISMAADAPTER-CONFLICT
+Agent: main (Z.ai Code)
+Task: Fix "Google login redirects to landing, no session created" — the user reports that OAuth (Google) login appears to register the user but redirects back to the landing page without creating a session or showing the dashboard.
+
+Work Log:
+- Analyzed the OAuth flow in src/lib/auth.ts. Found the ROOT CAUSE: the signIn callback was creating the user MANUALLY (db.user.create), but PrismaAdapter ALSO tries to create the user AFTER signIn returns true. This caused a unique-constraint violation (P2002) on email, which silently killed the OAuth flow — the session was never set, and the user was redirected to the landing page with no error feedback.
+- The developer who wrote the signIn callback assumed PrismaAdapter runs BEFORE signIn; in reality it runs AFTER. So on first OAuth login, the manual creation in signIn + PrismaAdapter's creation = duplicate email = P2002 = silent failure.
+- Fix 1: Removed manual user creation from signIn callback. Now signIn only has a defensive fallback: if a user already exists (from a prior partial attempt) but has no username, generate one. signIn no longer attaches id/role/username to the user object — PrismaAdapter sets user.id, and the jwt callback refreshes the rest from DB.
+- Fix 2: Added events.createUser handler. This fires AFTER PrismaAdapter creates the user (without username). The handler generates a unique username from name/email, updates the DB, sends a welcome notification, and writes an audit log. It's defensive (re-fetches to check if username already set) and error-tolerant (if it fails, signIn's fallback will retry on next login).
+- Fix 3: Fixed the jwt callback's DB refresh to include `username` in both the cache type and the Prisma select. Previously the refresh fetched balance/role/status/etc but NOT username — so after the initial jwt creation, the username was never refreshed from DB. Now token.username gets updated on every request, which means events.createUser's username update is picked up by the very first jwt call (cache miss → DB fetch → has the new username).
+- Fix 4: Added OAuth error handling in src/components/novsmm/app-view.tsx useUrlParamHandlers. NextAuth redirects to /?error=... on OAuth failure (e.g., OAuthCallback, OAuthCreateAccount). Previously the frontend silently ignored this param. Now it maps common error codes to human-readable toast messages and strips the param from the URL.
+- Verified tsc --noEmit exits 0 with both SQLite (sandbox) and PostgreSQL (user's WSL2) schema providers.
+- Simulated the full OAuth flow end-to-end with a tsx script: (1) PrismaAdapter.createUser creates user without username, (2) events.createUser generates username "googleoauthtest" and updates DB, (3) PrismaAdapter.linkAccount creates the Account row, (4) jwt callback refreshes from DB and gets the username. Result: JWT token has id+role+username+email — session would be authed. ✅
+- Verified credentials registration still works: POST /api/auth/register 201 + auto-login + onboarding redirect.
+- Committed as a0a85d4 and pushed to origin/main.
+
+Stage Summary:
+- ROOT CAUSE: PrismaAdapter + signIn callback both creating the user → P2002 unique constraint violation on email → silent OAuth failure → no session → redirect to landing.
+- 4 fixes applied across 2 files (src/lib/auth.ts, src/components/novsmm/app-view.tsx).
+- OAuth flow simulation passed: user created with username, account linked, JWT has all fields, session would be authed.
+- User action: git pull + npm run build + restart process manager. Google login will now create the user via PrismaAdapter + events.createUser (no conflict), set the session, and the frontend will redirect to the dashboard.
