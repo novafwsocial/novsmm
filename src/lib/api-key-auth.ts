@@ -206,9 +206,28 @@ export function hasPermission(apiKey: any, permission: string): boolean {
 }
 
 /**
- * API key auth wrapper — returns { user, apiKey, error }
+ * Check if an API key has ANY of the given permissions.
+ * Z-4 FIX: Allows routes to accept multiple valid scopes (e.g. /api/v1/refill
+ * accepts both "refill" and "order" for backward compatibility).
  */
-export async function requireApiKey(req: NextRequest, permission: string = "read") {
+export function hasAnyPermission(apiKey: any, permissions: string[]): boolean {
+  if (!apiKey?.permissions) return false;
+  const perms = String(apiKey.permissions)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return permissions.some((p) => perms.includes(p));
+}
+
+/**
+ * API key auth wrapper — returns { user, apiKey, error }
+ *
+ * Z-4 FIX: `permission` can now be a string OR an array of strings.
+ * If it's an array, the key must have at least ONE of the permissions.
+ * This allows routes to accept both the specific scope (e.g. "refill")
+ * and the general scope (e.g. "order") for backward compatibility.
+ */
+export async function requireApiKey(req: NextRequest, permission: string | string[] = "read") {
   const result = await validateApiKey(req);
   if (!result) {
     return {
@@ -217,11 +236,15 @@ export async function requireApiKey(req: NextRequest, permission: string = "read
       error: apiError("Invalid or missing API key", 401),
     };
   }
-  if (!hasPermission(result.apiKey, permission)) {
+
+  // Z-4 FIX: Support array of permissions (OR logic)
+  const perms = Array.isArray(permission) ? permission : [permission];
+  if (!hasAnyPermission(result.apiKey, perms)) {
+    const permLabel = perms.length === 1 ? `'${perms[0]}'` : `one of [${perms.map((p) => `'${p}'`).join(", ")}]`;
     return {
       user: null,
       apiKey: null,
-      error: apiError(`Missing '${permission}' permission`, 403),
+      error: apiError(`Missing ${permLabel} permission`, 403),
     };
   }
   return { ...result, error: null };

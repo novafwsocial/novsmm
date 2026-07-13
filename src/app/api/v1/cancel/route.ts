@@ -91,7 +91,7 @@ async function cancelSingleOrder(
 }
 
 export async function POST(req: NextRequest) {
-  const { user, error } = await requireApiKey(req, "order");
+  const { user, error } = await requireApiKey(req, ["order", "cancel"]);
   if (error) return error;
   const userId = user.id;
 

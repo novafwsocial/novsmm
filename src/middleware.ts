@@ -134,6 +134,24 @@ const RATE_LIMITS: { pattern: RegExp; max: number; windowMs: number }[] = [
 // removed in production. This closes the XSS vector that `'unsafe-inline'`
 // leaves open. Next.js 16 auto-applies the `x-nonce` request header to its
 // own injected inline scripts (RSC payload, streaming-SSR, bootstrap).
+/**
+ * C-1 FIX: Determine if the original client request was HTTPS, even when
+ * behind a TLS-terminating proxy (Cloudflare, nginx, Caddy). The proxy
+ * sets `x-forwarded-proto: https` to indicate the client connected via
+ * HTTPS, even though the proxy→origin connection is plain HTTP.
+ *
+ * Without this check, HSTS is never set in production (behind Cloudflare)
+ * because `req.nextUrl.protocol` is always `http:` at the origin.
+ */
+function isHttpsRequest(req: NextRequest): boolean {
+  // Direct HTTPS connection (rare in prod behind proxy, common in dev)
+  if (req.nextUrl.protocol === "https:") return true;
+  // Behind proxy — check x-forwarded-proto (set by Cloudflare/nginx/Caddy)
+  const forwardedProto = req.headers.get("x-forwarded-proto");
+  if (forwardedProto === "https") return true;
+  return false;
+}
+
 function addSecurityHeaders(res: NextResponse, nonce?: string, isHttps = false) {
   res.headers.set("X-Content-Type-Options", "nosniff");
   res.headers.set("X-Frame-Options", "DENY");
@@ -309,7 +327,7 @@ export function middleware(req: NextRequest) {
     const res = NextResponse.next({
       request: { headers: requestHeaders },
     });
-    addSecurityHeaders(res, nonce, req.nextUrl.protocol === "https:");
+    addSecurityHeaders(res, nonce, isHttpsRequest(req));
 
     // PERF: Cache HTML pages at Cloudflare edge for 60s (s-maxage).
     // Stale-while-revalidate allows serving cached content while fetching fresh.
@@ -359,7 +377,7 @@ export function middleware(req: NextRequest) {
         res.headers.set("Vary", "Origin");
         res.headers.set("Access-Control-Max-Age", "86400"); // 24h cache preflight
       }
-      addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
+      addSecurityHeaders(res, undefined, isHttpsRequest(req));
       return res;
     }
     const res = NextResponse.next();
@@ -370,7 +388,7 @@ export function middleware(req: NextRequest) {
       res.headers.set("Access-Control-Allow-Credentials", "false");
       res.headers.set("Vary", "Origin");
     }
-    addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
+    addSecurityHeaders(res, undefined, isHttpsRequest(req));
     // SEC FIX (H-001): pass IP to downstream via REQUEST headers (not response).
     // Previously was res.headers.set() which doesn't propagate to route handlers.
     // Now we use NextResponse.next({ request: { headers } }) to inject the header.
@@ -494,7 +512,7 @@ export function middleware(req: NextRequest) {
   }
 
   const res = NextResponse.next();
-  addSecurityHeaders(res, undefined, req.nextUrl.protocol === "https:");
+  addSecurityHeaders(res, undefined, isHttpsRequest(req));
 
   // CRITICAL: Never cache auth/session endpoints — they must be per-session.
   // Without this, Cloudflare might cache /api/auth/csrf or /api/auth/session,

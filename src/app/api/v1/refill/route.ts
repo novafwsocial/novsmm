@@ -133,7 +133,7 @@ async function requestRefill(
 }
 
 export async function POST(req: NextRequest) {
-  const { user, error } = await requireApiKey(req, "order");
+  const { user, error } = await requireApiKey(req, ["order", "refill"]);
   if (error) return error;
   const userId = user.id;
 
