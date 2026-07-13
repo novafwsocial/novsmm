@@ -45,6 +45,8 @@
     "examples",
     "tool-results",
     "agent-ctx",
-    "upload"
+    "upload",
+    "src/__tests__",
+    "vitest.config.ts"
   ]
 }
