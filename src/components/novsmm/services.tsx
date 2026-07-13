@@ -56,7 +56,7 @@ function ServiceCard({ platform }: { platform: Platform }) {
   const { t } = useLanguage();
   return (
     <div
-      className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-background p-5 transition-all duration-300 hover:-translate-y-1 hover:nov-ring-lg"
+      className="group relative flex h-full min-h-[170px] flex-col justify-between gap-3 rounded-2xl border border-border/70 bg-background p-5 transition-all duration-300 hover:-translate-y-1 hover:nov-ring-lg"
     >
       {/* Hover glow — CSS-only, no JS tracking */}
       <div
@@ -75,7 +75,7 @@ function ServiceCard({ platform }: { platform: Platform }) {
         <div className="text-base font-semibold text-foreground">
           {platform.name}
         </div>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground line-clamp-2">
           {platform.blurb}
         </p>
       </div>

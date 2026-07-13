@@ -60,7 +60,7 @@ export function Hero() {
         >
           <a
             href="#stats"
-            className="group inline-flex items-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-md transition-colors hover:text-foreground"
+            className="group inline-flex max-w-full flex-wrap items-center justify-center gap-2 rounded-full border border-border/60 bg-background/70 px-3 py-1.5 text-xs font-medium text-muted-foreground backdrop-blur-md transition-colors hover:text-foreground"
           >
             <span className="relative flex h-1.5 w-1.5">
               <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -92,11 +92,11 @@ export function Hero() {
 
         {/* CTAs */}
         <div
-          className="mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row"
+          className="mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center"
           style={{ animation: "heroFadeUp 0.9s 0.26s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
-            <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
+            <span className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue sm:w-auto">
               {t("landing.hero.startFree")}
               <ArrowRight className="h-4 w-4" />
             </span>
@@ -106,13 +106,13 @@ export function Hero() {
               step without forcing them to scroll looking for it. */}
           <a
             href="/pricing"
-            className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted"
+            className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted sm:w-auto"
           >
             {t("landing.hero.viewPricing")}
             <ArrowRight className="h-3.5 w-3.5" />
           </a>
           <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
-            <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted">
+            <span className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-border bg-background/70 px-7 py-3.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted sm:w-auto">
               <Play className="h-3.5 w-3.5 fill-current" />
               {t("landing.hero.signIn")}
             </span>

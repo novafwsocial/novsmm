@@ -231,7 +231,7 @@ export function Footer() {
       {/* Link grid */}
       <div className="border-t border-border/60">
         <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-x-8 lg:grid-cols-6 lg:gap-x-10">
             <div className="col-span-2 lg:col-span-2">
               <a
                 href="#hero"
@@ -356,7 +356,7 @@ export function Footer() {
       {/* giant wordmark — subtle depth */}
       <div
         aria-hidden
-        className="pointer-events-none select-none overflow-hidden"
+        className="pointer-events-none relative select-none overflow-hidden"
       >
         <motion.div
           initial={{ opacity: 0 }}
@@ -366,7 +366,8 @@ export function Footer() {
           // U-L-007: opacity was 0.03 — invisible on some monitors (especially
           // low-contrast IPS panels and anti-glare screens). Bumped to 0.04 so
           // the wordmark is barely visible (the design intent) but not invisible.
-          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04]"
+          // FIX: Added py-4 so the text isn't clipped vertically by overflow-hidden
+          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04] py-4"
         >
           NOVSMM
         </motion.div>
