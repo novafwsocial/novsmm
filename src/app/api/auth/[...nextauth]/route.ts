@@ -20,32 +20,32 @@ async function handleRequest(
   req: Request,
   ctx: { params: Promise<{ nextauth: string[] }> }
 ) {
-  // DIAGNOSTIC LOG: log the URL and method for every auth request so we can
-  // trace the OAuth flow (signin → callback → session) in the server logs.
+  // DIAGNOSTIC LOG: log every auth request so we can trace the full OAuth flow.
   const url = typeof req?.url === "string" ? req.url : "(unknown url)";
   const method = req?.method ?? "(unknown method)";
   const params = await ctx.params;
   const nextauthPath = params?.nextauth?.join("/") ?? "";
 
-  if (
-    nextauthPath.includes("callback/google") ||
-    nextauthPath.includes("signin/google") ||
-    nextauthPath.includes("callback/facebook") ||
-    nextauthPath.includes("signin/facebook") ||
-    nextauthPath.includes("callback/github") ||
-    nextauthPath.includes("signin/github") ||
-    nextauthPath.includes("callback/twitter") ||
-    nextauthPath.includes("signin/twitter")
-  ) {
-    console.log(`[auth-route] ${method} /api/auth/${nextauthPath}`);
+  // Log ALL auth requests (not just google) — shorter format for non-OAuth
+  if (nextauthPath.includes("callback/") || nextauthPath.includes("signin/")) {
+    console.log(`[auth-route] ${method} /api/auth/${nextauthPath} | url=${url}`);
   }
 
   try {
     const options = await getDynamicAuthOptions();
     // NextAuth v4 App Router signature: NextAuth(req, ctx, options)
     // where ctx is { params: { nextauth: string[] } }
-    const handler = NextAuth(req as any, { params: { nextauth: params.nextauth } } as any, options);
-    return handler;
+    const result = await NextAuth(req as any, { params: { nextauth: params.nextauth } } as any, options);
+
+    // DIAGNOSTIC: log the response status + Location header for OAuth callbacks
+    // so we can see where NextAuth is redirecting after the callback.
+    if (nextauthPath.includes("callback/")) {
+      const status = result?.status ?? "(unknown)";
+      const location = result?.headers?.get?.("location") ?? "(no redirect)";
+      console.log(`[auth-route] callback result: status=${status}, location=${location}`);
+    }
+
+    return result;
   } catch (e) {
     console.error(`[auth-route] ERROR handling ${method} /api/auth/${nextauthPath}:`, e);
     throw e;
