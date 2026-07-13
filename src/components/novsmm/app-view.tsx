@@ -261,7 +261,7 @@ function ResetPasswordModal({
  *   lands on "/" with a session but hasn't explicitly asked to see the landing).
  */
 export function AppView({ landing }: { landing: ReactNode }) {
-  const { data: session, isLoading } = useSession();
+  const { data: session, isLoading, refetch: refetchSession } = useSession();
   const { view, dashboardTab, setAuthed, setAuthLoading, setView, authed, browsingLanding, setBrowsingLanding, setOnboardingStep } = useApp();
   const { resetToken, setResetToken } = useUrlParamHandlers();
 
@@ -284,15 +284,14 @@ export function AppView({ landing }: { landing: ReactNode }) {
 
     // FIX (OAuth redirect): After a successful OAuth login, NextAuth redirects
     // to /?authed=1 (we set this as the callbackUrl in login/register screens).
-    // When we see this param, we KNOW the user just authenticated — even if
-    // the session polling hasn't picked up the new cookie yet. We force the
-    // view to "dashboard" and clear the param so it doesn't cause issues on
-    // refresh. If the session isn't set yet, the useSession hook will
-    // refetch shortly and the dashboard will render.
+    // When we see this param, we set a "post-login" flag in sessionStorage
+    // that prevents the "session lost → redirect to landing" logic from
+    // firing for 10 seconds, giving the session cookie time to be detected.
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
       if (params.get("authed") === "1") {
-        // Force the view to dashboard (the session will populate shortly)
+        // Set a post-login flag with a timestamp (valid for 10 seconds)
+        sessionStorage.setItem("novsmm_post_login", Date.now().toString());
         setBrowsingLanding(false);
         if (view !== "dashboard") {
           setView("dashboard");
@@ -321,12 +320,35 @@ export function AppView({ landing }: { landing: ReactNode }) {
       setBrowsingLanding(false);
       setView("dashboard");
     }
-    // If session is lost (e.g. token expired), return to landing.
-    if (!isAuthed && !isLoading && (view === "dashboard" || view === "onboarding")) {
-      setView("landing");
-      setBrowsingLanding(false);
+
+    // FIX: Check if we're in a post-login grace period (10 seconds after
+    // login redirect). During this period, DON'T redirect to landing even
+    // if the session hasn't been detected yet — the cookie might still be
+    // propagating. If the grace period expires and there's still no session,
+    // THEN redirect to landing.
+    const postLoginTs = typeof window !== "undefined" ? sessionStorage.getItem("novsmm_post_login") : null;
+    const inPostLoginGrace = postLoginTs && (Date.now() - parseInt(postLoginTs, 10)) < 10_000;
+
+    if (inPostLoginGrace && isAuthed) {
+      // Session detected during grace period — clear the flag
+      sessionStorage.removeItem("novsmm_post_login");
     }
-  }, [session, isLoading, view, authed, browsingLanding, setAuthed, setAuthLoading, setView, setBrowsingLanding, setOnboardingStep]);
+
+    // If session is lost (e.g. token expired), return to landing.
+    // BUT: skip this redirect if we're in the post-login grace period and
+    // the session is still loading — the cookie might not be detected yet.
+    if (!isAuthed && !isLoading && (view === "dashboard" || view === "onboarding")) {
+      if (inPostLoginGrace) {
+        // Grace period active but session not detected yet — force a refetch.
+        // The cookie might not have been detected on the first fetch.
+        refetchSession();
+      } else {
+        // No grace period, session definitively lost — redirect to landing
+        setView("landing");
+        setBrowsingLanding(false);
+      }
+    }
+  }, [session, isLoading, view, authed, browsingLanding, setAuthed, setAuthLoading, setView, setBrowsingLanding, setOnboardingStep, refetchSession]);
 
   const isAuthed = !!session?.user;
 
