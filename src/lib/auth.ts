@@ -610,31 +610,28 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
     callbacks: {
       async signIn({ user, account, profile }) {
         // FIX (OAuth): When a user signs in via OAuth (Google, Facebook, etc.),
-        // PrismaAdapter tries to create a User row automatically. But our User
-        // model requires a `username` field (unique, no default) — the auto-
-        // creation fails silently, and the user ends up without a session.
-        //
-        // This signIn callback intercepts OAuth logins, finds or creates the
-        // user with a proper username, and attaches the DB user ID to the
-        // user object so the jwt callback can use it.
+        // PrismaAdapter creates a User row automatically — but WITHOUT username
+        // (it's now String? @unique to allow null). This signIn callback:
+        // 1. Finds the user by email (PrismaAdapter may have just created them)
+        // 2. If username is null, generates one and updates the DB
+        // 3. Attaches DB user's id, role, username to the user object
+        //    so the jwt callback can use them
         if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
           try {
             const email = user.email?.toLowerCase();
             if (!email) return false;
 
-            // Find existing user by email
+            // Find existing user by email (PrismaAdapter may have just created them)
             let dbUser = await db.user.findUnique({ where: { email } });
 
             if (!dbUser) {
-              // Create new user from OAuth profile
-              // Generate a unique username from the email or name
+              // PrismaAdapter didn't create the user — create manually
               const baseUsername = (user.name || email.split("@")[0])
                 .toLowerCase()
                 .replace(/[^a-z0-9_]/g, "")
                 .slice(0, 20) || "user";
               let username = baseUsername;
               let suffix = 1;
-              // Ensure username uniqueness
               while (await db.user.findUnique({ where: { username } })) {
                 username = `${baseUsername}${suffix++}`;
               }
@@ -647,11 +644,9 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                   image: user.image || null,
                   role: "user",
                   status: "active",
-                  // passwordHash is null — OAuth-only account
                 },
               });
 
-              // Send welcome notification
               await createNotification({
                 userId: dbUser.id,
                 type: "system",
@@ -664,10 +659,33 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 provider: account.provider,
                 email,
               }).catch(() => {});
+            } else if (!dbUser.username) {
+              // User exists but has no username (created by PrismaAdapter)
+              const baseUsername = (dbUser.name || email.split("@")[0])
+                .toLowerCase()
+                .replace(/[^a-z0-9_]/g, "")
+                .slice(0, 20) || "user";
+              let username = baseUsername;
+              let suffix = 1;
+              while (await db.user.findUnique({ where: { username } })) {
+                username = `${baseUsername}${suffix++}`;
+              }
+
+              dbUser = await db.user.update({
+                where: { id: dbUser.id },
+                data: { username },
+              });
+
+              await createNotification({
+                userId: dbUser.id,
+                type: "system",
+                title: "Welcome to NOVSMM 🎉",
+                message: `Hi ${dbUser.name || dbUser.username}! Your workspace is ready. Top up your wallet to place your first order.`,
+                severity: "success",
+              }).catch(() => {});
             }
 
             // Attach the DB user ID and other fields to the user object
-            // so the jwt callback can use them
             (user as any).id = dbUser.id;
             (user as any).role = dbUser.role;
             (user as any).username = dbUser.username;
