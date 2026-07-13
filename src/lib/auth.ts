@@ -459,6 +459,8 @@ export async function getConfiguredSocialProviders(): Promise<
  */
 async function getConfiguredOAuthProviders(): Promise<Provider[]> {
   const configured = await getConfiguredSocialProviders();
+  // DIAGNOSTIC LOG: helps debug "Google login redirects to landing" issues.
+  console.log(`[auth] getConfiguredOAuthProviders: configured=[${configured.join(",")}]`);
   const oauthProviders: Provider[] = [];
 
   // For each configured provider, look up the credentials (env var first,
@@ -480,12 +482,20 @@ async function getConfiguredOAuthProviders(): Promise<Provider[]> {
           if (creds?.clientId && creds?.clientSecret) {
             clientId = creds.clientId;
             clientSecret = creds.clientSecret;
+            console.log(`[auth] ${provider}: loaded credentials from DB (clientId: ${String(clientId).slice(0, 8)}...)`);
+          } else {
+            console.error(`[auth] ${provider}: DB setting exists but decryption returned null — LICENSE_ENCRYPTION_KEY may have changed!`);
           }
+        } else {
+          console.error(`[auth] ${provider}: getConfiguredSocialProviders said it's configured but no DB row found (race condition?)`);
         }
-      } catch {
+      } catch (e) {
+        console.error(`[auth] ${provider}: error reading DB credentials:`, e);
         // DB might not be available — skip this provider
         continue;
       }
+    } else {
+      console.log(`[auth] ${provider}: using env var credentials (clientId: ${String(clientId).slice(0, 8)}...)`);
     }
 
     if (!clientId || !clientSecret) continue;
@@ -624,11 +634,16 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         // generate one now so the jwt callback has a valid username to work
         // with.
         if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
+          console.log(`[auth] signIn callback: provider=${account.provider}, user.email=${user.email}, user.id=${user.id}`);
           try {
             const email = user.email?.toLowerCase();
-            if (!email) return false;
+            if (!email) {
+              console.error("[auth] signIn callback: no email from OAuth provider");
+              return false;
+            }
 
             const dbUser = await db.user.findUnique({ where: { email } });
+            console.log(`[auth] signIn callback: dbUser=${dbUser ? `found (id=${dbUser.id}, username=${dbUser.username})` : "not found"}`);
 
             if (dbUser && !dbUser.username) {
               // Defensive fallback: user exists (from a prior attempt where
@@ -646,6 +661,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 where: { id: dbUser.id },
                 data: { username },
               });
+              console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
             }
 
             // NOTE: We do NOT attach id/role/username to the user object here.
@@ -873,7 +889,11 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
       // username here and update the DB. By the time the jwt callback
       // runs (which refreshes from DB), the username is already set.
       async createUser({ user }) {
-        if (!user?.id || !user?.email) return;
+        console.log(`[auth] events.createUser: user.id=${user.id}, user.email=${user.email}`);
+        if (!user?.id || !user?.email) {
+          console.error("[auth] events.createUser: missing user.id or user.email");
+          return;
+        }
         try {
           // Re-fetch to check if username is already set (defensive —
           // a prior createUser event may have already run).
@@ -881,8 +901,14 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             where: { id: user.id },
             select: { username: true, name: true, email: true },
           });
-          if (!existing) return;
-          if (existing.username) return; // already has a username
+          if (!existing) {
+            console.error(`[auth] events.createUser: user ${user.id} not found in DB (PrismaAdapter may have failed)`);
+            return;
+          }
+          if (existing.username) {
+            console.log(`[auth] events.createUser: user already has username "${existing.username}", skipping`);
+            return;
+          }
 
           const baseUsername = (existing.name || existing.email.split("@")[0])
             .toLowerCase()
@@ -898,6 +924,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             where: { id: user.id },
             data: { username },
           });
+          console.log(`[auth] events.createUser: generated username "${username}" for user ${user.id}`);
 
           await createNotification({
             userId: user.id,

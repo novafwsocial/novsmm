@@ -18,9 +18,22 @@ import { getDynamicAuthOptions } from "@/lib/auth";
  * providers).
  */
 async function handleRequest(req: any, res: any) {
-  const options = await getDynamicAuthOptions();
-  const handler = NextAuth(options);
-  return handler(req, res);
+  // DIAGNOSTIC LOG: log the URL and method for every auth request so we can
+  // trace the OAuth flow (signin → callback → session) in the server logs.
+  const url = typeof req?.url === "string" ? req.url : "(unknown url)";
+  const method = typeof req?.method === "string" ? req.method : "(unknown method)";
+  if (url.includes("callback/google") || url.includes("signin/google")) {
+    console.log(`[auth-route] ${method} ${url}`);
+  }
+
+  try {
+    const options = await getDynamicAuthOptions();
+    const handler = NextAuth(options);
+    return handler(req, res);
+  } catch (e) {
+    console.error(`[auth-route] ERROR handling ${method} ${url}:`, e);
+    throw e;
+  }
 }
 
 export { handleRequest as GET, handleRequest as POST };
