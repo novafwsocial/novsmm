@@ -2,36 +2,52 @@ import NextAuth from "next-auth";
 import { getDynamicAuthOptions } from "@/lib/auth";
 
 /**
- * NextAuth route handler.
+ * NextAuth route handler for App Router (Next.js 16).
  *
- * BROAD-FIX-BATCH-1: previously this handler manually checked for the
- * Google OAuth Setting row and pushed a GoogleProvider into the static
- * authOptions.providers array. That approach only handled Google (Facebook,
- * GitHub, and Twitter credentials saved via the admin panel were never
- * registered) and mutated shared module state in a non-thread-safe way.
+ * NextAuth v4 supports App Router via the signature:
+ *   NextAuth(req: NextRequest, ctx: { params }, options: AuthOptions)
  *
- * The handler now calls `getDynamicAuthOptions()` which resolves ALL
- * configured OAuth providers (google, facebook, github, twitter) from both
- * env vars and the DB on each request. Admin credential changes take effect
- * on the next request without a server restart. The static `authOptions`
- * export remains for callers that only need session/callbacks (no OAuth
- * providers).
+ * The previous implementation passed (req, res) as if it were the Pages
+ * Router signature — this worked for credentials login (which doesn't need
+ * OAuth provider resolution on the signin page) but broke OAuth flows
+ * because the `params` (the [...nextauth] path segments like ["signin",
+ * "google"]) were never passed to NextAuth, so it couldn't route the
+ * request to the correct provider handler.
+ *
+ * Now we extract `params` from the route context and pass it correctly.
  */
-async function handleRequest(req: any, res: any) {
+async function handleRequest(
+  req: Request,
+  ctx: { params: Promise<{ nextauth: string[] }> }
+) {
   // DIAGNOSTIC LOG: log the URL and method for every auth request so we can
   // trace the OAuth flow (signin → callback → session) in the server logs.
   const url = typeof req?.url === "string" ? req.url : "(unknown url)";
-  const method = typeof req?.method === "string" ? req.method : "(unknown method)";
-  if (url.includes("callback/google") || url.includes("signin/google")) {
-    console.log(`[auth-route] ${method} ${url}`);
+  const method = req?.method ?? "(unknown method)";
+  const params = await ctx.params;
+  const nextauthPath = params?.nextauth?.join("/") ?? "";
+
+  if (
+    nextauthPath.includes("callback/google") ||
+    nextauthPath.includes("signin/google") ||
+    nextauthPath.includes("callback/facebook") ||
+    nextauthPath.includes("signin/facebook") ||
+    nextauthPath.includes("callback/github") ||
+    nextauthPath.includes("signin/github") ||
+    nextauthPath.includes("callback/twitter") ||
+    nextauthPath.includes("signin/twitter")
+  ) {
+    console.log(`[auth-route] ${method} /api/auth/${nextauthPath}`);
   }
 
   try {
     const options = await getDynamicAuthOptions();
-    const handler = NextAuth(options);
-    return handler(req, res);
+    // NextAuth v4 App Router signature: NextAuth(req, ctx, options)
+    // where ctx is { params: { nextauth: string[] } }
+    const handler = NextAuth(req as any, { params: { nextauth: params.nextauth } } as any, options);
+    return handler;
   } catch (e) {
-    console.error(`[auth-route] ERROR handling ${method} ${url}:`, e);
+    console.error(`[auth-route] ERROR handling ${method} /api/auth/${nextauthPath}:`, e);
     throw e;
   }
 }
