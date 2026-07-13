@@ -93,33 +93,84 @@ const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 // In-memory fallback
 const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
 
+/**
+ * Track a failed login attempt atomically.
+ *
+ * A-6 FIX: Previously used a non-atomic read-modify-write pattern
+ * (cacheGet → +1 → cacheSet). Under Redis with concurrent requests, N
+ * simultaneous attempts could all read the same count, all increment to
+ * count+1, and all write count+1 — net result: only 1 attempt tracked
+ * instead of N. This reduced the effective brute-force protection.
+ *
+ * Now uses Redis INCR (atomic increment) when Redis is available. INCR is
+ * a single Redis command that atomically increments and returns the new
+ * value — no read-modify-write window. The in-memory fallback uses a
+ * synchronous Map (safe because Node.js is single-threaded for sync ops).
+ */
 async function trackFailedAttempt(key: string) {
   const redisKey = `login_lock:${key}`;
+  const ttlSeconds = Math.ceil(LOCK_DURATION_MS / 1000);
 
-  // Try Redis
-  const existing = await cacheGet<{ count: number; lockedUntil: number }>(redisKey);
+  // ── Try Redis atomic INCR ──
+  try {
+    const { getRedis } = await import("./redis");
+    const redis = await getRedis();
+    if (redis) {
+      // Atomic increment — returns the NEW count after incrementing
+      const newCount = await redis.incr(redisKey);
+
+      // Set TTL on first increment (INCR doesn't set expiry)
+      if (newCount === 1) {
+        await redis.expire(redisKey, ttlSeconds);
+      }
+
+      // If this attempt triggered the lockout, set the lockedUntil marker
+      if (newCount >= MAX_FAILED_ATTEMPTS) {
+        const lockedUntil = Date.now() + LOCK_DURATION_MS;
+        await redis.set(`${redisKey}:locked`, String(lockedUntil), "EX", ttlSeconds);
+      }
+
+      // Also update in-memory for immediate consistency
+      loginAttempts.set(key, {
+        count: newCount,
+        lockedUntil: newCount >= MAX_FAILED_ATTEMPTS ? Date.now() + LOCK_DURATION_MS : 0,
+      });
+      return;
+    }
+  } catch {
+    // Redis error — fall through to in-memory
+  }
+
+  // ── In-memory fallback (single-threaded — no race) ──
+  const existing = loginAttempts.get(key);
   const count = (existing?.count ?? 0) + 1;
   const lockedUntil = count >= MAX_FAILED_ATTEMPTS ? Date.now() + LOCK_DURATION_MS : 0;
-
-  await cacheSet(redisKey, { count, lockedUntil }, Math.ceil(LOCK_DURATION_MS / 1000));
-
-  // Also update in-memory (for immediate consistency in fallback mode)
   loginAttempts.set(key, { count, lockedUntil });
 }
 
 async function isAccountLocked(key: string): Promise<{ locked: boolean; lockedUntil?: number }> {
   const redisKey = `login_lock:${key}`;
 
-  // Try Redis first
-  const data = await cacheGet<{ count: number; lockedUntil: number }>(redisKey);
-  if (data) {
-    if (data.lockedUntil > Date.now()) {
-      return { locked: true, lockedUntil: data.lockedUntil };
+  // ── Try Redis ──
+  try {
+    const { getRedis } = await import("./redis");
+    const redis = await getRedis();
+    if (redis) {
+      // Check the locked marker key (set by trackFailedAttempt when count >= MAX)
+      const lockedUntilStr = await redis.get(`${redisKey}:locked`);
+      if (lockedUntilStr) {
+        const lockedUntil = parseInt(lockedUntilStr, 10);
+        if (lockedUntil > Date.now()) {
+          return { locked: true, lockedUntil };
+        }
+      }
+      return { locked: false };
     }
-    return { locked: false };
+  } catch {
+    // Redis error — fall through to in-memory
   }
 
-  // Fallback to in-memory
+  // ── In-memory fallback ──
   const mem = loginAttempts.get(key);
   if (mem && mem.lockedUntil > Date.now()) {
     return { locked: true, lockedUntil: mem.lockedUntil };
@@ -129,6 +180,16 @@ async function isAccountLocked(key: string): Promise<{ locked: boolean; lockedUn
 
 async function clearFailedAttempts(key: string) {
   const redisKey = `login_lock:${key}`;
+  // A-6 FIX: Also delete the locked marker key
+  try {
+    const { getRedis } = await import("./redis");
+    const redis = await getRedis();
+    if (redis) {
+      await redis.del(redisKey, `${redisKey}:locked`);
+    }
+  } catch {
+    // fall through to cacheDel
+  }
   await cacheDel(redisKey);
   loginAttempts.delete(key);
 }
@@ -304,7 +365,17 @@ const providers: Provider[] = [
         if (!twoFactorOk) {
           await trackFailedAttempt(lockKeyEmail);
           if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
-          throw new Error("Invalid 2FA code");
+          // A-4 FIX: Return the SAME generic "Invalid credentials" message
+          // as the lockout check (line 192) and the password-fail path
+          // (line 202). Previously this returned "Invalid 2FA code" which
+          // let an attacker detect the lockout threshold: attempts 1-5
+          // returned "Invalid 2FA code", attempt 6+ returned "Invalid
+          // credentials" (from the lockout check). Now both return the
+          // same message, so the attacker can't tell when the lockout
+          // engaged. The frontend handles the UX message — it shows
+          // "Invalid 2FA code" when in 2FA mode regardless of the server
+          // error string.
+          throw new Error("Invalid credentials");
         }
 
         // Optional: log backup-code usage so support can reach out to users
@@ -604,7 +675,18 @@ export async function getGoogleOAuthConfig(): Promise<{
 function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
   return {
     adapter: PrismaAdapter(db),
-    session: { strategy: "jwt" },
+    // A-5 FIX: Reduced session maxAge from NextAuth's default (30 days) to
+    // 24 hours. NOVSMM handles wallet balances, orders, and withdrawals — a
+    // stolen session cookie (XSS, malicious browser extension, shared
+    // computer) would give the attacker a full month of access. 24h limits
+    // the window of exposure while still being usable for daily use. The
+    // passwordChangedAt check in the jwt callback still invalidates sessions
+    // immediately on password change, so users can force-logout all sessions
+    // by changing their password.
+    session: {
+      strategy: "jwt",
+      maxAge: 24 * 60 * 60, // 24 hours (in seconds)
+    },
     // SECURITY FIX (A-003): removed trustHost: true — it made NextAuth
     // derive the base URL from the forgeable Host header, enabling
     // host-header injection attacks (password-reset poisoning → account

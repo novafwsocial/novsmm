@@ -204,13 +204,17 @@ export function LoginScreen() {
           setLoading(false);
           return;
         }
-        if (result.error === "Invalid 2FA code") {
+        // A-4 FIX: The server now returns "CredentialsSignin" (generic) for
+        // BOTH wrong password AND wrong 2FA code (to prevent threshold
+        // detection). When the user is in the 2FA step, show a 2FA-specific
+        // message. When in the password step, show a password-specific message.
+        // The server error is the same in both cases — the frontend decides
+        // which UX message to show based on the current step.
+        if (needs2FA) {
           setError("Invalid 2FA code. Please try again.");
-          setLoading(false);
-          return;
+        } else {
+          setError("Invalid email or password. Please try again.");
         }
-        // NextAuth returns error: "CredentialsSignin" for wrong credentials
-        setError("Invalid email or password. Please try again.");
         setLoading(false);
         return;
       }
