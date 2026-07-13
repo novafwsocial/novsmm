@@ -282,6 +282,30 @@ export function AppView({ landing }: { landing: ReactNode }) {
       return;
     }
 
+    // FIX (OAuth redirect): After a successful OAuth login, NextAuth redirects
+    // to /?authed=1 (we set this as the callbackUrl in login/register screens).
+    // When we see this param, we KNOW the user just authenticated — even if
+    // the session polling hasn't picked up the new cookie yet. We force the
+    // view to "dashboard" and clear the param so it doesn't cause issues on
+    // refresh. If the session isn't set yet, the useSession hook will
+    // refetch shortly and the dashboard will render.
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("authed") === "1") {
+        // Force the view to dashboard (the session will populate shortly)
+        setBrowsingLanding(false);
+        if (view !== "dashboard") {
+          setView("dashboard");
+        }
+        // Strip the param so a manual refresh doesn't force-redirect again
+        params.delete("authed");
+        const newSearch = params.toString();
+        const newPath = `${window.location.pathname}${newSearch ? `?${newSearch}` : ""}${window.location.hash}`;
+        window.history.replaceState({}, document.title, newPath);
+        return;
+      }
+    }
+
     // Only auto-redirect to dashboard on the very first load when the user
     // is authed but still on the landing view AND hasn't explicitly chosen
     // to browse the landing page (browsingLanding=false).

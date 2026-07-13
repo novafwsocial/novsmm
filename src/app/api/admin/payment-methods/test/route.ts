@@ -19,7 +19,7 @@ export async function POST(req: NextRequest) {
   // Normalize method name
   const methodLower = method.toLowerCase();
   const pm = await db.paymentMethod.findFirst({
-    where: { name: { contains: method, mode: "insensitive" } },
+    where: { name: { contains: method } },
   });
 
   let creds: Record<string, any> | null = null;

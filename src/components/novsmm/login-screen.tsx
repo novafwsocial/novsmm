@@ -228,7 +228,10 @@ export function LoginScreen() {
   const handleSocial = async (provider: SocialProviderId) => {
     setSocialLoading(provider);
     setError(null);
-    await signIn(provider, { callbackUrl: "/" });
+    // FIX: callbackUrl includes ?authed=1 so the frontend knows this is a
+    // post-OAuth redirect and should force-redirect to the dashboard even
+    // if the session polling hasn't picked up the new cookie yet.
+    await signIn(provider, { callbackUrl: "/?authed=1" });
   };
 
   return (
