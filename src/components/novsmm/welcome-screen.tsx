@@ -115,7 +115,7 @@ export function WelcomeScreen({
       }
     }, 200);
     return () => clearInterval(tick);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isRegister, reduceMotion]);
 
   // Keyboard: Escape / Enter advances (friendly for keyboard users).
@@ -128,7 +128,7 @@ export function WelcomeScreen({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   // Simplified, landing-aligned motion variants.

@@ -2895,7 +2895,7 @@ function SellTab() {
     prevOffersSalesMapRef.current = Object.fromEntries(
       offers.map((o: any) => [o.id, o.sales]),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [offersData?.totalSales]);
 
   const isEditing = !!editingOffer;
