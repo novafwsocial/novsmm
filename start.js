@@ -13,18 +13,58 @@
  * This works regardless of how the process was launched (PM2, systemd,
  * Docker, direct node, etc.).
  *
- * Usage in ecosystem.config.js:
- *   script: "node",
- *   args: "start.js",
- *
- * Or in package.json:
- *   "start:prod": "node start.js"
+ * FIX: Also adds a manual .env parser as fallback in case @next/env
+ * fails to load certain vars (e.g. if the .env has Windows line
+ * endings or unusual quoting).
  */
-const { loadEnvConfig } = require("@next/env");
+const fs = require("fs");
+const path = require("path");
 
-// Load .env, .env.local, .env.production, .env.production.local
-// from the current working directory.
-loadEnvConfig(process.cwd());
+// ── Method 1: @next/env (the official Next.js env loader) ──
+try {
+  const { loadEnvConfig } = require("@next/env");
+  loadEnvConfig(process.cwd());
+} catch (e) {
+  console.warn("[start] @next/env failed, falling back to manual parser:", e.message);
+}
+
+// ── Method 2: Manual .env parser (fallback) ──
+// This catches vars that @next/env might miss (e.g. if the .env file has
+// Windows line endings \r\n or unusual quoting that confuses the parser).
+function loadEnvManually(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const lines = content.split(/\r?\n/); // handle both \n and \r\n
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const eqIndex = trimmed.indexOf("=");
+      if (eqIndex === -1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      let value = trimmed.slice(eqIndex + 1).trim();
+      // Strip surrounding quotes
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      // Strip inline comments (but not # inside quotes — already handled)
+      if (!value.startsWith('"') && !value.startsWith("'")) {
+        const hashIndex = value.indexOf(" #");
+        if (hashIndex !== -1) value = value.slice(0, hashIndex).trim();
+      }
+      // Only set if not already in process.env (don't override existing)
+      if (!process.env[key]) {
+        process.env[key] = value;
+      }
+    }
+  } catch (e) {
+    console.warn(`[start] manual .env load failed: ${e.message}`);
+  }
+}
+
+loadEnvManually(path.join(process.cwd(), ".env"));
 
 // Log which env vars were loaded (for debugging — safe because it only
 // logs the KEY names, never the values).
@@ -43,7 +83,25 @@ const loadedKeys = [
 ];
 console.log("[start] Environment loaded. Present vars:");
 for (const key of loadedKeys) {
-  console.log(`  ${key}: ${process.env[key] ? "✓ set" : "✗ NOT SET"}`);
+  const isSet = Boolean(process.env[key]);
+  console.log(`  ${key}: ${isSet ? "set" : "NOT SET"}`);
+}
+
+// CRITICAL CHECK: DATABASE_URL is required for Prisma to work.
+// If it's still not set, log a clear error with debugging instructions.
+if (!process.env.DATABASE_URL) {
+  console.error("[start] ═══════════════════════════════════════════════════════");
+  console.error("[start] ❌ CRITICAL: DATABASE_URL is NOT SET!");
+  console.error("[start]");
+  console.error("[start] The app will start but Prisma will fail with:");
+  console.error("[start]   'Environment variable not found: DATABASE_URL'");
+  console.error("[start]");
+  console.error("[start] Debugging steps:");
+  console.error("[start]   1. Check that ~/novsmm/.env exists and has DATABASE_URL=...");
+  console.error("[start]   2. Check for Windows line endings: file .env  (should say ASCII, not CRLF)");
+  console.error("[start]   3. Check for hidden characters: cat -A .env | grep DATABASE_URL");
+  console.error("[start]   4. Convert if needed: dos2unix .env  OR  sed -i 's/\\r$//' .env");
+  console.error("[start] ═══════════════════════════════════════════════════════");
 }
 
 // Now spawn next start with the loaded env
