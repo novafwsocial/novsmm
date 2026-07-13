@@ -671,6 +671,9 @@ const AdminUsers = memo(function AdminUsers() {
       {/* AUDIT R3: Step-up auth modal for admin role changes */}
       {roleChangeTarget && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Confirm role change"
           className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
           onClick={() => { setRoleChangeTarget(null); setConfirmPw(""); }}
         >
@@ -802,6 +805,9 @@ function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void })
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Impersonate user"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1185,7 +1191,7 @@ function ServiceModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Service form" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
         <div className="text-base font-semibold">{mode === "create" ? "Add service" : "Edit service"}</div>
         <div className="mt-4 grid grid-cols-2 gap-3">
@@ -1440,7 +1446,7 @@ function ProviderModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="API provider form" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">{mode === "create" ? "Add API provider" : "Edit provider"}</div>
         <div className="mt-4 flex flex-col gap-3">
@@ -1615,7 +1621,7 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Configure payment credentials" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
         <button onClick={onClose} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-4 w-4" />
@@ -1744,7 +1750,7 @@ function AddPaymentMethodModal({ onClose, onCreate }: { onClose: () => void; onC
     try { await onCreate(form); onClose(); } catch { setLoading(false); }
   };
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Add payment method" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Add payment method</div>
         <div className="mt-4 flex flex-col gap-3">
@@ -1999,7 +2005,7 @@ function RoleModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Role form" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll">
         <div className="text-base font-semibold">{mode === "create" ? "Create role" : `Edit · ${role?.name}`}</div>
 
@@ -2285,7 +2291,7 @@ function AdminApiKeys() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Generate API key" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Generate API key</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -2306,7 +2312,7 @@ function AdminApiKeys() {
       )}
 
       {editingIp && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setEditingIp(null)}>
+        <div role="dialog" aria-modal="true" aria-label="Edit IP allowlist" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setEditingIp(null)}>
           <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Edit IP Allowlist</div>
             <p className="mt-1 text-xs text-muted-foreground">Comma-separated list of allowed IPs. Leave empty to allow any IP.</p>
@@ -2436,7 +2442,7 @@ function AdminLicenses() {
       </div>
 
       {showCreate && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Issue license" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowCreate(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Issue new license</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -2528,7 +2534,7 @@ function AdminCurrencies() {
         </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Add currency" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add currency</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -2607,7 +2613,7 @@ function AdminLanguages() {
         </div>
       </div>
       {showAdd && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
+        <div role="dialog" aria-modal="true" aria-label="Add language" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={() => setShowAdd(false)}>
           <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
             <div className="text-base font-semibold">Add language</div>
             <div className="mt-4 flex flex-col gap-3">
@@ -2942,7 +2948,7 @@ function PromotionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Promotion form" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">{mode === "create" ? "New promotion" : "Edit promotion"}</div>
         <div className="mt-4 flex flex-col gap-3">
@@ -3198,7 +3204,7 @@ function CouponModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Coupon form" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">{mode === "create" ? "Create coupon" : "Edit coupon"}</div>
         <div className="mt-4 flex flex-col gap-3">
@@ -3405,7 +3411,7 @@ function CreateManualOrderModal({
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label="Create manual order" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} className="relative modal-3d-enter w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg">
         <div className="text-base font-semibold">Create manual order</div>
         <div className="text-[11px] text-muted-foreground">Admin-created orders are complimentary (no balance debit).</div>
@@ -4266,6 +4272,9 @@ function EmailTemplateEditor({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit email template"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -4641,6 +4650,9 @@ function CmsEditor({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit content"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >

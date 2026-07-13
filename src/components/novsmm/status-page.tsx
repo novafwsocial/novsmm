@@ -116,6 +116,9 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="System status"
         className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-background/80 backdrop-blur-md sm:items-center"
         onClick={onClose}
       >

@@ -1587,6 +1587,9 @@ function CompareModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Compare services"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1746,6 +1749,9 @@ function ServiceDetailModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Service details"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -2140,6 +2146,9 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Mass order"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -2670,6 +2679,9 @@ function HistoryTab() {
           asks the user to confirm. Uses the same modal-3d-enter entrance. */}
       {refundTarget && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Refund order"
           className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
           onClick={() => !cancelOrder.isPending && !adminRefund.isPending && setRefundTarget(null)}
         >
@@ -3100,6 +3112,9 @@ function SellTab() {
       {/* Publish / Edit modal */}
       {showPublish && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Publish offer"
           className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
           onClick={closeModal}
         >
@@ -3318,6 +3333,9 @@ function BulkPublishModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bulk publish offers"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -3528,6 +3546,9 @@ function OfferStatsModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Offer statistics"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >

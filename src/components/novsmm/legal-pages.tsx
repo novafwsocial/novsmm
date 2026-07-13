@@ -777,6 +777,9 @@ export function LegalPages({
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Legal information"
           className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-background/80 backdrop-blur-sm"
           onClick={onClose}
         >

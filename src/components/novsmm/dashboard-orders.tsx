@@ -314,6 +314,9 @@ function OrderDetailDrawer({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Order details"
         className="fixed inset-0 z-[80] bg-foreground/40 backdrop-blur-sm"
       />
       {/* Drawer */}

@@ -317,6 +317,9 @@ function DangerZone() {
 
       {open && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Delete account"
           className="fixed inset-0 z-[90] flex items-center justify-center bg-foreground/50 p-4 backdrop-blur-sm"
           onClick={close}
         >

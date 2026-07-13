@@ -547,6 +547,9 @@ function CreateChildPanelModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Create child panel"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -785,6 +788,9 @@ function EditChildPanelModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit child panel"
       className="fixed inset-0 z-[85] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
