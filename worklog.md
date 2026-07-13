@@ -16110,3 +16110,973 @@ Work Log:
 
 Stage Summary (research deliverable — no files modified):
 All six visual-bug areas located with exact file paths, line numbers, and the CSS classes currently controlling the problematic behavior. Detailed per-item report delivered to the orchestrator (see final message). Ready for a follow-up task to apply fixes.
+
+---
+
+Task ID: MASTER-AUDIT-SEC-REMAINING
+Agent: subagent (general-purpose — security audit, remaining scope)
+Task: Master security audit — verify the 6 remaining findings NOT already covered by Lotes A-E. Scope: (1) WebSocket JWT field-name mismatch (3.6), (2) x-client-ip header propagation (3.5), (3) /api/internal/backup-status protection (3.2), (4) trustHost in auth.ts (3.1), (5) console.log leaks in API routes (Section 2), (6) .gitignore for tool-results/.claude (3.7). READ-ONLY audit — no files modified.
+
+Work Log:
+- Read worklog.md head + tail to recover context (NOVSMM Next.js 16 SaaS panel; Lotes A-E fixed 16 prior findings; OWASP/ASVS/SECURITY_AUDIT reports tracked in repo).
+- Read `mini-services/notifications-service/index.ts` (420 lines) end-to-end — confirmed `verifyJwt()` at L75-119 verifies HS256 signature with `crypto.timingSafeEqual` (no timing side-channel), checks `payload.exp`, and returns `payload.id || payload.sub || null` at L114.
+- Grepped `src/lib/auth.ts` for `token.` assignments — confirmed NextAuth `jwt({ token, user })` callback sets `token.id = user.id` at L841 (no `token.userId` is ever assigned).
+- Grepped entire `src/` for `token.userId|jwt.userId|payload.userId` → 0 hits. The audit prompt's hypothesis ("signed with `userId`") does NOT match current code.
+- Read `src/app/api/me/ws-token/route.ts` (52 lines) — found the smoking-gun fix comment at L42-44: `SEC FIX (H-003): was { userId: user.id, ws: true } but the notifications-service verifies payload.id || payload.sub. Changed to use 'sub' claim (standard JWT claim for subject/user ID).` Current code at L45-49 signs with `{ sub: user.id, ws: true }` + `expiresIn: '5m'`. Verifies `NEXTAUTH_SECRET` length ≥32 chars at L33 (S-L-001 fix).
+- Read `src/components/novsmm/dashboard-notifications.tsx` L50-90 — confirmed frontend fetches `/api/me/ws-token` and passes the JWT via `socket.io` `auth.token` handshake (NOT query string — R-L-004 fix). Matches `io.use()` middleware at notifications-service L215-229 which reads `socket.handshake.auth.token`.
+- Read `src/middleware.ts` (545 lines) end-to-end. Found `x-client-ip` injected via `NextResponse.next({ request: { headers: finalReqHeaders } })` in THREE places: page routes L327-329 (x-nonce), CORS-allowed v1 routes L399-402, general API routes L533-536. The fix comment at L392-395 + L529-532 explicitly says "SEC FIX (H-001): pass IP to downstream via REQUEST headers (not response). Previously was res.headers.set() which doesn't propagate to route handlers."
+- Read `src/lib/api-utils.ts` audit() helper L170-220 — confirms it reads `h.get("x-client-ip")` from request headers (via `headers()` from `next/headers`). Falls back through cf-connecting-ip → x-client-ip → x-forwarded-for (with TRUST_PROXY gate in prod) → "unknown".
+- Read `src/lib/auth.ts` getClientIp() L46-80 — same chain: cf-connecting-ip → x-client-ip → x-forwarded-for (TRUST_PROXY gated in prod) → "unknown". Used by brute-force lockout at L242-244.
+- Read `src/app/api/internal/backup-status/route.ts` (127 lines) end-to-end. POST handler L33-104: (1) extracts clientIp from `x-client-ip || x-forwarded-for first entry || ""` L43-46, (2) checks against `127.0.0.1 / ::1 / ::ffff:127.0.0.1 / 10.x / 192.168.x / 172.16-31.x` allowlist L50-58, (3) treats `""`/unknown as FORBIDDEN L60-63, (4) requires Bearer token match against `INTERNAL_API_TOKEN` env var with `constantTimeEqual()` L70-78, (5) fails closed if `INTERNAL_API_TOKEN` not set L67-69. GET handler L106-113 is an unauthenticated health check that returns only `{ endpoint, method: "POST", configured: Boolean(INTERNAL_TOKEN) }` — no sensitive data exposed.
+- Grepped `src/lib/auth.ts` for `trustHost` — only match is the SECURITY FIX comment at L690-695 documenting the removal. No `trustHost: true` is set anywhere in the codebase (grepped all of `/home/z/my-project`).
+- Read `.env.example` L32-46 — `NEXTAUTH_URL=https://novsmm.shop` is set as a server-side constant; `AUTH_TRUST_HOST` is explicitly documented as "DO NOT set in production". `NEXTAUTH_SECRET=` is required.
+- Grepped `src/app/api/` for `console.log` → 11 hits across 5 files: `auth/[...nextauth]/route.ts` (2), `webhooks/mercadopago/route.ts` (1), `webhooks/nowpayments/route.ts` (4), `webhooks/paypal/route.ts` (3), `metrics/web-vitals/route.ts` (1). Read all 11 in context.
+- Grepped `src/lib/` for `console.log` → 23 hits across 6 files. Read `src/lib/notify.ts` L109-120 — sandbox-mode email logging only fires when `SMTP_HOST`/`SMTP_USER` is unset (dev-only). Read `src/lib/auth.ts` 12 console.log sites (L566, 588, 601, 756, 765, 782, 798, 800, 826, 1068, 1085, 1103) — they log email addresses, user IDs, usernames, truncated OAuth client IDs. Read `src/lib/logger.ts` — confirmed a structured pino logger with redaction of `password/token/secret/cookie/authorization/...` exists but is NOT used in auth.ts or the route handler (they call raw `console.log`).
+- Read `.gitignore` (63 lines). Confirmed line 45 ignores `.claude`, line 55 ignores `/skills/tool-results/`, line 59 ignores `/tool-results/`. Both pre-existing-path AND audit-recommended-path are covered.
+- Ran `git ls-files | grep -E "tool-results|\.claude"` → 0 hits. Confirmed no leaked tool-results or .claude files tracked.
+- Ran `git check-ignore -v tool-results/ .claude/` → both matched by .gitignore (lines 59 and 45 respectively).
+- Ran `git ls-files | grep -E "^\."` → only `.dockerignore, .env.example, .github/, .gitignore, .zscripts/` tracked. `.env` is correctly NOT tracked (matches `.env*` rule with `!.env.example` exception).
+- Ran `git ls-files | grep -E "\.db$|\.sqlite|\.pem|\.key$|id_rsa|id_ed25519"` → 0 hits. No DB or key files tracked.
+- Ran `curl https://api.github.com/repos/novafwsocial/novsmm` → 403 (unauthenticated access blocked → repo is PRIVATE).
+- Listed tracked `.md` files at repo root → 28+ audit/report files (OWASP_AUDIT_REPORT.md, SECURITY_AUDIT.md, EXHAUSTIVE_AUDIT_FINAL.md, worklog.md, audit-report.md, ASVS_AUDIT_REPORT.md, DEVOPS_AUDIT_REPORT.md, etc.) are committed. Repo is private so not public-leaked, but they expose vulnerability details to every developer/contractor with read access.
+- Noted: `git remote -v` shows `https://novafwsocial:[REDACTED:github_token]@github.com/...` — a GitHub Personal Access Token is embedded in `.git/config`. Not in `.gitignore` scope (it's in `.git/`), but worth flagging: any developer who clones the repo + runs `git remote -v` sees the token. If they leak it (screenshots, paste, etc.) the private repo + all audit reports become public.
+
+Stage Summary (READ-ONLY — no files modified except this worklog append):
+
+# MASTER SECURITY AUDIT — REMAINING SCOPE (6 items)
+
+## Summary table
+
+| # | Audit ref | Finding ID | Severity | Status | Resolution |
+|---|-----------|-----------|----------|--------|------------|
+| 1 | §3.6 WebSocket JWT mismatch | MAS-001 | HIGH (was) | ✅ FIXED | `src/app/api/me/ws-token/route.ts:42-49` — JWT signing migrated from `{ userId: user.id, ws: true }` → `{ sub: user.id, ws: true }` (H-003 fix). Verifier at `mini-services/notifications-service/index.ts:114` reads `payload.id \|\| payload.sub` — both align. |
+| 2 | §3.5 x-client-ip propagation | MAS-002 | HIGH (was) | ✅ FIXED | `src/middleware.ts:529-536` (+ L399-402, L327-329) — middleware now injects `x-client-ip` via `NextResponse.next({ request: { headers } })` (H-001 fix). Consumers `src/lib/api-utils.ts:185` and `src/lib/auth.ts:56` correctly read it via `headers()`. |
+| 3 | §3.2 /api/internal/backup-status | MAS-003 | LOW | ✅ CONFIRMED PROTECTED | POST handler requires localhost/private-IP allowlist + Bearer `INTERNAL_API_TOKEN` (constant-time compare, fail-closed if unset). GET health check leaks only `Boolean(INTERNAL_TOKEN)` — informational, no data exposure. |
+| 4 | §3.1 trustHost | MAS-004 | HIGH (was) | ✅ FIXED | `src/lib/auth.ts:690-695` — `trustHost: true` removed (A-003 fix). `.env.example:38` sets `NEXTAUTH_URL=https://novsmm.shop` as the canonical URL (server-side constant, unforgeable). `AUTH_TRUST_HOST` explicitly documented as DO-NOT-SET in production. |
+| 5 | §2 console.log leaks | MAS-005 | MEDIUM | ⚠️ SUSPECTED | 11 console.log in `src/app/api/` (auth route logs OAuth callback URLs incl. `code`/`state`; webhook routes log txnId/userId/amount). 12 more in `src/lib/auth.ts` log emails + usernames. Project has structured `pino` logger with redaction (`src/lib/logger.ts`) but it's bypassed in these hot paths. |
+| 6 | §3.7 .gitignore tool-results | MAS-006 | LOW (was) | ✅ FIXED | `.gitignore:45` ignores `.claude`, `.gitignore:55` ignores `/skills/tool-results/` (legacy path), `.gitignore:59` ignores `/tool-results/` (correct path). `git ls-files | grep` returns 0 leaked files. |
+
+---
+
+## Finding MAS-001 — WebSocket JWT field-name mismatch (Section 3.6)
+
+- **Severity:** HIGH (original audit) → resolved
+- **Status:** ✅ CONFIRMED FIXED (H-003)
+- **Description:** The audit's hypothesis was that the WebSocket JWT was signed with a `userId` field but the notifications-service verifier read `payload.id`/`payload.sub`, creating a mismatch. Investigation confirms this WAS the bug, and the fix has already been applied.
+- **Files / lines:**
+  - Signing: `src/app/api/me/ws-token/route.ts:42-49`
+  - Verifying: `mini-services/notifications-service/index.ts:75-119` (return at L114)
+- **Evidence (audit comment in route.ts):**
+  ```ts
+  // SEC FIX (H-003): was { userId: user.id, ws: true } but the
+  // notifications-service verifies payload.id || payload.sub.
+  // Changed to use 'sub' claim (standard JWT claim for subject/user ID).
+  const token = jwt.sign(
+    { sub: user.id, ws: true },
+    secret,
+    { expiresIn: "5m" }
+  );
+  ```
+  And verifier in `notifications-service/index.ts`:
+  ```ts
+  return payload.id || payload.sub || null   // L114
+  ```
+  Greps for `token.userId|jwt.userId|payload.userId` across `src/` → 0 hits. The mismatch is fully closed.
+- **Additional defense-in-depth verified:**
+  - Signature uses `crypto.timingSafeEqual` (L98) — no timing side-channel.
+  - `NEXTAUTH_SECRET` length validated ≥32 chars in `ws-token/route.ts:33` (S-L-001).
+  - Token TTL 5 minutes (L48).
+  - Token passed via `socket.io` `auth.token` handshake, NOT URL query string (R-L-004 fix at `dashboard-notifications.tsx:73`).
+  - Per-user rooms: `socket.join(\`user:${userId}\`)` at L242; `/broadcast` emits via `io.to(\`user:${userId}\`).emit(...)` at L374 (no cross-user data leak).
+  - `/broadcast` HTTP endpoint requires `NOTIFICATIONS_SERVICE_SECRET` Bearer token (L300-319), fail-closed if unset.
+- **Recommendation:** No action — finding closed. Optional: add an integration test (`bun test`) that signs a token with `userId` field and confirms `verifyJwt()` returns null, to prevent regression.
+
+---
+
+## Finding MAS-002 — x-client-ip header propagation (Section 3.5)
+
+- **Severity:** HIGH (original audit) → resolved
+- **Status:** ✅ CONFIRMED FIXED (H-001)
+- **Description:** The audit's concern was that `x-client-ip` was set on `res.headers` (response) which doesn't propagate to route handlers, breaking the IP allowlist on API keys and the IP-based brute-force lockout. The fix has been applied in all three middleware branches.
+- **Files / lines:**
+  - `src/middleware.ts:327-329` (page routes — x-nonce propagation, same pattern)
+  - `src/middleware.ts:399-402` (CORS-allowed v1 routes — x-client-ip propagation)
+  - `src/middleware.ts:529-536` (general API routes — x-client-ip propagation)
+  - Consumers: `src/lib/api-utils.ts:185`, `src/lib/auth.ts:56`
+- **Evidence:**
+  ```ts
+  // src/middleware.ts:529-536
+  // SEC FIX (H-001): pass IP via request headers, not response headers.
+  const finalReqHeaders = new Headers(req.headers);
+  finalReqHeaders.set("x-client-ip", ip);
+  return NextResponse.next({
+    request: { headers: finalReqHeaders },
+    headers: res.headers,
+  });
+  ```
+  ```ts
+  // src/lib/api-utils.ts:184-190  (audit() helper)
+  const cfIp = h.get("cf-connecting-ip");
+  const clientIp = h.get("x-client-ip");  // ← reads from request headers
+  let ip: string;
+  if (cfIp && cfIp.trim()) ip = cfIp.trim();
+  else if (clientIp && clientIp !== "unknown") ip = clientIp;
+  ```
+- **Additional defense-in-depth verified:**
+  - `resolveClientIp()` (L33-60) prioritizes `cf-connecting-ip` (Cloudflare, non-forgeable) over `x-forwarded-for`.
+  - In production, `x-forwarded-for` is ONLY trusted if `TRUST_PROXY=true` (L40), and the LAST entry is used (proxy-added, not client-controlled).
+  - Without `TRUST_PROXY` in prod, returns `"unknown"` (fail-closed).
+- **Recommendation:** No action — finding closed. Optional: add a unit test that mocks a request through the middleware and asserts the handler sees `x-client-ip` in `headers()`.
+
+---
+
+## Finding MAS-003 — /api/internal/backup-status protection (Section 3.2)
+
+- **Severity:** LOW (informational)
+- **Status:** ✅ CONFIRMED PROTECTED
+- **Description:** POST handler is protected by (1) localhost/private-network IP allowlist and (2) Bearer `INTERNAL_API_TOKEN`. GET handler is an unauthenticated health check that leaks only whether the token is configured (`configured: Boolean(INTERNAL_TOKEN)`).
+- **Files / lines:** `src/app/api/internal/backup-status/route.ts`
+- **Evidence:**
+  ```ts
+  // POST handler L43-78
+  const clientIp = req.headers.get("x-client-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+  const isLocalhost = clientIp !== "" && (clientIp === "127.0.0.1" ||
+    clientIp === "::1" || clientIp.startsWith("10.") ||
+    clientIp.startsWith("192.168.") || /^172\.(1[6-9]|2[0-9]|3[01])\./.test(clientIp) ||
+    clientIp === "::ffff:127.0.0.1");
+  if (!isLocalhost) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!INTERNAL_TOKEN) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const token = authHeader.slice(7);
+  if (!constantTimeEqual(token, INTERNAL_TOKEN)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+  ```
+- **Strengths:**
+  - `unknown`/empty IP → FORBIDDEN (fail-closed, L60-63).
+  - `INTERNAL_API_TOKEN` unset → FORBIDDEN (fail-closed, L67-69).
+  - `constantTimeEqual()` (L119-126) — no timing side-channel on token comparison.
+  - Generic 403 "Forbidden" on all failure paths (no existence disclosure).
+- **Weakness (low):** GET handler at L106-113 leaks `configured: Boolean(INTERNAL_TOKEN)`. An attacker can probe whether the operator has hardened the endpoint. Informational only — does not allow exploitation.
+- **Recommendation:** Optional hardening: require the same Bearer token + localhost check on GET, returning 403 to unauthenticated probes. Alternatively: leave as-is (the health-check is useful for ops dashboards).
+
+---
+
+## Finding MAS-004 — trustHost in auth.ts (Section 3.1)
+
+- **Severity:** HIGH (original audit) → resolved
+- **Status:** ✅ CONFIRMED FIXED (A-003)
+- **Description:** `trustHost: true` was removed because it caused NextAuth to derive the canonical URL from the (forgeable) `Host` header, enabling host-header injection attacks (password-reset poisoning → account takeover). NextAuth now uses `NEXTAUTH_URL` from env (server-side constant).
+- **Files / lines:** `src/lib/auth.ts:686-695`
+- **Evidence:**
+  ```ts
+  session: {
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60,
+  },
+  // SECURITY FIX (A-003): removed trustHost: true — it made NextAuth
+  // derive the base URL from the forgeable Host header, enabling
+  // host-header injection attacks (password-reset poisoning → account
+  // takeover). Now NextAuth uses NEXTAUTH_URL from env (already set in
+  // .env as https://novsmm.shop), which is a server-side constant that
+  // cannot be spoofed by the client.
+  ```
+  ```env
+  # .env.example:38
+  NEXTAUTH_URL=https://novsmm.shop
+  # .env.example:39-45 — AUTH_TRUST_HOST explicitly DO-NOT-SET in production
+  ```
+  `grep -r trustHost /home/z/my-project` → only matches the comment + historical worklog references. No live `trustHost: true` in code.
+- **Defense-in-depth verified:**
+  - `NEXTAUTH_URL` is set in `.env.example` (operators must set it in `.env` for production).
+  - `AUTH_TRUST_HOST` documented as DO-NOT-SET in production (`.env.example:39-45`).
+  - Reverse proxy (Caddyfile tracked at repo root) overrides the `Host` header.
+  - CSRF Origin check at `src/middleware.ts:438-453` value-matches Origin against `getTrustedHost()` (derived from `NEXTAUTH_URL`), and in production fails-closed if `NEXTAUTH_URL` is unset (L462-471).
+- **Recommendation:** No action — finding closed. Optional: add a startup assertion that crashes the process if `NODE_ENV=production` AND `NEXTAUTH_URL` is unset.
+
+---
+
+## Finding MAS-005 — console.log leaks in API routes (Section 2)
+
+- **Severity:** MEDIUM
+- **Status:** ⚠️ SUSPECTED (partially mitigated, partially outstanding)
+- **Description:** 11 `console.log` calls in `src/app/api/` and 12 more in `src/lib/auth.ts` (which executes during `/api/auth/*` request handling) bypass the structured pino logger (`src/lib/logger.ts`) and its sensitive-field redaction. Some leak OAuth callback URLs (containing `code`/`state` query params), email addresses, usernames, and user IDs to stdout logs.
+- **Files / lines:**
+
+  **(a) OAuth callback URLs — `src/app/api/auth/[...nextauth]/route.ts`:**
+  - L31: `console.log(\`[auth-route] ${method} /api/auth/${nextauthPath} | url=${url}\`)` — logs the FULL URL of every callback/signin request. OAuth callback URLs contain `?code=<authorization_code>&state=<state>`. The code is short-lived (10 min) but if logs are exfiltrated, an attacker with the code before NextAuth exchanges it could replay it.
+  - L45: `console.log(\`[auth-route] callback result: status=${status}, location=${location}\`)` — logs redirect Location header, which can include state/code in some flows.
+  - Both were added in commit `8cc9c73 Add detailed OAuth callback logging` (intentional diagnostic).
+
+  **(b) PII leak — `src/lib/auth.ts` (12 sites):**
+  - L566: `getConfiguredOAuthProviders: configured=[...]` — provider names only (low).
+  - L588/L601: `${provider}: loaded credentials ... (clientId: ${String(clientId).slice(0, 8)}...)` — first 8 chars of OAuth client ID (low — not the secret).
+  - L756: `signIn callback: provider=..., user.email=..., user.id=...` — **EMAIL + USER ID** (PII).
+  - L765: `dbUser=... (id=..., username=...)` — **USER ID + USERNAME** (PII).
+  - L782/L798/L800/L826: account-linking debug logs (user IDs + usernames).
+  - L1068/L1085/L1103: `events.createUser` logs (user ID + email + generated username).
+
+  **(c) Webhook operational logs — `src/app/api/webhooks/{mercadopago,nowpayments,paypal}/route.ts`:**
+  - mercadopago L203: `Transaction already processed ... { txnId }`.
+  - nowpayments L112/L195/L220/L301: status, txnId, amount, userId, publicId.
+  - paypal L213/L342/L376: event type, txnId, amount, userId, publicId.
+  - These log internal IDs + amounts — operational and useful for forensic investigation, but they bypass the pino redaction. Severity: LOW.
+
+  **(d) Dev-only — `src/app/api/metrics/web-vitals/route.ts:28`:** gated by `process.env.NODE_ENV === "development"` (L27). NOT a production finding.
+
+  **(e) Sandbox-only — `src/lib/notify.ts:113-118`:** only fires when `SMTP_HOST`/`SMTP_USER` unset (sandbox mode). NOT a production finding.
+
+- **Project's intended solution (already in place, just under-used):** `src/lib/logger.ts` exports a `pino` logger with redaction of `password, token, secret, apiKey, cookie, authorization, ...` (REDACTED_FIELDS L31-58). It is NOT used in `auth.ts` or the `[...nextauth]` route handler.
+- **Evidence (grep counts):**
+  ```
+  src/app/api/  → 11 console.log hits across 5 files
+  src/lib/      → 23 console.log hits across 6 files
+                  (12 in auth.ts, 6 in notify.ts [sandbox-only], 1 in logger.ts [definition], 1 in sentry.ts, 1 in redis.ts, 2 in queues.ts)
+  ```
+- **Recommendation:**
+  1. **(P1)** Replace the 2 console.log in `src/app/api/auth/[...nextauth]/route.ts` with `logger.debug(...)` from `@/lib/logger` and redact the URL's `code`/`state` query params before logging. Or gate behind `NODE_ENV !== 'production'`.
+  2. **(P1)** Replace the 12 console.log in `src/lib/auth.ts` with `logger.info(...)`/`logger.debug(...)` — pino's redaction will mask `password`/`token`/`secret` automatically, and the structured fields make the logs queryable in Loki/Datadog. Email/username/userId are PII — consider whether they should be logged at INFO (operational) or DEBUG (off in prod by default).
+  3. **(P2)** Replace the 8 webhook console.log with `logger.info(...)` — preserves operational visibility while gaining redaction + structured fields + request-id propagation.
+  4. **(P3)** The web-vitals and notify.ts sandbox logs are acceptable as-is (dev/sandbox only).
+
+---
+
+## Finding MAS-006 — .gitignore tool-results / .claude (Section 3.7)
+
+- **Severity:** LOW (original audit) → resolved
+- **Status:** ✅ CONFIRMED FIXED
+- **Description:** The audit's concern was that `.gitignore` only had `/skills/tool-results/` (wrong path) instead of `/tool-results/` (correct path), causing internal agent output files to be tracked by git. Both paths are now ignored, AND `.claude` is ignored.
+- **Files / lines:** `.gitignore:45, 55, 59`
+- **Evidence:**
+  ```
+  # .gitignore excerpt
+  .claude               # L45 — ignores .claude/ at any depth
+  /skills/tool-results/ # L55 — legacy path (audit said was wrong)
+  /tool-results/        # L59 — correct path (audit's recommendation)
+  ```
+  ```
+  $ git ls-files | grep -E "tool-results|\.claude"
+  (empty)
+  $ git check-ignore -v tool-results/ .claude/
+  .gitignore:59:/tool-results/	tool-results/
+  .gitignore:45:.claude	.claude/
+  ```
+- **Repo visibility check:** `curl https://api.github.com/repos/novafwsocial/novsmm` → 403 (unauthenticated access blocked → repo is PRIVATE). Even if a tool-results file slipped through, it would not be public-leaked.
+- **Related concerns (out-of-scope but flagged):**
+  - **(LOW)** 28+ audit/report `.md` files are tracked at repo root (OWASP_AUDIT_REPORT.md, SECURITY_AUDIT.md, EXHAUSTIVE_AUDIT_FINAL.md, worklog.md, audit-report.md, ASVS_AUDIT_REPORT.md, DEVOPS_AUDIT_REPORT.md, REMEDIATION_*.md, ROOT_CAUSE_ANALYSIS.md, RISK_MATRIX.md, etc.). They contain detailed vulnerability descriptions, file paths, and remediation status. While the repo is private, these would be exposed to all developers/contractors with read access, and a future flip to public would be catastrophic. Recommendation: move to a separate private `novsmm-security` repo, or add to `.gitignore` and host in a private docs site.
+  - **(MEDIUM)** `git remote -v` shows `https://novafwsocial:[REDACTED:github_token]@github.com/...` — a GitHub PAT is embedded in `.git/config`. Any developer who clones and runs `git remote -v` (or shares the `.git/` directory) exposes the token. Recommendation: switch to SSH remotes (`git@github.com:novafwsocial/novsmm.git`) and rotate the leaked PAT.
+- **Recommendation:** No action on the original finding (closed). Address the two related concerns above as separate hardening tasks.
+
+---
+
+## Net conclusion
+
+5 of 6 findings in the remaining scope are ALREADY FIXED by prior Lotes (A-E + the remote-merge H-001/H-003 fixes). 1 finding (MAS-005 console.log leaks) is a real outstanding MEDIUM-severity gap that should be addressed in a follow-up Lote F: migrate `src/app/api/auth/[...nextauth]/route.ts` and `src/lib/auth.ts` console.log calls to the existing `pino` logger (`src/lib/logger.ts`) to gain automatic sensitive-field redaction + structured output.
+
+Files modified: ONLY this worklog append. No source files touched (read-only audit).
+
+---
+
+Task ID: MASTER-AUDIT-CODE-QUALITY
+Agent: subagent (general-purpose — code quality & dead code audit, Phase 2)
+Task: Master code-quality audit. Six scope items: (1) dead dependencies in package.json vs src/ imports, (2) orphaned source files in src/, (3) console.log leaks in src/app/api/ (classify sensitivity), (4) requireAdmin guard consistency across all admin routes, (5) test coverage for money flows, (6) disabled ESLint rules without justification. READ-ONLY audit — no source files modified (only this worklog append).
+
+Work Log:
+- Read `/home/z/my-project/worklog.md` tail (lines 16000-16377) to recover context: NOVSMM is a Next.js 16 + Tailwind v4 + framer-motion SaaS panel. Lotes A-E + H-001/H-003 fixed prior security findings. MAS-005 (console.log leaks in API routes + auth.ts) is the one outstanding MEDIUM from the prior security audit. Worklog template observed: `Task ID / Agent / Task / Work Log / Stage Summary`.
+- Read `/home/z/my-project/package.json` (105 lines) — full dependency list. 73 runtime deps, 12 devDeps. Suspicious candidates from the audit prompt: `stripe` (NOT in package.json — already removed per `changelog-page.tsx` line 77: "Removed: Stripe (complete removal)"), `recharts` (line 80), `@hookform/resolvers` (line 22), `decimal.js` (line 60), `date-fns` (line 59), `@auth/core` (line 20), `sharp` (line 81), `lenis` (line 66), `nodemailer` (line 70), `@sentry/node` (line 51), `web-vitals` (line 86), `tailwindcss-animate` (line 84).
+- Verified imports for each suspicious dep with broad grep covering static + dynamic imports (`from "X"`, `import("X")`, `require("X")`). Cross-checked against shadcn/ui component files (`src/components/ui/*.tsx`) by reading each.
+- For each `src/components/ui/*.tsx` shadcn file, checked whether it is imported by ANY application code (`src/components/novsmm/*`, `src/app/*`, `src/hooks/*`, `src/lib/*`) using the `@/components/ui/<name>` alias. Excluded internal shadcn/ui self-imports (e.g. `sidebar.tsx` importing `input.tsx`) from the count.
+- Read `next.config.ts`, `tailwind.config.ts`, `postcss.config.mjs`, `tsconfig.json` (path alias `@/*` → `./src/*`).
+- Ran `find` for all test/spec/vitest.config/jest.config files under the project (excluding node_modules/.next/skills/tool-results/.git).
+- Listed all admin route.ts files via `find src/app/api/admin -name route.ts -print` (35 files). For each, ran `grep -l requireAdmin` to find files NOT containing the guard; found 2 candidates: `impersonate/stop/route.ts` and `webhooks/outbound/route.ts`. Read both end-to-end to verify intent.
+- Grepped `src/app/api/` for `console.log` (11 hits across 5 files). Read each in context to classify sensitivity (PII / OAuth code / operational IDs / dev-only). Also grepped `src/lib/` (23 hits across 6 files) — already documented in MAS-005; re-verified and consolidated.
+- Read `eslint.config.mjs` (79 lines) end-to-end. Catalogued every disabled rule and cross-referenced against inline comments to identify which disabled rules lack a justification comment.
+- Built a script that, for every file in `src/lib/*.ts` and `src/components/novsmm/*.{ts,tsx}` and `src/hooks/*.ts`, greps the rest of `src/` for any quoted reference to that basename. Verified each candidate orphan manually with a targeted function-export grep (e.g. searched for `useModalAria`, `ModalOverlay`, `creditWallet`, `withErrorHandler`, `parseBody`, `ciContains`, `renderInvoiceHtml`, `calculateDirectPrice`, `moneyAdd`, `rateLimitOr429`, `useAnalytics`, `useTranslation`) to distinguish true orphans from files imported via dynamic-import or relative paths.
+
+Stage Summary (READ-ONLY — no source files modified except this worklog append):
+
+# MASTER CODE-QUALITY AUDIT — Phase 2 (6 items)
+
+## Summary table
+
+| # | Finding | Severity | Status | Files / count |
+|---|---------|----------|--------|---------------|
+| 1 | Dead deps in `package.json` | LOW-MEDIUM | NEW | 8 fully-dead deps + 12 cascade-dead `@radix-ui/*` packages |
+| 2 | Orphaned source files in `src/` | MEDIUM | NEW | 13 orphaned files (~1,300 lines dead code) |
+| 3 | `console.log` leaks in `src/app/api/` | MEDIUM | PARTIALLY-KNOWN (MAS-005) | 2 MEDIUM (OAuth URL) + 8 LOW (operational IDs) + 1 dev-only |
+| 4 | `requireAdmin` guard consistency | — | ✅ ALL GUARDED | 33/35 use `requireAdmin()`; 2 intentional exceptions verified |
+| 5 | Test coverage for money flows | HIGH | NEW — NO TESTS | 0 test files in entire repo |
+| 6 | Disabled ESLint rules without justification | HIGH | NEW | 23 of 28 disabled rules lack any comment |
+
+---
+
+## Finding MACQ-001 — Dead dependencies in `package.json`
+
+- **Severity:** LOW-MEDIUM
+- **Status:** NEW FINDING
+- **Description:** Eight runtime dependencies in `package.json` are never imported by any live code in `src/` (excluding files that are themselves orphans — see MACQ-002). An additional 12+ `@radix-ui/react-*` packages cascade-dead via unused shadcn/ui components. The audit prompt's claim that `recharts` was "replaced with SVG" is **FALSE** — `recharts` is still actively imported in 4 dashboard files + the chart wrapper. The audit prompt's claim that `stripe` is dead is **outdated** — `stripe` is not in `package.json` (was already removed per `src/components/novsmm/changelog-page.tsx:77`: *"Removed: Stripe (complete removal)"*); the only `stripe` matches in `src/` are string literals in comments, legal-pages copy, dashboard mock data (`dashboard-data.ts`), and redaction lists in `logger.ts`.
+
+- **Dead deps (confirmed via grep — 0 imports in `src/`):**
+
+  | Dep | package.json line | Evidence |
+  |-----|----|----------|
+  | `@hookform/resolvers` | L22 | `grep -r "@hookform" src/` → 0 hits anywhere |
+  | `react-hook-form` | L78 | Only importer is `src/components/ui/form.tsx` (itself an orphan — see MACQ-002) |
+  | `react-day-picker` | L76 | Only importer is `src/components/ui/calendar.tsx` (orphan) |
+  | `embla-carousel-react` | L61 | Only importer is `src/components/ui/carousel.tsx` (orphan) |
+  | `cmdk` | L58 | Only importer is `src/components/ui/command.tsx` (orphan) |
+  | `vaul` | L85 | Only importer is `src/components/ui/drawer.tsx` (orphan) |
+  | `input-otp` | L63 | Only importer is `src/components/ui/input-otp.tsx` (orphan) |
+  | `react-resizable-panels` | L79 | Only importer is `src/components/ui/resizable.tsx` (orphan) |
+  | `date-fns` | L59 | `grep -r "date-fns\|dateFns" src/` → 0 hits anywhere |
+  | `@auth/core` | L20 | `grep -r "@auth/core" src/` → 0 hits (next-auth v4 doesn't import it directly; transitive dep only) |
+  | `decimal.js` | L60 | 0 hits in `src/` (only used by `prisma/migrate-sqlite-to-postgres.ts` — a one-off migration script in `prisma/`, excluded from `tsconfig.json`). `Prisma.Decimal` (used in `src/lib/money.ts`) is provided by `@prisma/client`, NOT by direct `decimal.js` import. |
+
+- **Cascade-dead `@radix-ui/react-*` packages** (each only imported by a single orphaned shadcn/ui component — see MACQ-002 for the orphan list):
+  - `@radix-ui/react-accordion`, `@radix-ui/react-aspect-ratio`, `@radix-ui/react-avatar`, `@radix-ui/react-checkbox`, `@radix-ui/react-collapsible`, `@radix-ui/react-context-menu`, `@radix-ui/react-dropdown-menu`, `@radix-ui/react-hover-card`, `@radix-ui/react-menubar`, `@radix-ui/react-navigation-menu`, `@radix-ui/react-popover`, `@radix-ui/react-progress`, `@radix-ui/react-radio-group`, `@radix-ui/react-scroll-area`, `@radix-ui/react-select`, `@radix-ui/react-slider`, `@radix-ui/react-slot` (note: used by `button.tsx`, `badge.tsx`, `breadcrumb.tsx`, `sidebar.tsx`, `form.tsx` — but `button.tsx` is the only consumer that itself is used; the dep is still required so NOT dead), `@radix-ui/react-switch`, `@radix-ui/react-tabs`, `@radix-ui/react-toast` (kept — used by `use-toast.ts` via `toast.tsx`), `@radix-ui/react-toggle`, `@radix-ui/react-toggle-group`, `@radix-ui/react-tooltip`.
+
+- **NOT dead (audit prompt was wrong / verified alive):**
+  - `recharts` — **STILL USED** in `src/components/ui/chart.tsx`, `src/components/novsmm/admin-panel.tsx:68`, `dashboard-home.tsx:37`, `dashboard-analytics.tsx:19`, `dashboard-wallet.tsx:26`. Not replaced with SVG.
+  - `lenis` — dynamically imported by `src/components/novsmm/smooth-scroll.tsx:37` (`import("lenis").then(...)`).
+  - `nodemailer` — dynamically imported by `src/lib/notify.ts:123` (`await import("nodemailer")`).
+  - `@sentry/node` — dynamically imported by `src/lib/sentry.ts:43` (but `sentry.ts` is itself a chain-orphan — see MACQ-002).
+  - `web-vitals` — dynamically imported by `src/components/novsmm/web-vitals.tsx:25` (`import("web-vitals")`).
+  - `tailwindcss-animate` — loaded as Tailwind plugin in `tailwind.config.ts:8,69` (NOT a source import; provided `animate-in`/`fade-in` classes used by shadcn/ui — but if those components are unused, the plugin is transitively dead).
+  - `sharp` — 0 source imports, but Next.js auto-uses it for `next/image` if installed. Currently no `next/image` usage (logo uses `<img>` per `logo.tsx:11` comment "removed the next/image dependency"), so `sharp` is effectively unused but kept as defensive.
+
+- **Files / lines:**
+  - `package.json:20, 22, 58, 59, 60, 61, 63, 76, 78, 79, 85` and `@radix-ui/react-*` lines 24-50 (cascade-dead subset).
+  - Importer evidence: see grep output above.
+
+- **Evidence (representative):**
+  ```
+  $ grep -rE 'from ["'']@hookform/resolvers' src/  → 0 hits
+  $ grep -rE 'date-fns|dateFns' src/              → 0 hits
+  $ grep -rE '@auth/core' src/                    → 0 hits
+  $ grep -rE 'from ["'']recharts["'']' src/        → 5 hits (chart.tsx, admin-panel.tsx, dashboard-home.tsx, dashboard-analytics.tsx, dashboard-wallet.tsx)
+  $ grep -i 'stripe' src/                          → all matches are string literals (comments, legal-pages, dashboard-data mock, logger.ts redaction list)
+  ```
+
+- **Recommendation:**
+  1. **(P2)** Remove the 8 confirmed-dead deps (`@hookform/resolvers`, `react-hook-form`, `react-day-picker`, `embla-carousel-react`, `cmdk`, `vaul`, `input-otp`, `react-resizable-panels`, `date-fns`, `@auth/core`) from `package.json` after deleting their orphan consumer files (see MACQ-002). Run `bun install` to verify the lockfile.
+  2. **(P2)** Move `decimal.js` to `devDependencies` (only the prisma migration script uses it).
+  3. **(P3)** After MACQ-002 cleanup, audit which `@radix-ui/react-*` packages are still genuinely needed (likely only `dialog`, `toast`, `alert-dialog`, `slot`, `label` — the 5 shadcn components actually used by app code). Remove the rest.
+  4. **(P3)** `sharp` can stay (defensive for future `next/image` use) or be removed (no current consumer).
+
+---
+
+## Finding MACQ-002 — Orphaned source files in `src/`
+
+- **Severity:** MEDIUM (significant code-maintenance debt; ~1,300 lines of dead code)
+- **Status:** NEW FINDING
+- **Description:** 13 source files in `src/` export symbols (functions, components, constants) that are NEVER imported by any other file in the codebase. The most significant is `src/lib/services/wallet.service.ts` (232 lines) — a Phase 5 backend refactor that extracted `creditWallet`/`debitWallet`/`refundWallet` helpers from "10+ API routes" per its own comment, but **none of those API routes were ever migrated to call the new service**. The refactor was abandoned halfway.
+
+- **Orphaned files (full list):**
+
+  | # | File | Lines | Exports | Notes |
+  |---|------|------|---------|-------|
+  | 1 | `src/lib/services/wallet.service.ts` | 232 | `creditWallet`, `debitWallet`, `refundWallet`, `transferWallet` | Comment L6-7 says "extracted … that were duplicated across 10+ API routes" — but 0 of those routes were migrated. **Major: money-flow logic centralized but never consumed.** |
+  | 2 | `src/lib/invoice-html.ts` | 519 | `renderInvoiceHtml`, `InvoiceInput`, `InvoiceLineItem` | Full HTML invoice template; never rendered. |
+  | 3 | `src/lib/margins.ts` | 70 | `NOVSMM_MARKUP_PERCENT`, `calculateDirectPrice`, `calculateDirectProfit`, `calculateMarketplaceProfit`, `calculateChildPanelPrice`, `calculateChildPanelProfit` | Pricing-structure constants + helpers; never enforced anywhere. |
+  | 4 | `src/lib/money.ts` | 146 | `toMoneyNumber`, `toMoneyDecimal`, `moneyAdd`, `moneySub`, `moneyMul`, `moneyDiv`, `moneyGte/Gt/Lte/Lt/Eq`, `calculateProfit`, `calculateMargin`, `calculateTotal` | Decimal-safe money helpers; never used (API routes do inline Prisma.Decimal math). |
+  | 5 | `src/lib/api-handler.ts` | ~150 | `withErrorHandler` (route-handler HOC) | Never wraps any route. Routes use `requireAuth` + try/catch inline instead. |
+  | 6 | `src/lib/response.ts` | ~130 | `ok`, `created`, `fail`, `error` | Routes use `apiOk`/`apiError` from `@/lib/api-utils` instead. |
+  | 7 | `src/lib/parse-body.ts` | ~100 | `parseBody`, `parseBodyOrError` | Routes use `await req.json()` + `schema.safeParse()` inline. |
+  | 8 | `src/lib/rate-limit.ts` | ~150 | `rateLimitOr429` | Middleware has its OWN `rateLimitMap` (L64-86); this lib version is unused. |
+  | 9 | `src/lib/db-search.ts` | ~50 | `ciContains` (case-insensitive Prisma `contains` helper) | Never used (queries use raw `contains` with `mode: "insensitive"` inline). |
+  | 10 | `src/lib/sentry.ts` | ~130 | `captureException`, `setSentryUser` | Only consumer is `src/lib/api-handler.ts` (itself orphan). **Chain-orphan.** |
+  | 11 | `src/components/novsmm/use-modal-aria.tsx` | 173 | `useModalAria` (hook) + `ModalOverlay` (component) | Comment L26-29 says "designed for the 30+ custom modals in the codebase" — but ZERO modals were ever migrated to use it. |
+  | 12 | `src/hooks/use-analytics.ts` | ~30 | `useAnalytics` | **Duplicate** of `useAnalytics` in `src/hooks/use-api.ts:637` (which is the one actually imported by `dashboard-analytics.tsx:23`). |
+  | 13 | `src/hooks/use-i18n.ts` | ~80 | `useTranslation` | Only referenced in comments (`register-screen.tsx:35`, `validations.ts:30`). No actual import. |
+
+- **Files / lines:** listed in table above.
+
+- **Evidence (representative):**
+  ```
+  # wallet.service.ts — exports never imported
+  $ grep -rE 'creditWallet|debitWallet|refundWallet|transferWallet' src/
+  → /home/z/my-project/src/lib/services/wallet.service.ts  (only the definition file itself)
+
+  # use-modal-aria.tsx — exports never imported
+  $ grep -rE 'useModalAria|ModalOverlay' src/
+  → /home/z/my-project/src/components/novsmm/use-modal-aria.tsx  (only the definition file itself)
+
+  # use-analytics.ts — superseded by use-api.ts
+  $ grep -rE 'useAnalytics' src/
+  → src/components/novsmm/dashboard-analytics.tsx:23: import { useAnalytics, ... } from "@/hooks/use-api";  ← different file
+  → src/hooks/use-analytics.ts:6,12  (self-reference)
+  → src/hooks/use-api.ts:637: export function useAnalytics() {  ← the actually-used one
+
+  # margins.ts — pricing constants never enforced
+  $ grep -rE 'calculateDirectPrice|calculateDirectProfit|NOVSMM_MARKUP_PERCENT|MARKETPLACE_PROFIT_SPLIT|CHILD_PANEL_PROFIT_SPLIT' src/
+  → /home/z/my-project/src/lib/margins.ts  (only the definition file)
+  ```
+
+- **Recommendation:**
+  1. **(P1)** Decide fate of `src/lib/services/wallet.service.ts`: either (a) migrate the 10+ API routes to actually call `creditWallet`/`debitWallet`/`refundWallet` (finishing the Phase 5 refactor — reduces duplication and ensures atomic transaction handling), or (b) delete it if the refactor is no longer planned.
+  2. **(P2)** Delete the 8 truly-dead lib files (`api-handler.ts`, `response.ts`, `parse-body.ts`, `rate-limit.ts`, `db-search.ts`, `invoice-html.ts`, `margins.ts`, `money.ts`) — they are unreachable code. If any are kept as future API, mark with `// @internal` and add to eslint `no-unused-vars` exception list.
+  3. **(P2)** Delete `src/lib/sentry.ts` (chain-orphan) OR keep it and migrate the existing `console.error` calls in API routes to `captureException` (the file's intended use).
+  4. **(P2)** Delete `src/components/novsmm/use-modal-aria.tsx` (173 lines) — never integrated. If a11y is a priority, instead integrate it into the 30+ custom modals (the comment at L26-29 lists the intent).
+  5. **(P3)** Delete `src/hooks/use-analytics.ts` (duplicate of `use-api.ts` version) and `src/hooks/use-i18n.ts` (orphan).
+  6. **(P3)** Run `bun install && bun run build` after each deletion to confirm no transitive breakage.
+
+---
+
+## Finding MACQ-003 — `console.log` leaks in `src/app/api/` (sensitivity-classified)
+
+- **Severity:** MEDIUM (consistent with prior MAS-005 finding)
+- **Status:** PARTIALLY-KNOWN (consolidates + classifies the API-route portion of MAS-005)
+- **Description:** 11 `console.log` calls in `src/app/api/` bypass the structured pino logger (`src/lib/logger.ts`) and its sensitive-field redaction (REDACTED_FIELDS L31-58: `password, token, secret, apiKey, cookie, authorization, ...`). Classified by sensitivity below. The 2 MEDIUM leaks are in `auth/[...nextauth]/route.ts` and log OAuth callback URLs containing `?code=<authorization_code>&state=<state>` — short-lived (10 min) but replayable if logs are exfiltrated.
+
+- **Classification:**
+
+  | # | File:line | Code | Severity | Why |
+  |---|-----------|------|----------|-----|
+  | 1 | `auth/[...nextauth]/route.ts:31` | `console.log(`[auth-route] ${method} /api/auth/${nextauthPath} \| url=${url}`)` | **MEDIUM** | Logs FULL OAuth callback URL — contains `?code=<authorization_code>&state=<state>` (replayable for 10 min if logs exfiltrated). |
+  | 2 | `auth/[...nextauth]/route.ts:45` | `console.log(`[auth-route] callback result: status=${status}, location=${location}`)` | **MEDIUM** | Logs redirect Location header — can include `code`/`state` in some flows. |
+  | 3 | `webhooks/mercadopago/route.ts:203` | `console.log("[webhooks/mercadopago] Transaction already processed …", { txnId: txn.id })` | LOW | Internal txnId only. |
+  | 4 | `webhooks/nowpayments/route.ts:112` | `console.log(`[webhooks/nowpayments] Status "${status}" — waiting for confirmation`)` | LOW | Status string only. |
+  | 5 | `webhooks/nowpayments/route.ts:195` | `console.log("[webhooks/nowpayments] Transaction already processed …", { txnId: txn.id })` | LOW | Internal txnId only. |
+  | 6 | `webhooks/nowpayments/route.ts:220` | `console.log(`[webhooks/nowpayments] Credited $${txn.amount} to user ${txn.userId} (txn ${txn.publicId})`)` | LOW-MEDIUM | userId + amount + publicId — operational but bypasses pino redaction. |
+  | 7 | `webhooks/nowpayments/route.ts:301` | `console.log("[webhooks/nowpayments] Refund already processed …", { txnId: txn.id })` | LOW | Internal txnId only. |
+  | 8 | `webhooks/paypal/route.ts:213` | `console.log(`[webhooks/paypal] Unhandled event type: ${eventType}`)` | LOW | Event-type string only. |
+  | 9 | `webhooks/paypal/route.ts:342` | `console.log("[webhooks/paypal] Transaction already processed …", { txnId: txn.id })` | LOW | Internal txnId only. |
+  | 10 | `webhooks/paypal/route.ts:376-378` | `console.log(`[webhooks/paypal] Credited $${txn.amount} to user ${txn.userId} (txn ${txn.publicId})`)` | LOW-MEDIUM | Same pattern as #6. |
+  | 11 | `metrics/web-vitals/route.ts:28` | `console.log("[web-vitals]", data.name, data.value, data.rating)` | NOT-PROD | Gated by `process.env.NODE_ENV === "development"` (L27). Acceptable. |
+
+- **Plus 23 `console.log` in `src/lib/` (already documented in MAS-005):**
+  - **MEDIUM (PII)**: `auth.ts:756` (`user.email`, `user.id`), `auth.ts:765` (`dbUser.id`, `dbUser.username`), `auth.ts:1068` (`user.id`, `user.email`).
+  - **LOW**: `auth.ts:566,588,601,782,798,800,826,1085,1103` (OAuth provider names, truncated client IDs, user IDs); `notify.ts:113-118` (sandbox-only email logs — fires only when `SMTP_HOST`/`SMTP_USER` unset); `queues.ts:149,157` (providerId, userId); `redis.ts:58` (connection diagnostic); `sentry.ts:60` (init diagnostic).
+
+- **No HIGH-severity leaks found:** No `console.log` of raw passwords, API keys, JWTs, session cookies, or full secrets in `src/app/api/`. The `logger.ts` REDACTED_FIELDS list (L31-58) covers these if migrated to pino.
+
+- **Files / lines:** listed in tables above.
+
+- **Evidence:**
+  ```
+  $ grep -rn "console\.log" src/app/api/ --include="*.ts"
+  → 11 hits across 5 files (auth/[...nextauth], webhooks/{mercadopago,nowpayments,paypal}, metrics/web-vitals)
+  $ grep -rn "console\.log" src/lib/ --include="*.ts"
+  → 23 hits across 6 files (auth.ts [12], notify.ts [6 — sandbox], queues.ts [2], redis.ts [1], sentry.ts [1], logger.ts [1 — comment])
+  ```
+
+- **Recommendation:**
+  1. **(P1)** Replace the 2 `console.log` in `src/app/api/auth/[...nextauth]/route.ts` (L31, L45) with `logger.debug(...)` from `@/lib/logger` and redact the URL's `code`/`state` query params before logging. Or gate behind `NODE_ENV !== 'production'`.
+  2. **(P1)** Replace the 3 MEDIUM-PII `console.log` in `src/lib/auth.ts` (L756, L765, L1068) with `logger.info(...)`/`logger.debug(...)` — pino's redaction will mask `password`/`token`/`secret` automatically, and structured fields make logs queryable.
+  3. **(P2)** Replace the 8 webhook `console.log` (mercadopago L203, nowpayments L112/L195/L220/L301, paypal L213/L342/L376) with `logger.info(...)` — preserves operational visibility while gaining redaction + structured fields + request-id propagation.
+  4. **(P3)** web-vitals route (dev-only) and notify.ts (sandbox-only) are acceptable as-is.
+  5. This is the same outstanding work as MAS-005 recommendation — consolidated here for the code-quality audit. The fix is mechanical: ~23 lines to swap `console.log` → `logger.info`/`logger.debug` across 5 files.
+
+---
+
+## Finding MACQ-004 — `requireAdmin` guard consistency on admin routes
+
+- **Severity:** — (verification audit)
+- **Status:** ✅ ALL GUARDED (intentional exceptions verified)
+- **Description:** 33 of 35 admin routes call `requireAdmin()`. The 2 routes that don't are intentional design choices, both with explanatory comments.
+
+- **All admin routes (35 total):**
+  - 33 routes call `requireAdmin()` (verified via `grep -L requireAdmin` returning only the 2 below).
+  - 2 routes intentionally use `requireAuth()` instead:
+
+    | Route | Why `requireAuth()` not `requireAdmin()` |
+    |-------|------------------------------------------|
+    | `src/app/api/admin/impersonate/stop/route.ts` | Called by an admin who is currently impersonating a user. At call time, the session is the IMPERSONATED user's session (session.user.role = impersonated user's role, NOT "admin"), so `requireAdmin()` would FAIL. The handler validates `user.realAdminId` (L24) to confirm this is a genuine impersonation session, then mints a fresh admin JWT. **Correct design.** |
+    | `src/app/api/admin/webhooks/outbound/route.ts` | Explicitly **DEPRECATED** (comment L11-21): "the resource is user-scoped (any authenticated user can CRUD their own webhooks), not admin-scoped. The canonical path is now `/api/me/webhooks/outbound`. This file is kept for backward compatibility." Admin-only `?all=1` filter (L49, L54-56) lets admins list across users; non-admins only see their own. **Correct design.** |
+
+- **Files / lines:**
+  - `src/app/api/admin/impersonate/stop/route.ts:20-26` (`requireAuth()` + `user.realAdminId` check)
+  - `src/app/api/admin/webhooks/outbound/route.ts:11-21` (deprecation comment) + L43, L81, L157 (each handler uses `requireAuth()`)
+
+- **Evidence:**
+  ```
+  $ for f in src/app/api/admin/*/route.ts src/app/api/admin/*/*/route.ts; do
+      has_admin=$(grep -l "requireAdmin" "$f" 2>/dev/null)
+      if [ -z "$has_admin" ]; then echo "MISSING: $f"; fi
+    done
+  → MISSING: src/app/api/admin/impersonate/stop/route.ts
+  → MISSING: src/app/api/admin/webhooks/outbound/route.ts
+  ```
+
+- **Recommendation:** No action — both exceptions are intentional and documented. Optional: add a regression test that asserts (a) `impersonate/stop` rejects non-impersonation sessions with 400, (b) `webhooks/outbound` returns 403 for non-admin `?all=1` requests.
+
+---
+
+## Finding MACQ-005 — Test coverage for money flows (ZERO tests)
+
+- **Severity:** HIGH
+- **Status:** NEW FINDING
+- **Description:** The entire repository contains **ZERO test files**. No `*.test.ts`, `*.spec.ts`, `*.test.tsx`, or `*.spec.tsx` anywhere outside `node_modules/`, `skills/`, `tool-results/`, `.git/`. No `vitest.config.*`, `jest.config.*`, or `package.json` `test` script. Money-flow code (wallet top-up, wallet withdrawal, order placement, order refund, webhook crediting, subscription rebilling, balance adjustment) has no automated coverage. Bugs in these paths ship to production silently.
+
+- **Critical money-flow files with NO tests:**
+  - `src/app/api/wallet/topup/route.ts` — wallet top-up (PayPal/MercadoPago/NowPayments/Manual).
+  - `src/app/api/wallet/withdraw/route.ts` — wallet withdrawal.
+  - `src/app/api/orders/route.ts` — order placement (debits wallet, creates fulfillment task).
+  - `src/app/api/admin/refunds/route.ts` — refund issuance (re-credits wallet, calls provider refund API).
+  - `src/app/api/admin/users/adjust-balance/route.ts` — manual admin balance adjustment.
+  - `src/app/api/webhooks/{mercadopago,nowpayments,paypal}/route.ts` — payment-provider webhooks (credit wallet on confirmed payment; idempotency via `txnPublicId` unique constraint; race-condition handling via transaction).
+  - `src/app/api/v1/{orders,status,refill,refill_status,cancel,balance,services}/route.ts` — public API v1 (API-key auth, rate-limited).
+  - `src/lib/services/wallet.service.ts` — credit/debit/refund helpers (currently orphan — see MACQ-002 — but the log says they were "extracted from 10+ API routes"; if migrated, they become the single chokepoint for all money movement and MUST be tested).
+  - `src/lib/money.ts` — decimal-safe money math (also currently orphan; if adopted, same testing requirement).
+  - `src/lib/margins.ts` — pricing constants (also orphan; if adopted, the 150% markup + 50/50 marketplace split logic must be unit-tested).
+
+- **Files / lines:**
+  - `package.json:5-18` — `scripts` block has no `test` entry.
+  - `package.json:19-90` — `dependencies` has no `vitest`, `jest`, `@playwright/test`, `@testing-library/react`, etc.
+  - 0 test files in `src/`, `prisma/`, `mini-services/`, `scripts/` (verified via `find`).
+
+- **Evidence:**
+  ```
+  $ find . -path ./node_modules -prune -o -path ./.next -prune -o -path ./skills -prune -o \
+           -path ./tool-results -prune -o -path ./.git -prune -o -type f \
+           \( -name "*.test.ts" -o -name "*.test.tsx" -o -name "*.spec.ts" -o -name "*.spec.tsx" \
+              -o -name "*.test.js" -o -name "*.spec.js" -o -name "vitest.config.*" -o -name "jest.config.*" \) -print
+  → (empty output)
+  ```
+
+- **Recommendation:**
+  1. **(P1)** Install `vitest` (lightweight, Vite-native, plays well with Next.js 16 + Turbopack) + `@testing-library/react` for component tests + `msw` for HTTP mocking.
+  2. **(P1)** Write unit tests for the money-flow critical paths FIRST (before any refactor — see MACQ-002 wallet.service.ts recommendation):
+     - `wallet.service.ts` (`creditWallet`, `debitWallet`, `refundWallet`) — test happy path + idempotency + race condition (concurrent credit) + insufficient-balance rejection + atomic transaction rollback.
+     - `webhooks/{mercadopago,nowpayments,paypal}/route.ts` — test signature verification (valid + invalid), idempotency (same `txnPublicId` twice → only one credit), race condition (two concurrent webhooks for same txn → only one credit), amount mismatch, unknown event types.
+     - `wallet/topup/route.ts` — test each provider branch, insufficient-amount edge, currency conversion.
+     - `wallet/withdraw/route.ts` — test insufficient balance, min-withdrawal, fee deduction, status transitions.
+     - `orders/route.ts` — test wallet debit + order creation atomicity, service-not-found, quantity edge cases.
+     - `admin/refunds/route.ts` — test full-refund + partial-refund + double-refund prevention + provider-API-failure-after-db-commit (the comment at L66-68 explicitly calls out this risk).
+  3. **(P2)** Add integration tests for the API v1 public endpoints (`src/app/api/v1/*`) — they're the externally-exposed contract for resellers; regressions here break customer integrations.
+  4. **(P2)** Add a `bun test` script to `package.json` and wire it into CI (`.github/workflows/`) as a required check before merge.
+  5. **(P3)** Add component tests for the dashboard money-display components (`dashboard-wallet.tsx`, `dashboard-orders.tsx`) — at minimum snapshot tests to catch unintended UI regressions.
+
+---
+
+## Finding MACQ-006 — Disabled ESLint rules without justification
+
+- **Severity:** HIGH (multiple critical code-quality rules silenced)
+- **Status:** NEW FINDING
+- **Description:** `eslint.config.mjs` disables 28 rules. Only 5 of those have an inline comment explaining why. The remaining 23 are disabled without any justification, including rules that would catch: type-safety erosion (`@typescript-eslint/no-explicit-any`, `@typescript-eslint/no-non-null-assertion`, `@typescript-eslint/ban-ts-comment`), dead code (`@typescript-eslint/no-unused-vars`, `no-unused-vars`, `no-unreachable`), React stale-closure bugs (`react-hooks/exhaustive-deps`), production hazards (`no-console`, `no-debugger`), and silent error-swallowing (`no-empty`).
+
+- **Disabled rules WITH justification comment (5):**
+  - `react-hooks/set-state-in-effect` (L26-30) — comment explains the React 19 pattern is intentional and safe with proper deps.
+  - `@next/next/google-font-preconnect` + `@next/next/no-page-custom-font` (L35-39) — comment explains fonts are intentionally loaded via `<link>` in App Router (false positive for Next.js lint rule designed for Pages Router).
+  - `jsx-a11y/role-supports-aria-props` + `jsx-a11y/role-has-required-aria-props` (L41-44) — comment acknowledges "pre-existing, need manual fixes in a UX-focused pass. Disabling to unblock CI."
+  - `@typescript-eslint/no-require-imports` (L62-73, in a `files: [...]` override block for `ecosystem.config.js`, `start.js`, `worker-start.js`, `notifications-start.js`, `scripts/**/*.js`) — comment explains CommonJS is correct for these startup files.
+
+- **Disabled rules WITHOUT any justification comment (23):**
+
+  | Rule | ESLint default severity if ON | Risk if violated |
+  |------|------------------------------|------------------|
+  | `@typescript-eslint/no-explicit-any` | warn | Type-safety erosion — `any` propagates and hides bugs. |
+  | `@typescript-eslint/no-unused-vars` | warn | Dead code accumulates (directly causes MACQ-002). |
+  | `@typescript-eslint/no-non-null-assertion` | warn | `foo!.bar` crashes at runtime if `foo` is null/undefined. |
+  | `@typescript-eslint/ban-ts-comment` | warn | `@ts-ignore` silences real type errors — bugs slip through. |
+  | `@typescript-eslint/prefer-as-const` | warn | Minor stylistic. |
+  | `@typescript-eslint/no-unused-disable-directive` | warn | Stale `// eslint-disable` comments accumulate. |
+  | `react-hooks/exhaustive-deps` | warn | **Stale closures in useEffect/useMemo** — the #1 source of subtle React bugs. |
+  | `react-hooks/purity` | warn | Hook side-effects in render. |
+  | `react/no-unescaped-entities` | warn | Minor (apostrophes in JSX text). |
+  | `react/display-name` | warn | Minor (debugging). |
+  | `react/prop-types` | warn | Irrelevant for TS (TS does prop validation). Justified-by-irrelevance but no comment. |
+  | `react-compiler/react-compiler` | warn | React Compiler lint — currently opt-in. |
+  | `@next/next/no-img-element` | warn | `<img>` instead of `next/image` — LCP/CLS regression. Project intentionally uses `<img>` for SVG logo (see `logo.tsx:11` comment), so a comment would be appropriate. |
+  | `@next/next/no-html-link-for-pages` | warn | Irrelevant for App Router (no `pages/`). Justified-by-irrelevance but no comment. |
+  | `prefer-const` | warn | `let x = 5;` where `const` would do — minor stylistic but signals intent. |
+  | `no-unused-vars` | warn | Duplicate of TS rule above (redundant). |
+  | `no-console` | warn | **Allows `console.log` everywhere** — directly enables MACQ-003. |
+  | `no-debugger` | warn | **Allows `debugger;` statements** — production halt risk if one slips through. |
+  | `no-empty` | warn | **Allows `catch (e) {}`** — silent error-swallowing, hides bugs. |
+  | `no-irregular-whitespace` | warn | Hidden whitespace bugs (zero-width chars from copy-paste). |
+  | `no-case-declarations` | warn | Lexical declaration in switch case without block — scoping bugs. |
+  | `no-fallthrough` | warn | **Switch case fallthrough** — unintentional fallthrough is a classic bug. |
+  | `no-mixed-spaces-and-tabs` | warn | Indentation inconsistency. |
+  | `no-redeclare` | warn | Variable redeclaration (usually a typo). |
+  | `no-undef` | warn | **Reference to undefined variable** — `ReferenceError` at runtime. (TS already catches this, so partially redundant, but the rule exists for `.js` files.) |
+  | `no-unreachable` | warn | **Code after `return`/`throw`** — dead code, signals logic error. |
+  | `no-useless-escape` | warn | Regex/string escape that does nothing. |
+
+- **Files / lines:** `eslint.config.mjs:9-60` (the main rules block) — 28 disabled rules, 5 commented, 23 uncommented.
+
+- **Evidence:**
+  ```
+  $ cat eslint.config.mjs
+  (see full file — 79 lines, 28 rule entries in `rules: {...}` block at L10-60)
+  ```
+  Representative uncommented disable:
+  ```js
+  // L13
+  "@typescript-eslint/no-unused-vars": "off",  // ← no comment; allows dead code
+  // L20
+  "react-hooks/exhaustive-deps": "off",         // ← no comment; allows stale closures
+  // L49
+  "no-console": "off",                          // ← no comment; allows console.log everywhere
+  // L50
+  "no-debugger": "off",                         // ← no comment; allows debugger statements
+  ```
+
+- **Recommendation:**
+  1. **(P1)** Re-enable the high-impact rules one at a time, fix the resulting errors, and add a comment if any rule needs to stay disabled:
+     - `no-debugger` — re-enable, fix any `debugger;` statements (likely zero).
+     - `no-console` — re-enable with `allow: ["warn", "error"]` (allows `console.warn`/`console.error` for diagnostics, blocks `console.log`). This single change would prevent future MACQ-003-style leaks.
+     - `no-empty` — re-enable, fix empty `catch {}` blocks (add at least `console.error(e)` or `// intentional` comment).
+     - `no-unreachable` — re-enable, delete dead code after `return`/`throw`.
+     - `no-fallthrough` — re-enable, add explicit `break` or `// falls through` comments.
+  2. **(P2)** Re-enable `@typescript-eslint/no-unused-vars` (with `argsIgnorePattern: "^_"` to allow intentionally-unused params). This would have caught MACQ-002 at lint time. Pair with the MACQ-002 cleanup.
+  3. **(P2)** Re-enable `react-hooks/exhaustive-deps`. This is the highest-impact React rule — it catches stale closures that cause the hardest-to-debug runtime issues. Fix the resulting warnings by either adding missing deps or refactoring with `useCallback`/`useRef`.
+  4. **(P2)** Re-enable `@typescript-eslint/no-non-null-assertion` and `@typescript-eslint/ban-ts-comment` — these prevent runtime crashes and silenced type errors. Each `!` and each `@ts-ignore` should be a deliberate, reviewed decision.
+  5. **(P3)** For each rule that genuinely needs to stay disabled (e.g. `@next/next/no-html-link-for-pages` is irrelevant in App Router), add an inline comment explaining why — matching the style already used for the 5 commented rules. The pattern: `"rule-name": "off", // <reason>`.
+  6. **(P3)** Add a CI check that runs `bun run lint` and fails on errors. Currently `package.json:12` has `"lint": "eslint ."` but no CI gate (per MAS-006 worklog note: "lint currently fails repo-wide due to a pre-existing environment incompatibility" — that issue needs to be resolved first).
+
+---
+
+## Net conclusion
+
+6 findings audited. 1 (MACQ-004 requireAdmin) is fully clean. 1 (MACQ-003 console.log) is a partial-carry-over of MAS-005 with the API-route portion classified. 4 are NEW findings:
+
+- **MACQ-001 (dead deps):** 8 fully-dead + 12+ cascade-dead — cleanable in 1 PR after MACQ-002.
+- **MACQ-002 (orphaned files):** 13 files, ~1,300 lines of dead code. Most critical: `wallet.service.ts` (Phase 5 refactor abandoned halfway) and `use-modal-aria.tsx` (a11y hook written but never integrated).
+- **MACQ-005 (no tests):** HIGH severity — money flows have zero coverage. Should be the #1 priority before any further refactoring.
+- **MACQ-006 (eslint rules):** HIGH severity — 23 of 28 disabled rules lack justification, including `no-console` (causes MACQ-003), `no-debugger`, `no-empty`, `react-hooks/exhaustive-deps`, `@typescript-eslint/no-unused-vars` (causes MACQ-002). Re-enabling these would prevent the entire class of issues found in this audit.
+
+Recommended remediation order: (1) MACQ-006 (re-enable lint rules → catches future MACQ-002/MACQ-003 regressions), (2) MACQ-005 (write money-flow tests → safety net for next steps), (3) MACQ-002 (delete orphans OR finish the wallet.service.ts refactor), (4) MACQ-001 (remove dead deps after orphans gone), (5) MACQ-003 (migrate console.log → pino logger).
+
+Files modified: ONLY this worklog append. No source files touched (read-only audit).
+
+---
+
+## Task ID: MASTER-AUDIT-PERF-FRONTEND
+**Agent:** general-purpose (audit sub-agent — read-only)
+**Scope:** Phase 3 (Performance) + Phase 4 (Frontend/UX) audit of NOVSMM at `/home/z/my-project`.
+**Method:** Static analysis (rg / Read / Bash) + live verification via the running dev server (`curl http://localhost:3000/` and `/api/status`).
+**Files modified:** NONE — this is a read-only audit. Only this worklog append was added.
+
+### Summary table
+
+| ID | Phase | Severity | Status | One-line |
+|----|-------|----------|--------|----------|
+| P-001 | Perf | MEDIUM | CONFIRMED | `framer-motion` imported in 36 .tsx files; ~266KB dev chunk |
+| P-002 | Perf | MEDIUM | CONFIRMED | `recharts` (~898KB dev chunk) still imported by 4 dashboard/admin components despite P-C-001 fix in `stats.tsx` |
+| P-003 | Perf | — | ✅ CLEAN | Lazy-loading is well done — 10 landing sections + 10 dashboard tabs use `next/dynamic` |
+| P-004 | Perf | LOW | MINOR GAP | DB indexes comprehensive (100+ `@@index`), but no 3-column `(userId, status, createdAt)` composites on Order/Transaction/Notification |
+| P-005 | Perf | **HIGH** | CONFIRMED | Cache invalidation missing in 6 balance-mutating routes (3 webhooks + refunds + adjust-balance + subscriptions) — stale wallet/Navbar for 15-30s |
+| P-006 | Perf | — | ✅ CLEAN | `public/` is tiny (<25KB total) — no large images to optimize |
+| P-007 | Perf | — | ✅ CLEAN | Google Fonts: preconnect + non-blocking `media="print"` swap pattern properly implemented in `layout.tsx` |
+| F-001 | UX | — | ✅ RESOLVED | i18n raw-keys bug NOT reproducible — already fixed by SECURITY FIX A-002; live HTML shows real English text |
+| F-002 | UX | MEDIUM | CONFIRMED | 54 `<input>/<select>/<textarea>` with bare `text-sm`/`text-xs` (no `md:` prefix) → triggers iOS Safari auto-zoom on focus |
+| F-003 | UX | **HIGH** | CONFIRMED | Language selector hidden on mobile — `LanguageSwitcher` only rendered inside `hidden ... lg:flex` block; mobile menu has no language option |
+| F-004 | UX | LOW | CLEAN (minor polish) | Social proof "Demo" badge is visible + has tooltip; could be slightly more prominent |
+| F-005 | UX | **HIGH** | CONFIRMED (live) | Stats counters fall back to **0** when `/api/status` 5xx's — verified live: endpoint returns HTTP 500 (DB unreachable), so visitors see "0 orders / 0 users / $0 revenue" |
+
+---
+
+### Phase 3 — Performance
+
+#### Finding P-001 — `framer-motion` imported in 36 source files
+- **Severity:** MEDIUM
+- **Status:** CONFIRMED
+- **Description:** `framer-motion` is imported by 36 .tsx files in `src/`. The dev chunk for framer-motion is ~266KB (`node_modules_framer-motion_dist_es_*.js` = 265,810 bytes unminified). While this is acceptable for an animation-rich landing page, the same library is also pulled into dashboard/admin/scroll components where simpler CSS animations would suffice.
+- **Evidence:**
+  ```
+  $ rg -l "framer-motion" src/ -g "*.tsx" -g "*.ts" | wc -l
+  → 36
+  ```
+  The Hero component (hero.tsx L59-60) already demonstrates the migration path: `style={{ animation: "heroFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1)" }}` — pure CSS keyframe animation, no motion component. AppView.tsx L441-443 comment confirms framer-motion was already removed from the top-level view switch to fix "removeChild" DOM errors.
+- **Recommendation:** Continue the in-progress migration pattern (Hero, AppView) — replace `motion.div initial/animate` for simple fade/slide reveals with CSS keyframes (already defined in globals.css: `heroFadeUp`, `heroFadeBlur`, `chipIn`, `float-3d`, `navbarIn`, `mobileMenuIn`). Keep framer-motion only for: AnimatePresence, layout animations, drag, and the `motion.button whileHover/whileTap` spring interactions in `auth-fields.tsx` and `social-proof.tsx`. Estimated savings: ~150-200KB off initial bundle.
+
+#### Finding P-002 — `recharts` still imported by 4 dashboard/admin components
+- **Severity:** MEDIUM
+- **Status:** CONFIRMED
+- **Description:** `recharts` (^2.15.4) is still imported by `src/components/ui/chart.tsx` (shadcn wrapper), `src/components/novsmm/admin-panel.tsx`, `src/components/novsmm/dashboard-home.tsx`, `src/components/novsmm/dashboard-analytics.tsx`, `src/components/novsmm/dashboard-wallet.tsx`. The recharts dev chunk is 898KB (`node_modules_recharts_es6_*.js` = 897,719 bytes unminified, ~400KB production-minified). The P-C-001 fix in `stats.tsx` (L6-9 comment + L357-398 `MiniBarChart` pure-SVG component) demonstrates the migration path but only one component was migrated.
+- **Evidence:**
+  ```
+  $ rg -l "recharts" src/ -g "*.tsx" -g "*.ts"
+  → src/components/ui/chart.tsx
+  → src/components/novsmm/admin-panel.tsx
+  → src/components/novsmm/dashboard-home.tsx
+  → src/components/novsmm/dashboard-analytics.tsx
+  → src/components/novsmm/dashboard-wallet.tsx
+  ```
+  Note: the landing page itself is unaffected because all 5 recharts-using components are below the dashboard fold and lazy-loaded via `next/dynamic` in `app-view.tsx` (see P-003). The cost is paid by authed users when they open the dashboard.
+- **Recommendation:** Apply the same P-C-001 pattern (pure SVG bar/line/area charts in ~40 lines each) to the 4 remaining dashboard components. Priority order: `dashboard-home.tsx` (initial dashboard view, every authed user lands here), then `dashboard-analytics.tsx`, then `dashboard-wallet.tsx`, then `admin-panel.tsx`. Keep recharts only if a chart genuinely needs features SVG can't provide (stacked areas with brush, scatter with tooltips).
+
+#### Finding P-003 — Lazy-loading: well done (no fix needed)
+- **Status:** ✅ CONFIRMED CLEAN
+- **Description:** Both the landing page and the dashboard properly lazy-load below-the-fold sections via `next/dynamic`.
+- **Evidence:**
+  - `src/app/page.tsx` L44-83: 10 landing sections lazy-loaded (Services, Marketplace, Payments, Stats, Testimonials, Security, ApiDocsSection, AffiliateSection, Faq, Footer), each with a `SectionSkeleton` placeholder reserving vertical space (L27-42) to prevent CLS. Hero and Navbar are eagerly imported (above the fold).
+  - `src/components/novsmm/app-view.tsx` L21-30: 10 dashboard tabs lazy-loaded (Analytics, Marketplace, Orders, Subscriptions, ChildPanels, Wallet, Tickets, Notifications, Profile, AdminPanel), each with a `TabLoader` spinner (L32-38).
+  - Comment in `app-view.tsx` L20: "Lazy load heavy components for better initial load"
+- **Recommendation:** No action.
+
+#### Finding P-004 — Database indexes: comprehensive, minor composite-index gaps
+- **Severity:** LOW
+- **Status:** MINOR GAP
+- **Description:** `prisma/schema.prisma` has 100+ `@@index` declarations across all 30+ models — coverage is broadly excellent. The specific audit queries are all covered by 2-column composites, but the typical dashboard "list user's recent orders by status" query (`WHERE userId=? AND status=? ORDER BY createdAt DESC`) does not have a matching 3-column composite on `(userId, status, createdAt)`. Postgres will use the 2-column `(userId, status)` index then do an in-memory sort on `createdAt`.
+- **Evidence (verified line-by-line):**
+  | Table | Audit query | Existing indexes | Gap |
+  |-------|-------------|------------------|-----|
+  | Order (L193-198) | userId + status + createdAt | `(userId)`, `(status)`, `(serviceId)`, `(createdAt)`, `(userId,status)`, `(userId,createdAt)` | No `(userId, status, createdAt)` |
+  | Transaction (L216-223) | userId + type + createdAt | `(userId)`, `(type)`, `(status)`, `(reference)`, `(createdAt)`, `(userId,type)`, `(userId,status)`, `(userId,createdAt)` | No `(userId, type, createdAt)` |
+  | Service (L155-157) | platform + status | `(platform)`, `(status)`, `(status, platform, price)` | ✅ Covered |
+  | Notification (L256-260) | userId + createdAt | `(userId)`, `(read)`, `(createdAt)`, `(userId,read)`, `(userId,createdAt)` | ✅ Covered |
+- **Recommendation:** Low priority — only add 3-column composites on `Order` and `Transaction` if EXPLAIN ANALYZE shows a sort node on the dashboard's "recent orders" / "transaction history" queries. The 2-column indexes are still effective for cardinality reduction.
+
+#### Finding P-005 — Cache invalidation gaps in 6 balance-mutating routes (HIGH)
+- **Severity:** HIGH
+- **Status:** CONFIRMED
+- **Description:** Two cache layers store user balance:
+  1. **`user:{userId}`** — JWT session-token enrichment cache in `src/lib/auth.ts:952`, 30s TTL. Populates `session.user.balance/role/status/currency/...` on every authenticated request without hitting the DB.
+  2. **`dashboard:{userId}:{range}`** — dashboard aggregate cache in `src/app/api/dashboard/route.ts:25`, 15s TTL. Caches the entire dashboard payload (balance + orders + analytics + ...).
+
+  Three routes correctly invalidate the dashboard cache after balance changes:
+  - ✅ `wallet/topup/route.ts:284` — `cacheInvalidate('dashboard:${userId}:*')`
+  - ✅ `wallet/withdraw/route.ts:90` — `cacheInvalidate('dashboard:${userId}:*')`
+  - ✅ `orders/route.ts:340` — `cacheInvalidate('dashboard:${userId}:*')`
+
+  Three routes correctly invalidate the user (JWT) cache:
+  - ✅ `admin/users/route.ts:183` — `cacheInvalidate('user:${id}')`
+  - ✅ `admin/bulk/route.ts:50` — `cacheInvalidate('user:${userId}')`
+  - ✅ `me/sessions/route.ts:103` — `cacheInvalidate('user:${userId}')`
+
+  **SIX routes mutate `user.balance` but invalidate NEITHER cache:**
+
+  | Route | Line | Mutation | Cache invalidated |
+  |-------|------|----------|-------------------|
+  | `webhooks/nowpayments/route.ts` | L184-190 | `user.update({ data: { balance: { increment: txn.amount } } })` | ❌ NONE |
+  | `webhooks/paypal/route.ts` | (same pattern) | credits wallet on confirmed PayPal payment | ❌ NONE |
+  | `webhooks/mercadopago/route.ts` | (same pattern) | credits wallet on confirmed MercadoPago payment | ❌ NONE |
+  | `admin/refunds/route.ts` | L83-90 | `user.update({ data: { balance: { increment/decrement } } })` | ❌ NONE |
+  | `admin/users/adjust-balance/route.ts` | L50-61 | `user.update({ data: { balance: { increment/decrement } } })` | ❌ NONE |
+  | `subscriptions/route.ts` | (billing) | subscription charge debits wallet | ❌ NONE |
+
+  The dashboard route comment (`/api/dashboard/route.ts` L14) explicitly claims "Invalidated on order/wallet mutations" — but this is only true for the 3 routes above, not for the 6 webhook/refund/adjust/subscription routes.
+- **Impact:** After a webhook credits the wallet (e.g. PayPal payment confirmed), the user's session token (cached under `user:{userId}` for 30s) keeps the OLD balance. The Navbar (`navbar.tsx` L24 reads `user.balance` from session) shows stale balance for up to 30s. The dashboard (cached under `dashboard:{userId}:*` for 15s) also stays stale for 15s. The user tops up, sees no balance change, and may submit a duplicate topup or open a support ticket. The same staleness happens after admin refunds and admin balance adjustments.
+- **Evidence:**
+  ```
+  $ rg -n "cacheInvalidate|cache\.|from \"@/lib/cache\"" src/app/api/webhooks/nowpayments/route.ts src/app/api/webhooks/paypal/route.ts src/app/api/webhooks/mercadopago/route.ts src/app/api/admin/refunds/route.ts src/app/api/admin/users/adjust-balance/route.ts src/app/api/subscriptions/route.ts
+  → (no output — none of these 6 routes import or call cacheInvalidate)
+  ```
+- **Recommendation:**
+  1. **(P1)** Add a small helper to `src/lib/cache.ts`:
+     ```ts
+     export async function invalidateUserCache(userId: string): Promise<void> {
+       await Promise.all([
+         cacheInvalidate(`user:${userId}`).catch(() => {}),
+         cacheInvalidate(`dashboard:${userId}:*`).catch(() => {}),
+       ]);
+     }
+     ```
+  2. **(P1)** Call `invalidateUserCache(txn.userId)` after every `db.user.update({ where: { id: userId }, data: { balance: { increment: ... } } })` in the 6 routes above. The 3 webhook routes also need this in both the credit-on-success path AND the refund-credit path.
+  3. **(P2)** Add an integration test that: (a) reads dashboard balance, (b) triggers a webhook, (c) reads dashboard balance again, (d) asserts the second read shows the new balance immediately (not after 15s TTL).
+
+#### Finding P-006 — Image optimization: clean (no fix needed)
+- **Status:** ✅ CONFIRMED CLEAN
+- **Description:** `public/` is minimal — only 4 root files (icon.png 3.7KB, novsmm-logo.png 3.7KB, logo.svg 1.5KB, sw.js 5KB) plus a `payment-logos/` subdirectory with 8 small files (all <5KB each, SVG + PNG variants for PayPal/MercadoPago/NowPayments/WhatsApp). Total `public/` is <25KB.
+- **Evidence:**
+  ```
+  $ ls -la public/*.png public/*.jpg public/*.webp 2>/dev/null | sort -k5 -rn | head -10
+  -rw-rw-r-- 1 z z 3716 Jul 13 18:42 public/novsmm-logo.png
+  -rw-rw-r-- 1 z z 3716 Jul 13 18:42 public/icon.png
+  ```
+- **Recommendation:** No action. (If marketing assets are added later, route them through `next/image` with proper `width`/`height` and consider AVIF/WebP variants.)
+
+#### Finding P-007 — Google Fonts: clean (well-architected)
+- **Status:** ✅ CONFIRMED CLEAN
+- **Description:** `src/app/layout.tsx` L248-280 implements the standard non-blocking Google Fonts pattern correctly:
+  - L248: `<link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous">`
+  - L249: `<link rel="preconnect" href="https://fonts.googleapis.com">`
+  - L250: `<link rel="dns-prefetch" href="https://fonts.gstatic.com">`
+  - L260-265: Font stylesheet loaded with `media="print" id="font-stylesheet"` — non-render-blocking
+  - L275-280: Nonce'd `<script>` swaps `media="print"` → `media="all"` on load (the standard print-then-swap trick)
+  - L266-271: `<noscript>` fallback for users without JS
+  - L38-47: Justified comment explaining why `next/font/google` is NOT used (VPS restricted-network build failures)
+- **Recommendation:** No action. (Note: ESLint rule `@next/next/google-font-preconnect` is disabled in `eslint.config.mjs:35-39` with a justified comment — correct because the rule is designed for Pages Router and would false-positive here.)
+
+---
+
+### Phase 4 — Frontend/UX
+
+#### Finding F-001 — i18n raw-keys bug: NOT REPRODUCIBLE (already fixed)
+- **Status:** ✅ RESOLVED (by SECURITY FIX A-002)
+- **Description:** The audit task said "the Hero shows raw translation keys like `landing.hero.title` instead of real text." This is no longer the case — the bug was already fixed. The fix is documented inline at `src/components/novsmm/language-provider.tsx` L63-71:
+  > "SECURITY FIX (A-002): initialize translations with English defaults instead of empty object. Previously, the SSR HTML contained raw translation keys like 'landing.hero.title' because t() returned the key when translations was {}. Now SSR renders English text, and useEffect updates to the user's preferred language on mount."
+- **Evidence (live verification):**
+  ```
+  $ curl -s http://localhost:3000/ > /tmp/page.html
+  $ python3 -c "
+  import re
+  html = open('/tmp/page.html').read()
+  m = re.search(r'<h1[^>]*>(.*?)</h1>', html, re.S)
+  print('H1 text:', repr(re.sub(r'<[^>]+>','',m.group(1)))[:200])
+  if re.search(r'landing\.hero\.(title|subtitle|badge)', html):
+      print('RAW KEYS FOUND')
+  else:
+      print('NO RAW landing.hero.* KEYS — i18n working')
+  "
+  → H1 text: 'The infrastructure for social media marketing at scale.'
+  → NO RAW landing.hero.* KEYS — i18n working
+  ```
+  Also confirmed: `src/app/page.tsx` L13 imports `LanguageProvider`, L89 + L131 wraps the entire landing page (Hero, Navbar, all sections, AppView landing prop) inside `<LanguageProvider>...</LanguageProvider>`.
+- **Recommendation:** No action. Close this audit item.
+
+#### Finding F-002 — iOS Safari auto-zoom on inputs with font-size < 16px (MEDIUM)
+- **Severity:** MEDIUM (UX bug — iOS Safari auto-zooms the viewport when an input/select/textarea with font-size <16px is focused, then doesn't zoom back out on blur, disorienting the user)
+- **Status:** CONFIRMED
+- **Description:** Programmatic scan of all 80+ .tsx files in `src/components/novsmm/` found **54 `<input>/<select>/<textarea>` tags with a BARE `text-sm` (14px) or `text-xs` (12px) class** (no `md:` prefix on that token). iOS Safari treats anything below 16px as "zoom on focus."
+- **Evidence (breakdown by file):**
+  ```
+  TOTAL: 54 inputs/selects/textareas with bare text-sm or text-xs (triggers iOS zoom)
+
+     23  admin-panel.tsx        ← Input (L1336) + SelectField (L444) component DEFINITIONS are text-sm
+     11  dashboard-marketplace.tsx
+      8  dashboard-subscriptions.tsx
+      4  dashboard-tickets.tsx
+      2  dashboard-child-panels.tsx
+      2  dashboard-wallet.tsx    ← withdraw modal select (L509) + destination input (L542)
+      1  dashboard-shell.tsx     ← search input (L807)
+      1  landing-command-palette.tsx
+      1  register-screen.tsx
+      1  whatsapp-widget.tsx
+  ```
+  Specific examples:
+  - `admin-panel.tsx:1336-1340` — `Input` component definition: `className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm ..."` — propagates to 23 call sites (every admin service/provider/coupon/promotion form).
+  - `admin-panel.tsx:444-447` — `SelectField` component definition: `className="h-10 w-full rounded-lg border border-border bg-background px-3 text-sm ..."` — same blast radius.
+  - `dashboard-wallet.tsx:509-513` — withdrawal payment method `<select>`: `text-sm`.
+  - `dashboard-wallet.tsx:542-546` — withdrawal destination `<input>`: `text-sm`.
+  - `dashboard-subscriptions.tsx:466-579` — 8 form inputs all `text-sm` (service select, username, link, min/max qty, posts, delay, expiry).
+  - `admin-panel.tsx:1259,1271,1283,1293` — service-provider inline edit inputs: `text-xs` (12px — even worse).
+- **Note (what's already clean):**
+  - `auth-fields.tsx:85` — the `Field` component used in login/register uses `text-base` (16px) ✅
+  - `dashboard-profile.tsx:225,517,525,571,584` — most profile inputs use `text-base` ✅
+- **Recommendation:**
+  1. **(P1)** Fix the two admin-panel.tsx component definitions first — single edit, 23+ call sites fixed at once:
+     - L1340: `text-sm` → `text-base`
+     - L447: `text-sm` → `text-base`
+  2. **(P1)** Fix the remaining 31 instances. Either:
+     - Simple: replace `text-sm` → `text-base` (slightly larger inputs, no density loss on desktop because `h-11`/`h-12` already controls the box height)
+     - Preserve density: replace `text-sm` → `text-sm md:text-base` (still 14px on desktop, 16px on mobile — iOS zoom only triggers on touch devices)
+  3. **(P2)** Verify in Mobile Safari (iOS 17+) after the fix — focus each input type and confirm no auto-zoom.
+  4. **(P3)** Add a custom ESLint rule (regex on `className` of `<input>/<select>/<textarea>` containing `text-sm` or `text-xs` without a preceding `md:`) to prevent regressions.
+
+#### Finding F-003 — Language selector hidden on mobile (HIGH)
+- **Severity:** HIGH (i18n accessibility — non-English-speaking mobile users cannot switch language)
+- **Status:** CONFIRMED
+- **Description:** The `LanguageSwitcher` component is only rendered inside the desktop-only `<div className="hidden items-center gap-2 lg:flex">` blocks in `navbar.tsx` (L110 desktop-not-authed, L93 desktop-authed). The mobile menu (`L137-201`, `lg:hidden`) renders nav links + Sign In + Start Free / Dashboard — but **NO `LanguageSwitcher`**. Mobile users (typically 50-70% of SaaS traffic) have no way to change language from the UI; they're stuck on whatever `detectBrowserLang()` chose at first mount.
+
+  Also note: there is no currency selector anywhere in the codebase — `rg "CurrencySwitcher" src/` returns nothing. The Navbar shows the user's currency as a static label (`{currency}` from session) but offers no way to change it.
+- **Evidence (`src/components/novsmm/navbar.tsx`):**
+  - L110: `<div className="hidden items-center gap-2 lg:flex">` — desktop block
+  - L111: `<LanguageSwitcher />` — only rendered inside this `hidden lg:flex` block
+  - L137-201: mobile menu — search for `LanguageSwitcher` → not present:
+    ```
+    L148-157: 6 nav links (Platform/Services/Marketplace/Payments/Security/Pricing)
+    L158:     <div className="mt-2 flex flex-col gap-2 border-t border-border/60 pt-3">
+    L159-176:   authed-branch: Balance + Dashboard button
+    L177-198:   non-authed-branch: Sign In + Start Free buttons
+    L199:      (close div)
+    ```
+  - There is no third branch rendering `<LanguageSwitcher />`.
+- **Impact:** Spanish/Portuguese/French-speaking mobile visitors (a large share of NOVSMM's target LATAM + Brazil market per the master prompt) cannot switch the UI to their language. They either bounce or power through in English. The PDF master prompt is in Spanish — mobile Spanish support is a core requirement, not a nice-to-have.
+- **Recommendation:**
+  1. **(P1)** Add `<LanguageSwitcher />` to the mobile menu in `navbar.tsx`, between the nav links (L157) and the auth buttons (L158). The switcher's dropdown opens absolute-positioned (`absolute right-0 top-full` in language-switcher.tsx L46) — for the mobile menu's full-width context, either:
+     - Pass a `className="w-full justify-between"` prop and override the dropdown to `static` positioning, OR
+     - Wrap it in a labeled row: `<div className="px-4 py-3 text-sm text-muted-foreground">Language</div>` then `<LanguageSwitcher className="w-full" />`.
+  2. **(P2)** Consider also surfacing the language switcher on the dashboard (`dashboard-shell.tsx` topbar) — authed users currently have no way to switch language either, and their language preference is persisted in `localStorage` (not in the User row) so it doesn't follow them across devices.
+  3. **(P3)** Decide whether a currency selector is needed. The codebase supports multi-currency display (user.currency, formatPrice()) but offers no UI to change it. If multi-currency is a feature, add a CurrencySwitcher next to LanguageSwitcher; if it's admin-only (set at onboarding), document that.
+
+#### Finding F-004 — Social proof disclosure: visible, minor polish optional
+- **Severity:** LOW
+- **Status:** CONFIRMED CLEAN (minor polish optional)
+- **Description:** `src/components/novsmm/social-proof.tsx` correctly discloses the illustrative nature of the notifications:
+  - L7-17: docstring explicitly invokes FTC + EU unfair commercial practices directive compliance
+  - L99: `<span className="rounded bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70" title="Illustrative example — not real-time data">{t("landing.socialProof.demo")}</span>`
+    - Visible inline next to the user's name + action
+    - Has a tooltip (`title="Illustrative example — not real-time data"`)
+    - Uses `text-[11px] uppercase tracking-wide` — legible at notification scale
+    - Color: `text-muted-foreground/70` on `bg-muted/60` — subdued but readable
+- **Minor concern:** the badge is somewhat subtle (70% opacity, 60% bg). For maximum legal defensibility across jurisdictions (especially EU), the disclosure could be slightly more prominent.
+- **Recommendation (optional):**
+  - Bump opacity: `text-muted-foreground/70` → `text-muted-foreground` (full opacity)
+  - Add a small info icon: `<Info className="mr-0.5 h-2.5 w-2.5 inline" />` before the "DEMO" text
+  - Otherwise no action — the current implementation is functional and legally defensible.
+
+#### Finding F-005 — Zero counters when /api/status fails (HIGH, live-verified)
+- **Severity:** HIGH (visible "platform looks broken" UX bug)
+- **Status:** CONFIRMED (live-verified in sandbox)
+- **Description:** `src/components/novsmm/stats.tsx` initializes ALL stat counters to **0** as the fallback when `/api/status` is unreachable or returns no `stats` field. The endpoint is currently returning HTTP 500 (because the database is unreachable in this sandbox — confirmed via `/api/health/db` returning 503 "Database unreachable"). As a result, live visitors to `http://localhost:3000/` right now see:
+  - "0+" total orders (Counter animates from 0 → 0)
+  - "0" active users
+  - "$0" revenue
+  - "0 orders/min" throughput
+  - Only uptime shows 99.99% (hardcoded at `stats.tsx:274`: `<Counter to={99.99} ... />`)
+
+  The Stats section was deliberately moved to position 2 (right after the Hero) per `page.tsx` L104-109: "Showing credibility numbers (6,300+ services, 1,200 orders/min, 99.99% uptime) immediately after the Hero builds trust before the visitor scrolls..." — but the 0-defaults invert that intent: instead of building trust, the section now signals "this platform has zero activity / is broken."
+
+  By contrast, the Hero component (`hero.tsx:34`) is protected — it falls back to `1200` orders/min if the API fails: `const [ordersPerMin, setOrdersPerMin] = useState(1200);`. So the Hero eyebrow still shows "1200 orders/min" while the Stats section below it shows "0 orders/min" — an internally contradictory page that looks broken.
+- **Evidence:**
+  ```
+  $ curl -sI http://localhost:3000/api/status
+  → HTTP/1.1 500 Internal Server Error
+
+  $ curl -s http://localhost:3000/api/health/db
+  → {"error":"Database unreachable"}  (HTTP 503)
+
+  # stats.tsx L34-41:
+  const DEFAULTS: StatsPayload = {
+    totalUsers: 0,       // ← becomes visible "0"
+    orders24h: 0,
+    activeServices: 0,
+    totalOrders: 0,
+    totalRevenue: 0,
+    ordersPerMin: 0,
+  };
+
+  # stats.tsx L48-58: only updates if statusData?.stats is truthy
+  useEffect(() => {
+    if (statusData?.stats) {
+      setStats({ totalUsers: statusData.stats.totalUsers ?? DEFAULTS.totalUsers, ... });
+    }
+    // ← no else branch; stats stays at 0 forever if API fails
+  }, [statusData]);
+  ```
+- **Impact:** Every `/api/status` 5xx (DB outage, deploy blip, cold-start race, Redis desync, network blip on the Cloudflare→origin hop) makes the landing page show "0 users / 0 orders / $0 revenue / 0 orders/min" to first-time visitors. For a SaaS whose primary conversion lever is social-proof numbers, this is a catastrophic first impression. Returning visitors who saw real numbers yesterday see zeros today and may assume the platform shut down.
+- **Recommendation:**
+  1. **(P1)** Replace the zero DEFAULTS in `stats.tsx` L34-41 with realistic marketing-floor constants — the same numbers the Hero already uses as fallbacks, plus the values shown in the section's own copy ("6,300+ services, 1,200 orders/min, 99.99% uptime"):
+     ```ts
+     // Marketing-floor defaults — used ONLY when /api/status is unreachable.
+     // Real numbers come from the DB once it's back. These prevent the
+     // "0 users / $0 revenue" broken-platform impression during outages.
+     const DEFAULTS: StatsPayload = {
+       totalUsers: 18_400,
+       orders24h: 173_000,
+       activeServices: 6_300,
+       totalOrders: 2_400_000,
+       totalRevenue: 4_100_000,
+       ordersPerMin: 1_200,
+     };
+     ```
+  2. **(P1)** Make `/api/status` degrade gracefully — wrap the DB queries in `try/catch` and return the last-known-good cached payload plus `degraded: true`, instead of 500'ing. A 200-with-degraded-flag lets the client render real numbers from cache.
+  3. **(P2)** Surface a small "stats temporarily unavailable" indicator (e.g. a subtle amber dot next to the section title) when `degraded: true`, so returning users know it's a glitch rather than the actual platform state.
+  4. **(P3)** Add a synthetic test (Playwright) that boots the app with the DB disconnected and asserts that no "0" stat values are visible on the landing page.
+
+---
+
+### Net conclusion — 12 findings audited
+
+**Phase 3 (Performance):** 2 clean (P-003 lazy-loading, P-006 images, P-007 fonts), 1 minor gap (P-004 composite indexes), 4 actionable (P-001 framer-motion breadth, P-002 recharts in 4 components, **P-005 cache invalidation HIGH**).
+
+**Phase 4 (Frontend/UX):** 1 already-resolved (F-001 i18n), 1 clean-with-polish (F-004 social proof), 3 actionable (F-002 iOS zoom 54 instances, **F-003 mobile language selector HIDDEN HIGH**, **F-005 zero counters HIGH**).
+
+**3 HIGH-severity findings requiring immediate attention:**
+1. **P-005** — 6 balance-mutating routes (3 payment webhooks + admin refund + admin balance-adjust + subscription billing) don't invalidate the `user:{userId}` or `dashboard:{userId}:*` cache. Users see stale wallet/Navbar balance for 15-30s after every webhook-driven topup, every refund, and every admin balance adjustment. Fix is mechanical (add `invalidateUserCache(userId)` helper + 6 call sites).
+2. **F-003** — Language selector is hidden on mobile. Mobile users (50-70% of traffic, especially in NOVSMM's LATAM/Brazil target market) cannot switch language from the UI. Fix is one component insertion in `navbar.tsx` mobile menu.
+3. **F-005** — Stats section shows "0 users / 0 orders / $0 revenue / 0 orders/min" whenever `/api/status` 5xx's. Verified live in sandbox (endpoint returns 500). Fix is replacing the zero DEFAULTS with marketing-floor constants and adding try/catch to the status endpoint.
+
+**Recommended remediation order:**
+1. F-005 (1 file, ~10 lines — instantly removes the "broken platform" impression)
+2. F-003 (1 file, ~5 lines — restores mobile i18n access)
+3. P-005 (7 files, ~30 lines — closes the wallet-staleness UX bug + the duplicate-topup support-ticket class)
+4. F-002 (10 files, ~54 class swaps — fixes iOS zoom; the 2 admin-panel.tsx component definitions alone fix 23 sites)
+5. P-002 (4 files — migrate remaining recharts usages to pure SVG, ~150-200KB savings on dashboard initial load)
+6. P-001 (ongoing — continue motion→CSS migration as opportunities arise)
+7. P-004 (only if EXPLAIN ANALYZE shows sort-node cost on dashboard queries)
+
+Files modified: ONLY this worklog append. No source files touched (read-only audit).
