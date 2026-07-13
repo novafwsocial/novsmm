@@ -735,7 +735,7 @@ function CreateTicketModal({ onClose }: { onClose: () => void }) {
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
               placeholder="Brief description of your issue"
-              className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </label>
           <label className="block">
@@ -743,7 +743,7 @@ function CreateTicketModal({ onClose }: { onClose: () => void }) {
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
-              className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm focus:outline-none"
+              className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-base focus:outline-none"
             >
               <option value="low">Low</option>
               <option value="medium">Medium</option>
@@ -757,7 +757,7 @@ function CreateTicketModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
               placeholder="Describe your issue in detail…"
-              className="w-full resize-none rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="w-full resize-none rounded-xl border border-border bg-background px-3.5 py-2.5 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </label>
         </div>

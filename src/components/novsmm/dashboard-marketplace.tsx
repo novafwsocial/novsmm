@@ -1928,7 +1928,7 @@ function ServiceDetailModal({
             value={link}
             onChange={(e) => setLink(e.target.value)}
             placeholder="https://instagram.com/yourpost"
-            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
 
@@ -2200,7 +2200,7 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
               <select
                 value={r.serviceId}
                 onChange={(e) => updateRow(r.id, { serviceId: e.target.value })}
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
               >
                 <option value="">Select a service…</option>
                 {services.map((s: any) => (
@@ -2214,14 +2214,14 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
                 value={r.link}
                 onChange={(e) => updateRow(r.id, { link: e.target.value })}
                 placeholder="https://…"
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
               />
               <input
                 type="number"
                 value={r.quantity || ""}
                 onChange={(e) => updateRow(r.id, { quantity: Number(e.target.value) || 0 })}
                 placeholder="0"
-                className="h-10 rounded-lg border border-border bg-background px-3 text-right text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-1"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-right text-base tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-1"
               />
               <button
                 onClick={() => removeRow(r.id)}
@@ -2498,7 +2498,7 @@ function HistoryTab() {
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   aria-label="Filter orders by status"
-                  className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
+                  className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-base font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
                 >
                   {HISTORY_STATUS_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>

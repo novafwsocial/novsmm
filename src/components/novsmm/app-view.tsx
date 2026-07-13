@@ -10,7 +10,7 @@ import { RegisterScreen } from "./register-screen";
 import { OnboardingScreen } from "./onboarding-screen";
 import { WelcomeScreen } from "./welcome-screen";
 import { DashboardShell } from "./dashboard-shell";
-import { DashboardHome } from "./dashboard-home";
+const DashboardHome = dynamic(() => import("./dashboard-home").then(m => ({ default: m.DashboardHome })), { loading: () => <TabLoader /> });
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { Field } from "./auth-fields";

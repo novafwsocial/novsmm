@@ -196,6 +196,8 @@ model Order {
   @@index([createdAt])
   @@index([userId, status])
   @@index([userId, createdAt])
+  // P-004: 3-col composite for dashboard queries "user's orders by status, sorted by date"
+  @@index([userId, status, createdAt])
 }
 
 model Transaction {
@@ -221,6 +223,8 @@ model Transaction {
   @@index([userId, type])
   @@index([userId, status])
   @@index([userId, createdAt])
+  // P-004: 3-col composite for dashboard queries "user's transactions by type, sorted by date"
+  @@index([userId, type, createdAt])
 }
 
 model PaymentMethod {

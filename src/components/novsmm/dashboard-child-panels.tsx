@@ -589,7 +589,7 @@ function CreateChildPanelModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="Acme SMM"
               maxLength={50}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
           <div>
@@ -823,7 +823,7 @@ function EditChildPanelModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={50}
-            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
 

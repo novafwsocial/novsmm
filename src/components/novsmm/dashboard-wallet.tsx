@@ -509,7 +509,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           >
             {/* BROAD-FIX-BATCH-1: removed the hardcoded "Wise" option (Wise was
                 dropped from the canonical 5 payment methods in
@@ -543,7 +543,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             placeholder="e.g. IBAN, USDT wallet address, PayPal email"
-            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
 

@@ -466,7 +466,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
             <select
               value={serviceId}
               onChange={(e) => handleServiceChange(e.target.value)}
-              className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             >
               <option value="">Select a service…</option>
               {services.map((s: any) => (
@@ -495,7 +495,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               placeholder="@username"
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
           <div>
@@ -507,7 +507,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               value={link}
               onChange={(e) => setLink(e.target.value)}
               placeholder="https://instagram.com/username"
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
         </div>
@@ -524,7 +524,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               min={selectedService?.minQty ?? 1}
               max={maxQuantity}
               onChange={(e) => setMinQuantity(Number(e.target.value) || 0)}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
           <div>
@@ -537,7 +537,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               min={minQuantity}
               max={selectedService?.maxQty ?? 100000}
               onChange={(e) => setMaxQuantity(Number(e.target.value) || 0)}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
         </div>
@@ -554,7 +554,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               min={1}
               max={365}
               onChange={(e) => setPosts(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
           <div>
@@ -567,7 +567,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               min={0}
               max={60 * 24}
               onChange={(e) => setDelayMinutes(Math.max(0, Number(e.target.value) || 0))}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
           <div>
@@ -580,7 +580,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               min={1}
               max={365}
               onChange={(e) => setExpiryDays(Math.max(1, Math.min(365, Number(e.target.value) || 1)))}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
         </div>
