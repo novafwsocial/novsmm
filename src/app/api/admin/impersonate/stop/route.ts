@@ -61,7 +61,8 @@ export async function POST(_req: NextRequest) {
     email: admin.email,
     name: admin.name,
     role: admin.role,
-    username: admin.username,
+    // FIX (OAuth nullable username): coerce null → ""
+    username: admin.username ?? "",
     // No realAdminId — this is a normal admin session again
   };
 

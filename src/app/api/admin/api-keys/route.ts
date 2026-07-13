@@ -65,7 +65,9 @@ export async function GET(req: NextRequest) {
     ipAllowlist: k.ipAllowlist,
     createdAt: k.createdAt,
     revokedAt: k.revokedAt,
-    user: k.user,
+    user: k.user
+      ? { ...k.user, username: k.user.username ?? "" }
+      : k.user,
   }));
 
   return apiOk({

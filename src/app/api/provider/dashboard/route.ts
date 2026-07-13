@@ -33,6 +33,13 @@ async function resolveProviderIdsForUser(
   // Provider role: match by name (= username convention) OR by apiKey
   // field that may store the userId. We also pull the user record so we
   // can match on email/name as a fallback.
+  //
+  // FIX (OAuth nullable username): `user.username` and `user.name` are
+  // `string | null` (User.username was made nullable to allow OAuth users
+  // to be created before the signIn callback generates a username).
+  // `Provider.name` expects `string | undefined` — passing `null` fails
+  // the TS build AND would match nothing useful at runtime. We use
+  // conditional spread so the OR branch is simply skipped when null.
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { username: true, email: true, name: true },
@@ -42,9 +49,9 @@ async function resolveProviderIdsForUser(
   const matches = await db.provider.findMany({
     where: {
       OR: [
-        { name: user.username },
+        ...(user.username ? [{ name: user.username }] : []),
         { name: user.email },
-        { name: user.name ?? "" },
+        ...(user.name ? [{ name: user.name }] : []),
         { apiKey: userId },
       ],
     },

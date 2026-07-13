@@ -700,7 +700,14 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         if (user) {
           token.id = (user as any).id;
           token.role = (user as any).role;
-          token.username = (user as any).username;
+          // FIX (OAuth nullable username): User.username is `string | null`
+          // (nullable to allow OAuth users to be created before the signIn
+          // callback generates a username). Coerce to "" so the JWT/session
+          // always carries a string — this keeps AuthUser.username and
+          // AppSession.user.username honest as `string` rather than
+          // `string | null`, and prevents null leaking to the frontend in
+          // the brief window before username is generated.
+          token.username = (user as any).username ?? "";
           // Preserve impersonation context from the "impersonate" provider
           if ((user as any).realAdminId) {
             token.realAdminId = (user as any).realAdminId;
@@ -791,7 +798,8 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 token.language = impersonated.language;
                 token.country = impersonated.country;
                 token.name = impersonated.name;
-                token.username = impersonated.username;
+                // FIX (OAuth nullable username): coerce null → ""
+                token.username = impersonated.username ?? "";
                 token.email = impersonated.email;
                 token.lifetimeEarnings = impersonated.lifetimeEarnings;
               }

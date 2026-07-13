@@ -66,6 +66,9 @@ export async function GET() {
   return apiOk({
     user: {
       ...user,
+      // FIX (OAuth nullable username): coerce null → "" so the frontend's
+      // `user.username: string` typing stays honest.
+      username: user.username ?? "",
       twoFactorEnabled,
       notificationPreferences,
     },

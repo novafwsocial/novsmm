@@ -34,7 +34,14 @@ export async function GET(req: NextRequest) {
   ]);
 
   return apiOk({
-    withdrawals: transactions,
+    // FIX (OAuth nullable username): coerce null → "" on each included user
+    // so the admin table's `username: string` typing stays honest.
+    withdrawals: transactions.map((t) => ({
+      ...t,
+      user: t.user
+        ? { ...t.user, username: t.user.username ?? "" }
+        : t.user,
+    })),
     pagination: {
       page,
       limit,

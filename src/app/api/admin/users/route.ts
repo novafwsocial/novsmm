@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
   ]);
 
   return apiOk({
-    users,
+    // FIX (OAuth nullable username): coerce null → "" on each user so the
+    // admin table's `username: string` typing stays honest.
+    users: users.map((u) => ({ ...u, username: u.username ?? "" })),
     pagination: {
       page,
       limit,

@@ -152,7 +152,10 @@ export async function GET(req: NextRequest) {
   for (const e of topReferrerEarnings) {
     earningsMap.set(e.userId, Math.abs(e._sum.amount ?? 0));
   }
-  const userMap = new Map<string, { username: string; name: string | null; image: string | null }>();
+  // FIX (OAuth nullable username): u.username is `string | null` because
+  // User.username was made nullable. The Map must accept null; line 166
+  // already falls back via `?? "anonymous"`.
+  const userMap = new Map<string, { username: string | null; name: string | null; image: string | null }>();
   for (const u of topReferrerUsers) {
     userMap.set(u.id, { username: u.username, name: u.name, image: u.image });
   }
