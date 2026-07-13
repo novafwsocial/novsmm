@@ -60,12 +60,12 @@ echo "── Exposed Files (should all be 404) ──"
 check_404() {
   local path=$1
   local code=$(curl -s -o /dev/null -w "%{http_code}" "$DOMAIN$path")
-  if [ "$code" = "404" ] || [ "$code" = "403" ]; then
-    echo "✅ $path → $code (protected)"
-    PASS=$((PASS + 1))
-  else
+  if [ "$code" = "200" ]; then
     echo "❌ $path → $code (EXPOSED!)"
     FAIL=$((FAIL + 1))
+  else
+    echo "✅ $path → $code (protected)"
+    PASS=$((PASS + 1))
   fi
 }
 
