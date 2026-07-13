@@ -26,17 +26,78 @@
  * via npm, which works because `next start` only needs the standard
  * `.next/` build output (BUILD_ID + server/ + static/).
  *
- * This config now uses the SAME approach: `script: "npm"`, `args:
- * "run start"`. That way `pm2 start ecosystem.config.js` is equivalent
- * to the user's manual command, and survives `npm`/`bun` differences
- * (the npm wrapper just calls `next start -p 3000` from package.json).
+ * FIX (env vars): This config now loads ALL variables from the .env file
+ * and passes them to each PM2 process. Previously, only NODE_ENV/PORT were
+ * set in the `env:` block, which meant DATABASE_URL, GOOGLE_CLIENT_ID,
+ * NEXTAUTH_SECRET, LICENSE_ENCRYPTION_KEY, etc. were NOT available to the
+ * running processes — causing Prisma to fail with "Environment variable
+ * not found: DATABASE_URL" and OAuth providers to not be registered.
  *
- * To use bun explicitly (faster startup, less memory), set:
- *   interpreter: "/usr/bin/bun", script: "node_modules/.bin/next", args: "start -p 3000"
- * — but require bun >= 1.1.258 which supports `bun next`. For maximum
- * compatibility we default to npm.
+ * Next.js only auto-loads .env in dev mode (`next dev`). In production
+ * (`next start`), the process inherits env vars from its parent (PM2),
+ * so PM2 MUST explicitly pass them.
  * ─────────────────────────────────────────────────────────────────────────────
  */
+
+const fs = require("fs");
+const path = require("path");
+
+/**
+ * Parse a .env file into a key=value object.
+ * Supports:
+ *   - Comments (lines starting with #)
+ *   - Empty lines (skipped)
+ *   - Quotes around values (stripped)
+ *   - Inline comments after values (# ...)
+ *   - KEY=value syntax
+ * Does NOT support:
+ *   - Variable expansion (FOO=${BAR}) — values are literal
+ *   - Multi-line values — each line is a separate var
+ */
+function loadEnvFile(filePath) {
+  const env = {};
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      // Skip empty lines and comments
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      // Must contain = to be a valid env var
+      const eqIndex = trimmed.indexOf("=");
+      if (eqIndex === -1) continue;
+      const key = trimmed.slice(0, eqIndex).trim();
+      let value = trimmed.slice(eqIndex + 1).trim();
+      // Strip inline comments (but not # inside quotes)
+      if (!value.startsWith('"') && !value.startsWith("'")) {
+        const hashIndex = value.indexOf(" #");
+        if (hashIndex !== -1) value = value.slice(0, hashIndex).trim();
+      }
+      // Strip surrounding quotes
+      if (
+        (value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))
+      ) {
+        value = value.slice(1, -1);
+      }
+      // Skip shell command substitution like $(openssl...) — these should
+      // have been resolved before writing to .env. If present, the value
+      // is invalid and we skip it (the var won't be set, which is better
+      // than passing the literal "$(openssl...)" string).
+      if (value.includes("$(") || value.includes("`")) {
+        console.warn(`[ecosystem] WARNING: .env var ${key} contains shell substitution "${value}" — please resolve it to a literal value in .env`);
+        continue;
+      }
+      env[key] = value;
+    }
+  } catch (e) {
+    console.warn(`[ecosystem] WARNING: could not load ${filePath}: ${e.message}`);
+  }
+  return env;
+}
+
+// Load the .env file from the project root
+const envFile = path.join(__dirname, ".env");
+const dotenvVars = loadEnvFile(envFile);
 
 module.exports = {
   apps: [
@@ -48,7 +109,12 @@ module.exports = {
       script: "npm",
       args: "run start",
       cwd: __dirname,
+      // FIX: pass ALL .env vars + process env + explicit overrides to PM2.
+      // This ensures DATABASE_URL, GOOGLE_CLIENT_ID, NEXTAUTH_SECRET, etc.
+      // are available to the Next.js production server.
       env: {
+        ...dotenvVars,
+        ...process.env,
         NODE_ENV: "production",
         PORT: 3000,
         HOSTNAME: "0.0.0.0",
@@ -75,6 +141,8 @@ module.exports = {
       args: "run worker:prod",
       cwd: __dirname,
       env: {
+        ...dotenvVars,
+        ...process.env,
         NODE_ENV: "production",
       },
       instances: 1,
@@ -96,6 +164,8 @@ module.exports = {
       args: "run notifications:prod",
       cwd: __dirname,
       env: {
+        ...dotenvVars,
+        ...process.env,
         NODE_ENV: "production",
         NOTIFICATIONS_SERVICE_PORT: 3003,
       },
