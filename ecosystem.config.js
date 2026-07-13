@@ -103,11 +103,13 @@ module.exports = {
   apps: [
     {
       name: "novsmm",
-      // Run `next start` via npm so it picks up the same binary the user's
-      // manual `pm2 start "npm run start"` uses. This is the most portable
-      // setup — works whether the host has node, bun, or both.
-      script: "npm",
-      args: "run start",
+      // FIX: use node start.js instead of npm run start. The start.js
+      // script explicitly loads .env via @next/env BEFORE spawning next
+      // start. This ensures DATABASE_URL, GOOGLE_CLIENT_ID, etc. are
+      // available regardless of how PM2 launches the process (npm strips
+      // env vars in some configurations).
+      script: "node",
+      args: "start.js",
       cwd: __dirname,
       // FIX: pass ALL .env vars + process env + explicit overrides to PM2.
       // This ensures DATABASE_URL, GOOGLE_CLIENT_ID, NEXTAUTH_SECRET, etc.
@@ -135,10 +137,9 @@ module.exports = {
     },
     {
       name: "novsmm-worker",
-      // The worker is a TypeScript file — use tsx (via npx) so PM2 doesn't
-      // need a separate bun install. Equivalent to `npm run worker:prod`.
-      script: "npm",
-      args: "run worker:prod",
+      // FIX: use node worker-start.js to load .env before running the worker.
+      script: "node",
+      args: "worker-start.js",
       cwd: __dirname,
       env: {
         ...dotenvVars,
@@ -158,10 +159,9 @@ module.exports = {
     },
     {
       name: "novsmm-notifications",
-      // Notifications mini-service — also run via npm script for portability.
-      // Reads NOTIFICATIONS_SERVICE_PORT from env (default 3003).
-      script: "npm",
-      args: "run notifications:prod",
+      // FIX: use node notifications-start.js to load .env before running.
+      script: "node",
+      args: "notifications-start.js",
       cwd: __dirname,
       env: {
         ...dotenvVars,
