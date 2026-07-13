@@ -15763,3 +15763,33 @@ Stage Summary:
 - Session is now ALWAYS refetched on mount (staleTime: 0, refetchOnMount: "always", cache: "no-store").
 - Login/register redirects use `/?authed=1` to force the dashboard view immediately.
 - User action: `git pull` + `npm run build` + restart. Both credentials login AND registration will now redirect to the dashboard correctly.
+
+---
+Task ID: CRITICAL-FIX-NEXTAUTH-ROUTE-HANDLER
+Agent: main (Z.ai Code)
+Task: User cannot log in with Google. Screenshot showed URL /?callbackUrl=... (no ?error= param). User asked for deep analysis.
+
+Work Log:
+- Analyzed the OAuth flow end-to-end using the /api/auth/debug-oauth diagnostic endpoint.
+- Key finding: GET /api/auth/providers only returned {credentials: ...} — NO google provider was registered, even though the user had saved Google credentials via the admin panel.
+- Investigated /api/auth/social-providers — returned {providers: []} (empty). This means the Google button wasn't even showing on the login screen (or if it was, clicking it would fail because NextAuth didn't know about the provider).
+- Ran /api/auth/debug-oauth which revealed the ROOT CAUSE:
+  * oauth:google DB setting EXISTS (hasValue: true, valueLength: 162)
+  * BUT decrypts: false — the AES-256-GCM decryption FAILS
+  * encryptionKey.set: false — LICENSE_ENCRYPTION_KEY is not set (in sandbox)
+  * In the user's WSL2, the key is either not set OR has changed since credentials were saved
+- Found a SECOND critical bug in the route handler: src/app/api/auth/[...nextauth]/route.ts was using the Pages Router signature NextAuth(options)(req, res). In Next.js 16 App Router, this doesn't pass the route params (the [...nextauth] path segments like ['signin', 'google']) to NextAuth, so NextAuth couldn't route to the correct provider handler.
+- Fixed the route handler to use the correct App Router signature: NextAuth(req, { params: { nextauth: [...] } }, options). This passes the route context to NextAuth so it can correctly route signin/google, callback/google, etc.
+- Verified the fix: with GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET env vars set, GET /api/auth/providers now returns BOTH 'credentials' AND 'google'. Previously it only returned 'credentials'.
+- tsc --noEmit exits 0.
+- Committed as 60b8942 and pushed to origin/main.
+
+Stage Summary:
+- TWO root causes found and fixed:
+  1. Route handler was using Pages Router signature → NextAuth couldn't route to OAuth providers (CRITICAL — this is why Google login never worked even when credentials were configured)
+  2. DB-stored credentials can't be decrypted → LICENSE_ENCRYPTION_KEY missing or changed (the user must fix this by setting env vars or re-saving credentials)
+- User action: git pull + npm run build + restart. Then EITHER:
+  (a) Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in .env (recommended — bypasses DB encryption entirely), OR
+  (b) Set LICENSE_ENCRYPTION_KEY in .env to the same value used when credentials were saved, OR
+  (c) Re-save Google credentials via the admin panel (re-encrypts with current key)
+- After the fix, visit https://novsmm.shop/api/auth/debug-oauth to verify the configuration. The google provider should appear in /api/auth/providers.
