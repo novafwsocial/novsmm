@@ -169,19 +169,32 @@ export async function POST(req: NextRequest) {
           return apiError("Webhook rejected — external_reference mismatch", 403);
         }
 
-        await db.$transaction([
-          db.transaction.update({
-            where: { id: txn.id },
+        // FIX (W-1): Use conditional updateMany with status:"pending" inside
+        // an interactive $transaction. Only ONE webhook can flip the status;
+        // the other gets count=0 and aborts before crediting. Prevents
+        // double-credit when MP retries the webhook.
+        const result = await db.$transaction(async (tx) => {
+          const updated = await tx.transaction.updateMany({
+            where: { id: txn.id, status: "pending" },
             data: { status: "completed", reference: paymentId },
-          }),
-          db.user.update({
+          });
+          if (updated.count === 0) {
+            return { alreadyProcessed: true };
+          }
+          await tx.user.update({
             where: { id: txn.userId },
             data: {
               balance: { increment: txn.amount },
               lifetimeEarnings: { increment: txn.amount },
             },
-          }),
-        ]);
+          });
+          return { alreadyProcessed: false };
+        });
+
+        if (result.alreadyProcessed) {
+          console.log("[webhooks/mercadopago] Transaction already processed by concurrent webhook — skipping", { txnId: txn.id });
+          return apiOk({ received: true });
+        }
 
         await createNotification({
           userId: txn.userId,

@@ -297,31 +297,43 @@ async function handleCaptureCompleted(event: any) {
     return;
   }
 
-  // Idempotency: skip if already completed
-  if (txn.status === "completed") {
-    console.log("[webhooks/paypal] Transaction already completed — skipping", { txnId: txn.id });
-    return;
-  }
-
-  // ── Credit the balance atomically ──
+  // ── Credit the balance atomically (race-safe) ──
+  // FIX (W-1): The old code did `if (txn.status === "completed") return`
+  // OUTSIDE the $transaction, then `db.transaction.update({ where: { id } })`
+  // INSIDE — two concurrent webhooks (PayPal retries automatically) could
+  // both pass the check and both increment the balance → double credit.
+  //
+  // Now we use a conditional updateMany with `status: "pending"` inside an
+  // interactive $transaction. Only ONE webhook can flip the status (the
+  // other gets count=0 and aborts before crediting). This is the same
+  // race-safe pattern used in /api/wallet/withdraw and /api/orders.
   const reference = `paypal:${captureId ?? orderId ?? txn.publicId}`;
-  await db.$transaction([
-    db.transaction.update({
-      where: { id: txn.id },
+  const result = await db.$transaction(async (tx) => {
+    const updated = await tx.transaction.updateMany({
+      where: { id: txn.id, status: "pending" },
       data: {
         status: "completed",
         reference,
         description: `Top-up via PayPal — capture ${captureId ?? txn.publicId}`,
       },
-    }),
-    db.user.update({
+    });
+    if (updated.count === 0) {
+      return { alreadyProcessed: true };
+    }
+    await tx.user.update({
       where: { id: txn.userId },
       data: {
         balance: { increment: txn.amount },
         lifetimeEarnings: { increment: txn.amount },
       },
-    }),
-  ]);
+    });
+    return { alreadyProcessed: false };
+  });
+
+  if (result.alreadyProcessed) {
+    console.log("[webhooks/paypal] Transaction already processed by concurrent webhook — skipping", { txnId: txn.id });
+    return;
+  }
 
   // ── Notify the user ──
   await createNotification({
@@ -386,12 +398,14 @@ async function handleCaptureDenied(event: any) {
 
   if (!txn) return;
 
-  if (txn.status === "pending") {
-    await db.transaction.update({
-      where: { id: txn.id },
-      data: { status: "failed" },
-    });
-
+  // FIX (W-1): Use conditional updateMany to prevent race with a concurrent
+  // COMPLETED webhook. If another webhook already flipped the status, we
+  // get count=0 and skip (don't overwrite completed→failed).
+  const failResult = await db.transaction.updateMany({
+    where: { id: txn.id, status: "pending" },
+    data: { status: "failed" },
+  });
+  if (failResult.count > 0) {
     await createNotification({
       userId: txn.userId,
       type: "recharge",

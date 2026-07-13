@@ -15,6 +15,50 @@ import { NextRequest, NextResponse } from "next/server";
  * API route level (via Redis) and at the gateway level (via Nginx in Phase 8).
  */
 
+/**
+ * Resolve the real client IP from the request, defense-in-depth against
+ * X-Forwarded-For spoofing (A-1).
+ *
+ * Priority:
+ * 1. cf-connecting-ip — set by Cloudflare, CANNOT be forged by the client
+ *    (Cloudflare strips any client-sent value). This is authoritative when
+ *    the app is behind Cloudflare Tunnel.
+ * 2. In production, if cf-connecting-ip is absent AND TRUST_PROXY=true,
+ *    use the LAST entry in x-forwarded-for (the one added by our trusted
+ *    proxy, e.g. nginx). The FIRST entry is client-controlled and forgeable.
+ * 3. In production without TRUST_PROXY, return "unknown" (fail-closed).
+ *    The request bypassed Cloudflare — don't trust any IP header.
+ * 4. In dev, use x-forwarded-for first entry (no Cloudflare in dev).
+ */
+function resolveClientIp(req: NextRequest): string {
+  // 1. Cloudflare's cf-connecting-ip is authoritative
+  const cfIp = req.headers.get("cf-connecting-ip");
+  if (cfIp && cfIp.trim()) return cfIp.trim();
+
+  // 2. In production, only trust x-forwarded-for if TRUST_PROXY is set
+  if (process.env.NODE_ENV === "production") {
+    if (process.env.TRUST_PROXY === "true") {
+      const xff = req.headers.get("x-forwarded-for");
+      if (xff) {
+        // Take the LAST entry — that's the one added by our trusted proxy.
+        // The first entry is client-controlled and forgeable.
+        const ips = xff.split(",").map((s) => s.trim()).filter(Boolean);
+        if (ips.length > 0) return ips[ips.length - 1];
+      }
+    }
+    // Fail-closed: no trusted proxy header, don't trust xff
+    return "unknown";
+  }
+
+  // 3. In dev, use x-forwarded-for first entry (no Cloudflare in dev)
+  const xff = req.headers.get("x-forwarded-for");
+  if (xff) {
+    return xff.split(",")[0]?.trim() ?? "unknown";
+  }
+
+  return "unknown";
+}
+
 // ── In-memory rate limiter (Edge Runtime compatible) ──
 type RateBucket = { count: number; resetAt: number };
 const rateLimitMap = new Map<string, RateBucket>();
@@ -283,9 +327,9 @@ export function middleware(req: NextRequest) {
       res.headers.set("Vary", "Origin");
     }
     addSecurityHeaders(res);
-    // Pass IP to downstream API routes
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+    // Pass IP to downstream API routes (A-1: uses resolveClientIp for
+    // cf-connecting-ip priority + anti-spoofing)
+    const ip = resolveClientIp(req);
     res.headers.set("x-client-ip", ip);
     return res;
   }
@@ -345,9 +389,9 @@ export function middleware(req: NextRequest) {
     }
   }
 
-  // Get client IP (behind Caddy proxy)
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+  // Get client IP (A-1: uses resolveClientIp for cf-connecting-ip priority
+  // + anti-spoofing — no longer trusts x-forwarded-for first entry in prod)
+  const ip = resolveClientIp(req);
   const rateLimitKey = `${ip}:${pathname.split("/").slice(0, 4).join("/")}`;
 
   // Find applicable rate limit (first match wins, most specific first)

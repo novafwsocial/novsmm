@@ -35,15 +35,47 @@ function decryptJSONSafe<T = any>(value: string | null | undefined): T | null {
  * Used by the brute-force lockout to track attempts per-IP in addition
  * to per-email. Falls back to "unknown" if neither x-client-ip nor
  * x-forwarded-for is set (the middleware always sets x-client-ip).
+ *
+ * FIX (A-1): Previously read x-forwarded-for directly (client-forgeable).
+ * Now prioritizes cf-connecting-ip (Cloudflare, non-forgeable) and
+ * x-client-ip (set by our middleware using the same logic). In production,
+ * does NOT trust x-forwarded-for unless TRUST_PROXY=true.
  */
 async function getClientIp(): Promise<string> {
   try {
     const h = await headers();
-    return (
-      h.get("x-client-ip") ||
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown"
-    );
+
+    // 1. Cloudflare's cf-connecting-ip is authoritative (non-forgeable)
+    const cfIp = h.get("cf-connecting-ip");
+    if (cfIp && cfIp.trim()) return cfIp.trim();
+
+    // 2. x-client-ip is set by our middleware (which uses resolveClientIp
+    //    with the same cf-connecting-ip priority + anti-spoofing logic)
+    const clientIp = h.get("x-client-ip");
+    if (clientIp && clientIp !== "unknown") return clientIp;
+
+    // 3. In production, don't trust x-forwarded-for unless TRUST_PROXY is set
+    if (process.env.NODE_ENV === "production") {
+      if (process.env.TRUST_PROXY === "true") {
+        const xff = h.get("x-forwarded-for");
+        if (xff) {
+          // Take the LAST entry — the one added by our trusted proxy.
+          // The first entry is client-controlled and forgeable.
+          const ips = xff.split(",").map((s) => s.trim()).filter(Boolean);
+          if (ips.length > 0) return ips[ips.length - 1];
+        }
+      }
+      // Fail-closed: no trusted proxy header, don't trust xff
+      return "unknown";
+    }
+
+    // 4. In dev, use x-forwarded-for first entry (no Cloudflare in dev)
+    const xff = h.get("x-forwarded-for");
+    if (xff) {
+      return xff.split(",")[0]?.trim() ?? "unknown";
+    }
+
+    return "unknown";
   } catch {
     return "unknown";
   }

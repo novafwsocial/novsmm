@@ -157,12 +157,35 @@ export async function audit(
 ): Promise<void> {
   try {
     const h = await headers();
-    // Middleware forwards client IP via x-client-ip header.
-    // Fall back to x-forwarded-for (standard proxy header) or "unknown".
-    const ip =
-      h.get("x-client-ip") ||
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown";
+    // FIX (A-1): Use the same anti-spoofing logic as middleware/auth.
+    // Priority: cf-connecting-ip (Cloudflare, non-forgeable) → x-client-ip
+    // (set by middleware) → x-forwarded-for LAST entry (if TRUST_PROXY) →
+    // "unknown". In production without TRUST_PROXY, x-forwarded-for is
+    // NOT trusted (client-forgeable).
+    const cfIp = h.get("cf-connecting-ip");
+    const clientIp = h.get("x-client-ip");
+    let ip: string;
+    if (cfIp && cfIp.trim()) {
+      ip = cfIp.trim();
+    } else if (clientIp && clientIp !== "unknown") {
+      ip = clientIp;
+    } else if (process.env.NODE_ENV === "production") {
+      if (process.env.TRUST_PROXY === "true") {
+        const xff = h.get("x-forwarded-for");
+        if (xff) {
+          const ips = xff.split(",").map((s) => s.trim()).filter(Boolean);
+          ip = ips.length > 0 ? ips[ips.length - 1] : "unknown";
+        } else {
+          ip = "unknown";
+        }
+      } else {
+        ip = "unknown";
+      }
+    } else {
+      // Dev: use x-forwarded-for first entry
+      const xff = h.get("x-forwarded-for");
+      ip = xff ? (xff.split(",")[0]?.trim() ?? "unknown") : "unknown";
+    }
     const userAgent = h.get("user-agent") || "unknown";
 
     await db.auditLog.create({
