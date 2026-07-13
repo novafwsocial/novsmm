@@ -66,20 +66,47 @@ export async function GET() {
 }
 
 /**
- * DELETE /api/me/sessions — revoke all other sessions (sign out everywhere).
+ * DELETE /api/me/sessions — revoke all sessions (sign out everywhere).
+ *
+ * Z-3 FIX: Previously only deleted DB Session rows (which JWT strategy
+ * doesn't use). The JWT cookie remained valid until 24h expiry — the
+ * "All other sessions revoked" message was misleading. Now bumps
+ * passwordChangedAt, which the jwt callback checks on every request to
+ * invalidate ALL existing JWTs (including the current one). The user
+ * will need to sign in again after this.
  */
 export async function DELETE() {
   const { session, error } = await requireAuth();
   if (error) return error;
   const userId = (session!.user as any).id;
 
-  // Delete all DB sessions for this user
+  // Delete all DB sessions for this user (OAuth adapter sessions)
   await db.session.deleteMany({
     where: { userId },
   });
 
+  // Z-3 FIX: Bump passwordChangedAt to invalidate ALL existing JWTs.
+  // The jwt callback checks `token.iat < passwordChangedAt` on every
+  // request and returns {} (logged out) if the token was issued before
+  // the bump. This forces all sessions (including the current one) to
+  // re-authenticate. This is the same pattern used by /api/me/password
+  // and /api/me/2fa/disable.
+  await db.user.update({
+    where: { id: userId },
+    data: { passwordChangedAt: new Date() },
+  });
+
+  // Invalidate the user cache so the jwt callback picks up the new
+  // passwordChangedAt immediately (no 30s stale window).
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${userId}`);
+  } catch {
+    // best-effort
+  }
+
   // Audit log
   await audit(userId, "revoke_sessions", "session", userId);
 
-  return apiOk({ message: "All other sessions revoked" });
+  return apiOk({ message: "All sessions revoked. Please sign in again." });
 }

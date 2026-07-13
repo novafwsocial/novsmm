@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
+import { sanitizeText } from "@/lib/sanitize";
 
 /**
  * GET /api/me — current user's profile, 2FA status, and notification preferences.
@@ -117,7 +118,11 @@ export async function PATCH(req: NextRequest) {
     }
 
     const updateData: any = {};
-    if (parsed.data.name !== undefined) updateData.name = parsed.data.name;
+    // I-2 FIX: Sanitize the name field to prevent stored XSS. The register
+    // endpoint already does this, but /api/me PATCH was missing it. React
+    // auto-escapes {user.name}, but defense-in-depth requires sanitization
+    // at write time (email templates, future non-React rendering, etc).
+    if (parsed.data.name !== undefined) updateData.name = sanitizeText(parsed.data.name);
     if (parsed.data.country !== undefined) updateData.country = parsed.data.country;
     if (parsed.data.currency !== undefined) {
       // Validate the currency exists and is active

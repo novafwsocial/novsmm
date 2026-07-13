@@ -187,9 +187,22 @@ function checkApiRateLimit(
 
 /**
  * Require a specific permission on the API key.
+ *
+ * Z-2 FIX: Previously used `apiKey.permissions.includes(permission)` which
+ * is a substring match on the CSV string (e.g. "read,order".includes("read")
+ * returns true, but "order_read".includes("read") would ALSO return true —
+ * a false positive). Now splits the CSV into an array and does an exact
+ * match on each element. No current scope names collide, but this prevents
+ * future scope-name collisions from creating false positives.
  */
 export function hasPermission(apiKey: any, permission: string): boolean {
-  return apiKey?.permissions?.includes(permission) ?? false;
+  if (!apiKey?.permissions) return false;
+  // Split the CSV string into an array and trim each element
+  const perms = String(apiKey.permissions)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return perms.includes(permission);
 }
 
 /**

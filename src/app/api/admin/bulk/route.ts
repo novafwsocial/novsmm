@@ -40,6 +40,18 @@ export async function POST(req: NextRequest) {
     } else {
       return apiError(`Action ${action} not supported for users`, 422);
     }
+
+    // Z-1 FIX: Invalidate cache for all affected users so their next request
+    // picks up the new status (suspended users should be locked out immediately,
+    // not after 30s cache TTL).
+    try {
+      const { cacheInvalidate } = await import("@/lib/cache");
+      for (const userId of ids) {
+        await cacheInvalidate(`user:${userId}`);
+      }
+    } catch {
+      // best-effort
+    }
   } else if (entity === "order") {
     if (action === "cancel") {
       affected = (await db.order.updateMany({ where: { id: { in: ids }, status: { in: ["pending", "processing", "in_progress"] } }, data: { status: "cancelled" } })).count;
