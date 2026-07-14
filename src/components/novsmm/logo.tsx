@@ -1,15 +1,9 @@
 import { cn } from "@/lib/utils";
 
 /**
- * NOVSMM brand logo — uses the official SVG logo.
- * Circular black badge with a stylized white "N" mark.
+ * NOVSMM brand logo — uses the official logo PNG.
+ * Metallic stylized "W" mark on transparent background.
  * Used across the entire app: navbar, sidebar, footer, login screen, etc.
- *
- * PERF FIX (U-H-002): previously used novsmm-logo.png (21KB PNG, rasterized).
- * Switched to logo.svg (1KB SVG, vector) — scales perfectly at any size,
- * no resolution loss on retina displays, and -20KB per page load.
- * Also removed the next/image dependency for the logo (SVG is tiny enough
- * that the Image component optimization adds more overhead than it saves).
  */
 export function Logo({
   className,
@@ -23,11 +17,11 @@ export function Logo({
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
       <img
-        src="/logo.svg"
+        src="/logo-new.png"
         alt={alt}
         width={32}
         height={32}
-        className="h-7 w-7 shrink-0 rounded-full"
+        className="h-7 w-7 shrink-0"
         loading="eager"
       />
       {showWord && (
