@@ -172,14 +172,14 @@ export function DashboardAnalytics() {
               </span>
             </div>
             {/* P-002: BarChart replaced with CSS flex bars */}
-            <div className="mt-4 h-[200px] w-full flex items-end gap-[2px]">
+            <div className="mt-4 h-[200px] w-full flex items-end gap-[6px]">
               {(() => {
                 const maxV = Math.max(...hourlyOrders.map((h: any) => h.v), 1);
                 return hourlyOrders.map((h: any, i: number) => (
-                  <div key={i} className="flex-1 group relative" title={`${h.h}:00 — ${h.v} orders`}>
+                  <div key={i} className="group relative" style={{ flex: "1 1 0", maxWidth: "18px" }} title={`${h.h}:00 — ${h.v} orders`}>
                     <div
                       className="w-full rounded-t-md bg-primary/80 transition-all group-hover:bg-primary"
-                      style={{ height: `${(h.v / maxV) * 100}%`, minHeight: h.v > 0 ? "2px" : "0" }}
+                      style={{ height: `${(h.v / maxV) * 100}%`, minHeight: h.v > 0 ? "3px" : "0" }}
                     />
                   </div>
                 ));

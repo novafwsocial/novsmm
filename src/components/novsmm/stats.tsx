@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 // PERF FIX (P-C-001): removed recharts import (was pulling in lodash 5MB +
 // victory-vendor 1.5MB → 378KB chunk). The MiniBarChart below is a pure
@@ -360,45 +360,57 @@ function Mini({
  * ~40 lines vs recharts' 378KB chunk (lodash + victory-vendor).
  */
 function MiniBarChart({ data }: { data: { d: number; v: number }[] }) {
-  const W = 100; // viewBox width (scales via CSS)
-  const H = 100; // viewBox height
-  const PAD = 2;  // top padding so bars don't touch the edge
-  const gap = 1.5; // gap between bars (in viewBox units)
-  const barW = (W - gap * (data.length - 1)) / data.length;
+  const [width, setWidth] = useState(600);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w && w > 0) setWidth(w);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const H = 200; // pixel height (matches container h-[200px])
+  const PAD = 8; // top padding in px
+  const gap = 6; // gap between bars in px
+  const barW = Math.min(18, (width - gap * (data.length - 1)) / data.length);
   const maxV = Math.max(1, ...data.map((d) => d.v));
 
   return (
-    <svg
-      viewBox={`0 0 ${W} ${H}`}
-      preserveAspectRatio="none"
-      width="100%"
-      height="100%"
-      role="img"
-      aria-label="Daily sales for the last 14 days"
-      style={{ display: "block" }}
-    >
-      {data.map((d, i) => {
-        const h = (d.v / maxV) * (H - PAD);
-        const x = i * (barW + gap);
-        const y = H - h;
-        const isLast = i === data.length - 1;
-        return (
-          <rect
-            key={i}
-            x={x}
-            y={y}
-            width={barW}
-            height={h}
-            rx={Math.min(5, barW / 2)}
-            ry={Math.min(5, barW / 2)}
-            fill={isLast ? "#0052ff" : "oklch(0.85 0.04 264)"}
-            opacity={0.85}
-          >
-            <title>{`Day ${i + 1}: $${d.v.toLocaleString()}`}</title>
-          </rect>
-        );
-      })}
-    </svg>
+    <div ref={containerRef} className="w-full" style={{ height: H }}>
+      <svg
+        width={width}
+        height={H}
+        role="img"
+        aria-label="Daily sales for the last 14 days"
+        style={{ display: "block" }}
+      >
+        {data.map((d, i) => {
+          const h = (d.v / maxV) * (H - PAD);
+          const x = i * (barW + gap);
+          const y = H - h;
+          const isLast = i === data.length - 1;
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={barW}
+              height={h}
+              rx={Math.min(4, barW / 2)}
+              ry={Math.min(4, barW / 2)}
+              fill={isLast ? "#0052ff" : "oklch(0.85 0.04 264)"}
+              opacity={0.85}
+            >
+              <title>{`Day ${i + 1}: $${d.v.toLocaleString()}`}</title>
+            </rect>
+          );
+        })}
+      </svg>
+    </div>
   );
 }
 
