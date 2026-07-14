@@ -20240,3 +20240,60 @@ Stage Summary:
 - The fix is backward-compatible (legacy reference-match preserved as fallback) and defense-in-depth is maintained (external_reference mismatch still rejected).
 - Pre-fix pending MP transactions cannot be auto-reconciled — admin must manually credit them after confirming payment receipt.
 - W-1 (double-credit prevention) is preserved — the conditional `updateMany` inside `$transaction` is unchanged.
+
+---
+Task ID: SEC-1a-002-FIX
+Agent: main (impersonate 2FA bypass fix)
+Task: Fix SEC-1a-002 — Impersonate credentials provider bypassed 2FA. An attacker with a stolen admin password (but no 2FA device) could impersonate any non-admin user. Also fixes SEC-1a-003 (no brute-force protection on the impersonate path).
+
+Root Cause:
+The impersonate CredentialsProvider in src/lib/auth.ts (lines 418-469) validated the admin's email + password but NEVER checked 2FA. The 2FA enforcement logic (lines 281-388) existed only in the main credentials provider, not in the impersonate provider. An attacker could call signIn("impersonate", {adminEmail, adminPassword, targetUserId}) directly — bypassing both the UI pre-flight check AND the admin's 2FA — and get a session as any non-admin user.
+
+Additionally (SEC-1a-003), the impersonate path had NO trackFailedAttempt calls — only the generic 300/min/IP rate limit applied, enabling unlimited admin-password brute-force via the impersonate path.
+
+Fix (2 files):
+
+1. src/lib/auth.ts — impersonate CredentialsProvider:
+   - Added `totp` and `backupCode` fields to the credentials definition
+   - Added brute-force protection (SEC-1a-003): isAccountLocked check at entry, trackFailedAttempt on every failure path (wrong email, wrong password, non-admin, inactive, 2FA fail, 2FA corrupt), clearFailedAttempts on success. Keyed by BOTH admin email AND client IP (same pattern as credentials provider).
+   - Added 2FA enforcement (SEC-1a-002): after password validation, check if admin has 2FA enabled (2fa:{admin.id} Setting). If yes:
+     - If no totp AND no backupCode supplied → throw "2FA_REQUIRED" (frontend prompts for code)
+     - Verify TOTP via verify2FAToken(decrypt2FASecret(payload.secret), code)
+     - Fallback to backup code: bcrypt.compare against hashed codes, rotate (single-use) on match
+     - If neither validates → trackFailedAttempt + throw "Invalid credentials"
+   - The 2FA check is placed AFTER password validation but BEFORE target user validation — so a 2FA failure doesn't leak whether the target user exists.
+
+2. src/components/novsmm/admin-panel.tsx — ImpersonateModal:
+   - Added state: totp, backupCode, useBackupCode, needs2fa
+   - On "2FA_REQUIRED" server response: set needs2fa=true, show 2FA input panel
+   - 2FA panel has a toggle between TOTP (6-digit numeric, auto-filtered, inputMode=numeric, autoComplete=one-time-code) and backup code
+   - Sends totp/backupCode in the signIn() call
+   - Submit button disabled until 2FA code is provided when needs2fa is true
+
+Verification:
+- `npx tsc --noEmit` → 0 errors
+- `bun run lint` → 0 errors, 3 pre-existing warnings (unrelated)
+- Dev server: health/live 200 (12ms), home 200 (200ms), /api/auth/providers 200 (260ms)
+- Code structure verified:
+  - 2FA check placement: line 478 (password) → line 490 (2FA) → line 567 (target) ✓
+  - 12 trackFailedAttempt calls in impersonate provider (6 checks × 2 for email+IP) ✓
+  - 2 clearFailedAttempts calls (email+IP on success) ✓
+  - 3 adminTwoFactor references in pushed commit ✓
+  - 4 needs2fa references in pushed commit ✓
+- Git integrity:
+  - Local HEAD = origin/main HEAD = d5c4814 ✓
+  - git ls-remote confirms GitHub has the commit ✓
+  - git show HEAD:src/lib/auth.ts contains adminTwoFactor (3 matches) ✓
+  - git show HEAD:src/components/novsmm/admin-panel.tsx contains needs2fa (4 matches) ✓
+- Agent Browser: page loads cleanly, no page errors (the hydration warning is a pre-existing Next.js dev overlay artifact unrelated to this change — verified it exists on production novsmm.shop too, which predates this commit)
+
+Backward compatibility:
+- Admins WITHOUT 2FA enabled are unaffected — the 2FA block is skipped entirely (adminTwoFactor is null) and impersonation works as before (password only).
+- Admins WITH 2FA enabled will now see the 2FA prompt on the second attempt (first attempt returns "2FA_REQUIRED", frontend shows the TOTP input, second attempt includes the code).
+
+Stage Summary:
+- SEC-1a-002 (HIGH) is FIXED. The impersonate provider now enforces 2FA when the admin has it enabled.
+- SEC-1a-003 (MEDIUM) is FIXED. Brute-force protection (trackFailedAttempt/clearFailedAttempts) is now applied to the impersonate path.
+- The fix is backward-compatible (admins without 2FA are unaffected).
+- The fix is deployed to GitHub (commit d5c4814, pushed to origin/main).
+- Files modified: 2 (src/lib/auth.ts, src/components/novsmm/admin-panel.tsx) + this worklog entry.
