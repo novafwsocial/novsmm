@@ -180,7 +180,7 @@ export function Stats() {
     prevDay > 0 ? ((lastDay - prevDay) / prevDay) * 100 : 0;
 
   return (
-    <section id="stats" className="relative py-12 sm:py-32">
+    <section id="stats" className="relative py-8 sm:py-32">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"

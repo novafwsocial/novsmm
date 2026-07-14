@@ -42,7 +42,7 @@ export function Hero() {
     <section
       ref={sectionRef}
       id="hero"
-      className="relative overflow-hidden pt-20 pb-12 sm:pt-40 sm:pb-28"
+      className="relative overflow-hidden pt-14 pb-8 sm:pt-40 sm:pb-28"
     >
       {/* Background layers — depth (CSS-only, no scroll tracking) */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
@@ -76,7 +76,7 @@ export function Hero() {
 
         {/* Headline */}
         <h1
-          className="mx-auto mt-7 max-w-4xl text-center text-[clamp(2.4rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.03em] text-balance"
+          className="mx-auto mt-4 sm:mt-7 max-w-4xl text-center text-[clamp(2.4rem,6vw,4.75rem)] font-semibold leading-[1.02] tracking-[-0.03em] text-balance"
           style={{ animation: "heroFadeBlur 1s 0.06s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           {t("landing.hero.title")}{" "}
@@ -84,7 +84,7 @@ export function Hero() {
         </h1>
 
         <p
-          className="mx-auto mt-6 max-w-2xl text-center text-lg leading-relaxed text-muted-foreground text-pretty sm:text-xl"
+          className="mx-auto mt-4 sm:mt-6 max-w-2xl text-center text-lg leading-relaxed text-muted-foreground text-pretty sm:text-xl"
           style={{ animation: "heroFadeUp 0.9s 0.16s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           {t("landing.hero.subtitle")}
@@ -92,7 +92,7 @@ export function Hero() {
 
         {/* CTAs */}
         <div
-          className="mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center"
+          className="mt-5 sm:mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center"
           style={{ animation: "heroFadeUp 0.9s 0.26s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
@@ -121,7 +121,7 @@ export function Hero() {
 
         {/* trust line */}
         <div
-          className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground"
+          className="mt-4 sm:mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-xs text-muted-foreground"
           style={{ animation: "heroFade 0.9s 0.4s both" }}
         >
           {[
@@ -138,7 +138,7 @@ export function Hero() {
 
         {/* Dashboard preview — lazy-loaded with placeholder */}
         <div
-          className="relative mx-auto mt-16 max-w-6xl"
+          className="relative mx-auto mt-8 sm:mt-16 max-w-6xl"
           style={{ animation: "heroFadeUpBlur 1.1s 0.42s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
           {/* Floating stat chips — depth layers (hidden on mobile, perf) */}

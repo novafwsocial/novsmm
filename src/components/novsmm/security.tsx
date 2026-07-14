@@ -81,7 +81,7 @@ const LAYERS = [
 export function Security() {
   const { t } = useLanguage();
   return (
-    <section id="security" className="relative overflow-hidden py-12 sm:py-32">
+    <section id="security" className="relative overflow-hidden py-8 sm:py-32">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"
