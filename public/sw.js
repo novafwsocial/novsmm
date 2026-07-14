@@ -25,7 +25,14 @@
 // hash (e.g. `novsmm-<git-sha>`) to force a cache refresh on every change.
 // Manual bump is also fine for small deploys.
 // v3: bumped after mobile performance optimizations (Reveal CSS, dynamic imports, virtualization)
-const CACHE_VERSION = "novsmm-v4";
+// v4: previous version
+// v5 (MOBILE-CACHE-FIX): bumped to force-evict all v4 caches. Mobile users
+//     were seeing stale content (old stats, old payment logos, old pricing)
+//     because the SW cache-first strategy for static assets served old JS
+//     chunks from the v4 cache. Bumping to v5 ensures the activate handler
+//     deletes the "novsmm-v4" cache, forcing all assets to be re-fetched
+//     from the network on the next visit.
+const CACHE_VERSION = "novsmm-v5";
 const CACHE = CACHE_VERSION;
 // PERF FIX (P-L-006): removed /icon.png from APP_SHELL precache.
 // Was 186KB (now 11KB after Lote A resize), but still unnecessary to

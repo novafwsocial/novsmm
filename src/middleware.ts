@@ -372,10 +372,24 @@ export function middleware(req: NextRequest) {
     // Stale-while-revalidate allows serving cached content while fetching fresh.
     // Only applies to GET requests for HTML pages (not assets, not API).
     if (req.method === "GET" && !pathname.startsWith("/_next/")) {
-      res.headers.set(
-        "Cache-Control",
-        "public, s-maxage=60, stale-while-revalidate=300"
-      );
+      // MOBILE-CACHE-FIX: /sw.js and /manifest.webmanifest must NEVER be
+      // cached with max-age — the browser needs to revalidate them on every
+      // navigation so it detects SW updates immediately. If /sw.js is cached
+      // with max-age=120, the browser won't check for a new SW for 2 minutes,
+      // delaying deploys to mobile users. no-cache still allows 304 responses
+      // (ETag-based revalidation) so it's bandwidth-efficient, but guarantees
+      // the browser ALWAYS asks "has this file changed?" on each navigation.
+      if (pathname === "/sw.js" || pathname === "/manifest.webmanifest") {
+        res.headers.set(
+          "Cache-Control",
+          "no-cache, no-store, must-revalidate"
+        );
+      } else {
+        res.headers.set(
+          "Cache-Control",
+          "public, s-maxage=60, stale-while-revalidate=300"
+        );
+      }
     }
 
     return res;
