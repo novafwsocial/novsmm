@@ -20173,3 +20173,70 @@ Stage Summary:
 - Production performance is excellent (FCP <700ms, TTFB <50ms)
 - The #1 conversion-blocking issue is MOB-002 (stats showing zeros) — visitors see a dead platform
 - The #1 user-intent-blocking issue is MOB-001 (/pricing still live) — directly contradicts explicit user request
+
+---
+Task ID: SEC-1d-006-FIX
+Agent: main (Mercado Pago topup reconciliation fix)
+Task: Fix SEC-1d-006 — Mercado Pago topup was broken: users pay via MP but wallet never credited because the webhook couldn't reconcile the MP payment to a NOVSMM transaction.
+
+Root Cause Analysis:
+The bug had 3 coordinated failures across 2 files:
+
+1. `src/app/api/wallet/topup/route.ts` — `createMercadoPagoPreference()`:
+   - Did NOT accept a `reference` parameter
+   - Did NOT set `external_reference` in the MP preference body
+   - MP therefore had no way to echo back which NOVSMM transaction a payment belonged to
+
+2. `src/app/api/wallet/topup/route.ts` — MP dispatch block (lines 134-182):
+   - Called `createMercadoPagoPreference()` WITHOUT passing `txn.publicId`
+   - After creating the MP preference, did NOT update `txn.reference` (unlike PayPal which sets `reference: 'paypal:<orderId>'` and NowPayments which sets `reference: 'nowpayments:<invoiceId>'`)
+   - The transaction reference stayed as the placeholder `pi_<timestamp>` from line 80
+
+3. `src/app/api/webhooks/mercadopago/route.ts` — webhook handler (line 164-166):
+   - Looked up the transaction with `findFirst({ where: { reference: paymentId } })` where `paymentId` = MP's payment ID (e.g. "1312345678")
+   - But our transaction reference was `pi_<timestamp>` (placeholder), NOT MP's payment ID
+   - `findFirst` returned null → `if (txn && txn.status === "pending")` was false → no credit
+   - Result: user paid MP, wallet never credited
+
+Fix (3 coordinated changes):
+
+Part A — `createMercadoPagoPreference()` signature + body:
+- Added `reference: string` parameter (the txn.publicId)
+- Set `external_reference: params.reference` in the MP preference body (this is the field MP echoes back in payment objects and webhook payloads)
+- Changed return type from `Promise<string | null>` to `Promise<{ checkoutUrl: string; preferenceId: string } | null>` — now returns both the checkout URL AND the MP preference ID
+
+Part B — topup route MP dispatch block:
+- Pass `reference: txn.publicId` to `createMercadoPagoPreference()`
+- After successful preference creation, persist `reference: 'mercadopago:<preferenceId>'` and update the description to include the external_reference — matching the pattern used by PayPal and NowPayments
+- Return `preferenceId` in the API response for client-side debugging
+
+Part C — webhook reconciliation logic:
+- Primary lookup: `findFirst({ where: { publicId: externalReference } })` — matches via the external_reference that MP echoes back (the txn.publicId we set in Part A)
+- Fallback lookup: `findFirst({ where: { reference: paymentId } })` — legacy behavior for backward compatibility (handles webhook retries where a previous call already updated reference to paymentId)
+- If neither lookup finds a transaction: log "No matching transaction" with paymentId + externalReference + preferenceId for debugging, return 200 with `matched: false` (don't error — MP would retry pointlessly)
+- The external_reference mismatch check (line 207) is preserved as defense-in-depth: if the txn was found via the legacy fallback AND MP returned an external_reference that doesn't match txn.publicId, reject (someone is trying to credit the wrong transaction)
+- The `updateMany` inside `$transaction` (W-1 fix) still sets `reference: paymentId` on success — this is correct: it overwrites the `mercadopago:<preferenceId>` placeholder with the actual MP payment ID, so future webhook retries match via the legacy fallback immediately
+
+Backward compatibility:
+- Pre-fix pending transactions (created before this fix is deployed) have `reference: "pi_<timestamp>"` and NO external_reference set in the MP preference. When MP fires the webhook for these:
+  - Primary lookup: skipped (externalReference is empty)
+  - Fallback lookup: `reference === paymentId` → "pi_<timestamp>" ≠ "1312345678" → null
+  - Result: logged as "No matching transaction", not credited
+  - These transactions CANNOT be auto-reconciled — the user must manually credit them via admin panel after confirming the MP payment was received. This is unavoidable since the external_reference was never set.
+
+Verification:
+- `npx tsc --noEmit` → 0 errors
+- `bun run lint` → 0 errors, 3 pre-existing warnings (load-test.js, opengraph-image.tsx, twitter-image.tsx — unrelated)
+- Dev server: recompiled successfully, `GET / 200` in ~160ms, `/api/health/live` returns 200 in 15ms
+- No runtime errors in dev.log after the changes
+
+Files modified:
+- `src/app/api/wallet/topup/route.ts` — createMercadoPagoPreference signature + body, MP dispatch block
+- `src/app/api/webhooks/mercadopago/route.ts` — reconciliation logic (primary + fallback lookup, audit logging)
+- `worklog.md` (this entry)
+
+Stage Summary:
+- SEC-1d-006 (CRITICAL functional) is FIXED. New MP topups created after this deploy will correctly set external_reference, and the webhook will reconcile them via publicId === external_reference.
+- The fix is backward-compatible (legacy reference-match preserved as fallback) and defense-in-depth is maintained (external_reference mismatch still rejected).
+- Pre-fix pending MP transactions cannot be auto-reconciled — admin must manually credit them after confirming payment receipt.
+- W-1 (double-credit prevention) is preserved — the conditional `updateMany` inside `$transaction` is unchanged.

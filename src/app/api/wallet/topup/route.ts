@@ -134,17 +134,30 @@ export async function POST(req: NextRequest) {
     // ── 3. Mercado Pago ──
     if (pm.name === "Mercado Pago" && creds?.accessToken) {
       try {
-        const checkoutUrl = await createMercadoPagoPreference({
+        const mpResult = await createMercadoPagoPreference({
           accessToken: creds.accessToken,
           amount,
+          reference: txn.publicId, // CRITICAL: set as external_reference for webhook reconciliation
           successUrl: `${origin}/?topup=success`,
           failureUrl: `${origin}/?topup=cancelled`,
           pendingUrl: `${origin}/?topup=pending`,
         });
-        if (checkoutUrl) {
+        if (mpResult?.checkoutUrl && mpResult?.preferenceId) {
+          // Persist the MP preference id for webhook reconciliation.
+          // The webhook looks up the transaction by:
+          //   1. reference === paymentId (MP payment id, set on webhook) — legacy
+          //   2. publicId === payment.external_reference (set here) — SEC-1d-006 fix
+          await db.transaction.update({
+            where: { id: txn.id },
+            data: {
+              reference: `mercadopago:${mpResult.preferenceId}`,
+              description: `Top-up via Mercado Pago (preference ${mpResult.preferenceId}, external_reference ${txn.publicId})`,
+            },
+          });
           return apiOk({
             provider: "mercadopago",
-            checkoutUrl,
+            checkoutUrl: mpResult.checkoutUrl,
+            preferenceId: mpResult.preferenceId,
             transaction: { id: txn.id, publicId: txn.publicId, status: "pending" },
             message: "Redirect to Mercado Pago to complete payment.",
           });
@@ -390,7 +403,18 @@ async function createPaypalOrder(params: {
 
 /**
  * Create a Mercado Pago checkout preference.
- * Returns the `init_point` (production checkout URL).
+ * Returns the `init_point` (production checkout URL) AND the preference `id`.
+ *
+ * CRITICAL (SEC-1d-006 fix): The `reference` parameter (txn.publicId) is set
+ * as `external_reference` in the MP preference body. MP echoes this back in
+ * the payment object AND in webhook payloads, which is how the webhook at
+ * /api/webhooks/mercadopago reconciles the payment to our transaction.
+ *
+ * Without external_reference, MP has no way to tell us which NOVSMM
+ * transaction a payment belongs to — the webhook receives MP's own payment ID
+ * (e.g. "1312345678") which doesn't match our placeholder reference
+ * ("pi_<timestamp>"), so findFirst returns null and the wallet is NEVER
+ * credited. Users pay but get nothing.
  *
  * Mercado Pago requires back_urls to be valid HTTPS URLs. If the origin is
  * localhost or http, we omit auto_return (which requires all back_urls) and
@@ -399,10 +423,11 @@ async function createPaypalOrder(params: {
 async function createMercadoPagoPreference(params: {
   accessToken: string;
   amount: number;
+  reference: string; // txn.publicId — set as external_reference
   successUrl: string;
   failureUrl: string;
   pendingUrl: string;
-}): Promise<string | null> {
+}): Promise<{ checkoutUrl: string; preferenceId: string } | null> {
   // Mercado Pago requires HTTPS for back_urls in production.
   // If the URL is http or localhost, strip it to just the path.
   const sanitizeUrl = (url: string): string => {
@@ -438,6 +463,11 @@ async function createMercadoPagoPreference(params: {
         currency_id: "USD",
       },
     ],
+    // CRITICAL: external_reference is what MP echoes back in the payment
+    // object and webhook payloads. This is the ONLY reliable way to
+    // reconcile an MP payment to a NOVSMM transaction. Set it to the
+    // transaction's publicId (e.g. "TX-AB12CD34").
+    external_reference: params.reference,
     back_urls: {
       success: successUrl,
       failure: failureUrl,
@@ -466,5 +496,8 @@ async function createMercadoPagoPreference(params: {
   }
 
   const data: any = await res.json();
-  return data.init_point ?? data.sandbox_init_point ?? null;
+  const checkoutUrl = data.init_point ?? data.sandbox_init_point ?? null;
+  const preferenceId: string | undefined = data.id;
+  if (!checkoutUrl || !preferenceId) return null;
+  return { checkoutUrl, preferenceId };
 }

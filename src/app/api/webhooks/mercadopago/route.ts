@@ -153,19 +153,57 @@ export async function POST(req: NextRequest) {
       // `external_reference` when the MP preference is created in
       // wallet/topup/route.ts. If external_reference is missing or doesn't
       // match, refuse to credit.
-      //
-      // (Currently the MP preference is created without external_reference —
-      // we still verify it IF MP returns one; otherwise we fall back to the
-      // reference-match behavior. The credit condition becomes: approved
-      // AND (external_reference missing OR external_reference matches txn.publicId).)
       const externalReference = payment.external_reference ?? "";
 
-      // Find transaction by reference (paymentId)
-      const txn = await db.transaction.findFirst({
-        where: { reference: paymentId },
-      });
-      if (txn && txn.status === "pending") {
-        // If MP returned an external_reference, it MUST match the txn publicId.
+      // SEC-1d-006 FIX: Reconcile the MP payment to a NOVSMM transaction.
+      //
+      // Primary lookup: by publicId === external_reference.
+      //   The topup route sets external_reference = txn.publicId when creating
+      //   the MP preference. MP echoes it back in the payment object. This is
+      //   the RELIABLE way to match — it survives MP payment-id changes,
+      //   retries, and preference re-creation.
+      //
+      // Fallback lookup: by reference === paymentId (legacy behavior).
+      //   Pre-fix transactions (created before SEC-1d-006) have reference =
+      //   "pi_<timestamp>" which will NOT match MP's paymentId, so this
+      //   fallback only helps the rare case where a webhook race already
+      //   updated the reference to the paymentId on a previous call.
+      let txn = externalReference
+        ? await db.transaction.findFirst({
+            where: { publicId: externalReference },
+          })
+        : null;
+
+      // Fallback: legacy reference-match (for transactions where external_reference
+      // was not set, or for webhook retries that already updated the reference)
+      if (!txn) {
+        txn = await db.transaction.findFirst({
+          where: { reference: paymentId },
+        });
+      }
+
+      // Log for auditability if neither lookup found a transaction
+      if (!txn) {
+        await db.webhookLog.update({
+          where: { id: log.id },
+          data: {
+            status: "failed",
+            error: `No transaction found for paymentId=${paymentId}, external_reference=${externalReference || "(empty)"}`,
+          },
+        });
+        console.warn("[webhooks/mercadopago] No matching transaction", {
+          paymentId,
+          externalReference,
+          preferenceId: payment.preference_id ?? null,
+        });
+        return apiOk({ received: true, matched: false });
+      }
+      if (txn.status === "pending") {
+        // If we found the txn via the legacy reference-match fallback (not via
+        // external_reference), AND MP returned an external_reference that
+        // doesn't match txn.publicId, reject — this means someone is trying
+        // to credit this transaction using an MP payment that belongs to a
+        // DIFFERENT transaction.
         if (externalReference && externalReference !== txn.publicId) {
           await db.webhookLog.update({
             where: { id: log.id },
