@@ -1,15 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
-import {
-  BarChart,
-  Bar,
-  ResponsiveContainer,
-  Cell,
-  Tooltip,
-} from "recharts";
 import {
   ShoppingCart,
   Users,
@@ -242,36 +234,7 @@ export function Stats() {
                 </div>
               </div>
               <div className="mt-5 h-[200px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart
-                    data={dailySales}
-                    margin={{ top: 4, right: 0, left: 0, bottom: 0 }}
-                  >
-                    <Tooltip
-                      cursor={{ fill: "oklch(0.5 0.005 285 / 0.05)" }}
-                      contentStyle={{
-                        borderRadius: 10,
-                        border: "1px solid oklch(0.928 0.003 285)",
-                        fontSize: 12,
-                        boxShadow: "0 8px 24px -8px rgba(0,0,0,0.12)",
-                      }}
-                      labelStyle={{ display: "none" }}
-                      formatter={(v: number) => [`$${v.toLocaleString()}`, "Sales"]}
-                    />
-                    <Bar dataKey="v" radius={[5, 5, 0, 0]} maxBarSize={26}>
-                      {dailySales.map((_, i) => (
-                        <Cell
-                          key={i}
-                          fill={
-                            i === dailySales.length - 1
-                              ? "#0052ff"
-                              : "oklch(0.85 0.04 264)"
-                          }
-                        />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
+                <MiniBarChart data={dailySales} />
               </div>
             </div>
           </Reveal>
@@ -307,18 +270,16 @@ export function Stats() {
               {/* uptime bars */}
               <div className="mt-4 flex items-end gap-[3px]">
                 {Array.from({ length: 60 }).map((_, i) => (
-                  <motion.div
+                  <div
                     key={i}
-                    initial={{ height: 0, opacity: 0 }}
-                    whileInView={{
-                      height: `${10 + Math.random() * 22}px`,
-                      opacity: 1,
-                    }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5, delay: i * 0.008 }}
-                    className={`flex-1 rounded-sm ${
+                    className={`flex-1 rounded-sm fm-fade-up ${
                       i === 47 ? "bg-amber-400" : "bg-emerald-400/70"
                     }`}
+                    style={{
+                      height: `${10 + Math.random() * 22}px`,
+                      animationDelay: `${i * 0.008}s`,
+                      animationDuration: "0.5s",
+                    }}
                   />
                 ))}
               </div>
@@ -362,6 +323,108 @@ function Mini({
       <span className="text-base font-semibold tabular-nums text-foreground">
         {children}
       </span>
+    </div>
+  );
+}
+
+/**
+ * MiniBarChart — pure SVG bar chart (replaces recharts).
+ * Full width, hover interactivity with tooltip.
+ */
+function MiniBarChart({ data }: { data: { d: number; v: number }[] }) {
+  const [width, setWidth] = useState(600);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const observer = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect?.width;
+      if (w && w > 0) setWidth(w);
+    });
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const H = 200;
+  const PAD = 8;
+  const gap = 4;
+  const barW = (width - gap * (data.length - 1)) / data.length;
+  const maxV = Math.max(1, ...data.map((d) => d.v));
+
+  return (
+    <div ref={containerRef} className="relative w-full" style={{ height: H }}>
+      <svg
+        width={width}
+        height={H}
+        role="img"
+        aria-label="Daily sales for the last 14 days"
+        style={{ display: "block" }}
+        onMouseLeave={() => setHoverIdx(null)}
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          let nearest = 0;
+          let minDist = Infinity;
+          data.forEach((_, i) => {
+            const barCenter = i * (barW + gap) + barW / 2;
+            const dist = Math.abs(barCenter - x);
+            if (dist < minDist) { minDist = dist; nearest = i; }
+          });
+          setHoverIdx(nearest);
+        }}
+      >
+        {data.map((d, i) => {
+          const h = (d.v / maxV) * (H - PAD);
+          const x = i * (barW + gap);
+          const y = H - h;
+          const isLast = i === data.length - 1;
+          const isHover = hoverIdx === i;
+          return (
+            <rect
+              key={i}
+              x={x}
+              y={y}
+              width={barW}
+              height={h}
+              rx={Math.min(4, barW / 2)}
+              ry={Math.min(4, barW / 2)}
+              fill={isLast || isHover ? "#0052ff" : "oklch(0.85 0.04 264)"}
+              opacity={isHover ? 1 : 0.85}
+              style={{ transition: "opacity 0.15s, fill 0.15s", cursor: "pointer" }}
+            >
+              <title>{`Day ${i + 1}: $${d.v.toLocaleString()}`}</title>
+            </rect>
+          );
+        })}
+        {hoverIdx !== null && (
+          <line
+            x1={hoverIdx * (barW + gap) + barW / 2}
+            y1={0}
+            x2={hoverIdx * (barW + gap) + barW / 2}
+            y2={H}
+            stroke="#0052ff"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            opacity={0.4}
+          />
+        )}
+      </svg>
+      {hoverIdx !== null && data[hoverIdx] && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-lg border border-border bg-background/95 px-2.5 py-1 text-xs shadow-md backdrop-blur-sm"
+          style={{
+            left: `${hoverIdx * (barW + gap) + barW / 2}px`,
+            top: 0,
+            transform: "translateX(-50%)",
+          }}
+        >
+          <div className="font-semibold text-foreground">
+            ${data[hoverIdx].v.toLocaleString()}
+          </div>
+          <div className="text-muted-foreground">Day {hoverIdx + 1}</div>
+        </div>
+      )}
     </div>
   );
 }
