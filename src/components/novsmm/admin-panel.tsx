@@ -749,11 +749,19 @@ const AdminUsers = memo(function AdminUsers() {
  * Impersonation modal — prompts the admin for their password, then
  * triggers `signIn("impersonate", ...)` to mint a new session for the
  * target user. The page reloads on success.
+ *
+ * SEC-1a-002 FIX: If the admin has 2FA enabled, the server returns
+ * "2FA_REQUIRED" on the first attempt. The modal then shows a TOTP input
+ * field and re-submits with the password + TOTP code (or backup code).
  */
 function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void }) {
   const { data: session } = useNextAuthSession();
   const { toast } = useToast();
   const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
+  const [backupCode, setBackupCode] = useState("");
+  const [useBackupCode, setUseBackupCode] = useState(false);
+  const [needs2fa, setNeeds2fa] = useState(false);
   const [loading, setLoading] = useState(false);
 
   const adminEmail = (session?.user as any)?.email ?? "";
@@ -761,6 +769,8 @@ function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void })
   const handleImpersonate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!password || !adminEmail) return;
+    // If 2FA is required, insist on either a TOTP or backup code
+    if (needs2fa && !totp && !backupCode) return;
     setLoading(true);
     try {
       // Pre-flight: validate the target is impersonate-able
@@ -776,14 +786,28 @@ function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void })
 
       // Mint the new session via the "impersonate" credentials provider.
       // This will overwrite the current session cookie.
+      // SEC-1a-002 FIX: send TOTP / backup code when the admin has 2FA enabled.
       const result = await signIn("impersonate", {
         adminEmail,
         adminPassword: password,
         targetUserId: user.id,
+        totp: totp || undefined,
+        backupCode: backupCode || undefined,
         redirect: false,
       });
 
       if (result?.error) {
+        // SEC-1a-002 FIX: the server signals "2FA_REQUIRED" when the admin
+        // has 2FA enabled but no code was supplied. Show the TOTP input.
+        if (result.error === "2FA_REQUIRED") {
+          setNeeds2fa(true);
+          setLoading(false);
+          toast({
+            title: "2FA required",
+            description: "Enter your authenticator code to continue.",
+          });
+          return;
+        }
         throw new Error(result.error);
       }
 
@@ -862,9 +886,54 @@ function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void })
           />
         </label>
 
+        {/* SEC-1a-002 FIX: 2FA input — shown when the server signals 2FA_REQUIRED */}
+        {needs2fa && (
+          <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="text-xs font-medium text-amber-700">
+                {useBackupCode ? "Backup code" : "Authenticator code (2FA)"}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  setUseBackupCode(!useBackupCode);
+                  setTotp("");
+                  setBackupCode("");
+                }}
+                className="text-[11px] text-muted-foreground underline hover:text-foreground"
+              >
+                {useBackupCode ? "Use TOTP instead" : "Use backup code instead"}
+              </button>
+            </div>
+            <input
+              type="text"
+              value={useBackupCode ? backupCode : totp}
+              onChange={(e) => {
+                const v = e.target.value;
+                if (useBackupCode) {
+                  setBackupCode(v);
+                } else {
+                  // TOTP is numeric, 6 digits — filter non-digits for UX
+                  setTotp(v.replace(/\D/g, "").slice(0, 6));
+                }
+              }}
+              placeholder={useBackupCode ? "XXXX-XXXX" : "123456"}
+              autoFocus
+              inputMode={useBackupCode ? "text" : "numeric"}
+              autoComplete="one-time-code"
+              className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm tracking-[0.3em] text-center font-mono focus:outline-none focus:shadow-[0_0_0_4px_rgba(245,158,11,0.15)]"
+            />
+            <p className="mt-1.5 text-[11px] text-muted-foreground">
+              {useBackupCode
+                ? "Enter one of your single-use backup codes."
+                : "Enter the 6-digit code from your authenticator app."}
+            </p>
+          </div>
+        )}
+
         <button
           type="submit"
-          disabled={loading || !password}
+          disabled={loading || !password || (needs2fa && !totp && !backupCode)}
           className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-500 py-3 text-sm font-medium text-white transition-colors hover:bg-amber-600 disabled:opacity-60"
         >
           {loading ? (

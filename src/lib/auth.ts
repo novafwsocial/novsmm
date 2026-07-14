@@ -413,6 +413,15 @@ const providers: Provider[] = [
   //
   // SECURITY:
   // - Admin password is always required (no bypass via 2FA for impersonation)
+  // - SEC-1a-002 FIX: If the admin has 2FA enabled, a valid TOTP code (or
+  //   backup code) is ALSO required. Previously, the impersonate provider
+  //   skipped 2FA entirely — an attacker with a stolen admin password (but
+  //   no 2FA device) could impersonate any non-admin user by calling
+  //   signIn("impersonate", {adminEmail, adminPassword, targetUserId})
+  //   directly, bypassing both the UI pre-flight check AND the admin's 2FA.
+  // - SEC-1a-003 FIX: brute-force protection is now applied (trackFailedAttempt
+  //   on the admin email + IP). Previously, the impersonate path had NO
+  //   trackFailedAttempt calls — unlimited password guessing was possible.
   // - Target user must exist, be active, and NOT be an admin (safety)
   // - Audit log records the impersonation start
   CredentialsProvider({
@@ -421,6 +430,9 @@ const providers: Provider[] = [
       adminEmail: { label: "Admin Email", type: "email" },
       adminPassword: { label: "Admin Password", type: "password" },
       targetUserId: { label: "Target User ID", type: "text" },
+      // SEC-1a-002 FIX: 2FA code required when the admin has 2FA enabled.
+      totp: { label: "Admin 2FA Code", type: "text" },
+      backupCode: { label: "Admin Backup Code", type: "text" },
     },
     async authorize(credentials) {
       if (!credentials?.adminEmail || !credentials?.adminPassword || !credentials?.targetUserId) {
@@ -429,14 +441,127 @@ const providers: Provider[] = [
 
       const adminEmail = credentials.adminEmail.toLowerCase();
 
+      // ── SEC-1a-003 FIX: Brute-force protection (same as credentials provider) ──
+      // Key by BOTH admin email AND client IP so that distributed brute force
+      // (many IPs, one email) AND single-IP spray (one IP, many admin emails)
+      // are both bounded.
+      const clientIp = await getClientIp();
+      const lockKeyEmail = `impersonate:email:${adminEmail}`;
+      const lockKeyIp = clientIp !== "unknown" ? `impersonate:ip:${clientIp}` : null;
+
+      const [emailLock, ipLock] = await Promise.all([
+        isAccountLocked(lockKeyEmail),
+        lockKeyIp ? isAccountLocked(lockKeyIp) : Promise.resolve({ locked: false }),
+      ]);
+      if (emailLock.locked || ipLock.locked) {
+        throw new Error("Too many failed attempts. Please try again later.");
+      }
+
       // ── Validate the admin ──
       const admin = await db.user.findUnique({ where: { email: adminEmail } });
-      if (!admin || !admin.passwordHash) throw new Error("Invalid admin credentials");
-      if (admin.role !== "admin") throw new Error("Only admins can impersonate");
-      if (admin.status !== "active") throw new Error("Admin account is not active");
+      if (!admin || !admin.passwordHash) {
+        await trackFailedAttempt(lockKeyEmail);
+        if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+        throw new Error("Invalid admin credentials");
+      }
+      if (admin.role !== "admin") {
+        await trackFailedAttempt(lockKeyEmail);
+        if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+        throw new Error("Invalid admin credentials");
+      }
+      if (admin.status !== "active") {
+        await trackFailedAttempt(lockKeyEmail);
+        if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+        throw new Error("Invalid admin credentials");
+      }
 
       const validPw = await bcrypt.compare(credentials.adminPassword, admin.passwordHash);
-      if (!validPw) throw new Error("Invalid admin credentials");
+      if (!validPw) {
+        await trackFailedAttempt(lockKeyEmail);
+        if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+        throw new Error("Invalid admin credentials");
+      }
+
+      // ── SEC-1a-002 FIX: 2FA enforcement for the admin ──
+      // Mirror the credentials provider's 2FA flow: if the admin has 2FA
+      // enabled, require either a TOTP code OR a backup code BEFORE
+      // impersonation proceeds. This closes the bypass where an attacker
+      // with only the admin password could impersonate any user.
+      const adminTwoFactor = await db.setting.findUnique({
+        where: { key: `2fa:${admin.id}` },
+      });
+
+      if (adminTwoFactor) {
+        // 2FA is enabled on the admin account — require a code.
+        if (!credentials.totp && !credentials.backupCode) {
+          // Signal to the frontend that 2FA is required for impersonation.
+          throw new Error("2FA_REQUIRED");
+        }
+
+        const payload = decryptJSONSafe(adminTwoFactor.value);
+        if (!payload) {
+          // 2FA setup is corrupted — fail-closed. The admin must contact
+          // support to reset 2FA before impersonation works again.
+          await trackFailedAttempt(lockKeyEmail);
+          if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+          throw new Error("Admin 2FA setup is corrupted. Contact support to reset 2FA.");
+        }
+
+        let twoFactorOk = false;
+
+        if (credentials.totp) {
+          const secret = decrypt2FASecret(payload.secret);
+          if (secret && (await verify2FAToken(String(credentials.totp), secret))) {
+            twoFactorOk = true;
+          }
+        }
+
+        // If TOTP didn't work (or wasn't provided), try the backup code.
+        if (!twoFactorOk && credentials.backupCode) {
+          const normalized = String(credentials.backupCode).trim().toUpperCase();
+          const codes: string[] = Array.isArray(payload.backupCodes) ? payload.backupCodes : [];
+          let matchedIndex = -1;
+          for (let i = 0; i < codes.length; i++) {
+            try {
+              if (await bcrypt.compare(normalized, codes[i])) {
+                matchedIndex = i;
+                break;
+              }
+            } catch {
+              // malformed hash — skip
+            }
+          }
+          if (matchedIndex !== -1) {
+            twoFactorOk = true;
+            // Rotate: remove the used backup code so it's single-use.
+            const remaining = codes.filter((_, i) => i !== matchedIndex);
+            try {
+              const { write2FAPayload } = await import("./two-factor");
+              await db.setting.update({
+                where: { key: `2fa:${admin.id}` },
+                data: {
+                  value: write2FAPayload({
+                    secret: payload.secret,
+                    backupCodes: remaining,
+                  }),
+                },
+              });
+            } catch {
+              // best-effort — don't block impersonation on rotation failure
+            }
+          }
+        }
+
+        if (!twoFactorOk) {
+          await trackFailedAttempt(lockKeyEmail);
+          if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
+          throw new Error("Invalid credentials");
+        }
+      }
+
+      // ── Password (+ 2FA if enabled) verified — clear failed attempts ──
+      await clearFailedAttempts(lockKeyEmail);
+      if (lockKeyIp) await clearFailedAttempts(lockKeyIp);
 
       // ── Validate the target user ──
       const target = await db.user.findUnique({
