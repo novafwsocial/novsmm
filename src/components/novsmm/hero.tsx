@@ -42,7 +42,7 @@ export function Hero() {
     <section
       ref={sectionRef}
       id="hero"
-      className="relative overflow-hidden pt-32 pb-20 sm:pt-40 sm:pb-28"
+      className="relative overflow-hidden pt-20 pb-12 sm:pt-40 sm:pb-28"
     >
       {/* Background layers — depth (CSS-only, no scroll tracking) */}
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">

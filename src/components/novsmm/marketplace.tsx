@@ -96,7 +96,7 @@ export function Marketplace() {
   ];
 
   return (
-    <section id="marketplace" className="relative py-24 sm:py-32">
+    <section id="marketplace" className="relative py-12 sm:py-32">
       {/* divider glow */}
       <div
         aria-hidden

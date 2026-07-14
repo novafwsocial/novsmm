@@ -5,12 +5,14 @@ import { ScrollProgress } from "@/components/novsmm/scroll-progress";
 import { Navbar } from "@/components/novsmm/navbar";
 import { Hero } from "@/components/novsmm/hero";
 import { AppView } from "@/components/novsmm/app-view";
-import { WhatsAppWidget } from "@/components/novsmm/whatsapp-widget";
-import { StickyCTA } from "@/components/novsmm/sticky-cta";
-import { SocialProof } from "@/components/novsmm/social-proof";
 import { LandingJsonLd } from "@/components/novsmm/landing-json-ld";
-import { LandingCommandPalette } from "@/components/novsmm/landing-command-palette";
 import { LanguageProvider } from "@/components/novsmm/language-provider";
+
+// PERF: Lazy-load below-the-fold + heavy widgets to speed up mobile first paint
+const WhatsAppWidget = dynamic(() => import("@/components/novsmm/whatsapp-widget").then(m => ({ default: m.WhatsAppWidget })), { ssr: false });
+const StickyCTA = dynamic(() => import("@/components/novsmm/sticky-cta").then(m => ({ default: m.StickyCTA })), { ssr: false });
+const SocialProof = dynamic(() => import("@/components/novsmm/social-proof").then(m => ({ default: m.SocialProof })), { ssr: false });
+const LandingCommandPalette = dynamic(() => import("@/components/novsmm/landing-command-palette").then(m => ({ default: m.LandingCommandPalette })), { ssr: false });
 
 /**
  * PERF: Lazy-load below-the-fold landing sections.

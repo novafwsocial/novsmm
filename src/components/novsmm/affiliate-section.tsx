@@ -91,7 +91,7 @@ export function AffiliateSection() {
   };
 
   return (
-    <section id="affiliates" className="relative py-24 sm:py-32">
+    <section id="affiliates" className="relative py-12 sm:py-32">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"

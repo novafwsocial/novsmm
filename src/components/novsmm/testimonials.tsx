@@ -114,7 +114,7 @@ const ROW_B: Testimonial[] = [
 export function Testimonials() {
   const { t } = useLanguage();
   return (
-    <section id="testimonials" className="relative overflow-hidden py-24 sm:py-32">
+    <section id="testimonials" className="relative overflow-hidden py-12 sm:py-32">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"
