@@ -20442,3 +20442,94 @@ Stage Summary:
 - The uptime Counter starts at 99.90 (not 0) and animates to 99.99 — subtle
   animation that never flashes "0.00% uptime".
 - Files modified: 3 (stats.tsx, hero.tsx, affiliate-section.tsx) + this worklog entry.
+
+---
+Task ID: SEC-1d-012-FIX
+Agent: main (admin withdrawal-reject race condition fix)
+Task: Fix SEC-1d-012 — Race condition in PATCH /api/admin/withdrawals reject path allowing double-refund of user balance.
+
+Root Cause:
+The reject path used the array form `db.$transaction([...])` with a NON-conditional `db.transaction.update({ where: { id } })`. The race condition:
+
+1. Request A reads txn (status: "pending") — passes the `if (txn.status !== "pending")` check
+2. Request B reads txn (status: "pending") — also passes the check (both read the same state)
+3. Request A executes the $transaction: sets status→"failed", increments balance by $X
+4. Request B executes the $transaction: sets status→"failed" (already failed — idempotent on status, update succeeds), increments balance by $X AGAIN → DOUBLE REFUND
+
+The array form `db.$transaction([...])` runs both operations sequentially but does NOT make the `transaction.update` conditional on the current status. So even though the status was already "failed" by Request A, Request B's `update({ where: { id } })` still matches (it updates the row regardless of current status) and the subsequent `user.update` (balance increment) executes unconditionally.
+
+This is the same class of bug as W-1 (webhook double-credit), which was fixed with conditional `updateMany`. The cancel/refund paths were NOT migrated when W-1 was fixed.
+
+Fix:
+Migrated both the approve AND reject paths from array-form `db.$transaction([...])` to interactive `db.$transaction(async (tx) => {...})` with conditional `updateMany`:
+
+Approve path:
+```js
+const result = await db.$transaction(async (tx) => {
+  const updated = await tx.transaction.updateMany({
+    where: { id, status: "pending" },  // conditional — only if still pending
+    data: { status: "completed" },
+  });
+  if (updated.count === 0) {
+    return { alreadyProcessed: true };
+  }
+  return { alreadyProcessed: false };
+});
+if (result.alreadyProcessed) {
+  return apiOk({ message: "Withdrawal already approved by another admin" });
+}
+// proceed to notification
+```
+
+Reject path (the dollar-flow critical one):
+```js
+const result = await db.$transaction(async (tx) => {
+  const updated = await tx.transaction.updateMany({
+    where: { id, status: "pending" },  // conditional — only if still pending
+    data: { status: "failed" },
+  });
+  if (updated.count === 0) {
+    return { alreadyProcessed: true };
+  }
+  // Only ONE request reaches here — the balance increment is safe.
+  await tx.user.update({
+    where: { id: txn.userId },
+    data: { balance: { increment: Math.abs(txn.amount) } },
+  });
+  return { alreadyProcessed: false };
+});
+if (result.alreadyProcessed) {
+  return apiOk({ message: "Withdrawal already rejected by another admin" });
+}
+```
+
+The key change: `updateMany` with `where: { id, status: "pending" }` returns `count: 0` if a concurrent request already changed the status. We check `count === 0` and abort BEFORE the `user.update` (balance increment). Only ONE request can flip the status; the other gets count=0 and exits early.
+
+Also added:
+- Cache invalidation (P-005 fix): `cacheInvalidate('user:${userId}')` + `cacheInvalidate('dashboard:${userId}:*')` after the reject, so the balance update is visible immediately in the navbar/dashboard (not stale for 15-30s).
+- The approve path was also migrated for consistency (conditional updateMany prevents double-notification if two admins approve simultaneously).
+
+Backward compatibility:
+- The `alreadyProcessed` response returns HTTP 200 with an informative message ("Withdrawal already rejected by another admin") — the admin UI shows this instead of erroring. No client-side changes needed.
+
+Verification:
+- `npx tsc --noEmit` → 0 errors (EXIT 0)
+- `bun run lint` → 0 errors, 3 pre-existing warnings (unrelated)
+- Dev server: GET / 200 (147ms), GET /api/health/live 200 (8ms)
+- Code structure verified:
+  - 2 `updateMany` calls in code (approve + reject) ✓
+  - 2 interactive `$transaction(async (tx) => {...})` calls in code ✓
+  - 0 array-form `$transaction([...])` calls in code (verified via awk — old vulnerable pattern completely removed) ✓
+  - 2 `cacheInvalidate` calls (user + dashboard) ✓
+  - 2 `alreadyProcessed` early-return guards ✓
+- Git integrity:
+  - Local HEAD = origin/main HEAD = 4cffbbb ✓
+  - git ls-remote confirms GitHub has the commit ✓
+  - SEC-1d-012 markers in pushed commit: 3 ✓
+
+Stage Summary:
+- SEC-1d-012 (HIGH) is FIXED. The admin withdrawal-reject path no longer allows double-refund via concurrent requests.
+- The fix uses the same W-1 pattern (conditional updateMany inside interactive $transaction) that's already proven in the webhook handlers.
+- Both approve and reject paths are now race-safe.
+- Cache invalidation added so balance updates are visible immediately.
+- Files modified: 1 (src/app/api/admin/withdrawals/route.ts) + this worklog entry.
