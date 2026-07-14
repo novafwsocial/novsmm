@@ -75,23 +75,13 @@ export default function OpenGraphImage() {
             zIndex: 1,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: "#0052ff",
-              color: "#ffffff",
-              fontSize: 32,
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            N
-          </div>
+          {/* Logo — new metallic design */}
+          <img
+            src="https://novsmm.shop/logo-new.png"
+            width={56}
+            height={56}
+            style={{ borderRadius: 0 }}
+          />
           <div
             style={{
               display: "flex",
