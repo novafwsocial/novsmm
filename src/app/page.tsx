@@ -102,7 +102,7 @@ export default function Home() {
               <main id="main-content" className="flex-1">
                 <Hero />
                 <Stats />
-                {/* Services section disabled — will be replaced by Blog */}
+                <Services />
                 <Marketplace />
                 <Payments />
                 <Testimonials />
