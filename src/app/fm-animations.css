@@ -134,10 +134,34 @@
   .fm-slide-left,
   .fm-float,
   .fm-pulse-glow,
-  .fm-spring {
+  .fm-spring,
+  .fm-marquee,
+  .fm-marquee-reverse {
     animation: none !important;
   }
   .fm-hover-lift:hover {
     transform: none;
+  }
+}
+
+/* Marquee — infinite horizontal scroll, translateX(0% → -50%).
+   Pair with a duplicated content array (e.g. [...items, ...items]) so
+   the -50% offset aligns with the start of the second copy for a seamless
+   loop. Use .fm-marquee-reverse for the opposite direction.
+   Override the duration via inline style: style={{ animationDuration: "48s" }} */
+.fm-marquee {
+  animation: fmMarquee 48s linear infinite;
+}
+
+.fm-marquee-reverse {
+  animation: fmMarquee 48s linear infinite reverse;
+}
+
+@keyframes fmMarquee {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-50%);
   }
 }

@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useState } from "react";
 import { formatPrice } from "@/lib/currency-utils";
 import { PaymentLogo } from "./payment-logo";
@@ -164,12 +163,10 @@ export function DashboardWallet() {
                   </tr>
                 )}
                 {transactions.map((t: any, i: number) => (
-                  <motion.tr
+                  <tr
                     key={t.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.02 }}
-                    className="transition-colors hover:bg-muted/30"
+                    className="fm-fade-up transition-colors hover:bg-muted/30"
+                    style={{ animationDelay: `${i * 0.02}s` }}
                   >
                     <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-muted-foreground">{t.publicId}</td>
                     <td className="px-5 py-3 font-medium text-foreground">{t.description}</td>
@@ -199,7 +196,7 @@ export function DashboardWallet() {
                     <td className="px-5 py-3 text-right text-xs text-muted-foreground">
                       {new Date(t.createdAt).toLocaleString()}
                     </td>
-                  </motion.tr>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -346,10 +343,9 @@ function TopupModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Top up wallet" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+      <div
+        className="fm-scale-in relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+        onClick={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-5 w-5" />
@@ -422,7 +418,7 @@ function TopupModal({ onClose }: { onClose: () => void }) {
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Sandbox mode · no real charge · processes in ~2s
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -456,10 +452,9 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
 
   return (
     <div role="dialog" aria-modal="true" aria-label="Withdraw funds" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+      <div
+        className="fm-scale-in relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+        onClick={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-5 w-5" />
@@ -544,7 +539,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Withdrawals are reviewed by admin before processing · 1% fee applies
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }

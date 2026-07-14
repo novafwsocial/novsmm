@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {
@@ -173,24 +172,22 @@ export function AffiliateSection() {
                   <span>{t("landing.affiliates.commission.theirOrder")}</span>
                 </div>
                 <div className="mt-2 flex h-12 overflow-hidden rounded-xl border border-border/60">
-                  <motion.div
-                    initial={{ width: 0 }}
-                    whileInView={{ width: "10%" }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1, ease: [0.16, 1, 0.3, 1] }}
-                    className="flex items-center justify-center bg-primary text-[11px] font-semibold text-primary-foreground"
+                  <div
+                    className="fm-fade-up flex items-center justify-center bg-primary text-[11px] font-semibold text-primary-foreground"
+                    style={{ width: "10%", animationDuration: "1s" }}
                   >
                     10%
-                  </motion.div>
-                  <motion.div
-                    initial={{ width: 0 }}
-                    whileInView={{ width: "90%" }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 1, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
-                    className="flex items-center justify-center bg-muted text-[11px] font-medium text-muted-foreground"
+                  </div>
+                  <div
+                    className="fm-fade-up flex items-center justify-center bg-muted text-[11px] font-medium text-muted-foreground"
+                    style={{
+                      width: "90%",
+                      animationDuration: "1s",
+                      animationDelay: "0.1s",
+                    }}
                   >
                     {t("landing.affiliates.commission.customerOrder")}
-                  </motion.div>
+                  </div>
                 </div>
                 <div className="mt-2 text-xs text-muted-foreground">
                   {t("landing.affiliates.commission.example").replace("{amount}", "$10.00")}
@@ -231,17 +228,13 @@ export function AffiliateSection() {
 
               <div className="mt-6 flex flex-col gap-4">
                 {STEPS.map((s, i) => (
-                  <motion.div
+                  <div
                     key={s.titleKey}
-                    initial={{ opacity: 0, x: 16 }}
-                    whileInView={{ opacity: 1, x: 0 }}
-                    viewport={{ once: true, margin: "-10%" }}
-                    transition={{
-                      duration: 0.7,
-                      delay: i * 0.12,
-                      ease: [0.16, 1, 0.3, 1],
+                    className="fm-fade-up flex items-start gap-4 rounded-2xl border border-border/60 bg-muted/20 p-4"
+                    style={{
+                      animationDuration: "0.7s",
+                      animationDelay: `${i * 0.12}s`,
                     }}
-                    className="flex items-start gap-4 rounded-2xl border border-border/60 bg-muted/20 p-4"
                   >
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary text-sm font-semibold text-primary-foreground">
                       {s.chip}
@@ -257,7 +250,7 @@ export function AffiliateSection() {
                         {t(s.descKey)}
                       </p>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
 

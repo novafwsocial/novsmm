@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import {
@@ -158,13 +157,10 @@ export function RegisterScreen() {
   };
 
   return (
-    <motion.div
+    <div
       key="register"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.4 }}
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12"
+      className="fm-fade-up relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12"
+      style={{ animationDuration: "0.4s" }}
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 nov-grid-bg nov-radial-fade opacity-60" />
@@ -172,12 +168,9 @@ export function RegisterScreen() {
         <div className="absolute left-[8%] bottom-[8%] h-[280px] w-[280px] rounded-full bg-emerald-400/10 blur-[100px]" />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 24, filter: "blur(12px)" }}
-        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-        exit={{ opacity: 0, y: 16, filter: "blur(8px)" }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="auth-card-3d relative w-full max-w-[460px]"
+      <div
+        className="fm-fade-blur auth-card-3d relative w-full max-w-[460px]"
+        style={{ animationDuration: "0.7s" }}
       >
         <button
           onClick={() => setView("landing")}
@@ -225,13 +218,9 @@ export function RegisterScreen() {
           )}
 
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-4 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm text-red-600"
-            >
+            <div className="fm-fade-up mb-4 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm text-red-600">
               {error}
-            </motion.div>
+            </div>
           )}
 
           <form onSubmit={submit} className="flex flex-col gap-4">
@@ -403,10 +392,10 @@ export function RegisterScreen() {
             Cancel anytime
           </span>
         </div>
-      </motion.div>
+      </div>
 
       <LegalPages page={legalPageOpen} onClose={() => setLegalPageOpen(null)} />
-    </motion.div>
+    </div>
   );
 }
 

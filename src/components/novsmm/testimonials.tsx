@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { Star, Quote } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
@@ -178,15 +177,14 @@ function MarqueeRow({
   const doubled = [...items, ...items];
   return (
     <div className="flex overflow-hidden">
-      <motion.div
-        className="flex shrink-0 gap-4 pr-4"
-        animate={{ x: reverse ? ["-50%", "0%"] : ["0%", "-50%"] }}
-        transition={{ duration, ease: "linear", repeat: Infinity }}
+      <div
+        className={`flex shrink-0 gap-4 pr-4 ${reverse ? "fm-marquee-reverse" : "fm-marquee"}`}
+        style={{ animationDuration: `${duration}s` }}
       >
         {doubled.map((t, i) => (
           <Card key={i} t={t} />
         ))}
-      </motion.div>
+      </div>
     </div>
   );
 }

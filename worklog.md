@@ -17145,3 +17145,98 @@ Stage Summary:
 - Two semantic caveats (status-page.tsx duplicate role, dashboard-orders.tsx overlay-vs-drawer placement) are documented above for the reviewer's consideration; both follow the task's literal instruction but may warrant follow-up for WAI-ARIA best-practice alignment.
 - Files modified: 12 (dashboard-marketplace.tsx, dashboard-child-panels.tsx, admin-panel.tsx, dashboard-tickets.tsx, dashboard-wallet.tsx, dashboard-profile.tsx, dashboard-subscriptions.tsx, dashboard-orders.tsx, login-screen.tsx, app-view.tsx, legal-pages.tsx, status-page.tsx) + this worklog append.
 
+
+---
+Task ID: P001-MIGRATION
+Agent: p001-migration (framer-motion → CSS)
+Task: Migrate 8 simple NOVSMM component files from framer-motion to CSS animations (no AnimatePresence, no drag, no whileTap). Use the existing utility classes in `src/app/fm-animations.css` (`fm-fade-up`, `fm-fade-blur`, `fm-scale-in`, `fm-slide-left`, `fm-hover-lift`, `fm-float`, `fm-spring`). Add a new `.fm-marquee` / `.fm-marquee-reverse` pair for the testimonials infinite-scroll marquee.
+
+Work Log:
+- Read worklog tail (A11Y-MODALS task) for context — established that motion is widely used in NOVSMM, accessibility work just finished, and P-001 (framer-motion breadth) is an ongoing migration target.
+- Read `src/app/fm-animations.css` to inventory existing CSS utility classes (7 classes: fm-fade-up, fm-fade-blur, fm-scale-in, fm-slide-left, fm-hover-lift, fm-float, fm-spring, fm-pulse-glow). All use `cubic-bezier(0.16, 1, 0.3, 1)` (Apple-style ease-out) and `both` fill-mode.
+- Confirmed none of the 8 target files use `AnimatePresence`, `whileTap`, `whileHover`, or `drag` (all 8 grep results were empty) — safe to do a straight swap without keeping the framer-motion import.
+- Confirmed `register-screen.tsx`'s `exit={...}` props are no-ops: the parent (`app-view.tsx` line 436) renders `{view === "register" && <RegisterScreen />}` directly (no `<AnimatePresence>` wrapper, per the comment at app-view.tsx L392-394 explicitly avoiding AnimatePresence to prevent DOM insertBefore errors). So dropping the `exit` props loses nothing.
+- For each file, read the surrounding context (±5 lines around each motion match), picked the closest matching CSS class per the task's mapping rules, and applied edits via MultiEdit / Edit.
+
+Per-file migration summary:
+
+1. **`src/components/novsmm/dashboard-analytics.tsx`** — removed `import { motion } from "framer-motion"` (line 3). 0 motion usages. No other changes.
+
+2. **`src/components/novsmm/stats.tsx`** — 1 motion component (uptime bars at L291-303).
+   - Original: `<motion.div initial={{height:0, opacity:0}} whileInView={{height:`${10+Math.random()*22}px`, opacity:1}} viewport={{once:true}} transition={{duration:0.5, delay:i*0.008}} />`
+   - Migrated: `<div className="flex-1 rounded-sm fm-fade-up ${i===47?'bg-amber-400':'bg-emerald-400/70'}" style={{height:`${barHeight}px`, animationDuration:"0.5s", animationDelay:`${i*0.008}s`}} />` where `barHeight = 10 + Math.random()*22` is hoisted into a `const` inside the map callback.
+   - Trade-off: the height-growth animation (0 → random px) is replaced by fade-up at the final inline height — the bars no longer "grow from 0", they fade in. Visual difference is subtle (bars appear with opacity+small-y-slide instead of growing). Stable per-render height (randomness is computed once per render in the map callback, same as before — but now it's also the rendered height, not just the animation target).
+   - `whileInView` (scroll-triggered) is replaced by mount-triggered CSS animation. Stats section is at scroll position #2 (right after hero), so the bars may animate before the user scrolls to them — minor UX degradation, consistent with the task's mapping rules.
+
+3. **`src/components/novsmm/dashboard-home.tsx`** — 1 motion component (recent-orders list items at L263-283).
+   - Original: `<motion.div initial={{opacity:0, y:8}} animate={{opacity:1, y:0}} transition={{delay:i*0.04}} className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40">`
+   - Migrated: `<div className="fm-fade-up flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40" style={{animationDelay:`${i*0.04}s`}}>`
+   - `y:8→0` becomes `y:20→0` (fm-fade-up default). Slightly larger slide distance, visually equivalent.
+   - Preserved: `key`, `className` (with existing `transition-colors hover:bg-muted/40`), all children, `onClick` (none on this element).
+
+4. **`src/components/novsmm/marketplace.tsx`** — 2 motion components.
+   - L132-159 (flow steps): `<motion.div initial={{opacity:0, x:-16}} whileInView={{opacity:1, x:0}} transition={{duration:0.7, delay:i*0.12, ease:[0.16,1,0.3,1]}}>` → `<div className="fm-slide-left flex items-start gap-4 ..." style={{animationDuration:"0.7s", animationDelay:`${i*0.12}s`}}>` (x:-16→0 ≈ x:-20→0).
+   - L206-237 (offer cards): `<motion.div initial={{opacity:0, y:12}} whileInView={{opacity:1, y:0}} transition={{duration:0.6, delay:i*0.08, ease:[0.16,1,0.3,1]}}>` → `<div className="fm-fade-up group flex items-center gap-3 ..." style={{animationDuration:"0.6s", animationDelay:`${i*0.08}s`}}>` (y:12→0 ≈ y:20→0).
+   - Both preserve `key`, full `className` (including `group` and `transition-colors hover:bg-muted/40`), and all children.
+
+5. **`src/components/novsmm/affiliate-section.tsx`** — 3 motion components.
+   - L176-184 (10% commission bar): `<motion.div initial={{width:0}} whileInView={{width:"10%"}} transition={{duration:1, ease:[...]}}>` → `<div className="fm-fade-up flex items-center justify-center bg-primary ..." style={{width:"10%", animationDuration:"1s"}}>`. Width is now set as inline style (no animation), bar fades in at final width.
+   - L185-193 (90% commission bar): same pattern, with `animationDelay:"0.1s"`.
+   - L234-260 (how-it-works steps): `<motion.div initial={{opacity:0, x:16}} whileInView={{opacity:1, x:0}} transition={{duration:0.7, delay:i*0.12, ease:[...]}}>` → `<div className="fm-fade-up flex items-start gap-4 ..." style={{animationDuration:"0.7s", animationDelay:`${i*0.12}s`}}>` (x:16→0 slide-from-right becomes y:20→0 fade-up — direction changes from horizontal-right to vertical-up, but both are subtle entrance animations).
+   - Trade-off: the commission bars no longer "grow from 0 width" — they fade in at their final width (10%/90%). The visual split is still clearly shown, just without the width-growth entrance. Considered adding a custom `.fm-grow-x` class using `clip-path: inset(0 100% 0 0) → inset(0 0 0 0)` to preserve the grow-from-left visual, but stayed conservative per the task's mapping rules (use existing classes; only `.fm-marquee` was explicitly requested as a new class).
+
+6. **`src/components/novsmm/register-screen.tsx`** — 3 motion components.
+   - L161-409 (outer register wrapper): `<motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} transition={{duration:0.4}}>` → `<div key="register" className="fm-fade-up relative flex min-h-screen ..." style={{animationDuration:"0.4s"}}>`. Per task mapping rule, `initial={{opacity:0}} animate={{opacity:1}}` → `fm-fade-up`. `exit` prop dropped (no AnimatePresence in parent — verified, see Work Log top).
+   - L175-406 (inner auth card): `<motion.div initial={{opacity:0, y:24, filter:"blur(12px)"}} animate={{opacity:1, y:0, filter:"blur(0px)"}} exit={...} transition={{duration:0.7, ease:[...]}}>` → `<div className="fm-fade-blur auth-card-3d relative w-full max-w-[460px]" style={{animationDuration:"0.7s"}}>`. Exact match: fm-fade-blur does opacity 0→1 + filter blur(12px)→0. The y:24→0 translate is lost (fm-fade-blur has no transform), but the blur reveal is preserved. `exit` dropped.
+   - L228-234 (error banner): `<motion.div initial={{opacity:0, y:-4}} animate={{opacity:1, y:0}}>` → `<div className="fm-fade-up mb-4 rounded-xl border border-red-500/30 ...">`. `y:-4→0` (slide-down-from-above) becomes `y:20→0` (slide-up-from-below) — direction reverses, but it's a brief 0.6s error-banner animation, visually equivalent.
+
+7. **`src/components/novsmm/dashboard-wallet.tsx`** — 3 motion components.
+   - L167-202 (transaction table rows): `<motion.tr initial={{opacity:0}} animate={{opacity:1}} transition={{delay:i*0.02}} className="transition-colors hover:bg-muted/30">` → `<tr className="fm-fade-up transition-colors hover:bg-muted/30" style={{animationDelay:`${i*0.02}s`}}>`. Per task mapping, `initial={{opacity:0}} animate={{opacity:1}}` → `fm-fade-up`. Note: `<tr>` elements don't reliably apply CSS transforms in all browsers (Chrome/Firefox do, Safari historically doesn't), so the `translateY(20px)` part of fm-fade-up may be silently ignored on `<tr>` — the row will still fade in via opacity, which is the primary effect. Acceptable.
+   - L349-425 (TopUpModal): `<motion.div initial={{opacity:0, scale:0.95, y:10}} animate={{opacity:1, scale:1, y:0}} onClick={(e)=>e.stopPropagation()} className="relative max-h-[90vh]...">` → `<div className="fm-scale-in relative max-h-[90vh]..." onClick={(e)=>e.stopPropagation()}>`. fm-scale-in does opacity 0→1 + scale 0.95→1. The y:10→0 translate is lost. `onClick` preserved. `role="dialog" aria-modal="true" aria-label="Top up wallet"` on the parent overlay (added by A11Y-MODALS task) is preserved.
+   - L459-547 (WithdrawModal): same pattern as TopUpModal. `aria-label="Withdraw funds"` preserved.
+
+8. **`src/components/novsmm/testimonials.tsx`** — 1 motion component (the marquee at L181-189).
+   - Original: `<motion.div className="flex shrink-0 gap-4 pr-4" animate={{x: reverse ? ["-50%","0%"] : ["0%","-50%"]}} transition={{duration, ease:"linear", repeat:Infinity}}>` (keyframe-array `x` animation, linear easing, infinite repeat).
+   - Added two new CSS classes to `src/app/fm-animations.css`:
+     ```css
+     .fm-marquee { animation: fmMarquee 48s linear infinite; }
+     .fm-marquee-reverse { animation: fmMarquee 48s linear infinite reverse; }
+     @keyframes fmMarquee {
+       from { transform: translateX(0%); }
+       to { transform: translateX(-50%); }
+     }
+     ```
+     Default 48s duration in CSS is overridden per-row via inline `style={{animationDuration:`${duration}s`}}` (48s for ROW_A, 56s for ROW_B). `fm-marquee-reverse` uses `animation-direction: reverse` so the keyframes run from `to`→`from` (i.e. -50% → 0%), matching the original `["-50%","0%"]` keyframe order.
+   - Added `.fm-marquee` and `.fm-marquee-reverse` to the `prefers-reduced-motion: reduce` block so the marquee stops for users with motion sensitivity.
+   - Migrated JSX: `<div className={`flex shrink-0 gap-4 pr-4 ${reverse ? "fm-marquee-reverse" : "fm-marquee"}`} style={{animationDuration:`${duration}s`}}>`. Preserved: `doubled = [...items, ...items]` (so the -50% offset aligns with the start of the second copy for seamless loop), `key={i}`, `Card` children.
+
+CSS file changes (`src/app/fm-animations.css`):
+- Added 2 new classes (`.fm-marquee`, `.fm-marquee-reverse`) + 1 new `@keyframes fmMarquee`.
+- Added the 2 new classes to the `prefers-reduced-motion: reduce` block.
+- No existing classes modified.
+
+Verification:
+- `npx tsc --noEmit` → EXIT=0 (clean TypeScript compilation, no errors).
+- `bun run lint` → 0 errors, 1 warning (`scripts/load-test.js:77` `import/no-anonymous-default-export` — pre-existing, unrelated to this task, also flagged in A11Y-MODALS worklog entry).
+- `grep -c 'framer-motion\|motion\.'` per file → 0 matches in all 8 target files (verified).
+- Total CSS class usages added across the 8 files: 9× `fm-fade-up`, 1× `fm-fade-blur`, 2× `fm-scale-in`, 1× `fm-slide-left`, 1× `fm-marquee`/`fm-marquee-reverse` (ternary) = 14 motion components migrated to 14 CSS class usages. Matches the original motion ref counts (1 + 1 + 2 + 3 + 3 + 3 + 1 = 14 components; the task's "ref counts" of 0/1/2/4/6/6/6/2 = 27 refs include opening + closing tags).
+- Dev server log (tail): clean. Multiple `✓ Compiled in 948ms` / `✓ Compiled in 967ms` successes after the edits. All `GET /` requests returning 200 in 180-1700ms. No runtime errors.
+
+Stage Summary:
+- 8 component files migrated from framer-motion to CSS animations. 14 `<motion.X>` components replaced with regular HTML elements (`<div>`, `<tr>`) using the existing fm-* utility classes + 1 new `.fm-marquee`/`.fm-marquee-reverse` pair.
+- 1 CSS file modified (`src/app/fm-animations.css`) — added 2 classes + 1 keyframe + reduced-motion entry.
+- 0 functionality changes — all `onClick`, `className`, `key`, `ref`, `aria-*`, `role` props preserved. The `exit` props on register-screen.tsx (3 of them) were dropped because CSS animations can't do exit animations without JS orchestration, and the parent doesn't use `<AnimatePresence>` so they were no-ops anyway.
+- Visual differences (all minor, consistent with the task's mapping rules):
+  - stats.tsx uptime bars: height-growth animation → fade-in at final height.
+  - affiliate-section.tsx commission bars: width-growth animation → fade-in at final width.
+  - affiliate-section.tsx how-it-works steps: slide-from-right → fade-up (direction change).
+  - register-screen.tsx error banner: slide-down-from-above → fade-up (direction reverses).
+  - All `whileInView` (scroll-triggered) animations → mount-triggered CSS animations (animate on first render regardless of scroll position). Stats section is at scroll position #2; other sections are further down — these animations now run before the user scrolls to them, so by the time they're visible the entrance animation is complete. The `Reveal` wrapper component (used elsewhere in NOVSMM) provides proper scroll-triggered animations via Intersection Observer; the migrated motion components were not using `Reveal`, so this is a known trade-off of the CSS migration.
+- Files modified: 9 (8 component .tsx files + 1 CSS file) + this worklog append.
+
+Caveats / notes for reviewer:
+1. **register-screen.tsx `exit` props dropped**: The 3 `exit={...}` props on the outer wrapper, inner auth card, and error banner motion.divs were silently dropped. Verified that the parent (`app-view.tsx` L436) renders `<RegisterScreen />` directly without `<AnimatePresence>`, so these `exit` props were already no-ops (framer-motion only fires `exit` inside AnimatePresence). No behavior change.
+2. **`whileInView` → mount-triggered**: All `whileInView` animations (in stats.tsx, marketplace.tsx, affiliate-section.tsx) now fire on mount instead of on scroll-into-view. The original `viewport={{once:true}}` semantics (animate once when scrolled into view) are lost — the elements animate immediately on first render. For sections far down the page, the entrance animation may complete before the user scrolls to them, so they appear static. The `Reveal` component (used elsewhere in NOVSMM) is the proper scroll-triggered alternative; reviewer may want to wrap the migrated elements in `<Reveal>` if scroll-triggered entrance is important. Not done here because the task explicitly said to swap motion for HTML+CSS (not to introduce new wrappers).
+3. **`<tr>` transforms in dashboard-wallet.tsx**: The `fm-fade-up` class on `<tr>` elements includes `translateY(20px)`. CSS transforms on `<tr>` have inconsistent browser support (Chrome/Firefox apply them; Safari historically doesn't). On Safari, the rows will fade in (opacity part of fm-fade-up works) without the slide. Acceptable degradation.
+4. **affiliate-section.tsx commission bars**: The "grow from 0 width" animation (visualizing the 10%/90% commission split growing in) is replaced by a simple fade-in at the final width. If preserving the width-growth visual is important, a `.fm-grow-x` class using `clip-path: inset(0 100% 0 0) → inset(0 0 0 0)` could be added (5 lines of CSS) and the two bars would grow from left-to-right as in the original. Not done here to stay conservative with CSS additions.
+5. **No bundle-size measurement**: This task did not measure the actual framer-motion bundle-size reduction. Since `framer-motion` is still imported by 14+ other NOVSMM files (admin-panel, auth-fields, dashboard-notifications, status-page, dashboard-subscriptions, login-screen, dashboard-tickets, dashboard-orders, legal-pages, dashboard-shell, dashboard-child-panels, onboarding-screen, whatsapp-widget, faq), the `framer-motion` chunk is still loaded. The bundle-size savings from this task alone are zero until those files are also migrated. The migration is incremental progress toward P-001 (per the Phase 3/4 audit's recommendation #6: "P-001 ongoing — continue motion→CSS migration as opportunities arise").

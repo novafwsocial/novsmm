@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 // PERF FIX (P-C-001): removed recharts import (was pulling in lodash 5MB +
@@ -287,21 +286,22 @@ export function Stats() {
 
               {/* uptime bars */}
               <div className="mt-4 flex items-end gap-[3px]">
-                {Array.from({ length: 60 }).map((_, i) => (
-                  <motion.div
-                    key={i}
-                    initial={{ height: 0, opacity: 0 }}
-                    whileInView={{
-                      height: `${10 + Math.random() * 22}px`,
-                      opacity: 1,
-                    }}
-                    viewport={{ once: true }}
-                    transition={{ duration: 0.5, delay: i * 0.008 }}
-                    className={`flex-1 rounded-sm ${
-                      i === 47 ? "bg-amber-400" : "bg-emerald-400/70"
-                    }`}
-                  />
-                ))}
+                {Array.from({ length: 60 }).map((_, i) => {
+                  const barHeight = 10 + Math.random() * 22;
+                  return (
+                    <div
+                      key={i}
+                      className={`flex-1 rounded-sm fm-fade-up ${
+                        i === 47 ? "bg-amber-400" : "bg-emerald-400/70"
+                      }`}
+                      style={{
+                        height: `${barHeight}px`,
+                        animationDuration: "0.5s",
+                        animationDelay: `${i * 0.008}s`,
+                      }}
+                    />
+                  );
+                })}
               </div>
               <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
                 <span>{t("landing.stats.status.60daysAgo")}</span>

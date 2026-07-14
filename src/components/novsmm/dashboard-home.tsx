@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useState } from "react";
 import { useDashboard, useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import {
@@ -260,12 +259,10 @@ export function DashboardHome() {
               </div>
             ) : (
               recentOrders.map((o: any, i: number) => (
-                <motion.div
+                <div
                   key={o.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
+                  className="fm-fade-up flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
+                  style={{ animationDelay: `${i * 0.04}s` }}
                 >
                   <PlatformLogo platform={o.platform} size={28} />
                   <div className="min-w-0 flex-1">
@@ -280,7 +277,7 @@ export function DashboardHome() {
                   <span className="w-16 text-right text-sm font-semibold tabular-nums text-emerald-600">
                     ${o.totalPrice.toFixed(2)}
                   </span>
-                </motion.div>
+                </div>
               ))
             )}
           </div>

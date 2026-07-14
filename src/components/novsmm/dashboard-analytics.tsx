@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { MiniAreaChart } from "./mini-area-chart";
 import { ArrowUpRight, TrendingUp, ShoppingCart, DollarSign, Repeat2, Gift, Loader2, Sparkles, RefreshCw } from "lucide-react";
 import { Counter } from "./counter";

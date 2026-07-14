@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import {
   Store,
@@ -129,16 +128,12 @@ export function Marketplace() {
               <div className="mt-7 flex flex-col gap-4">
                 {FLOW.map((s, i) => (
                   <div key={s.title} className="relative">
-                    <motion.div
-                      initial={{ opacity: 0, x: -16 }}
-                      whileInView={{ opacity: 1, x: 0 }}
-                      viewport={{ once: true, margin: "-12%" }}
-                      transition={{
-                        duration: 0.7,
-                        delay: i * 0.12,
-                        ease: [0.16, 1, 0.3, 1],
+                    <div
+                      className="fm-slide-left flex items-start gap-4 rounded-2xl border border-border/60 bg-muted/30 p-4"
+                      style={{
+                        animationDuration: "0.7s",
+                        animationDelay: `${i * 0.12}s`,
                       }}
-                      className="flex items-start gap-4 rounded-2xl border border-border/60 bg-muted/30 p-4"
                     >
                       <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-background text-primary nov-ring">
                         <s.icon className="h-5 w-5" />
@@ -156,7 +151,7 @@ export function Marketplace() {
                           {s.desc}
                         </p>
                       </div>
-                    </motion.div>
+                    </div>
                     {i < FLOW.length - 1 && (
                       <div className="ml-9 flex h-4 items-center">
                         <ArrowDown className="h-3.5 w-3.5 text-muted-foreground/60" />
@@ -203,17 +198,13 @@ export function Marketplace() {
 
               <div className="mt-5 flex flex-col gap-2">
                 {offers.map((o, i) => (
-                  <motion.div
+                  <div
                     key={o.id ?? i}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-10%" }}
-                    transition={{
-                      duration: 0.6,
-                      delay: i * 0.08,
-                      ease: [0.16, 1, 0.3, 1],
+                    className="fm-fade-up group flex items-center gap-3 rounded-2xl border border-border/60 bg-background p-3 transition-colors hover:bg-muted/40"
+                    style={{
+                      animationDuration: "0.6s",
+                      animationDelay: `${i * 0.08}s`,
                     }}
-                    className="group flex items-center gap-3 rounded-2xl border border-border/60 bg-background p-3 transition-colors hover:bg-muted/40"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-sm font-medium text-foreground">
@@ -234,7 +225,7 @@ export function Marketplace() {
                         {o.sales} {t("landing.marketplace.offers.sold")}
                       </span>
                     </div>
-                  </motion.div>
+                  </div>
                 ))}
               </div>
 
