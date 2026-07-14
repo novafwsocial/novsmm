@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
+import { cacheInvalidate } from "@/lib/cache";
 
 /**
  * GET /api/admin/withdrawals — paginated list of withdrawals.
@@ -54,6 +55,23 @@ export async function GET(req: NextRequest) {
 /**
  * PATCH /api/admin/withdrawals — approve or reject a withdrawal.
  * Body: { id, action: "approve" | "reject" }
+ *
+ * SEC-1d-012 FIX: Race condition in the reject path. The previous code used
+ * the array form `db.$transaction([...])` with a NON-conditional
+ * `db.transaction.update({ where: { id } })`. Two concurrent PATCH requests
+ * would both pass the `if (txn.status !== "pending")` check (line 74), then
+ * both execute the $transaction: the first sets status→"failed" + increments
+ * balance; the second sets status→"failed" (already failed, idempotent on
+ * status) + increments balance AGAIN → DOUBLE REFUND.
+ *
+ * Fix: Migrated to interactive `db.$transaction(async (tx) => {...})` with a
+ * conditional `updateMany({ where: { id, status: "pending" } })`. Only ONE
+ * request can flip the status (the other gets count=0 and aborts BEFORE the
+ * balance increment). Same pattern as the W-1 webhook double-credit fix.
+ *
+ * The approve path is also migrated for consistency (though it has no
+ * dollar-flow race, the conditional updateMany prevents double-notification
+ * if two admins approve simultaneously).
  */
 export async function PATCH(req: NextRequest) {
   const { session, error } = await requireAdmin();
@@ -76,11 +94,24 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (action === "approve") {
-    // Mark as completed
-    await db.transaction.update({
-      where: { id },
-      data: { status: "completed" },
+    // SEC-1d-012 FIX: conditional updateMany — only ONE request can flip
+    // status to "completed". Concurrent requests get count=0 and skip
+    // the notification (prevents double-email to the user).
+    const result = await db.$transaction(async (tx) => {
+      const updated = await tx.transaction.updateMany({
+        where: { id, status: "pending" },
+        data: { status: "completed" },
+      });
+      if (updated.count === 0) {
+        return { alreadyProcessed: true };
+      }
+      return { alreadyProcessed: false };
     });
+
+    if (result.alreadyProcessed) {
+      // Another admin approved this withdrawal concurrently — no-op.
+      return apiOk({ message: "Withdrawal already approved by another admin" });
+    }
 
     await createNotification({
       userId: txn.userId,
@@ -93,16 +124,39 @@ export async function PATCH(req: NextRequest) {
     });
   } else {
     // Reject — refund the balance
-    await db.$transaction([
-      db.transaction.update({
-        where: { id },
+    // SEC-1d-012 FIX: conditional updateMany with status:"pending" inside an
+    // interactive $transaction. Only ONE request can flip the status; the
+    // other gets count=0 and aborts BEFORE the balance increment. Prevents
+    // double-refund when two admins reject simultaneously, or when a retry
+    // fires after a network timeout.
+    const result = await db.$transaction(async (tx) => {
+      const updated = await tx.transaction.updateMany({
+        where: { id, status: "pending" },
         data: { status: "failed" },
-      }),
-      db.user.update({
+      });
+      if (updated.count === 0) {
+        return { alreadyProcessed: true };
+      }
+      // Only ONE request reaches here — the balance increment is safe.
+      await tx.user.update({
         where: { id: txn.userId },
         data: { balance: { increment: Math.abs(txn.amount) } },
-      }),
-    ]);
+      });
+      return { alreadyProcessed: false };
+    });
+
+    if (result.alreadyProcessed) {
+      // Another admin rejected this withdrawal concurrently — the balance
+      // was already refunded by that request. No-op here.
+      return apiOk({ message: "Withdrawal already rejected by another admin" });
+    }
+
+    // P-005 FIX: Invalidate user cache so the balance update is visible
+    // immediately in the navbar/dashboard (not stale for 15-30s).
+    try {
+      await cacheInvalidate(`user:${txn.userId}`);
+      await cacheInvalidate(`dashboard:${txn.userId}:*`);
+    } catch {}
 
     await createNotification({
       userId: txn.userId,
