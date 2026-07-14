@@ -171,14 +171,19 @@ export function DashboardAnalytics() {
                 <ArrowUpRight className="h-3 w-3" /> live
               </span>
             </div>
-            {/* P-002: BarChart replaced with CSS flex bars */}
-            <div className="mt-4 h-[200px] w-full flex items-end gap-[6px]">
+            {/* P-002: BarChart replaced with CSS flex bars — full width + hover */}
+            <div className="mt-4 h-[200px] w-full flex items-end gap-[4px]">
               {(() => {
                 const maxV = Math.max(...hourlyOrders.map((h: any) => h.v), 1);
                 return hourlyOrders.map((h: any, i: number) => (
-                  <div key={i} className="group relative" style={{ flex: "1 1 0", maxWidth: "18px" }} title={`${h.h}:00 — ${h.v} orders`}>
+                  <div
+                    key={i}
+                    className="group relative flex-1 transition-opacity hover:opacity-100"
+                    style={{ opacity: 0.85 }}
+                    title={`${h.h}:00 — ${h.v} orders`}
+                  >
                     <div
-                      className="w-full rounded-t-md bg-primary/80 transition-all group-hover:bg-primary"
+                      className="w-full rounded-t-md bg-primary/80 transition-all group-hover:bg-primary group-hover:opacity-100"
                       style={{ height: `${(h.v / maxV) * 100}%`, minHeight: h.v > 0 ? "3px" : "0" }}
                     />
                   </div>

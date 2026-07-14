@@ -361,6 +361,7 @@ function Mini({
  */
 function MiniBarChart({ data }: { data: { d: number; v: number }[] }) {
   const [width, setWidth] = useState(600);
+  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -375,24 +376,43 @@ function MiniBarChart({ data }: { data: { d: number; v: number }[] }) {
 
   const H = 200; // pixel height (matches container h-[200px])
   const PAD = 8; // top padding in px
-  const gap = 6; // gap between bars in px
-  const barW = Math.min(18, (width - gap * (data.length - 1)) / data.length);
+  const gap = 4; // gap between bars in px
+  // Bars fill the full width — no maxWidth cap
+  const barW = (width - gap * (data.length - 1)) / data.length;
   const maxV = Math.max(1, ...data.map((d) => d.v));
 
   return (
-    <div ref={containerRef} className="w-full" style={{ height: H }}>
+    <div ref={containerRef} className="relative w-full" style={{ height: H }}>
       <svg
         width={width}
         height={H}
         role="img"
         aria-label="Daily sales for the last 14 days"
         style={{ display: "block" }}
+        onMouseLeave={() => setHoverIdx(null)}
+        onMouseMove={(e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const x = e.clientX - rect.left;
+          // Find nearest bar
+          let nearest = 0;
+          let minDist = Infinity;
+          data.forEach((_, i) => {
+            const barCenter = i * (barW + gap) + barW / 2;
+            const dist = Math.abs(barCenter - x);
+            if (dist < minDist) {
+              minDist = dist;
+              nearest = i;
+            }
+          });
+          setHoverIdx(nearest);
+        }}
       >
         {data.map((d, i) => {
           const h = (d.v / maxV) * (H - PAD);
           const x = i * (barW + gap);
           const y = H - h;
           const isLast = i === data.length - 1;
+          const isHover = hoverIdx === i;
           return (
             <rect
               key={i}
@@ -402,14 +422,46 @@ function MiniBarChart({ data }: { data: { d: number; v: number }[] }) {
               height={h}
               rx={Math.min(4, barW / 2)}
               ry={Math.min(4, barW / 2)}
-              fill={isLast ? "#0052ff" : "oklch(0.85 0.04 264)"}
-              opacity={0.85}
+              fill={isLast ? "#0052ff" : isHover ? "#0052ff" : "oklch(0.85 0.04 264)"}
+              opacity={isHover ? 1 : 0.85}
+              style={{ transition: "opacity 0.15s, fill 0.15s", cursor: "pointer" }}
             >
               <title>{`Day ${i + 1}: $${d.v.toLocaleString()}`}</title>
             </rect>
           );
         })}
+
+        {/* Hover tooltip line */}
+        {hoverIdx !== null && (
+          <line
+            x1={hoverIdx * (barW + gap) + barW / 2}
+            y1={0}
+            x2={hoverIdx * (barW + gap) + barW / 2}
+            y2={H}
+            stroke="#0052ff"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+            opacity={0.4}
+          />
+        )}
       </svg>
+
+      {/* Tooltip */}
+      {hoverIdx !== null && data[hoverIdx] && (
+        <div
+          className="pointer-events-none absolute z-10 rounded-lg border border-border bg-background/95 px-2.5 py-1 text-xs shadow-md backdrop-blur-sm"
+          style={{
+            left: `${hoverIdx * (barW + gap) + barW / 2}px`,
+            top: 0,
+            transform: "translateX(-50%)",
+          }}
+        >
+          <div className="font-semibold text-foreground">
+            ${data[hoverIdx].v.toLocaleString()}
+          </div>
+          <div className="text-muted-foreground">Day {hoverIdx + 1}</div>
+        </div>
+      )}
     </div>
   );
 }
