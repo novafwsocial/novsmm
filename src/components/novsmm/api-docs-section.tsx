@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   Terminal,
   KeyRound,
@@ -157,17 +156,10 @@ export function ApiDocsSection() {
 
               <ul className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {FEATURES.map((f, i) => (
-                  <motion.li
+                  <li
                     key={f.titleKey}
-                    initial={{ opacity: 0, y: 12 }}
-                    whileInView={{ opacity: 1, y: 0 }}
-                    viewport={{ once: true, margin: "-10%" }}
-                    transition={{
-                      duration: 0.6,
-                      delay: i * 0.06,
-                      ease: [0.16, 1, 0.3, 1],
-                    }}
-                    className="group flex items-start gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:bg-muted/40"
+                    className="group flex items-start gap-3 rounded-2xl border border-border/60 bg-muted/20 p-3.5 transition-colors hover:bg-muted/40 fm-fade-up"
+                    style={{ animationDelay: `${i * 0.06}s`, animationDuration: "0.6s" }}
                   >
                     <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-background text-primary nov-ring transition-colors group-hover:bg-primary/10">
                       <f.icon className="h-4 w-4" />
@@ -180,7 +172,7 @@ export function ApiDocsSection() {
                         {t(f.descKey)}
                       </p>
                     </div>
-                  </motion.li>
+                  </li>
                 ))}
               </ul>
 

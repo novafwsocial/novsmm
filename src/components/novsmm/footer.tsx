@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useState, useEffect } from "react";
 import { ArrowRight, Globe2 } from "lucide-react";
 import { Logo } from "./logo";
@@ -358,19 +357,13 @@ export function Footer() {
         aria-hidden
         className="pointer-events-none relative select-none overflow-hidden"
       >
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1 }}
-          // U-L-007: opacity was 0.03 — invisible on some monitors (especially
-          // low-contrast IPS panels and anti-glare screens). Bumped to 0.04 so
-          // the wordmark is barely visible (the design intent) but not invisible.
-          // FIX: Added py-4 so the text isn't clipped vertically by overflow-hidden
-          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04] py-4"
+        {/* P-001: replaced framer-motion with CSS fm-fade-up */}
+        <div
+          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04] py-4 fm-fade-up"
+          style={{ animationDuration: "1s" }}
         >
           NOVSMM
-        </motion.div>
+        </div>
       </div>
 
       {statusOpen && <StatusPage onClose={() => setStatusOpen(false)} />}
