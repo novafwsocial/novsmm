@@ -946,3 +946,20 @@ img, video, canvas, svg {
     transform: none !important;
   }
 }
+
+/* FIX: eliminate horizontal scroll on mobile */
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ensure all sections respect viewport width */
+main, section, footer, header, nav {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Prevent any element from exceeding viewport width on mobile */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
