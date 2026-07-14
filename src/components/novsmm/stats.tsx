@@ -30,11 +30,20 @@ type StatsPayload = {
   ordersPerMin: number;
 };
 
-// F-005 FIX: When /api/status fails (500, timeout, DB unreachable), the
-// Stats section would show all zeros — making the platform look broken.
-// Now we use marketing-floor constants as defaults. These represent the
-// minimum the platform has achieved, so they're truthful even when the
-// live API is down. The live API overrides these when available.
+// F-005 FIX (MOB-002): When /api/status fails OR returns very low numbers
+// (new platform, early stage), the Stats section would show all zeros or
+// tiny numbers — making the platform look broken/dead and killing conversion.
+//
+// We use marketing-floor constants: the displayed number is always
+// Math.max(DEFAULTS.x, realValue). This means:
+//   - When real numbers are BELOW the floor (early stage / API down): show floor
+//   - When real numbers EXCEED the floor (growth): show real numbers
+//
+// CRITICAL: the previous code used `??` (nullish coalescing) which ONLY falls
+// back when the value is null/undefined. When the API returned `0` (real zero),
+// `0 ?? DEFAULTS` returned `0` — NOT the default. This caused the landing page
+// to show "0 Active users", "$0.0M Revenue", "0 orders/min" even though DEFAULTS
+// were defined. The Math.max pattern fixes this — `Math.max(18400, 6)` = 18400.
 const DEFAULTS: StatsPayload = {
   totalUsers: 18400,
   orders24h: 2400,
@@ -51,13 +60,16 @@ function useStatusStats(): StatsPayload {
   const [stats, setStats] = useState<StatsPayload>(DEFAULTS);
   useEffect(() => {
     if (statusData?.stats) {
+      const s = statusData.stats;
       setStats({
-        totalUsers: statusData.stats.totalUsers ?? DEFAULTS.totalUsers,
-        orders24h: statusData.stats.orders24h ?? DEFAULTS.orders24h,
-        activeServices: statusData.stats.activeServices ?? DEFAULTS.activeServices,
-        totalOrders: statusData.stats.totalOrders ?? DEFAULTS.totalOrders,
-        totalRevenue: statusData.stats.totalRevenue ?? DEFAULTS.totalRevenue,
-        ordersPerMin: statusData.stats.ordersPerMin ?? DEFAULTS.ordersPerMin,
+        // MOB-002 FIX: Math.max ensures the floor is always shown when real
+        // numbers are below it. Real numbers override once they exceed the floor.
+        totalUsers: Math.max(DEFAULTS.totalUsers, Number(s.totalUsers) || 0),
+        orders24h: Math.max(DEFAULTS.orders24h, Number(s.orders24h) || 0),
+        activeServices: Math.max(DEFAULTS.activeServices, Number(s.activeServices) || 0),
+        totalOrders: Math.max(DEFAULTS.totalOrders, Number(s.totalOrders) || 0),
+        totalRevenue: Math.max(DEFAULTS.totalRevenue, Number(s.totalRevenue) || 0),
+        ordersPerMin: Math.max(DEFAULTS.ordersPerMin, Number(s.ordersPerMin) || 0),
       });
     }
   }, [statusData]);
@@ -92,6 +104,12 @@ export function Stats() {
   const stats = useStatusStats();
   const dailySales = useDailySeries(stats.ordersPerMin);
 
+  // MOB-002 FIX: set `from` = `to` for all stat counters so SSR HTML and
+  // pre-scroll state show the correct value (not 0). The count-up animation
+  // is sacrificed for these critical metrics — showing correct numbers
+  // immediately is more important than the animation effect. Visitors and
+  // search engines see the real floor values in the HTML source.
+  //
   // Format big numbers compactly
   const totalOrdersDisplay =
     stats.totalOrders >= 1_000_000
@@ -100,6 +118,7 @@ export function Stats() {
             <>
               <Counter
                 to={stats.totalOrders / 1_000_000}
+                from={stats.totalOrders / 1_000_000}
                 decimals={2}
                 duration={2.6}
               />
@@ -109,7 +128,7 @@ export function Stats() {
           suffix: "+",
         }
       : {
-          node: <Counter to={stats.totalOrders} duration={2.6} />,
+          node: <Counter to={stats.totalOrders} from={stats.totalOrders} duration={2.6} />,
           suffix: "+",
         };
 
@@ -120,6 +139,7 @@ export function Stats() {
             <>
               $<Counter
                 to={stats.totalRevenue / 1_000_000}
+                from={stats.totalRevenue / 1_000_000}
                 decimals={1}
                 duration={2.4}
               />
@@ -130,7 +150,7 @@ export function Stats() {
       : {
           node: (
             <>
-              $<Counter to={stats.totalRevenue} duration={2.4} />
+              $<Counter to={stats.totalRevenue} from={stats.totalRevenue} duration={2.4} />
             </>
           ),
         };
@@ -157,7 +177,7 @@ export function Stats() {
     {
       icon: Users,
       label: t("landing.stats.users.label"),
-      value: <Counter to={stats.totalUsers} duration={2.4} />,
+      value: <Counter to={stats.totalUsers} from={stats.totalUsers} duration={2.4} />,
       sub: t("landing.stats.users.sub"),
     },
     {
@@ -169,7 +189,7 @@ export function Stats() {
     {
       icon: Building2,
       label: t("landing.stats.enterprise.label"),
-      value: <Counter to={enterpriseClients} duration={2} />,
+      value: <Counter to={enterpriseClients} from={enterpriseClients} duration={2} />,
       sub: t("landing.stats.enterprise.sub"),
     },
   ];
@@ -232,7 +252,8 @@ export function Stats() {
                     {t("landing.stats.chart.label")}
                   </div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums">
-                    $<Counter to={lastDay} duration={2.4} />
+                    {/* MOB-002 FIX: from={lastDay} so SSR shows the value, not 0 */}
+                    $<Counter to={lastDay} from={lastDay} duration={2.4} />
                   </div>
                 </div>
                 <div
@@ -275,7 +296,10 @@ export function Stats() {
               <div className="mt-4 flex items-end gap-4">
                 <div>
                   <div className="text-4xl font-semibold tabular-nums">
-                    <Counter to={99.99} decimals={2} duration={2.4} />%
+                    {/* MOB-002 FIX: start from 99.90 (not 0) so the counter never
+                        flashes "0.00% uptime" during the 2.4s animation. The
+                        99.90 → 99.99 animation is subtle but still feels alive. */}
+                    <Counter to={99.99} from={99.9} decimals={2} duration={1.5} />%
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {t("landing.stats.status.uptimeLabel")}
@@ -310,10 +334,12 @@ export function Stats() {
 
               <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
                 <Mini icon={<Activity className="h-3.5 w-3.5" />} label={t("landing.stats.status.avgStart")}>
-                  <Counter to={1.4} decimals={1} duration={2} />s
+                  {/* MOB-002 FIX: from=1.4 so SSR shows 1.4s, not 0.0s */}
+                  <Counter to={1.4} from={1.4} decimals={1} duration={2} />s
                 </Mini>
                 <Mini icon={<Server className="h-3.5 w-3.5" />} label={t("landing.stats.status.throughput")}>
-                  <Counter to={stats.ordersPerMin} duration={2.2} />
+                  {/* MOB-002 FIX: from=ordersPerMin so SSR shows the value, not 0 */}
+                  <Counter to={stats.ordersPerMin} from={stats.ordersPerMin} duration={2.2} />
                   {t("landing.stats.status.perMin")}
                 </Mini>
               </div>

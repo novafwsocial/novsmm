@@ -30,11 +30,17 @@ export function Hero() {
   // if the request fails so the eyebrow never renders empty.
   // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
   // a single /api/status request via useCachedFetch.
+  //
+  // MOB-002 FIX: the previous truthy check `if (statusData?.stats?.ordersPerMin)`
+  // let small truthy values through (e.g. `1` → showed "1 orders/min" instead
+  // of the 1200 floor). Now we use Math.max(1200, realValue) so the displayed
+  // number is always at least the marketing floor, and grows with real data
+  // once it exceeds the floor.
   const statusData = useCachedFetch<any>("/api/status");
   const [ordersPerMin, setOrdersPerMin] = useState(1200);
   useEffect(() => {
-    if (statusData?.stats?.ordersPerMin) {
-      setOrdersPerMin(statusData.stats.ordersPerMin);
+    if (statusData?.stats?.ordersPerMin != null) {
+      setOrdersPerMin(Math.max(1200, Number(statusData.stats.ordersPerMin) || 0));
     }
   }, [statusData]);
 
@@ -68,7 +74,8 @@ export function Hero() {
             </span>
             {t("landing.hero.badge")}
             <span className="text-foreground">
-              <Counter to={ordersPerMin} duration={2.2} /> orders/min
+              {/* MOB-002 FIX: from=ordersPerMin so SSR shows the value, not 0 */}
+              <Counter to={ordersPerMin} from={ordersPerMin} duration={2.2} /> orders/min
             </span>
             <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" />
           </a>

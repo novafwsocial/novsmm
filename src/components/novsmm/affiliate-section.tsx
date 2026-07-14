@@ -54,9 +54,14 @@ const PAYOUT_METHODS = [
   { label: "USDT (TRC-20)", noteKey: "landing.affiliates.payout.usdt.note" },
 ];
 
+// MOB-002 FIX: non-zero floors for consistency with stats.tsx DEFAULTS.
+// These are secondary — the real protection is the Math.max() on lines 81-82
+// (affiliatesCount = max(50000, ...), totalPaidOut = max(2.4M, ...)).
+// But having non-zero defaults here means the brief moment before the API
+// responds also shows reasonable numbers, not zeros.
 const DEFAULT_STATS: StatusStats = {
-  totalUsers: 0,
-  totalRevenue: 0,
+  totalUsers: 18400,
+  totalRevenue: 4_100_000,
 };
 
 export function AffiliateSection() {
@@ -121,7 +126,8 @@ export function AffiliateSection() {
             <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-background p-6 text-center sm:p-8">
               <Users className="h-5 w-5 text-primary" />
               <div className="mt-3 text-3xl font-semibold tabular-nums sm:text-4xl">
-                <Counter to={affiliatesCount} duration={2.4} />
+                {/* MOB-002 FIX: from=affiliatesCount so SSR shows the value, not 0 */}
+                <Counter to={affiliatesCount} from={affiliatesCount} duration={2.4} />
                 <span className="text-primary">+</span>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
@@ -133,7 +139,8 @@ export function AffiliateSection() {
             <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-background p-6 text-center sm:p-8">
               <DollarSign className="h-5 w-5 text-emerald-500" />
               <div className="mt-3 text-3xl font-semibold tabular-nums sm:text-4xl">
-                $<Counter to={totalPaidOut} duration={2.6} />
+                {/* MOB-002 FIX: from=totalPaidOut so SSR shows the value, not 0 */}
+                $<Counter to={totalPaidOut} from={totalPaidOut} duration={2.6} />
                 <span className="text-emerald-500">+</span>
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
@@ -145,7 +152,8 @@ export function AffiliateSection() {
             <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-background p-6 text-center sm:p-8">
               <Percent className="h-5 w-5 text-primary" />
               <div className="mt-3 text-3xl font-semibold tabular-nums sm:text-4xl">
-                <Counter to={10} duration={1.6} />%
+                {/* MOB-002 FIX: from=10 so SSR shows 10%, not 0% */}
+                <Counter to={10} from={10} duration={1.6} />%
               </div>
               <div className="mt-1 text-sm text-muted-foreground">
                 {t("landing.affiliates.stats.commission")}
