@@ -356,7 +356,7 @@ function ProfileStep({
             onChange={(e) =>
               setData((d: any) => ({ ...d, name: e.target.value }))
             }
-            className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-sm text-foreground transition-shadow focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-base text-foreground transition-shadow focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
         <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700">
@@ -397,7 +397,7 @@ function CurrencyStep({ data, setData, options }: StepProps & { options: any[] }
               {c.symbol}
             </span>
             <span className="text-sm font-medium text-foreground">{c.code}</span>
-            <span className="text-[10px] text-muted-foreground">{c.name}</span>
+            <span className="text-[11px] text-muted-foreground">{c.name}</span>
           </motion.button>
         ))}
       </div>

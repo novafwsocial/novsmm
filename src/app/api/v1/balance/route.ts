@@ -11,7 +11,7 @@ import { requireApiKey, apiOk } from "@/lib/api-utils";
  *   { status, balance, currency }
  */
 export async function GET(req: NextRequest) {
-  const { user, error } = await requireApiKey(req, "read");
+  const { user, error } = await requireApiKey(req, ["read", "balance"]);
   if (error) return error;
 
   // Re-read the balance from DB (the session-cached value may be stale by up to 30s)

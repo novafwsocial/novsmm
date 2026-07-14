@@ -7,9 +7,12 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  /* Font variables defined directly (previously populated by next/font/google,
+     which failed in restricted-network build environments). */
+  --font-inter: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
   --font-sans: var(--font-inter);
-  --font-display: var(--font-display);
-  --font-mono: var(--font-mono);
+  --font-display: var(--font-inter);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -233,16 +236,36 @@
   background: oklch(0.5 0.005 285 / 0.32);
 }
 
-/* Marquee animation for testimonials/logos */
+/* Marquee animation for testimonials/logos
+   A11Y FIX (U-H-007): added pause-on-hover so users can read testimonials
+   without the marquee moving. Also added prefers-reduced-motion override
+   to stop the animation entirely for users who request reduced motion.
+   UX FIX (U-L-004): sped up from 40s/60s to 25s/35s. The previous
+   duration was too slow — testimonials barely appeared to move, making
+   the section feel static and broken. 25s is fast enough to show
+   movement but slow enough to read. */
 @keyframes nov-marquee {
   from { transform: translateX(0); }
   to { transform: translateX(-50%); }
 }
 .nov-marquee {
-  animation: nov-marquee 40s linear infinite;
+  animation: nov-marquee 25s linear infinite;
 }
 .nov-marquee-slow {
-  animation: nov-marquee 60s linear infinite;
+  animation: nov-marquee 35s linear infinite;
+}
+/* Pause on hover — lets users read the content */
+.nov-marquee:hover,
+.nov-marquee-slow:hover {
+  animation-play-state: paused;
+}
+
+/* Respect prefers-reduced-motion: stop marquee entirely */
+@media (prefers-reduced-motion: reduce) {
+  .nov-marquee,
+  .nov-marquee-slow {
+    animation: none !important;
+  }
 }
 
 /* Shimmer for live indicators */
@@ -271,9 +294,14 @@
    - touch-action: prevent 300ms tap delay on touch targets
    ───────────────────────────────────────────────────────────── */
 
-/* Skip rendering for below-the-fold sections (huge perf win on mobile) */
+/* Skip rendering for below-the-fold sections (huge perf win on mobile)
+   PERF FIX (P-L-004): was `section { content-visibility: auto }` which
+   applied to ALL <section> elements — including the hero, which is
+   above-the-fold and should always render immediately. Now scoped to
+   sections with the .lazy-section class, applied only to below-the-fold
+   sections (Services, Marketplace, Payments, Stats, etc.). */
 @media (max-width: 768px) {
-  section {
+  section.lazy-section {
     content-visibility: auto;
     contain-intrinsic-size: auto 400px;
   }
@@ -890,5 +918,31 @@ img, video, canvas, svg {
   button, a[role="button"], [role="button"] {
     min-height: 44px;
     min-width: 44px;
+  }
+}
+
+/* ─── ERROR BOUNDARY (P-C-002 fix) ─── */
+/* Replaces framer-motion fade+scale animation in error-boundary.tsx.
+   Kept minimal — this is an error state most users never see. */
+@keyframes errorBoundaryIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.error-boundary-enter {
+  animation: errorBoundaryIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error-boundary-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
   }
 }

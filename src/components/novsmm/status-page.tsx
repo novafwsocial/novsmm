@@ -110,12 +110,15 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
   const updatedAt = data?.updatedAt ?? new Date().toISOString();
 
   return (
-    <AnimatePresence>
+    <AnimatePresence mode="wait">
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
+        role="dialog"
+        aria-modal="true"
+        aria-label="System status"
         className="fixed inset-0 z-[100] flex items-start justify-center overflow-y-auto bg-background/80 backdrop-blur-md sm:items-center"
         onClick={onClose}
       >
@@ -232,12 +235,12 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
                           <div className="text-sm font-semibold tabular-nums">
                             {s.uptime30d.toFixed(2)}%
                           </div>
-                          <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                             30d uptime
                           </div>
                         </div>
                         <span
-                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[10px] font-medium ${
+                          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[11px] font-medium ${
                             STATUS_BADGE[s.status] ?? STATUS_BADGE.operational
                           }`}
                         >
@@ -256,7 +259,7 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
                 Last 30 days
               </div>
-              <div className="text-[10px] text-muted-foreground">30 days ago → today</div>
+              <div className="text-[11px] text-muted-foreground">30 days ago → today</div>
             </div>
             <div className="mt-3 flex items-end gap-[3px]">
               {loading

@@ -147,7 +147,7 @@ export function DashboardOrders() {
                         <PlatformLogo platform={o.platform} size={28} />
                         <div>
                           <div className="font-medium text-foreground">#{o.publicId}</div>
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-[11px] text-muted-foreground">
                             {new Date(o.createdAt).toLocaleDateString()}
                           </div>
                         </div>
@@ -180,7 +180,7 @@ export function DashboardOrders() {
                             )}
                           />
                         </div>
-                        <span className="text-[10px] tabular-nums text-muted-foreground">
+                        <span className="text-[11px] tabular-nums text-muted-foreground">
                           {o.progress}%
                         </span>
                       </div>
@@ -229,7 +229,7 @@ export function DashboardOrders() {
       </Reveal>
 
       {/* Order Detail Drawer */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {selectedOrder && (
           <OrderDetailDrawer
             order={selectedOrder}
@@ -314,6 +314,9 @@ function OrderDetailDrawer({
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         onClick={onClose}
+        role="dialog"
+        aria-modal="true"
+        aria-label="Order details"
         className="fixed inset-0 z-[80] bg-foreground/40 backdrop-blur-sm"
       />
       {/* Drawer */}
@@ -348,11 +351,11 @@ function OrderDetailDrawer({
           {/* Status + drip-feed banner */}
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={order.status} />
-            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
               {order.priority} priority
             </span>
             {dripConfig && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-medium text-primary">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
                 <Droplets className="h-3 w-3" /> Drip-feed
               </span>
             )}
@@ -360,7 +363,7 @@ function OrderDetailDrawer({
 
           {/* Timeline */}
           <div className="rounded-2xl border border-border/60 p-4">
-            <div className="mb-3 text-[10px] uppercase tracking-wider text-muted-foreground">Timeline</div>
+            <div className="mb-3 text-[11px] uppercase tracking-wider text-muted-foreground">Timeline</div>
             {cancelled ? (
               <div className="flex items-center gap-2 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4" />
@@ -374,7 +377,7 @@ function OrderDetailDrawer({
                     <div key={s.id} className="flex items-center gap-3">
                       <div
                         className={cn(
-                          "flex h-6 w-6 items-center justify-center rounded-full text-[10px] font-bold",
+                          "flex h-6 w-6 items-center justify-center rounded-full text-[11px] font-bold",
                           active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground",
                         )}
                       >
@@ -385,7 +388,7 @@ function OrderDetailDrawer({
                           {s.label}
                         </div>
                         {active && s.at && (
-                          <div className="text-[10px] text-muted-foreground">
+                          <div className="text-[11px] text-muted-foreground">
                             {new Date(s.at).toLocaleString()}
                           </div>
                         )}
@@ -425,7 +428,7 @@ function OrderDetailDrawer({
                 <a
                   href={order.link}
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
@@ -506,7 +509,7 @@ function OrderDetailDrawer({
 function DetailCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div className="rounded-2xl border border-border/60 p-4">
-      <div className="mb-3 text-[10px] uppercase tracking-wider text-muted-foreground">{title}</div>
+      <div className="mb-3 text-[11px] uppercase tracking-wider text-muted-foreground">{title}</div>
       <div className="flex flex-col gap-2">{children}</div>
     </div>
   );
@@ -539,7 +542,7 @@ function DetailRow({
 function ConfigItem({ label, value, full }: { label: string; value: string; full?: boolean }) {
   return (
     <div className={cn("rounded-lg bg-background/60 px-2.5 py-1.5", full && "col-span-2")}>
-      <div className="text-[9px] uppercase tracking-wider text-muted-foreground">{label}</div>
+      <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-xs font-medium text-foreground">{value}</div>
     </div>
   );

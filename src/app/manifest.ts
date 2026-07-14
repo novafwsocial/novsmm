@@ -32,24 +32,33 @@ export default function manifest(): MetadataRoute.Manifest {
     icons: [
       { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
-      // TODO AUDIT-14: The maskable icons below reuse the same PNG as "any".
-      // A proper maskable icon needs ~20% safe zone margin around the logo
-      // to prevent Android from cropping it on install. Generate a dedicated
-      // maskable variant (centered logo on solid background) and replace
-      // these entries. Until then, Android may crop the icon aggressively.
-      { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
-      { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
+      // PWA maskable icons — dedicated variants with safe zone margin.
+      // AUDIT-14 RESOLVED: previously reused /icon.png for maskable (Android
+      // would crop the logo). Now using dedicated maskable PNGs with proper
+      // ~20% safe zone padding on solid background.
+      { src: "/icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
+      { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
+    // UX FIX (U-M-011): was using ?view=dashboard&tab=marketplace —
+    // the AppView component doesn't parse these query params (it uses
+    // the Zustand store, not URL params). The shortcuts would open the
+    // landing page instead of the dashboard. Changed to use hash anchors
+    // that actually work — they scroll to the relevant section.
     shortcuts: [
       {
-        name: "Dashboard",
-        short_name: "Home",
-        url: "/?view=dashboard",
+        name: "Pricing",
+        short_name: "Plans",
+        url: "/pricing",
       },
       {
         name: "Marketplace",
         short_name: "Services",
-        url: "/?view=dashboard&tab=marketplace",
+        url: "/#marketplace",
+      },
+      {
+        name: "API Docs",
+        short_name: "API",
+        url: "/api-docs",
       },
     ],
   };

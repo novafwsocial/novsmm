@@ -104,12 +104,10 @@ export async function POST(req: Request) {
 }
 
 export async function GET() {
-  // Health check — does not require auth (only confirms the endpoint exists).
-  return NextResponse.json({
-    endpoint: "/api/internal/backup-status",
-    method: "POST",
-    configured: Boolean(INTERNAL_TOKEN),
-  });
+  // FIX: Previously a public health check that revealed whether
+  // INTERNAL_API_TOKEN was configured. This information helps attackers.
+  // Now always returns 403 — the endpoint is internal-only (POST).
+  return NextResponse.json({ error: "Forbidden" }, { status: 403 });
 }
 
 /**

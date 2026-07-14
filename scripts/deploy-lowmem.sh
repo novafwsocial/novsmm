@@ -111,22 +111,34 @@ ok "Containers started"
 echo ""
 echo "═══ Step 6: Health Check ═══"
 info "Waiting for app to be ready..."
+# FIX (L-011): use wall-clock time instead of counting iterations.
+# Previously WAITED counted +5 per iteration, but each iteration could
+# take up to 10s (5s curl + 5s sleep). MAX_WAIT=120 could be 240s real.
 MAX_WAIT=120
-WAITED=0
-while [ $WAITED -lt $MAX_WAIT ]; do
+START_TIME=$(date +%s)
+while true; do
+  ELAPSED=$(($(date +%s) - START_TIME))
+  if [ $ELAPSED -ge $MAX_WAIT ]; then
+    break
+  fi
   if curl -sf --max-time 5 http://localhost:3000/api/health/live &>/dev/null; then
-    ok "App healthy (${WAITED}s)"
+    ok "App healthy (${ELAPSED}s)"
     break
   fi
   sleep 5
-  WAITED=$((WAITED + 5))
-  printf "\r  ⏳ Waiting... %ds" "$WAITED"
+  printf "\r  ⏳ Waiting... %ds" "$ELAPSED"
 done
+WAITED=$(($(date +%s) - START_TIME))
 echo ""
 
 if [ $WAITED -ge $MAX_WAIT ]; then
-  warn "App not responding after ${MAX_WAIT}s — check logs:"
-  warn "  docker compose -f docker-compose.lowmem.yml logs web"
+  # FIX (H-004): abort the deploy instead of just warning. Previously
+  # this continued to run migrations + seed on a broken deploy, which
+  # could corrupt the DB or leave the system in an inconsistent state.
+  fail "App not responding after ${MAX_WAIT}s — aborting deploy."
+  echo "  Check logs: docker compose -f docker-compose.lowmem.yml logs web"
+  echo "  Rollback: docker compose -f docker-compose.lowmem.yml down"
+  exit 1
 fi
 
 # ── 7. Run migrations ──

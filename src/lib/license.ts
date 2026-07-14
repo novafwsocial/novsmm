@@ -100,9 +100,26 @@ export async function validateLicense(
 
   // 2. Fall back to bcrypt-scan over legacy licenses (lookupHash: null).
   //    Backfill lookupHash on the matched legacy license.
+  //
+  // SECURITY FIX (S-C-005): cap the scan at MAX_LEGACY_SCAN licenses.
+  // Previously this loop scanned ALL legacy licenses — with cost-12 bcrypt
+  // (~100ms each), N legacy licenses meant N×100ms of CPU per request. A
+  // botnet hitting the public /api/public/validate-license endpoint could
+  // saturate the event loop (each request blocks the single-threaded JS
+  // runtime for seconds).
+  //
+  // The route-level rate limit (10/min/IP in middleware.ts) caps the
+  // request rate, and this scan cap caps the per-request work. Together
+  // they bound the worst-case CPU burn to: 10 req/min × 3 bcrypt = 30
+  // bcrypt ops/min per IP — well within capacity.
+  //
+  // Long-term fix: run a one-time migration script that backfills
+  // lookupHash for ALL legacy licenses, then delete this fallback entirely.
+  const MAX_LEGACY_SCAN = 3;
   if (!lic) {
     const legacyLicenses = await db.license.findMany({
       where: { status: "active", lookupHash: null },
+      take: MAX_LEGACY_SCAN,
     });
     for (const l of legacyLicenses) {
       if (await validateLicenseKey(licenseKey, l.licenseHash)) {
@@ -133,8 +150,26 @@ export async function validateLicense(
   }
 
   // Check domain
-  if (lic.domain && options.domain && !options.domain.includes(lic.domain)) {
-    return { valid: false, reason: "Domain not allowed for this license" };
+  // SECURITY FIX (S-H-005): previously used `options.domain.includes(lic.domain)`
+  // which is a SUBSTRING match — if the license is for "novsmm.com", an
+  // attacker could use "evil-novsmm.com" and pass the check because
+  // "evil-novsmm.com".includes("novsmm.com") === true.
+  // Now we do proper hostname matching: exact match OR suffix match with
+  // a dot boundary (so "app.novsmm.com" matches a license for "novsmm.com"
+  // but "evil-novsmm.com" does NOT).
+  if (lic.domain && options.domain) {
+    try {
+      const requestedHost = new URL(options.domain.startsWith("http") ? options.domain : `https://${options.domain}`).hostname.toLowerCase();
+      const licensedHost = lic.domain.toLowerCase().replace(/^https?:\/\//, "").split("/")[0];
+      const isAllowed =
+        requestedHost === licensedHost ||
+        requestedHost.endsWith(`.${licensedHost}`);
+      if (!isAllowed) {
+        return { valid: false, reason: "Domain not allowed for this license" };
+      }
+    } catch {
+      return { valid: false, reason: "Invalid domain in request" };
+    }
   }
   // Check IP allowlist
   if (lic.ipAllowlist && options.ip) {

@@ -1,8 +1,7 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useDashboard, useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import {
   Wallet,
   ShoppingCart,
@@ -27,18 +26,10 @@ import {
   ChevronRight,
   Lock,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  CartesianGrid,
-} from "recharts";
+import { MiniAreaChart } from "./mini-area-chart";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { DashReveal } from "./dash-reveal";
-import { useFavorites, useTickets, useReferrals, useSession, useLoyalty } from "@/hooks/use-api";
 import { api } from "@/lib/api-client";
 import { useApp } from "./app-store";
 import { StatusPill } from "./status-pill";
@@ -61,13 +52,11 @@ const RANGE_RANGE_LABEL: Record<Range, string> = {
 
 export function DashboardHome() {
   const [range, setRange] = useState<Range>("30d");
-  // Range-aware fetch (re-fetches when range changes). Other consumers
-  // (sidebar balance, topbar) continue using useDashboard() without range.
-  const { data, isLoading } = useQuery({
-    queryKey: ["dashboard", range],
-    queryFn: () => api.get<any>(`/api/dashboard?range=${range}`),
-    refetchInterval: 30 * 1000,
-  });
+  // PERF FIX (P-H-002): use the shared useDashboard hook (with range)
+  // instead of a local useQuery. This shares the queryKey with the
+  // sidebar/topbar consumers, avoiding a duplicate /api/dashboard
+  // request every 30-60s.
+  const { data, isLoading } = useDashboard(range);
   const { setDashboardTab } = useApp();
   const { data: favData } = useFavorites();
   const { data: ticketsData } = useTickets();
@@ -177,35 +166,7 @@ export function DashboardHome() {
                 </div>
               </div>
               <div className="chart-container mt-5 h-[220px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={series} margin={{ top: 4, right: 4, left: 4, bottom: 0 }}>
-                    <defs>
-                      <linearGradient id="revArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#0052ff" stopOpacity={0.28} />
-                        <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                    <XAxis dataKey="d" hide />
-                    <Tooltip
-                      contentStyle={{
-                        borderRadius: 10,
-                        border: "1px solid rgba(0,0,0,0.08)",
-                        fontSize: 12,
-                      }}
-                      labelStyle={{ display: "none" }}
-                      formatter={(v: number) => [`$${v.toFixed(2)}`, "Revenue"]}
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="revenue"
-                      stroke="#0052ff"
-                      strokeWidth={2}
-                      fill="url(#revArea)"
-                      animationDuration={800}
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <MiniAreaChart data={series} height={220} color="#0052ff" formatValue={(v) => `$${v.toFixed(2)}`} />
               </div>
             </div>
           </Reveal>
@@ -298,12 +259,10 @@ export function DashboardHome() {
               </div>
             ) : (
               recentOrders.map((o: any, i: number) => (
-                <motion.div
+                <div
                   key={o.id}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
+                  className="fm-fade-up flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted/40"
+                  style={{ animationDelay: `${i * 0.04}s` }}
                 >
                   <PlatformLogo platform={o.platform} size={28} />
                   <div className="min-w-0 flex-1">
@@ -318,7 +277,7 @@ export function DashboardHome() {
                   <span className="w-16 text-right text-sm font-semibold tabular-nums text-emerald-600">
                     ${o.totalPrice.toFixed(2)}
                   </span>
-                </motion.div>
+                </div>
               ))
             )}
           </div>
@@ -343,7 +302,7 @@ export function DashboardHome() {
                   <PlatformLogo platform={f.service?.platform ?? "Other"} size={32} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-medium text-foreground">{f.service?.name}</div>
-                    <div className="text-[10px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
+                    <div className="text-[11px] text-muted-foreground">{f.service?.platform} · ${f.service?.price.toFixed(2)}/1000</div>
                   </div>
                 </div>
               )) : (
@@ -368,7 +327,7 @@ export function DashboardHome() {
                   <span className={cn("mt-1 h-1.5 w-1.5 rounded-full", t.priority === "high" ? "bg-red-500" : "bg-amber-500")} />
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-xs font-medium text-foreground">#{t.publicId} · {t.subject}</div>
-                    <div className="text-[10px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
+                    <div className="text-[11px] text-muted-foreground">{t.status} · {new Date(t.updatedAt).toLocaleDateString()}</div>
                   </div>
                 </div>
               )) : (

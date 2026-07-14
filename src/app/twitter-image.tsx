@@ -72,23 +72,13 @@ export default function TwitterImage() {
             zIndex: 1,
           }}
         >
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 56,
-              height: 56,
-              borderRadius: 14,
-              background: "#0052ff",
-              color: "#ffffff",
-              fontSize: 32,
-              fontWeight: 700,
-              letterSpacing: "-0.02em",
-            }}
-          >
-            N
-          </div>
+          {/* Logo — new metallic design */}
+          <img
+            src="https://novsmm.shop/logo-new.png"
+            width={56}
+            height={56}
+            style={{ borderRadius: 0 }}
+          />
           <div
             style={{
               display: "flex",
@@ -140,7 +130,7 @@ export default function TwitterImage() {
             zIndex: 1,
           }}
         >
-          {["99.99% uptime", "SOC 2", "8 gateways"].map((chip) => (
+          {["99.99% uptime", "SOC 2", "4 gateways"].map((chip) => (
             <div
               key={chip}
               style={{

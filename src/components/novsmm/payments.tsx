@@ -7,44 +7,48 @@ import { Reveal } from "./reveal";
 import { Counter } from "./counter";
 import { PaymentLogo } from "./payment-logo";
 import { useEffect, useState, useRef } from "react";
+import { useLanguage } from "./language-provider";
 
 /* ── Provider data ────────────────────────────────────── */
+// i18n (U-C-005): notes, coverage, settlement, and security strings are now
+// translation keys (looked up at render time via t()). Brand names, method
+// names, and currency counts stay as literal values.
 const PROVIDERS = [
   {
     name: "PayPal",
     methods: ["PayPal", "Venmo", "Pay Later", "Cards"],
     currencies: 25,
-    settlement: "Instant",
-    security: "PCI DSS L1",
-    coverage: "200+ countries",
-    note: "Buyer protection & vaulted wallets. Trusted globally.",
+    noteKey: "landing.payments.provider.paypal.note",
+    coverageKey: "landing.payments.provider.paypal.coverage",
+    settlementKey: "landing.payments.settlement.instant",
+    securityKey: "landing.payments.security.pciL1",
   },
   {
     name: "Mercado Pago",
     methods: ["Mercado Pago", "Pix", "Boleto", "OXXO"],
     currencies: 6,
-    settlement: "Instant",
-    security: "PCI DSS L1",
-    coverage: "LATAM region",
-    note: "Leading payment platform in Latin America. Local rails.",
+    noteKey: "landing.payments.provider.mercadopago.note",
+    coverageKey: "landing.payments.provider.mercadopago.coverage",
+    settlementKey: "landing.payments.settlement.instant",
+    securityKey: "landing.payments.security.pciL1",
   },
   {
     name: "NowPayments",
     methods: ["BTC", "ETH", "USDT", "USDC", "+100 cryptos"],
     currencies: 100,
-    settlement: "~5 min (on-chain)",
-    security: "Decentralized",
-    coverage: "Global",
-    note: "Accept 100+ cryptocurrencies. Auto-conversion to fiat. Zero chargebacks.",
+    noteKey: "landing.payments.provider.nowpayments.note",
+    coverageKey: "landing.payments.provider.nowpayments.coverage",
+    settlementKey: "landing.payments.settlement.onchain",
+    securityKey: "landing.payments.security.decentralized",
   },
   {
     name: "Manual",
     methods: ["WhatsApp", "Wire", "Zelle", "Custom"],
     currencies: 1,
-    settlement: "1-24h",
-    security: "Verified",
-    coverage: "Global",
-    note: "Contact our team via WhatsApp for manual credits. Zero fees.",
+    noteKey: "landing.payments.provider.manual.note",
+    coverageKey: "landing.payments.provider.manual.coverage",
+    settlementKey: "landing.payments.settlement.hours",
+    securityKey: "landing.payments.security.verified",
   },
 ];
 
@@ -62,6 +66,7 @@ const COINS: Coin[] = [
 ];
 
 export function Payments() {
+  const { t } = useLanguage();
   return (
     <section id="payments" className="relative overflow-hidden py-24 sm:py-32">
       <div
@@ -70,14 +75,14 @@ export function Payments() {
       />
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Payments"
+          eyebrow={t("landing.payments.eyebrow")}
           title={
             <>
-              One balance. Every currency.
-              <br className="hidden sm:block" /> Settled in minutes.
+              {t("landing.payments.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.payments.titleLine2")}
             </>
           }
-          description="NOVSMM routes every transaction through PayPal, Mercado Pago, NowPayments (crypto), or manual settlement — with FX conversion at mid-market rates and 100+ cryptocurrencies accepted."
+          description={t("landing.payments.description")}
         />
 
         <div className="mt-14 grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-center">
@@ -97,34 +102,34 @@ export function Payments() {
                       <PaymentLogo name={p.name} size={24} />
                     </span>
                     <span className="text-xs font-medium text-muted-foreground">
-                      {p.coverage}
+                      {t(p.coverageKey)}
                     </span>
                   </div>
                   <div className="mt-3 text-base font-semibold text-foreground">
                     {p.name}
                   </div>
                   <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
-                    {p.note}
+                    {t(p.noteKey)}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-1.5">
                     {p.methods.map((m) => (
                       <span
                         key={m}
-                        className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] font-medium text-foreground/70"
+                        className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[11px] font-medium text-foreground/70"
                       >
                         {m}
                       </span>
                     ))}
                   </div>
                   <div className="mt-4 grid grid-cols-3 gap-2 border-t border-border/60 pt-3 text-[11px]">
-                    <Meta icon={<Globe2 className="h-3 w-3" />} label="Cur.">
+                    <Meta icon={<Globe2 className="h-3 w-3" />} label={t("landing.payments.metaCurrencies")}>
                       {p.currencies}
                     </Meta>
-                    <Meta icon={<Clock className="h-3 w-3" />} label="Settle">
-                      {p.settlement}
+                    <Meta icon={<Clock className="h-3 w-3" />} label={t("landing.payments.metaSettlement")}>
+                      {t(p.settlementKey)}
                     </Meta>
-                    <Meta icon={<ShieldCheck className="h-3 w-3" />} label="Sec.">
-                      {p.security}
+                    <Meta icon={<ShieldCheck className="h-3 w-3" />} label={t("landing.payments.metaSecurity")}>
+                      {t(p.securityKey)}
                     </Meta>
                   </div>
                 </div>
@@ -136,10 +141,10 @@ export function Payments() {
         {/* Footer stat strip */}
         <Reveal delay={0.1}>
           <div className="mt-10 grid grid-cols-2 gap-3 rounded-2xl border border-border/60 bg-muted/30 p-4 sm:grid-cols-4 sm:p-6">
-            <Stat value={<><Counter to={4} duration={1.6} /></>} label="Payment gateways" />
-            <Stat value={<><Counter to={135} duration={2} /></>} label="Currencies" />
-            <Stat value={<><Counter to={0.4} decimals={1} duration={2} />%</>} label="Failure rate" />
-            <Stat value={<><Counter to={3} duration={1.4} /> min</>} label="Avg. settlement" icon={<Zap className="h-3.5 w-3.5 text-primary" />} />
+            <Stat value={<><Counter to={4} duration={1.6} /></>} label={t("landing.payments.statGateways")} />
+            <Stat value={<><Counter to={135} duration={2} /></>} label={t("landing.payments.statCurrencies")} />
+            <Stat value={<><Counter to={0.4} decimals={1} duration={2} />%</>} label={t("landing.payments.statFailure")} />
+            <Stat value={<><Counter to={3} duration={1.4} /> min</>} label={t("landing.payments.statSettlement")} icon={<Zap className="h-3.5 w-3.5 text-primary" />} />
           </div>
         </Reveal>
       </div>
@@ -158,7 +163,7 @@ function Meta({
 }) {
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <span className="inline-flex items-center gap-1 text-[11px] uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}
       </span>
@@ -207,6 +212,7 @@ function ClientOnly({ children }: { children: React.ReactNode }) {
 
 /* ── CoinField: gravity + mouse parallax ──────────────── */
 function CoinField() {
+  const { t } = useLanguage();
   // mouse parallax
   const mx = useMotionValue(0);
   const my = useMotionValue(0);
@@ -246,7 +252,7 @@ function CoinField() {
       {/* center label */}
       <div className="absolute inset-x-0 bottom-5 flex justify-center">
         <div className="rounded-full border border-border/60 bg-background/80 px-4 py-1.5 text-[11px] font-medium text-muted-foreground backdrop-blur-md">
-          Reactive to scroll &amp; cursor · GPU accelerated
+          {t("landing.payments.coinFieldLabel")}
         </div>
       </div>
     </div>
@@ -303,7 +309,7 @@ function FloatingCoin({
         >
           {c.glyph}
         </div>
-        <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {c.label}
         </span>
       </motion.div>

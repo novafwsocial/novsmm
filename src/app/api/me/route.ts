@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiError, apiOk, audit } from "@/lib/api-utils";
 import { z } from "zod";
+import { sanitizeText } from "@/lib/sanitize";
 
 /**
  * GET /api/me — current user's profile, 2FA status, and notification preferences.
@@ -66,6 +67,9 @@ export async function GET() {
   return apiOk({
     user: {
       ...user,
+      // FIX (OAuth nullable username): coerce null → "" so the frontend's
+      // `user.username: string` typing stays honest.
+      username: user.username ?? "",
       twoFactorEnabled,
       notificationPreferences,
     },
@@ -114,7 +118,11 @@ export async function PATCH(req: NextRequest) {
     }
 
     const updateData: any = {};
-    if (parsed.data.name !== undefined) updateData.name = parsed.data.name;
+    // I-2 FIX: Sanitize the name field to prevent stored XSS. The register
+    // endpoint already does this, but /api/me PATCH was missing it. React
+    // auto-escapes {user.name}, but defense-in-depth requires sanitization
+    // at write time (email templates, future non-React rendering, etc).
+    if (parsed.data.name !== undefined) updateData.name = sanitizeText(parsed.data.name);
     if (parsed.data.country !== undefined) updateData.country = parsed.data.country;
     if (parsed.data.currency !== undefined) {
       // Validate the currency exists and is active
@@ -141,6 +149,10 @@ export async function PATCH(req: NextRequest) {
     // Role changes are admin-only via PATCH /api/admin/users.
 
     // Notification preferences — stored in Setting table (not on User)
+    // SECURITY FIX (S-M-005): only merge known keys. Previously
+    // currentPrefs (from DB) was spread directly, so if the DB had
+    // extra keys (from a bug or injection), they'd persist forever.
+    // Now we whitelist the 6 known keys and ignore everything else.
     if (parsed.data.notificationPreferences !== undefined) {
       const existingPrefs = await db.setting.findUnique({
         where: { key: `notif_prefs:${userId}` },
@@ -153,7 +165,14 @@ export async function PATCH(req: NextRequest) {
           currentPrefs = {};
         }
       }
-      const mergedPrefs = { ...currentPrefs, ...parsed.data.notificationPreferences };
+      // Whitelist: only these 6 keys are valid notification preferences.
+      const VALID_PREFS = ["email", "push", "orders", "wallet", "security", "marketing"] as const;
+      const mergedPrefs: Record<string, boolean> = {};
+      for (const key of VALID_PREFS) {
+        // Prefer the new value if provided, else keep the existing value, else default
+        mergedPrefs[key] =
+          parsed.data.notificationPreferences[key] ?? currentPrefs[key] ?? true;
+      }
       await db.setting.upsert({
         where: { key: `notif_prefs:${userId}` },
         update: { value: JSON.stringify(mergedPrefs) },

@@ -6,6 +6,7 @@ import { createNotification } from "@/lib/notify";
 import { createNowPaymentsInvoice } from "@/lib/nowpayments";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { nextPublicId } from "@/lib/ids";
+import { cacheInvalidate } from "@/lib/cache";
 
 /**
  * POST /api/wallet/topup — process a payment and credit the wallet.
@@ -280,6 +281,7 @@ export async function POST(req: NextRequest) {
         severity: "info",
       });
 
+      await cacheInvalidate(`dashboard:${userId}:*`).catch(() => {});
       return apiOk({
         provider: "manual",
         reference: txn.publicId,

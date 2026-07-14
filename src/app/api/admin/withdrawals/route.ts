@@ -4,7 +4,10 @@ import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
 import { createNotification } from "@/lib/notify";
 
 /**
- * GET /api/admin/withdrawals — list all pending withdrawals.
+ * GET /api/admin/withdrawals — paginated list of withdrawals.
+ *
+ * PERF FIX (P-H-004): added server-side pagination. Query params:
+ * status (default "pending"), page (default 1), limit (default 50, max 200).
  */
 export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
@@ -12,16 +15,40 @@ export async function GET(req: NextRequest) {
 
   const { searchParams } = new URL(req.url);
   const status = searchParams.get("status") ?? "pending";
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
 
-  const transactions = await db.transaction.findMany({
-    where: { type: "withdrawal", status },
-    include: {
-      user: { select: { name: true, email: true, username: true } },
+  const where = { type: "withdrawal" as const, status };
+
+  const [transactions, total] = await Promise.all([
+    db.transaction.findMany({
+      where,
+      include: {
+        user: { select: { name: true, email: true, username: true } },
+      },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.transaction.count({ where }),
+  ]);
+
+  return apiOk({
+    // FIX (OAuth nullable username): coerce null → "" on each included user
+    // so the admin table's `username: string` typing stays honest.
+    withdrawals: transactions.map((t) => ({
+      ...t,
+      user: t.user
+        ? { ...t.user, username: t.user.username ?? "" }
+        : t.user,
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
     },
-    orderBy: { createdAt: "desc" },
   });
-
-  return apiOk({ withdrawals: transactions });
 }
 
 /**

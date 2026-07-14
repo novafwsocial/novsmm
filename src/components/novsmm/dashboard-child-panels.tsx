@@ -160,7 +160,7 @@ export function DashboardChildPanels() {
       </RevealStagger>
 
       {/* Just-created API key banner (shown once after creation) */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {createdKey && (
           <CreatedKeyBanner
             panel={createdKey.panel}
@@ -188,7 +188,7 @@ export function DashboardChildPanels() {
       </Reveal>
 
       {/* Create modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {showCreate && (
           <CreateChildPanelModal
             onClose={() => setShowCreate(false)}
@@ -293,7 +293,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
         </div>
         <span
           className={cn(
-            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium",
+            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium",
             status.cls,
           )}
         >
@@ -305,7 +305,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
       {/* Subdomain + plan + markup + paidUntil */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Subdomain</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Subdomain</div>
           <a
             href={`https://${p.subdomain}.novsmm.shop`}
             target="_blank"
@@ -317,23 +317,23 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
           </a>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Plan</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Plan</div>
           <div className="mt-0.5 font-medium text-foreground">{planMeta.label}</div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Markup</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Markup</div>
           <div className="mt-0.5 font-semibold tabular-nums text-emerald-600">
             {p.markupPercent}%
           </div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Monthly fee</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Monthly fee</div>
           <div className="mt-0.5 font-medium tabular-nums text-foreground">
             ${p.monthlyFee.toFixed(2)}/mo
           </div>
         </div>
         <div className="col-span-2 rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[9px] uppercase tracking-wider text-muted-foreground">Paid until</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Paid until</div>
           <div className={cn("mt-0.5 font-medium", expired ? "text-red-600" : "text-foreground")}>
             {paidUntilDate.toLocaleDateString(undefined, {
               year: "numeric",
@@ -388,7 +388,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
       </div>
 
       {/* Edit modal */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {editing && (
           <EditChildPanelModal
             panel={p}
@@ -547,6 +547,9 @@ function CreateChildPanelModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Create child panel"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -589,7 +592,7 @@ function CreateChildPanelModal({
               onChange={(e) => setName(e.target.value)}
               placeholder="Acme SMM"
               maxLength={50}
-              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+              className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
           <div>
@@ -633,7 +636,7 @@ function CreateChildPanelModal({
                 <div className="mt-0.5 text-[11px] font-medium tabular-nums text-emerald-600">
                   ${PLANS[k].monthly}/mo
                 </div>
-                <div className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
                   {PLANS[k].tagline}
                 </div>
               </button>
@@ -654,7 +657,7 @@ function CreateChildPanelModal({
             onChange={(e) => setMarkupPercent(Number(e.target.value))}
             className="h-2 w-full appearance-none rounded-full bg-muted accent-primary"
           />
-          <div className="mt-1 flex justify-between text-[10px] text-muted-foreground">
+          <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
             <span>0% (at cost)</span>
             <span>50%</span>
             <span>100% (2× cost)</span>
@@ -785,6 +788,9 @@ function EditChildPanelModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Edit child panel"
       className="fixed inset-0 z-[85] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -823,7 +829,7 @@ function EditChildPanelModal({
             value={name}
             onChange={(e) => setName(e.target.value)}
             maxLength={50}
-            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
 

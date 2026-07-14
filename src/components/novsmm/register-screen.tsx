@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { signIn } from "next-auth/react";
 import {
@@ -106,9 +105,10 @@ export function RegisterScreen() {
   const handleSocial = async (provider: SocialProviderId) => {
     setSocialLoading(provider);
     setError(null);
-    // signIn redirects to the provider's consent screen, then back to "/".
-    // NextAuth + PrismaAdapter will create the user account on first login.
-    await signIn(provider, { callbackUrl: "/" });
+    // FIX: callbackUrl includes ?authed=1 so the frontend knows this is a
+    // post-OAuth redirect and should force-redirect to the dashboard even
+    // if the session polling hasn't picked up the new cookie yet.
+    await signIn(provider, { callbackUrl: "/?authed=1" });
   };
 
   const submit = async (e: React.FormEvent) => {
@@ -135,17 +135,19 @@ export function RegisterScreen() {
         email: form.email,
         password: form.password,
         redirect: false,
-        callbackUrl: "/",
       });
 
       // 3. If login succeeded, set onboarding flag + reload to pick up session
       if (result && !result.error) {
         // Set a flag so app-view.tsx knows to show onboarding after reload
         sessionStorage.setItem("novsmm_show_onboarding", "true");
-        window.location.href = "/";
+        // FIX: redirect to /?authed=1 so the frontend forces dashboard view
+        // even if the session polling hasn't picked up the new cookie yet.
+        window.location.href = "/?authed=1";
       } else {
-        // Login failed after registration — go to login screen
-        setView("login");
+        // Login failed after registration — show error + go to login screen
+        setError("Account created! Please sign in with your credentials.");
+        setTimeout(() => setView("login"), 1500);
       }
     } catch (e: any) {
       setError(e.message || "Registration failed. Please try again.");
@@ -155,13 +157,10 @@ export function RegisterScreen() {
   };
 
   return (
-    <motion.div
+    <div
       key="register"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.4 }}
-      className="relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12"
+      className="fm-fade-up relative flex min-h-screen items-center justify-center overflow-hidden bg-background px-4 py-12"
+      style={{ animationDuration: "0.4s" }}
     >
       <div aria-hidden className="pointer-events-none absolute inset-0 -z-10">
         <div className="absolute inset-0 nov-grid-bg nov-radial-fade opacity-60" />
@@ -169,12 +168,9 @@ export function RegisterScreen() {
         <div className="absolute left-[8%] bottom-[8%] h-[280px] w-[280px] rounded-full bg-emerald-400/10 blur-[100px]" />
       </div>
 
-      <motion.div
-        initial={{ opacity: 0, y: 24, filter: "blur(12px)" }}
-        animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-        exit={{ opacity: 0, y: 16, filter: "blur(8px)" }}
-        transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-        className="auth-card-3d relative w-full max-w-[460px]"
+      <div
+        className="fm-fade-blur auth-card-3d relative w-full max-w-[460px]"
+        style={{ animationDuration: "0.7s" }}
       >
         <button
           onClick={() => setView("landing")}
@@ -222,13 +218,9 @@ export function RegisterScreen() {
           )}
 
           {error && (
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="mb-4 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm text-red-600"
-            >
+            <div className="fm-fade-up mb-4 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-2.5 text-sm text-red-600">
               {error}
-            </motion.div>
+            </div>
           )}
 
           <form onSubmit={submit} className="flex flex-col gap-4">
@@ -400,10 +392,10 @@ export function RegisterScreen() {
             Cancel anytime
           </span>
         </div>
-      </motion.div>
+      </div>
 
       <LegalPages page={legalPageOpen} onClose={() => setLegalPageOpen(null)} />
-    </motion.div>
+    </div>
   );
 }
 
@@ -435,7 +427,7 @@ function SelectField({
         <select
           value={value}
           onChange={onChange}
-          className="h-11 w-full appearance-none bg-transparent text-sm text-foreground focus:outline-none"
+          className="h-11 w-full appearance-none bg-transparent text-base text-foreground focus:outline-none"
         >
           {options.map((o, i) => (
             <option key={o} value={o}>

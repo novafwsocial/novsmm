@@ -75,7 +75,11 @@ export function WhatsAppWidget() {
         whileHover={{ scale: 1.08 }}
         whileTap={{ scale: 0.95 }}
         onClick={toggleOpen}
-        className="fixed bottom-5 right-5 z-40 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-[#25D366]/30 transition-shadow hover:shadow-xl hover:shadow-[#25D366]/40"
+        // U-M-007: raised z-index to z-50 so it's above the StickyCTA
+        // (z-40). Also moved up on mobile (bottom-20) so it doesn't
+        // overlap with the StickyCTA bottom bar (which is ~64px tall).
+        // Desktop stays at bottom-5 right-5 (no StickyCTA bottom bar on desktop).
+        className="fixed bottom-20 right-5 z-50 flex h-14 w-14 items-center justify-center rounded-full bg-[#25D366] text-white shadow-lg shadow-[#25D366]/30 transition-shadow hover:shadow-xl hover:shadow-[#25D366]/40 lg:bottom-5"
         aria-label="Open WhatsApp chat"
       >
         <AnimatePresence mode="wait">
@@ -109,7 +113,7 @@ export function WhatsAppWidget() {
         {!open && mounted && showBadge && (
           <span className="absolute -right-1 -top-1 flex h-4 w-4">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
-            <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[9px] font-bold text-white">
+            <span className="relative inline-flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[11px] font-bold text-white">
               1
             </span>
           </span>
@@ -117,14 +121,14 @@ export function WhatsAppWidget() {
       </motion.button>
 
       {/* Chat popup */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {open && (
           <motion.div
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}
             transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed bottom-24 right-5 z-40 w-[min(340px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-background nov-ring-lg"
+            className="fixed bottom-40 right-5 z-50 w-[min(340px,calc(100vw-2.5rem))] overflow-hidden rounded-2xl border border-border bg-background nov-ring-lg lg:bottom-24"
           >
             {/* Header */}
             <div className="flex items-center gap-3 bg-[#25D366] p-4 text-white">
@@ -160,7 +164,7 @@ export function WhatsAppWidget() {
                   }}
                   rows={2}
                   placeholder="Type your message…"
-                  className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:shadow-[0_0_0_3px_rgba(37,211,102,0.2)]"
+                  className="flex-1 resize-none rounded-xl border border-border bg-background px-3 py-2 text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:shadow-[0_0_0_3px_rgba(37,211,102,0.2)]"
                 />
                 <button
                   onClick={openWhatsApp}
@@ -171,7 +175,7 @@ export function WhatsAppWidget() {
                 </button>
               </div>
 
-              <p className="mt-2 text-center text-[10px] text-muted-foreground">
+              <p className="mt-2 text-center text-[11px] text-muted-foreground">
                 Opens WhatsApp in a new tab · {number}
               </p>
             </div>

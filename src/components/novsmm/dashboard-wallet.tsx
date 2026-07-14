@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import { useState } from "react";
 import { formatPrice } from "@/lib/currency-utils";
 import { PaymentLogo } from "./payment-logo";
@@ -16,14 +15,7 @@ import {
   X,
   Loader2,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  CartesianGrid,
-} from "recharts";
+import { MiniAreaChart } from "./mini-area-chart";
 import { Counter } from "./counter";
 import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import {
@@ -126,20 +118,7 @@ export function DashboardWallet() {
               </div>
             </div>
             <div className="mt-4 h-[200px] w-full">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="wIn" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="d" hide />
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#wIn)" animationDuration={1000} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <MiniAreaChart data={series} height={200} color="#0052ff" formatValue={(v) => `$${v.toFixed(2)}`} />
             </div>
           </div>
         </Reveal>
@@ -184,12 +163,10 @@ export function DashboardWallet() {
                   </tr>
                 )}
                 {transactions.map((t: any, i: number) => (
-                  <motion.tr
+                  <tr
                     key={t.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.02 }}
-                    className="transition-colors hover:bg-muted/30"
+                    className="fm-fade-up transition-colors hover:bg-muted/30"
+                    style={{ animationDelay: `${i * 0.02}s` }}
                   >
                     <td className="whitespace-nowrap px-5 py-3 font-mono text-xs text-muted-foreground">{t.publicId}</td>
                     <td className="px-5 py-3 font-medium text-foreground">{t.description}</td>
@@ -202,7 +179,7 @@ export function DashboardWallet() {
                     </td>
                     <td className="px-5 py-3">
                       <span className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize",
+                        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize",
                         t.status === "completed"
                           ? "bg-emerald-500/10 text-emerald-700"
                           : t.status === "pending"
@@ -219,7 +196,7 @@ export function DashboardWallet() {
                     <td className="px-5 py-3 text-right text-xs text-muted-foreground">
                       {new Date(t.createdAt).toLocaleString()}
                     </td>
-                  </motion.tr>
+                  </tr>
                 ))}
               </tbody>
             </table>
@@ -269,7 +246,7 @@ function PaymentMethodsList() {
             <PaymentLogo name={m.name} size={32} />
             <div className="min-w-0 flex-1">
               <div className="text-xs font-semibold text-foreground">{m.name}</div>
-              <div className="text-[10px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
+              <div className="text-[11px] text-muted-foreground">{m.settleTime} · {m.fee}</div>
             </div>
             <ArrowUpRight className="h-3.5 w-3.5 text-muted-foreground" />
           </div>
@@ -292,7 +269,7 @@ const TYPE_META: Record<string, { label: string; cls: string; icon: any }> = {
 function TypePill({ type }: { type: string }) {
   const m = TYPE_META[type] ?? TYPE_META.sale;
   return (
-    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium", m.cls)}>
+    <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", m.cls)}>
       <m.icon className="h-3 w-3" />
       {m.label}
     </span>
@@ -365,11 +342,10 @@ function TopupModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+    <div role="dialog" aria-modal="true" aria-label="Top up wallet" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="fm-scale-in relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+        onClick={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-5 w-5" />
@@ -439,10 +415,10 @@ function TopupModal({ onClose }: { onClose: () => void }) {
             <>Top up ${amount.toFixed(2)}</>
           )}
         </button>
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Sandbox mode · no real charge · processes in ~2s
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }
@@ -475,11 +451,10 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
   };
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
-      <motion.div
-        initial={{ opacity: 0, scale: 0.95, y: 10 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }}
-        onClick={(e) => e.stopPropagation()} className="relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+    <div role="dialog" aria-modal="true" aria-label="Withdraw funds" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+      <div
+        className="fm-scale-in relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
+        onClick={(e) => e.stopPropagation()}
       >
         <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
           <X className="h-5 w-5" />
@@ -509,7 +484,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
-            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           >
             {/* BROAD-FIX-BATCH-1: removed the hardcoded "Wise" option (Wise was
                 dropped from the canonical 5 payment methods in
@@ -543,7 +518,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
             placeholder="e.g. IBAN, USDT wallet address, PayPal email"
-            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
 
@@ -561,10 +536,10 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             <>Withdraw {formatPrice(amount, currency)}</>
           )}
         </button>
-        <p className="mt-2 text-center text-[10px] text-muted-foreground">
+        <p className="mt-2 text-center text-[11px] text-muted-foreground">
           Withdrawals are reviewed by admin before processing · 1% fee applies
         </p>
-      </motion.div>
+      </div>
     </div>
   );
 }

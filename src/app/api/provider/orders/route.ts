@@ -44,6 +44,9 @@ async function resolveProviderIdsForUser(
     const all = await db.provider.findMany({ select: { id: true } });
     return all.map((p) => p.id);
   }
+  // FIX (OAuth nullable username): `user.username` and `user.name` are
+  // `string | null`. `Provider.name` expects `string | undefined` — we
+  // use conditional spread so the OR branch is skipped when null.
   const user = await db.user.findUnique({
     where: { id: userId },
     select: { username: true, email: true, name: true },
@@ -52,9 +55,9 @@ async function resolveProviderIdsForUser(
   const matches = await db.provider.findMany({
     where: {
       OR: [
-        { name: user.username },
+        ...(user.username ? [{ name: user.username }] : []),
         { name: user.email },
-        { name: user.name ?? "" },
+        ...(user.name ? [{ name: user.name }] : []),
         { apiKey: userId },
       ],
     },

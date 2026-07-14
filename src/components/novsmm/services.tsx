@@ -5,20 +5,22 @@ import { PLATFORMS, type Platform } from "./platforms";
 import { PlatformLogo } from "./platform-logo";
 import { SectionHeading } from "./section-heading";
 import { Scroll3DReveal } from "./scroll-3d-reveal";
+import { useLanguage } from "./language-provider";
 
 export function Services() {
+  const { t } = useLanguage();
   return (
     <section id="services" className="relative py-24 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
-          eyebrow="Services"
+          eyebrow={t("landing.services.eyebrow")}
           title={
             <>
-              Every platform. Every metric.
-              <br className="hidden sm:block" /> One control surface.
+              {t("landing.services.titleLine1")}
+              <br className="hidden sm:block" /> {t("landing.services.titleLine2")}
             </>
           }
-          description="From follower growth to watch-time, NOVSMM orchestrates 6,300+ services across the platforms your audience actually lives on — powered by HuntSMM."
+          description={t("landing.services.description")}
         />
 
         <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -32,14 +34,14 @@ export function Services() {
             <div className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-dashed border-border bg-muted/30 p-5 transition-colors hover:border-primary/40">
               <div className="flex items-center justify-between">
                 <span className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  + more
+                  {t("landing.services.moreLabel")}
                 </span>
                 <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
               </div>
               <div>
                 <div className="text-2xl font-semibold tabular-nums">6,382</div>
                 <div className="text-xs text-muted-foreground">
-                  total active services
+                  {t("landing.services.totalServices")}
                 </div>
               </div>
             </div>
@@ -51,9 +53,10 @@ export function Services() {
 }
 
 function ServiceCard({ platform }: { platform: Platform }) {
+  const { t } = useLanguage();
   return (
     <div
-      className="group relative flex h-full min-h-[150px] flex-col justify-between overflow-hidden rounded-2xl border border-border/70 bg-background p-5 transition-all duration-300 hover:-translate-y-1 hover:nov-ring-lg"
+      className="group relative flex h-full min-h-[170px] flex-col justify-between gap-3 rounded-2xl border border-border/70 bg-background p-5 transition-all duration-300 hover:-translate-y-1 hover:nov-ring-lg"
     >
       {/* Hover glow — CSS-only, no JS tracking */}
       <div
@@ -65,14 +68,14 @@ function ServiceCard({ platform }: { platform: Platform }) {
           <PlatformLogo platform={platform.name} size={24} />
         </span>
         <span className="text-[11px] font-medium tabular-nums text-muted-foreground">
-          {platform.services} svc
+          {platform.services} {t("landing.services.svcUnit")}
         </span>
       </div>
       <div className="relative">
         <div className="text-base font-semibold text-foreground">
           {platform.name}
         </div>
-        <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">
+        <p className="mt-1 text-xs leading-relaxed text-muted-foreground line-clamp-2">
           {platform.blurb}
         </p>
       </div>

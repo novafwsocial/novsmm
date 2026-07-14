@@ -6,7 +6,7 @@ import {
 } from "otplib";
 import QRCode from "qrcode";
 import crypto from "crypto";
-import { encrypt, decrypt } from "./crypto-utils";
+import { encrypt, decrypt, encryptJSON, decryptJSON } from "./crypto-utils";
 
 /**
  * 2FA / TOTP utilities.
@@ -101,4 +101,95 @@ export function generateBackupCodes(count: number = 8): string[] {
     codes.push(`${code.slice(0, 4)}-${code.slice(4)}`);
   }
   return codes;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 2FA Setting payload read/write helpers
+//
+// SECURITY FIX (S-C-002 from security audit):
+// Previously, setup/verify stored the 2FA payload as PLAIN JSON
+// (`JSON.stringify({ secret, backupCodes })`) while the login flow
+// expected the WHOLE payload to be AES-256-GCM encrypted (via
+// `decryptJSON`). This mismatch caused every user who enabled 2FA to
+// be locked out at the next login with "2FA setup is corrupted".
+//
+// These helpers enforce a single consistent format:
+//   - WRITE: always `encryptJSON(payload)` — the whole object is encrypted.
+//   - READ:  try `decryptJSON` first (new format); fall back to plain
+//            `JSON.parse` (legacy format) so existing entries that were
+//            written before this fix still work. On the next write
+//            (e.g. backup-code rotation), the entry is transparently
+//            upgraded to the encrypted format.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface TwoFactorPayload {
+  /** AES-256-GCM encrypted TOTP secret (output of encrypt2FASecret). */
+  secret: string;
+  /** Bcrypt-hashed backup codes (one-way). */
+  backupCodes: string[];
+}
+
+/**
+ * Read a 2FA payload from a Setting value.
+ * Handles BOTH formats:
+ *   - New (encrypted): the whole payload is AES-256-GCM encrypted via
+ *     `encryptJSON()`.
+ *   - Legacy (plain JSON): `JSON.stringify({ secret, backupCodes })` —
+ *     written by the old setup/verify routes before this fix.
+ * Returns null on failure (corrupted / unknown format) — caller MUST
+ * treat null as fail-closed.
+ */
+export function read2FAPayload(
+  value: string | null | undefined
+): TwoFactorPayload | null {
+  if (!value || typeof value !== "string") return null;
+
+  // Try new format: whole payload encrypted with encryptJSON.
+  try {
+    const decrypted = decryptJSON(value);
+    if (
+      decrypted &&
+      typeof decrypted === "object" &&
+      typeof decrypted.secret === "string"
+    ) {
+      return {
+        secret: decrypted.secret,
+        backupCodes: Array.isArray(decrypted.backupCodes)
+          ? decrypted.backupCodes
+          : [],
+      };
+    }
+  } catch {
+    // Not encrypted — fall through to legacy plain-JSON parse.
+  }
+
+  // Legacy format: plain JSON.stringify({ secret, backupCodes }).
+  try {
+    const parsed = JSON.parse(value);
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      typeof parsed.secret === "string"
+    ) {
+      return {
+        secret: parsed.secret,
+        backupCodes: Array.isArray(parsed.backupCodes)
+          ? parsed.backupCodes
+          : [],
+      };
+    }
+  } catch {
+    // Not plain JSON either — corrupted.
+  }
+
+  return null;
+}
+
+/**
+ * Write a 2FA payload as an encrypted string (for Setting.value).
+ * Always uses `encryptJSON` — the whole payload is AES-256-GCM encrypted,
+ * matching what `read2FAPayload` and the login flow expect.
+ */
+export function write2FAPayload(payload: TwoFactorPayload): string {
+  return encryptJSON(payload);
 }

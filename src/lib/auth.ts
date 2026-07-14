@@ -10,7 +10,8 @@ import bcrypt from "bcryptjs";
 import { headers } from "next/headers";
 import { db } from "@/lib/db";
 import { audit } from "@/lib/api-utils";
-import { verify2FAToken, decrypt2FASecret } from "@/lib/two-factor";
+import { createNotification } from "@/lib/notify";
+import { verify2FAToken, decrypt2FASecret, read2FAPayload } from "@/lib/two-factor";
 import { cacheGet, cacheSet, cacheDel } from "@/lib/cache";
 import { decryptJSON } from "@/lib/crypto-utils";
 
@@ -18,16 +19,17 @@ import { decryptJSON } from "@/lib/crypto-utils";
  * Safely decrypt + parse a 2FA Setting payload (OWASP A08-2, P3).
  * Returns null on any failure (corrupted ciphertext, malformed JSON,
  * missing fields). The caller MUST handle null as a fail-closed case.
+ *
+ * SECURITY FIX (S-C-002): delegates to `read2FAPayload` (from two-factor.ts)
+ * which handles BOTH the new encrypted format (write2FAPayload/encryptJSON)
+ * and the legacy plain-JSON format transparently. This fixes the 2FA lockout
+ * bug where setup/verify wrote plain JSON but login expected AES-encrypted.
  */
 function decryptJSONSafe<T = any>(value: string | null | undefined): T | null {
   if (!value) return null;
-  try {
-    const parsed = decryptJSON(value);
-    if (!parsed || typeof parsed !== "object") return null;
-    return parsed as T;
-  } catch {
-    return null;
-  }
+  const payload = read2FAPayload(value);
+  if (!payload) return null;
+  return payload as unknown as T;
 }
 
 /**
@@ -35,15 +37,47 @@ function decryptJSONSafe<T = any>(value: string | null | undefined): T | null {
  * Used by the brute-force lockout to track attempts per-IP in addition
  * to per-email. Falls back to "unknown" if neither x-client-ip nor
  * x-forwarded-for is set (the middleware always sets x-client-ip).
+ *
+ * FIX (A-1): Previously read x-forwarded-for directly (client-forgeable).
+ * Now prioritizes cf-connecting-ip (Cloudflare, non-forgeable) and
+ * x-client-ip (set by our middleware using the same logic). In production,
+ * does NOT trust x-forwarded-for unless TRUST_PROXY=true.
  */
 async function getClientIp(): Promise<string> {
   try {
     const h = await headers();
-    return (
-      h.get("x-client-ip") ||
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown"
-    );
+
+    // 1. Cloudflare's cf-connecting-ip is authoritative (non-forgeable)
+    const cfIp = h.get("cf-connecting-ip");
+    if (cfIp && cfIp.trim()) return cfIp.trim();
+
+    // 2. x-client-ip is set by our middleware (which uses resolveClientIp
+    //    with the same cf-connecting-ip priority + anti-spoofing logic)
+    const clientIp = h.get("x-client-ip");
+    if (clientIp && clientIp !== "unknown") return clientIp;
+
+    // 3. In production, don't trust x-forwarded-for unless TRUST_PROXY is set
+    if (process.env.NODE_ENV === "production") {
+      if (process.env.TRUST_PROXY === "true") {
+        const xff = h.get("x-forwarded-for");
+        if (xff) {
+          // Take the LAST entry — the one added by our trusted proxy.
+          // The first entry is client-controlled and forgeable.
+          const ips = xff.split(",").map((s) => s.trim()).filter(Boolean);
+          if (ips.length > 0) return ips[ips.length - 1];
+        }
+      }
+      // Fail-closed: no trusted proxy header, don't trust xff
+      return "unknown";
+    }
+
+    // 4. In dev, use x-forwarded-for first entry (no Cloudflare in dev)
+    const xff = h.get("x-forwarded-for");
+    if (xff) {
+      return xff.split(",")[0]?.trim() ?? "unknown";
+    }
+
+    return "unknown";
   } catch {
     return "unknown";
   }
@@ -59,33 +93,84 @@ const LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 // In-memory fallback
 const loginAttempts = new Map<string, { count: number; lockedUntil: number }>();
 
+/**
+ * Track a failed login attempt atomically.
+ *
+ * A-6 FIX: Previously used a non-atomic read-modify-write pattern
+ * (cacheGet → +1 → cacheSet). Under Redis with concurrent requests, N
+ * simultaneous attempts could all read the same count, all increment to
+ * count+1, and all write count+1 — net result: only 1 attempt tracked
+ * instead of N. This reduced the effective brute-force protection.
+ *
+ * Now uses Redis INCR (atomic increment) when Redis is available. INCR is
+ * a single Redis command that atomically increments and returns the new
+ * value — no read-modify-write window. The in-memory fallback uses a
+ * synchronous Map (safe because Node.js is single-threaded for sync ops).
+ */
 async function trackFailedAttempt(key: string) {
   const redisKey = `login_lock:${key}`;
+  const ttlSeconds = Math.ceil(LOCK_DURATION_MS / 1000);
 
-  // Try Redis
-  const existing = await cacheGet<{ count: number; lockedUntil: number }>(redisKey);
+  // ── Try Redis atomic INCR ──
+  try {
+    const { getRedis } = await import("./redis");
+    const redis = await getRedis();
+    if (redis) {
+      // Atomic increment — returns the NEW count after incrementing
+      const newCount = await redis.incr(redisKey);
+
+      // Set TTL on first increment (INCR doesn't set expiry)
+      if (newCount === 1) {
+        await redis.expire(redisKey, ttlSeconds);
+      }
+
+      // If this attempt triggered the lockout, set the lockedUntil marker
+      if (newCount >= MAX_FAILED_ATTEMPTS) {
+        const lockedUntil = Date.now() + LOCK_DURATION_MS;
+        await redis.set(`${redisKey}:locked`, String(lockedUntil), "EX", ttlSeconds);
+      }
+
+      // Also update in-memory for immediate consistency
+      loginAttempts.set(key, {
+        count: newCount,
+        lockedUntil: newCount >= MAX_FAILED_ATTEMPTS ? Date.now() + LOCK_DURATION_MS : 0,
+      });
+      return;
+    }
+  } catch {
+    // Redis error — fall through to in-memory
+  }
+
+  // ── In-memory fallback (single-threaded — no race) ──
+  const existing = loginAttempts.get(key);
   const count = (existing?.count ?? 0) + 1;
   const lockedUntil = count >= MAX_FAILED_ATTEMPTS ? Date.now() + LOCK_DURATION_MS : 0;
-
-  await cacheSet(redisKey, { count, lockedUntil }, Math.ceil(LOCK_DURATION_MS / 1000));
-
-  // Also update in-memory (for immediate consistency in fallback mode)
   loginAttempts.set(key, { count, lockedUntil });
 }
 
 async function isAccountLocked(key: string): Promise<{ locked: boolean; lockedUntil?: number }> {
   const redisKey = `login_lock:${key}`;
 
-  // Try Redis first
-  const data = await cacheGet<{ count: number; lockedUntil: number }>(redisKey);
-  if (data) {
-    if (data.lockedUntil > Date.now()) {
-      return { locked: true, lockedUntil: data.lockedUntil };
+  // ── Try Redis ──
+  try {
+    const { getRedis } = await import("./redis");
+    const redis = await getRedis();
+    if (redis) {
+      // Check the locked marker key (set by trackFailedAttempt when count >= MAX)
+      const lockedUntilStr = await redis.get(`${redisKey}:locked`);
+      if (lockedUntilStr) {
+        const lockedUntil = parseInt(lockedUntilStr, 10);
+        if (lockedUntil > Date.now()) {
+          return { locked: true, lockedUntil };
+        }
+      }
+      return { locked: false };
     }
-    return { locked: false };
+  } catch {
+    // Redis error — fall through to in-memory
   }
 
-  // Fallback to in-memory
+  // ── In-memory fallback ──
   const mem = loginAttempts.get(key);
   if (mem && mem.lockedUntil > Date.now()) {
     return { locked: true, lockedUntil: mem.lockedUntil };
@@ -95,6 +180,16 @@ async function isAccountLocked(key: string): Promise<{ locked: boolean; lockedUn
 
 async function clearFailedAttempts(key: string) {
   const redisKey = `login_lock:${key}`;
+  // A-6 FIX: Also delete the locked marker key
+  try {
+    const { getRedis } = await import("./redis");
+    const redis = await getRedis();
+    if (redis) {
+      await redis.del(redisKey, `${redisKey}:locked`);
+    }
+  } catch {
+    // fall through to cacheDel
+  }
   await cacheDel(redisKey);
   loginAttempts.delete(key);
 }
@@ -246,13 +341,20 @@ const providers: Provider[] = [
             twoFactorOk = true;
             usedBackupCode = true;
             // Rotate: remove the used code so it's single-use.
+            // SECURITY FIX (S-C-002): use write2FAPayload for consistent
+            // encrypted format (was encryptJSON direct — worked, but
+            // write2FAPayload is the canonical helper).
             const remaining = codes.filter((_, i) => i !== matchedIndex);
-            const newPayload = { ...payload, backupCodes: remaining };
             try {
-              const { encryptJSON } = await import("./crypto-utils");
+              const { write2FAPayload } = await import("./two-factor");
               await db.setting.update({
                 where: { key: `2fa:${user.id}` },
-                data: { value: encryptJSON(newPayload) },
+                data: {
+                  value: write2FAPayload({
+                    secret: payload.secret,
+                    backupCodes: remaining,
+                  }),
+                },
               });
             } catch {
               // best-effort — don't block login on rotation failure
@@ -263,7 +365,17 @@ const providers: Provider[] = [
         if (!twoFactorOk) {
           await trackFailedAttempt(lockKeyEmail);
           if (lockKeyIp) await trackFailedAttempt(lockKeyIp);
-          throw new Error("Invalid 2FA code");
+          // A-4 FIX: Return the SAME generic "Invalid credentials" message
+          // as the lockout check (line 192) and the password-fail path
+          // (line 202). Previously this returned "Invalid 2FA code" which
+          // let an attacker detect the lockout threshold: attempts 1-5
+          // returned "Invalid 2FA code", attempt 6+ returned "Invalid
+          // credentials" (from the lockout check). Now both return the
+          // same message, so the attacker can't tell when the lockout
+          // engaged. The frontend handles the UX message — it shows
+          // "Invalid 2FA code" when in 2FA mode regardless of the server
+          // error string.
+          throw new Error("Invalid credentials");
         }
 
         // Optional: log backup-code usage so support can reach out to users
@@ -450,6 +562,8 @@ export async function getConfiguredSocialProviders(): Promise<
  */
 async function getConfiguredOAuthProviders(): Promise<Provider[]> {
   const configured = await getConfiguredSocialProviders();
+  // DIAGNOSTIC LOG: helps debug "Google login redirects to landing" issues.
+  console.log(`[auth] getConfiguredOAuthProviders: configured=[${configured.join(",")}]`);
   const oauthProviders: Provider[] = [];
 
   // For each configured provider, look up the credentials (env var first,
@@ -471,12 +585,20 @@ async function getConfiguredOAuthProviders(): Promise<Provider[]> {
           if (creds?.clientId && creds?.clientSecret) {
             clientId = creds.clientId;
             clientSecret = creds.clientSecret;
+            console.log(`[auth] ${provider}: loaded credentials from DB (clientId: ${String(clientId).slice(0, 8)}...)`);
+          } else {
+            console.error(`[auth] ${provider}: DB setting exists but decryption returned null — LICENSE_ENCRYPTION_KEY may have changed!`);
           }
+        } else {
+          console.error(`[auth] ${provider}: getConfiguredSocialProviders said it's configured but no DB row found (race condition?)`);
         }
-      } catch {
+      } catch (e) {
+        console.error(`[auth] ${provider}: error reading DB credentials:`, e);
         // DB might not be available — skip this provider
         continue;
       }
+    } else {
+      console.log(`[auth] ${provider}: using env var credentials (clientId: ${String(clientId).slice(0, 8)}...)`);
     }
 
     if (!clientId || !clientSecret) continue;
@@ -553,11 +675,24 @@ export async function getGoogleOAuthConfig(): Promise<{
 function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
   return {
     adapter: PrismaAdapter(db),
-    session: { strategy: "jwt" },
-    // trustHost: true makes NextAuth derive the base URL from the request
-    // (Host + X-Forwarded-Proto headers) instead of requiring NEXTAUTH_URL.
-    // This is essential when behind a gateway/proxy with a different external URL.
-    ...(({ trustHost: true }) as any),
+    // A-5 FIX: Reduced session maxAge from NextAuth's default (30 days) to
+    // 24 hours. NOVSMM handles wallet balances, orders, and withdrawals — a
+    // stolen session cookie (XSS, malicious browser extension, shared
+    // computer) would give the attacker a full month of access. 24h limits
+    // the window of exposure while still being usable for daily use. The
+    // passwordChangedAt check in the jwt callback still invalidates sessions
+    // immediately on password change, so users can force-logout all sessions
+    // by changing their password.
+    session: {
+      strategy: "jwt",
+      maxAge: 24 * 60 * 60, // 24 hours (in seconds)
+    },
+    // SECURITY FIX (A-003): removed trustHost: true — it made NextAuth
+    // derive the base URL from the forgeable Host header, enabling
+    // host-header injection attacks (password-reset poisoning → account
+    // takeover). Now NextAuth uses NEXTAUTH_URL from env (already set in
+    // .env as https://novsmm.shop), which is a server-side constant that
+    // cannot be spoofed by the client.
     pages: {
       signIn: "/",
     },
@@ -597,11 +732,122 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
     },
     providers: [...providers, ...extraProviders],
     callbacks: {
+      async signIn({ user, account, profile }) {
+        // FIX (OAuth): When a user signs in via OAuth (Google, Facebook, etc.),
+        // PrismaAdapter creates the User row automatically AFTER signIn returns
+        // true. We must NOT create the user here — doing so causes a unique-
+        // constraint violation (P2002) when PrismaAdapter then tries to create
+        // the same user, which silently kills the OAuth flow and the session
+        // is never set (user gets redirected back to the landing page).
+        //
+        // The username generation is handled by the `events.createUser` event
+        // (see below), which fires AFTER PrismaAdapter creates the user.
+        //
+        // FIX (OAuthAccountNotLinked): When a user with the same email already
+        // exists (e.g. they registered with email+password first, then tried
+        // to sign in with Google), NextAuth refuses to link the OAuth account
+        // automatically → error "OAuthAccountNotLinked". This is a security
+        // measure to prevent account takeover, but for our use case we WANT
+        // to link them (the user owns both the email and the Google account).
+        // We manually create the Account row here, linking the OAuth provider
+        // to the existing user, so PrismaAdapter doesn't try to create a new
+        // user and trigger the "OAuthAccountNotLinked" error.
+        if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
+          console.log(`[auth] signIn callback: provider=${account.provider}, userId=${user.id ?? "(none)"}`);
+          try {
+            const email = user.email?.toLowerCase();
+            if (!email) {
+              console.error("[auth] signIn callback: no email from OAuth provider");
+              return false;
+            }
+
+            const dbUser = await db.user.findUnique({ where: { email } });
+            console.log(`[auth] signIn callback: dbUser=${dbUser ? `found (id=${dbUser.id}, username=${dbUser.username})` : "not found"}`);
+
+            if (dbUser) {
+              // User already exists — check if they have an Account row for
+              // this provider. If not, create one to link them (avoids
+              // OAuthAccountNotLinked error).
+              if (account.providerAccountId) {
+                const existingAccount = await db.account.findUnique({
+                  where: {
+                    provider_providerAccountId: {
+                      provider: account.provider,
+                      providerAccountId: account.providerAccountId,
+                    },
+                  },
+                });
+
+                if (!existingAccount) {
+                  console.log(`[auth] signIn callback: linking ${account.provider} account to existing user ${dbUser.id}`);
+                  await db.account.create({
+                    data: {
+                      userId: dbUser.id,
+                      type: account.type ?? "oauth",
+                      provider: account.provider,
+                      providerAccountId: account.providerAccountId,
+                      access_token: account.access_token ?? null,
+                      refresh_token: account.refresh_token ?? null,
+                      expires_at: account.expires_at ?? null,
+                      token_type: account.token_type ?? null,
+                      scope: account.scope ?? null,
+                      id_token: account.id_token ?? null,
+                      session_state: (account as any).session_state ?? null,
+                    },
+                  });
+                  console.log(`[auth] signIn callback: account linked successfully`);
+                } else {
+                  console.log(`[auth] signIn callback: account already linked`);
+                }
+              }
+
+              // Attach the existing user's id/role/username to the user object
+              // so the jwt callback uses the correct user (not a new one).
+              (user as any).id = dbUser.id;
+              (user as any).role = dbUser.role;
+              (user as any).username = dbUser.username ?? "";
+
+              if (!dbUser.username) {
+                // Defensive fallback: user exists but has no username.
+                const baseUsername = (dbUser.name || email.split("@")[0])
+                  .toLowerCase()
+                  .replace(/[^a-z0-9_]/g, "")
+                  .slice(0, 20) || "user";
+                let username = baseUsername;
+                let suffix = 1;
+                while (await db.user.findUnique({ where: { username } })) {
+                  username = `${baseUsername}${suffix++}`;
+                }
+                await db.user.update({
+                  where: { id: dbUser.id },
+                  data: { username },
+                });
+                (user as any).username = username;
+                console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
+              }
+            }
+            // If dbUser is null, PrismaAdapter will create the user + account
+            // automatically after signIn returns true. The events.createUser
+            // handler will generate the username.
+          } catch (e) {
+            console.error("[auth] OAuth signIn error:", e);
+            return false;
+          }
+        }
+        return true;
+      },
       async jwt({ token, user }) {
         if (user) {
           token.id = (user as any).id;
           token.role = (user as any).role;
-          token.username = (user as any).username;
+          // FIX (OAuth nullable username): User.username is `string | null`
+          // (nullable to allow OAuth users to be created before the signIn
+          // callback generates a username). Coerce to "" so the JWT/session
+          // always carries a string — this keeps AuthUser.username and
+          // AppSession.user.username honest as `string` rather than
+          // `string | null`, and prevents null leaking to the frontend in
+          // the brief window before username is generated.
+          token.username = (user as any).username ?? "";
           // Preserve impersonation context from the "impersonate" provider
           if ((user as any).realAdminId) {
             token.realAdminId = (user as any).realAdminId;
@@ -692,7 +938,8 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 token.language = impersonated.language;
                 token.country = impersonated.country;
                 token.name = impersonated.name;
-                token.username = impersonated.username;
+                // FIX (OAuth nullable username): coerce null → ""
+                token.username = impersonated.username ?? "";
                 token.email = impersonated.email;
                 token.lifetimeEarnings = impersonated.lifetimeEarnings;
               }
@@ -709,6 +956,8 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             // This eliminates the DB hit on every authenticated request.
             // The cache is invalidated on balance/role/profile changes via
             // cacheInvalidate("user:{id}") in the relevant API routes.
+            // FIX (OAuth nullable username): added `username` to the cache
+            // payload so it gets refreshed alongside balance/role/etc.
             const cached = await cacheGet<{
               balance: number;
               heldBalance: number;
@@ -718,6 +967,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               language: string;
               country: string;
               name: string | null;
+              username: string | null;
               lifetimeEarnings: number;
             }>(cacheKey);
 
@@ -730,12 +980,17 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
               token.language = cached.language;
               token.country = cached.country;
               token.name = cached.name;
+              token.username = cached.username ?? "";
               token.lifetimeEarnings = cached.lifetimeEarnings;
             } else {
               // Cache miss — fetch from DB and cache for 30s
+              // FIX (OAuth nullable username): added `username` to the
+              // select so the token picks up the username generated by
+              // events.createUser (which runs after PrismaAdapter creates
+              // the user but before this refresh on the first jwt call).
               const dbUser = await db.user.findUnique({
                 where: { id: userId },
-                select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, lifetimeEarnings: true },
+                select: { balance: true, heldBalance: true, role: true, status: true, currency: true, language: true, country: true, name: true, username: true, lifetimeEarnings: true },
               });
               if (dbUser) {
                 token.balance = dbUser.balance;
@@ -746,6 +1001,11 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 token.language = dbUser.language;
                 token.country = dbUser.country;
                 token.name = dbUser.name;
+                // FIX (OAuth nullable username): refresh username from DB
+                // so the token picks up the username generated by
+                // events.createUser (which runs after PrismaAdapter creates
+                // the user). Coerce null → "" for type honesty.
+                token.username = dbUser.username ?? "";
                 token.lifetimeEarnings = dbUser.lifetimeEarnings;
 
                 // Cache for 30 seconds — short enough that balance updates
@@ -761,6 +1021,20 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         return token;
       },
       async session({ session, token }) {
+        // A-3 FIX: If the jwt callback returned {} (e.g. passwordChangedAt
+        // check failed, account suspended, user deleted), token.id is
+        // undefined. In that case, clear session.user so the frontend and
+        // requireAuth() treat the session as logged-out (returns null → 401)
+        // instead of returning a partial session with undefined fields (which
+        // caused HTTP 500 when downstream code did db.user.findUnique with
+        // id: undefined).
+        if (!token.id) {
+          // Return the session with user set to null/empty so NextAuth
+          // treats it as unauthenticated. Setting session.user = null as
+          // any forces the session to look logged-out.
+          (session as any).user = null;
+          return session;
+        }
         if (session.user) {
           (session.user as any).id = token.id;
           (session.user as any).role = token.role;
@@ -785,6 +1059,68 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
       },
     },
     events: {
+      // FIX (OAuth): PrismaAdapter creates the User row WITHOUT username
+      // (username is `String? @unique` to allow this). This event fires
+      // RIGHT AFTER PrismaAdapter creates the user, so we generate a
+      // username here and update the DB. By the time the jwt callback
+      // runs (which refreshes from DB), the username is already set.
+      async createUser({ user }) {
+        console.log(`[auth] events.createUser: userId=${user.id}`);
+        if (!user?.id || !user?.email) {
+          console.error("[auth] events.createUser: missing user.id or user.email");
+          return;
+        }
+        try {
+          // Re-fetch to check if username is already set (defensive —
+          // a prior createUser event may have already run).
+          const existing = await db.user.findUnique({
+            where: { id: user.id },
+            select: { username: true, name: true, email: true },
+          });
+          if (!existing) {
+            console.error(`[auth] events.createUser: user ${user.id} not found in DB (PrismaAdapter may have failed)`);
+            return;
+          }
+          if (existing.username) {
+            console.log(`[auth] events.createUser: user already has username "${existing.username}", skipping`);
+            return;
+          }
+
+          const baseUsername = (existing.name || existing.email.split("@")[0])
+            .toLowerCase()
+            .replace(/[^a-z0-9_]/g, "")
+            .slice(0, 20) || "user";
+          let username = baseUsername;
+          let suffix = 1;
+          while (await db.user.findUnique({ where: { username } })) {
+            username = `${baseUsername}${suffix++}`;
+          }
+
+          await db.user.update({
+            where: { id: user.id },
+            data: { username },
+          });
+          console.log(`[auth] events.createUser: generated username "${username}" for user ${user.id}`);
+
+          await createNotification({
+            userId: user.id,
+            type: "system",
+            title: "Welcome to NOVSMM 🎉",
+            message: `Hi ${existing.name || username}! Your workspace is ready. Top up your wallet to place your first order.`,
+            severity: "success",
+          }).catch(() => {});
+
+          await audit(user.id, "register", "user", user.id, {
+            provider: "oauth",
+            email: existing.email,
+          }).catch(() => {});
+        } catch (e) {
+          console.error("[auth] createUser event error:", e);
+          // Don't throw — the user is already created, they can still log in.
+          // The signIn callback's defensive fallback will generate the
+          // username on the next login attempt.
+        }
+      },
       async signOut({ token }) {
         if (token?.id) {
           await audit(token.id as string, "logout", "user", token.id as string);

@@ -34,7 +34,9 @@ services:
     mem_limit: 512m
     cpus: 1.0
     # CIS: Read-only root filesystem (writes go to volumes)
-    read_only: false  # PostgreSQL needs to write to data dir
+    # FIX (L-013): removed `read_only: false` — it's the default and the
+    # comment was misleading (sounded like we were disabling something).
+    # PostgreSQL needs write access to its data dir, which is the default.
     tmpfs:
       - /tmp:size=64m
       - /run:size=16m
@@ -143,7 +145,9 @@ services:
       context: .
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["node", "node_modules/.bin/tsx", "src/workers/worker.ts"]
+    # FIX (CICD-C-001): was ["node","node_modules/.bin/tsx","src/workers/worker.ts"]
+    # but the oven/bun:1.1-debian image doesn't have node. Now uses bun.
+    command: ["bun", "run", "worker:prod"]
     # CIS Docker 5.3: Drop ALL capabilities
     cap_drop: [ALL]
     security_opt: [no-new-privileges:true]
@@ -166,7 +170,10 @@ services:
     volumes:
       - uploads:/app/storage/uploads
     healthcheck:
-      test: ["CMD-SHELL", "node -e \"process.exit(0)\" || exit 1"]
+      # FIX (M-008): was `node -e "process.exit(0)"` — always exits 0, so
+      # the healthcheck was a no-op. Now checks if the worker process is
+      # actually running by looking for the tsx process in the process list.
+      test: ["CMD-SHELL", "pgrep -f 'worker.ts' > /dev/null || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3

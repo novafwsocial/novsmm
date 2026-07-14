@@ -20,8 +20,13 @@ export async function POST(req: NextRequest) {
     }
 
     // Capture the requesting IP and domain for validation
-    const forwarded = req.headers.get("x-forwarded-for");
-    const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+    // SEC FIX (H-004): use CF-Connecting-IP priority (same as middleware)
+    // instead of x-forwarded-for which is forgeable.
+    const ip =
+      req.headers.get("cf-connecting-ip") ||
+      req.headers.get("x-client-ip") ||
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
     const requestDomain =
       domain ??
       req.headers.get("origin") ??
@@ -67,8 +72,12 @@ export async function GET(req: NextRequest) {
   const licenseKey = searchParams.get("key");
   if (!licenseKey) return apiError("License key is required", 422);
 
-  const forwarded = req.headers.get("x-forwarded-for");
-  const ip = forwarded?.split(",")[0]?.trim() ?? "unknown";
+  // SEC FIX (H-004): same CF-Connecting-IP priority as POST handler
+  const ip =
+    req.headers.get("cf-connecting-ip") ||
+    req.headers.get("x-client-ip") ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "unknown";
   const domain = req.headers.get("origin") ?? "unknown";
 
   const result = await validateLicense(licenseKey, { domain, ip });

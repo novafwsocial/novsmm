@@ -35,6 +35,7 @@ import { useApp, type DashboardTab } from "./app-store";
 import { useSession, useNotifications, useDashboard } from "@/hooks/use-api";
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
+import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import { Logo } from "./logo";
 import { Counter } from "./counter";
 import {
@@ -69,7 +70,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
   const { data: notifData } = useNotifications();
   const { data: dashData } = useDashboard();
   const { toast } = useToast();
-  const [statusState, setStatusState] = useState<"operational" | "degraded">("operational");
+  // PERF (P-M-007): statusState is now derived from useCachedFetch below —
+  // no more useState + setInterval polling.
 
   const openPalette = useCallback(() => {
     setPaletteNonce((n) => n + 1);
@@ -82,25 +84,13 @@ export function DashboardShell({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Poll /api/status every 60s for the topbar status pill
-  useEffect(() => {
-    let cancelled = false;
-    const tick = () => {
-      api
-        .get("/api/status")
-        .then((d: any) => {
-          if (cancelled) return;
-          setStatusState(d?.status === "operational" ? "operational" : "degraded");
-        })
-        .catch(() => {});
-    };
-    tick();
-    const id = setInterval(tick, 60_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+  // PERF FIX (P-M-007): use useCachedFetch instead of manual setInterval polling.
+  // Previously this component polled /api/status every 60s with its own
+  // setInterval, while Hero and Stats on the landing page also fetched
+  // /api/status via useCachedFetch (30s cache). Now all three share the
+  // same in-memory cache → 1 request per 30s instead of 2 separate polls.
+  const statusData = useCachedFetch<any>("/api/status");
+  const statusState = statusData?.status === "operational" ? "operational" : "degraded";
 
   // ⌘K / Ctrl+K → open the command palette
   useEffect(() => {
@@ -215,7 +205,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         </div>
 
         <nav className="flex-1 overflow-y-auto px-3 py-3 nov-scroll">
-          <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
             Workspace
           </div>
           {NAV.map((n) => {
@@ -241,7 +231,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
           {isAdmin && (
             <>
-              <div className="mt-5 px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              <div className="mt-5 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                 Admin
               </div>
               <NavButton
@@ -288,7 +278,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       </aside>
 
       {/* Mobile sidebar */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {mobileOpen && (
           <>
             <motion.div
@@ -411,7 +401,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             <span className="w-full text-left text-foreground/80">
               Search orders, services, clients…
             </span>
-            <kbd className="hidden rounded border border-border bg-background px-1.5 text-[10px] sm:inline">
+            <kbd className="hidden rounded border border-border bg-background px-1.5 text-[11px] sm:inline">
               ⌘K
             </kbd>
           </button>
@@ -541,7 +531,7 @@ function NavButton({
       {badge && (
         <span
           className={cn(
-            "rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums",
+            "rounded-full px-1.5 py-0.5 text-[11px] font-semibold tabular-nums",
             active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
           )}
         >
@@ -575,13 +565,13 @@ function UserPill({
           <div className="truncate text-xs font-semibold text-foreground">
             {user.name}
           </div>
-          <div className="truncate text-[10px] text-muted-foreground">
+          <div className="truncate text-[11px] text-muted-foreground">
             {user.email}
           </div>
         </div>
         <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
       </button>
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {open && (
           <motion.div
             initial={{ opacity: 0, y: -4, scale: 0.97 }}
@@ -823,7 +813,7 @@ function CommandPalette({
             }}
             onKeyDown={onKeyDown}
             placeholder="Type a command or search…"
-            className="w-full bg-transparent text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
+            className="w-full bg-transparent text-base text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             autoComplete="off"
             spellCheck={false}
             role="combobox"
@@ -831,7 +821,7 @@ function CommandPalette({
             aria-controls="cmd-list"
             aria-activedescendant={filtered[safeIndex] ? `cmd-${safeIndex}` : undefined}
           />
-          <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 text-[10px] text-muted-foreground sm:inline">
+          <kbd className="hidden shrink-0 rounded border border-border bg-muted px-1.5 text-[11px] text-muted-foreground sm:inline">
             Esc
           </kbd>
         </div>
@@ -850,7 +840,7 @@ function CommandPalette({
           ) : (
             Array.from(groups.entries()).map(([group, cmds]) => (
               <div key={group} className="mb-1.5">
-                <div className="px-2 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+                <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
                   {group}
                 </div>
                 {cmds.map((cmd) => {
@@ -902,7 +892,7 @@ function CommandPalette({
         </div>
 
         {/* Footer / keyboard hints */}
-        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-2.5 text-[10px] text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 bg-muted/30 px-4 py-2.5 text-[11px] text-muted-foreground">
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center gap-1">
               <kbd className="rounded border border-border bg-background px-1.5 py-0.5">↑</kbd>

@@ -401,7 +401,7 @@ function WalletDisplay() {
     <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background px-4 py-2.5">
       <Wallet className="h-4 w-4 text-primary" />
       <div>
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
           Balance · {currency}
         </div>
         <div className="text-sm font-semibold tabular-nums">
@@ -1185,7 +1185,7 @@ function ServiceCard({
             {service.description}
           </p>
         </div>
-        <span className={cn("mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium", quality.cls)}>
+        <span className={cn("mt-0.5 shrink-0 rounded-full px-2 py-0.5 text-[11px] font-medium", quality.cls)}>
           {quality.label}
         </span>
       </div>
@@ -1231,7 +1231,7 @@ function ServiceCard({
             <GitCompare className="h-3.5 w-3.5" />
           </button>
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
               Per 1000 · {currency}
             </div>
             <div className="text-lg font-semibold tabular-nums text-foreground">
@@ -1243,7 +1243,7 @@ function ServiceCard({
           {/* MARKETPLACE-13-IMPROVEMENTS #9 — rating summary, small stars.
               Only rendered when at least one rating exists in localStorage. */}
           {rating && (
-            <div className="flex items-center gap-0.5 text-[10px] text-amber-600 tabular-nums" title={`Rated ${rating.rating.toFixed(1)} by ${rating.count} user${rating.count > 1 ? "s" : ""}`}>
+            <div className="flex items-center gap-0.5 text-[11px] text-amber-600 tabular-nums" title={`Rated ${rating.rating.toFixed(1)} by ${rating.count} user${rating.count > 1 ? "s" : ""}`}>
               <Star className="h-3 w-3 fill-amber-400 text-amber-500" />
               <span className="font-semibold">{rating.rating.toFixed(1)}</span>
               <span className="text-muted-foreground">({rating.count})</span>
@@ -1324,7 +1324,7 @@ function ServiceListRow({
             <div className="truncate text-sm font-medium text-foreground">
               {service.name}
             </div>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
               <span>{service.platform}</span>
               {rating && (
                 <span className="inline-flex items-center gap-0.5 text-amber-600 tabular-nums">
@@ -1433,7 +1433,7 @@ function TrendingSection({
         </span>
         <div>
           <div className="text-sm font-semibold text-foreground">Trending services</div>
-          <div className="text-[10px] text-muted-foreground">
+          <div className="text-[11px] text-muted-foreground">
             Most established services on NOVSMM — chosen by catalog age.
           </div>
         </div>
@@ -1455,19 +1455,19 @@ function TrendingSection({
                 <div className="truncate text-xs font-semibold text-foreground">
                   {s.name}
                 </div>
-                <div className="text-[10px] text-muted-foreground">{s.platform}</div>
+                <div className="text-[11px] text-muted-foreground">{s.platform}</div>
               </div>
             </div>
             <div className="flex items-center justify-between gap-2">
               <div>
-                <div className="text-[9px] uppercase tracking-wider text-muted-foreground">
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   Per 1000
                 </div>
                 <div className="text-sm font-semibold tabular-nums text-foreground">
                   {formatPrice(s.price, currency)}
                 </div>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue">
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue">
                 <ShoppingCart className="h-3 w-3" />
                 Order
               </span>
@@ -1577,7 +1577,7 @@ function CompareModal({
       render: (s) => {
         const q = QUALITY_BADGES[s.quality] ?? QUALITY_BADGES.standard;
         return (
-          <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", q.cls)}>
+          <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", q.cls)}>
             {q.label}
           </span>
         );
@@ -1587,6 +1587,9 @@ function CompareModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Compare services"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1618,7 +1621,7 @@ function CompareModal({
           <table className="w-full min-w-[480px] text-sm">
             <thead>
               <tr>
-                <th className="w-32 px-3 py-2 text-left text-[10px] uppercase tracking-wider text-muted-foreground">
+                <th className="w-32 px-3 py-2 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
                   Attribute
                 </th>
                 {services.map((s) => (
@@ -1631,7 +1634,7 @@ function CompareModal({
                             {s.name}
                           </span>
                         </div>
-                        <div className="text-[10px] text-muted-foreground">{s.platform}</div>
+                        <div className="text-[11px] text-muted-foreground">{s.platform}</div>
                       </div>
                       <button
                         type="button"
@@ -1663,7 +1666,7 @@ function CompareModal({
           </table>
         </div>
 
-        <p className="mt-4 text-center text-[10px] text-muted-foreground">
+        <p className="mt-4 text-center text-[11px] text-muted-foreground">
           Tip: pick up to {MAX_COMPARISON} services for an at-a-glance comparison.
         </p>
       </div>
@@ -1746,6 +1749,9 @@ function ServiceDetailModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Service details"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1769,7 +1775,7 @@ function ServiceDetailModal({
           <div>
             <div className="flex items-center gap-2">
               <h2 className="text-lg font-semibold text-foreground">{service.name}</h2>
-              <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-medium", quality.cls)}>
+              <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-medium", quality.cls)}>
                 {quality.label}
               </span>
             </div>
@@ -1797,7 +1803,7 @@ function ServiceDetailModal({
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Community rating
+                Your rating
               </div>
               {currentRating ? (
                 <div className="mt-1 flex items-center gap-2">
@@ -1928,7 +1934,7 @@ function ServiceDetailModal({
             value={link}
             onChange={(e) => setLink(e.target.value)}
             placeholder="https://instagram.com/yourpost"
-            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-sm text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
+            className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
 
@@ -1999,7 +2005,7 @@ function ServiceDetailModal({
                   {perChunk.toLocaleString()}/day for {safeDays} day{safeDays > 1 ? "s" : ""}
                   {remainder > 0 ? ` + ${remainder} extra on final day` : ""}
                 </span>
-                <div className="mt-0.5 text-[10px] text-muted-foreground">
+                <div className="mt-0.5 text-[11px] text-muted-foreground">
                   ≈ {perChunk.toLocaleString()} units every {dripDelay >= 60 ? `${(dripDelay / 60).toFixed(1)}h` : `${dripDelay}m`}
                 </div>
               </div>
@@ -2010,10 +2016,10 @@ function ServiceDetailModal({
         {/* Total + submit */}
         <div className="mt-5 flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3">
           <div>
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Total cost</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total cost</div>
             <div className="text-2xl font-semibold tabular-nums text-foreground">{totalPriceLocal}</div>
           </div>
-          <div className="text-right text-[10px] text-muted-foreground">
+          <div className="text-right text-[11px] text-muted-foreground">
             ≈ ${totalPriceUSD.toFixed(2)} USD
           </div>
         </div>
@@ -2063,7 +2069,7 @@ function Spec({
 }) {
   return (
     <div className="rounded-xl border border-border/60 p-3">
-      <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+      <div className="flex items-center gap-1.5 text-[11px] uppercase tracking-wider text-muted-foreground">
         {icon}
         {label}
       </div>
@@ -2140,6 +2146,9 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Mass order"
       className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -2170,15 +2179,15 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
         {/* Balance + total */}
         <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-border/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Balance</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Balance</div>
             <div className="mt-0.5 text-sm font-semibold tabular-nums">{formatPrice(balance, currency)}</div>
           </div>
           <div className="rounded-xl border border-border/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Rows</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Rows</div>
             <div className="mt-0.5 text-sm font-semibold tabular-nums">{rows.length}</div>
           </div>
           <div className="rounded-xl border border-border/60 p-3">
-            <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Grand total</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Grand total</div>
             <div className={cn("mt-0.5 text-sm font-semibold tabular-nums", sufficient ? "text-emerald-600" : "text-red-600")}>
               {formatPrice(grandTotal, currency)}
             </div>
@@ -2188,7 +2197,7 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
         {/* Rows */}
         <div className="mt-4 flex flex-col gap-2">
           {/* Header (desktop) */}
-          <div className="hidden grid-cols-12 gap-2 px-1 text-[10px] uppercase tracking-wider text-muted-foreground sm:grid">
+          <div className="hidden grid-cols-12 gap-2 px-1 text-[11px] uppercase tracking-wider text-muted-foreground sm:grid">
             <div className="col-span-5">Service</div>
             <div className="col-span-5">Link</div>
             <div className="col-span-1 text-right">Qty</div>
@@ -2200,7 +2209,7 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
               <select
                 value={r.serviceId}
                 onChange={(e) => updateRow(r.id, { serviceId: e.target.value })}
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
               >
                 <option value="">Select a service…</option>
                 {services.map((s: any) => (
@@ -2214,14 +2223,14 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
                 value={r.link}
                 onChange={(e) => updateRow(r.id, { link: e.target.value })}
                 placeholder="https://…"
-                className="h-10 rounded-lg border border-border bg-background px-3 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-5"
               />
               <input
                 type="number"
                 value={r.quantity || ""}
                 onChange={(e) => updateRow(r.id, { quantity: Number(e.target.value) || 0 })}
                 placeholder="0"
-                className="h-10 rounded-lg border border-border bg-background px-3 text-right text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-1"
+                className="h-10 rounded-lg border border-border bg-background px-3 text-right text-base tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)] sm:col-span-1"
               />
               <button
                 onClick={() => removeRow(r.id)}
@@ -2231,7 +2240,7 @@ function MassOrderModal({ onClose }: { onClose: () => void }) {
               >
                 <X className="h-4 w-4" />
               </button>
-              <div className="flex items-center justify-end gap-2 px-1 text-[10px] sm:col-span-12">
+              <div className="flex items-center justify-end gap-2 px-1 text-[11px] sm:col-span-12">
                 {r.service && (
                   <span className="text-muted-foreground">
                     min {r.service.minQty.toLocaleString()} · max {r.service.maxQty.toLocaleString()}
@@ -2498,7 +2507,7 @@ function HistoryTab() {
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
                   aria-label="Filter orders by status"
-                  className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-sm font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
+                  className="h-[42px] w-full appearance-none rounded-xl border border-border bg-background py-2 pl-9 pr-9 text-base font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[180px]"
                 >
                   {HISTORY_STATUS_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
@@ -2562,7 +2571,7 @@ function HistoryTab() {
                         <PlatformLogo platform={o.platform} size={20} />
                         <div className="min-w-0">
                           <div className="truncate text-sm font-medium text-foreground">{o.serviceName}</div>
-                          <div className="text-[10px] text-muted-foreground">{o.platform}</div>
+                          <div className="text-[11px] text-muted-foreground">{o.platform}</div>
                         </div>
                       </div>
                     </td>
@@ -2670,6 +2679,9 @@ function HistoryTab() {
           asks the user to confirm. Uses the same modal-3d-enter entrance. */}
       {refundTarget && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Refund order"
           className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
           onClick={() => !cancelOrder.isPending && !adminRefund.isPending && setRefundTarget(null)}
         >
@@ -2809,11 +2821,11 @@ function StatusBadge({ status, progress }: { status: string; progress: number })
   const s = map[status] ?? map.pending;
   return (
     <div className="flex items-center gap-2">
-      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[10px] font-medium", s.cls)}>
+      <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", s.cls)}>
         {s.label}
       </span>
       {status !== "completed" && status !== "cancelled" && (
-        <span className="text-[10px] tabular-nums text-muted-foreground">{progress}%</span>
+        <span className="text-[11px] tabular-nums text-muted-foreground">{progress}%</span>
       )}
     </div>
   );
@@ -2895,7 +2907,7 @@ function SellTab() {
     prevOffersSalesMapRef.current = Object.fromEntries(
       offers.map((o: any) => [o.id, o.sales]),
     );
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [offersData?.totalSales]);
 
   const isEditing = !!editingOffer;
@@ -3016,11 +3028,11 @@ function SellTab() {
                       <div className="flex items-center gap-2">
                         <div className="min-w-0">
                           <div className="font-medium text-foreground">{o.service?.name ?? "—"}</div>
-                          <div className="text-[10px] text-muted-foreground">{o.service?.platform}</div>
+                          <div className="text-[11px] text-muted-foreground">{o.service?.platform}</div>
                         </div>
                         {/* MARKETPLACE-13-IMPROVEMENTS #12 — Paused badge. */}
                         {isPaused && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-700">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[11px] font-semibold text-amber-700">
                             <Pause className="h-2.5 w-2.5" />
                             Paused
                           </span>
@@ -3030,7 +3042,7 @@ function SellTab() {
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{formatPrice(o.cost, currency)}</td>
                     <td className="px-4 py-3 text-right font-semibold tabular-nums text-emerald-600">{formatPrice(o.price, currency)}</td>
                     <td className="px-4 py-3 text-right tabular-nums">
-                      <span className={cn("rounded-full px-2 py-0.5 text-[10px] font-semibold", (o.margin ?? 0) > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{(o.margin ?? 0).toFixed(0)}%</span>
+                      <span className={cn("rounded-full px-2 py-0.5 text-[11px] font-semibold", (o.margin ?? 0) > 100 ? "bg-emerald-500/10 text-emerald-700" : "bg-amber-500/10 text-amber-700")}>{(o.margin ?? 0).toFixed(0)}%</span>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums text-muted-foreground">{o.sales}</td>
                     <td className="px-4 py-3 text-right">
@@ -3100,6 +3112,9 @@ function SellTab() {
       {/* Publish / Edit modal */}
       {showPublish && (
         <div
+          role="dialog"
+          aria-modal="true"
+          aria-label="Publish offer"
           className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
           onClick={closeModal}
         >
@@ -3167,7 +3182,7 @@ function SellTab() {
                     <button
                       type="button"
                       onClick={() => setPrice(Number(suggested.toFixed(2)))}
-                      className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[10px] font-medium text-primary-foreground transition-colors hover:nov-shadow-blue btn-press"
+                      className="mt-2 inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1 text-[11px] font-medium text-primary-foreground transition-colors hover:nov-shadow-blue btn-press"
                     >
                       <ArrowRight className="h-3 w-3" />
                       Use suggested
@@ -3177,7 +3192,7 @@ function SellTab() {
                       <span className="font-semibold tabular-nums text-foreground">
                         ${svc?.price?.toFixed(2) ?? "—"}
                       </span>{" "}
-                      <span className="text-[10px]">(catalog competitor price)</span>
+                      <span className="text-[11px]">(catalog competitor price)</span>
                     </div>
                   </div>
                 );
@@ -3318,6 +3333,9 @@ function BulkPublishModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Bulk publish offers"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -3413,12 +3431,12 @@ function BulkPublishModal({
                       <PlatformLogo platform={s.platform} size={20} />
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium text-foreground">{s.name}</div>
-                        <div className="text-[10px] text-muted-foreground">
+                        <div className="text-[11px] text-muted-foreground">
                           {s.platform} · cost ${s.cost.toFixed(2)}/1k
                         </div>
                       </div>
                       <div className="shrink-0 text-right">
-                        <div className="text-[10px] uppercase tracking-wider text-muted-foreground">Price</div>
+                        <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Price</div>
                         <div className="text-sm font-semibold tabular-nums text-emerald-600">
                           {formatPrice(calc, currency)}
                         </div>
@@ -3439,13 +3457,13 @@ function BulkPublishModal({
               {preview.slice(0, 8).map((p) => (
                 <span
                   key={p.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-0.5 text-[10px] text-muted-foreground"
+                  className="inline-flex items-center gap-1 rounded-full bg-background px-2 py-0.5 text-[11px] text-muted-foreground"
                 >
                   {getPlatformEmoji(p.platform)} {p.name.length > 18 ? p.name.slice(0, 18) + "…" : p.name} · ${p.calculatedPrice.toFixed(2)}
                 </span>
               ))}
               {preview.length > 8 && (
-                <span className="text-[10px] text-muted-foreground">+{preview.length - 8} more</span>
+                <span className="text-[11px] text-muted-foreground">+{preview.length - 8} more</span>
               )}
             </div>
           </div>
@@ -3528,6 +3546,9 @@ function OfferStatsModal({
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Offer statistics"
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -3683,14 +3704,14 @@ function ServiceSearchSelect({
                   >
                     <PlatformLogo platform={s.platform} size={18} />
                     <span className="min-w-0 flex-1 truncate">{s.name}</span>
-                    <span className="shrink-0 text-[10px] text-muted-foreground">${s.cost.toFixed(2)}/1k</span>
+                    <span className="shrink-0 text-[11px] text-muted-foreground">${s.cost.toFixed(2)}/1k</span>
                   </button>
                 </li>
               ))}
             </ul>
           )}
           {services.length > 20 && !query && (
-            <div className="border-t border-border px-3 py-1.5 text-center text-[10px] text-muted-foreground">
+            <div className="border-t border-border px-3 py-1.5 text-center text-[11px] text-muted-foreground">
               Type to search {services.length} services…
             </div>
           )}

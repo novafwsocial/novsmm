@@ -11,6 +11,11 @@ import { z } from "zod";
 /**
  * /api/admin/webhooks/outbound
  *
+ * ⚠️ DEPRECATED (Z-5): This path is misleading — the resource is user-scoped
+ * (any authenticated user can CRUD their own webhooks), not admin-scoped.
+ * The canonical path is now /api/me/webhooks/outbound. This file is kept
+ * for backward compatibility — new clients should use the new path.
+ *
  * User-scoped CRUD for outbound webhook subscriptions. (Despite the
  * `/admin/` prefix, the resource is owned by individual users —
  * admins get a full-list view via ?all=1.)

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { CheckCircle2, X } from "lucide-react";
+import { useLanguage } from "./language-provider";
 
 /**
  * Social proof notifications — shows illustrative examples of platform activity.
@@ -15,18 +16,22 @@ import { CheckCircle2, X } from "lucide-react";
  * "Demo" label makes it clear these are sample notifications, not live data.
  */
 
+// i18n (U-C-009): event name, detail, and flag stay as-is (personal names +
+// platform/service references). Only the actionKey is translated at render
+// time via t().
 const PROOF_EVENTS = [
-  { name: "Carlos from Mexico", action: "just signed up", detail: "Reseller plan", flag: "🇲🇽" },
-  { name: "Ana from Brazil", action: "placed an order", detail: "Instagram Followers × 1000", flag: "🇧🇷" },
-  { name: "Mike from USA", action: "topped up", detail: "$50 via PayPal", flag: "🇺🇸" },
-  { name: "Priya from India", action: "just signed up", detail: "Agency plan", flag: "🇮🇳" },
-  { name: "Sofia from Spain", action: "placed an order", detail: "TikTok Views × 5000", flag: "🇪🇸" },
-  { name: "Liam from UK", action: "topped up", detail: "$100 via PayPal", flag: "🇬🇧" },
-  { name: "Yuki from Japan", action: "just signed up", detail: "Creator plan", flag: "🇯🇵" },
-  { name: "Omar from UAE", action: "placed an order", detail: "YouTube Watch Hours", flag: "🇦🇪" },
+  { name: "Carlos from Mexico", actionKey: "landing.socialProof.action.signedUp", detail: "Reseller plan", flag: "🇲🇽" },
+  { name: "Ana from Brazil", actionKey: "landing.socialProof.action.placedOrder", detail: "Instagram Followers × 1000", flag: "🇧🇷" },
+  { name: "Mike from USA", actionKey: "landing.socialProof.action.toppedUp", detail: "$50 via PayPal", flag: "🇺🇸" },
+  { name: "Priya from India", actionKey: "landing.socialProof.action.signedUp", detail: "Agency plan", flag: "🇮🇳" },
+  { name: "Sofia from Spain", actionKey: "landing.socialProof.action.placedOrder", detail: "TikTok Views × 5000", flag: "🇪🇸" },
+  { name: "Liam from UK", actionKey: "landing.socialProof.action.toppedUp", detail: "$100 via PayPal", flag: "🇬🇧" },
+  { name: "Yuki from Japan", actionKey: "landing.socialProof.action.signedUp", detail: "Creator plan", flag: "🇯🇵" },
+  { name: "Omar from UAE", actionKey: "landing.socialProof.action.placedOrder", detail: "YouTube Watch Hours", flag: "🇦🇪" },
 ];
 
 export function SocialProof() {
+  const { t } = useLanguage();
   const [current, setCurrent] = useState<typeof PROOF_EVENTS[0] | null>(null);
   const [exiting, setExiting] = useState(false);
   const [inHero, setInHero] = useState(true);
@@ -82,13 +87,16 @@ export function SocialProof() {
   return (
     <div
       className={`social-proof ${exiting ? "exit" : ""} fixed bottom-5 left-5 z-40 hidden lg:block`}
+      // A2-M-002 FIX: aria-live=polite so screen readers announce new notifications
+      aria-live="polite"
+      aria-label={t("landing.socialProof.ariaLabel")}
     >
       <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 px-4 py-3 shadow-lg backdrop-blur-xl">
         <span className="text-2xl">{current.flag}</span>
         <div className="flex flex-col">
           <div className="flex items-center gap-1.5 text-sm font-medium text-foreground">
-            {current.name} {current.action}
-            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide text-muted-foreground/70" title="Illustrative example — not real-time data">Illustrative</span>
+            {current.name} {t(current.actionKey)}
+            <span className="rounded bg-muted/60 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wide text-muted-foreground/70" title="Illustrative example — not real-time data">{t("landing.socialProof.demo")}</span>
           </div>
           <div className="flex items-center gap-1 text-xs text-muted-foreground">
             <CheckCircle2 className="h-3 w-3 text-emerald-500" />
@@ -98,7 +106,7 @@ export function SocialProof() {
         <button
           onClick={() => setExiting(true)}
           className="ml-2 text-muted-foreground hover:text-foreground"
-          aria-label="Dismiss"
+          aria-label={t("landing.socialProof.dismiss")}
         >
           <X className="h-3.5 w-3.5" />
         </button>

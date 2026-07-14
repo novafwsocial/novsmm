@@ -48,7 +48,17 @@ export const loginSchema = z.object({
 export const createOrderSchema = z.object({
   serviceId: z.string().min(1),
   quantity: z.number().int().positive(),
-  link: z.string().url().optional().or(z.literal("")),
+  // SECURITY FIX (S-M-003): link must be http/https URL (rejects
+  // javascript:, data:, blob: — prevents stored XSS when admin clicks
+  // the order link in the dashboard).
+  link: z
+    .string()
+    .url()
+    .refine((url) => url.startsWith("http://") || url.startsWith("https://"), {
+      message: "Link must be an http:// or https:// URL",
+    })
+    .optional()
+    .or(z.literal("")),
 });
 
 // ── Wallet schemas ──
@@ -75,7 +85,42 @@ export const createServiceSchema = z.object({
   maxQty: z.number().int().positive(),
   rate: z.string().default("0/d"),
   providerId: z.string().optional(),
-});
+}).strict();
+
+/**
+ * SECURITY FIX (S-C-004): strict schema for PATCH /api/admin/services.
+ * Previously the PATCH route spread the raw `body` into Prisma's update()
+ * with only a hand-maintained whitelist of fields — fragile and prone to
+ * mass assignment if a new column is added to the Service model.
+ *
+ * This schema explicitly enumerates every updatable field. Unknown keys
+ * are rejected (`.strict()`) so an attacker (or a buggy client) cannot
+ * inject `id`, `createdAt`, `updatedAt`, `status: "deleted"`, etc.
+ */
+export const updateServiceSchema = z.object({
+  id: z.string().min(1, "Service ID required"),
+  name: z.string().min(2).optional(),
+  platform: z.string().min(1).optional(),
+  category: z.string().optional(),
+  cost: z.number().nonnegative().optional(),
+  price: z.number().positive().optional(),
+  minQty: z.number().int().positive().optional(),
+  maxQty: z.number().int().positive().optional(),
+  rate: z.string().optional(),
+  status: z.enum(["active", "paused", "deleted"]).optional(),
+  providerId: z.string().optional().nullable(),
+  /**
+   * Optional array of multi-provider mappings to replace the service's
+   * ServiceProvider rows. Each entry: { providerId, priority 1-5,
+   * providerServiceId?, cost? }. When omitted, mappings are untouched.
+   */
+  providers: z.array(z.object({
+    providerId: z.string().min(1),
+    priority: z.number().int().min(1).max(5),
+    providerServiceId: z.string().optional().nullable(),
+    cost: z.number().nonnegative().optional().nullable(),
+  })).optional(),
+}).strict();
 
 export const createProviderSchema = z.object({
   name: z.string().min(2),
@@ -83,6 +128,17 @@ export const createProviderSchema = z.object({
   apiKey: z.string().optional(),
 });
 
+/**
+ * SECURITY FIX (S-C-003): strict schema for POST /api/admin/payment-methods.
+ * Previously the route spread the raw `body` (not `parsed.data`) into
+ * Prisma's create(), and the schema was not `.strict()` — so any extra
+ * field (id, sortOrder, status, createdAt) was passed through and
+ * persisted, allowing mass assignment.
+ *
+ * Now the schema explicitly accepts only the fields the admin form sends,
+ * rejects unknown keys, and includes `config` (the credentials blob) so
+ * the route no longer needs to pull it from the raw body.
+ */
 export const createPaymentMethodSchema = z.object({
   name: z.string().min(2),
   glyph: z.string().default("$"),
@@ -90,7 +146,9 @@ export const createPaymentMethodSchema = z.object({
   settleTime: z.string().default("Instant"),
   fee: z.string().default("0%"),
   currencies: z.string().default("USD"),
-});
+  // Credentials blob — accept any JSON object (or omit to skip).
+  config: z.record(z.string(), z.unknown()).optional(),
+}).strict();
 
 export const createNotificationSchema = z.object({
   type: z.enum([

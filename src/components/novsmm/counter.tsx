@@ -39,6 +39,29 @@ export function Counter({
   const [display, setDisplay] = useState(from);
   const startedRef = useRef(false);
 
+  // Phase 0 FIX: moved animateCount BEFORE useEffect to avoid temporal dead
+  // zone (const is not hoisted — calling it before declaration is a TDZ
+  // violation that eslint correctly flags as "Cannot access variable before
+  // it is declared").
+  const animateCount = () => {
+    const start = performance.now();
+    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // cubic ease-out
+
+    const tick = (now: number) => {
+      const elapsed = (now - start) / 1000;
+      const t = Math.min(1, elapsed / duration);
+      const eased = ease(t);
+      const current = from + (to - from) * eased;
+      setDisplay(current);
+      if (t < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        setDisplay(to); // ensure exact final value
+      }
+    };
+    requestAnimationFrame(tick);
+  };
+
   useEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -63,25 +86,6 @@ export function Counter({
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
-
-  const animateCount = () => {
-    const start = performance.now();
-    const ease = (t: number) => 1 - Math.pow(1 - t, 3); // cubic ease-out
-
-    const tick = (now: number) => {
-      const elapsed = (now - start) / 1000;
-      const t = Math.min(1, elapsed / duration);
-      const eased = ease(t);
-      const current = from + (to - from) * eased;
-      setDisplay(current);
-      if (t < 1) {
-        requestAnimationFrame(tick);
-      } else {
-        setDisplay(to); // ensure exact final value
-      }
-    };
-    requestAnimationFrame(tick);
-  };
 
   const formatted = format
     ? format(display)

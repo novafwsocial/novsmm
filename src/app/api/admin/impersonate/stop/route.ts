@@ -61,14 +61,16 @@ export async function POST(_req: NextRequest) {
     email: admin.email,
     name: admin.name,
     role: admin.role,
-    username: admin.username,
+    // FIX (OAuth nullable username): coerce null → ""
+    username: admin.username ?? "",
     // No realAdminId — this is a normal admin session again
   };
 
   const encoded = await encode({
     token: newToken,
     secret,
-    maxAge: 30 * 24 * 60 * 60, // 30 days, matching NextAuth default
+    // A-5 FIX: 24h, matching the session maxAge in auth.ts (was 30 days)
+    maxAge: 24 * 60 * 60,
   });
 
   // Determine cookie name (NextAuth uses __Secure- prefix in production HTTPS)
@@ -84,7 +86,8 @@ export async function POST(_req: NextRequest) {
     httpOnly: true,
     sameSite: "lax",
     path: "/",
-    maxAge: 30 * 24 * 60 * 60,
+    // A-5 FIX: 24h, matching the session maxAge (was 30 days)
+    maxAge: 24 * 60 * 60,
     // secure: true only in HTTPS production
     ...(process.env.NODE_ENV === "production" &&
     process.env.NEXTAUTH_URL?.startsWith("https")

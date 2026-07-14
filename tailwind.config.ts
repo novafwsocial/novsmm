@@ -1,3 +1,9 @@
+// NOTE (P-L-002): This file is NOT dead code. Tailwind v4's @tailwindcss/postcss
+// plugin still reads JS config files for backward compatibility. It loads the
+// `tailwindcss-animate` plugin which provides `animate-in`, `fade-in`, etc.
+// classes used by shadcn/ui components. The CSS @theme directive in globals.css
+// handles the color/radius config, but the plugin loading happens here.
+// Migrating to @plugin in CSS is possible but risky without a full test suite.
 import type { Config } from "tailwindcss";
 import tailwindcssAnimate from "tailwindcss-animate";
 

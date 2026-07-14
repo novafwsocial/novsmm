@@ -36,12 +36,24 @@ export type AuthResult =
   | { user: null; session: null; error: NextResponse };
 
 /**
- * Get the base URL of the current request, respecting proxy headers.
- * Uses x-forwarded-proto + x-forwarded-host when present (gateway/proxy),
- * otherwise falls back to the Host header. This replaces the need for
- * NEXTAUTH_URL env var and ensures redirects/links work behind any gateway.
+ * Get the base URL for the current request.
+ *
+ * SEC FIX (H-002): previously used x-forwarded-proto + x-forwarded-host
+ * headers, which are client-forgeable. If the Node port is exposed
+ * directly (bypassing Cloudflare/nginx), an attacker could spoof these
+ * headers to make password-reset and email-verification URLs point to
+ * their domain → account takeover.
+ *
+ * Now prefers NEXTAUTH_URL (a server-side env constant that cannot be
+ * spoofed). Only falls back to headers if NEXTAUTH_URL is not set
+ * (e.g., during local development).
  */
 export async function getBaseUrl(): Promise<string> {
+  // Prefer the server-side env var (secure, not forgeable)
+  const envUrl = process.env.NEXTAUTH_URL || process.env.NEXT_PUBLIC_SITE_URL;
+  if (envUrl) return envUrl;
+
+  // Fallback for local dev where NEXTAUTH_URL might not be set
   const h = await headers();
   const proto = h.get("x-forwarded-proto") || "http";
   const host = h.get("x-forwarded-host") || h.get("host") || "localhost:3000";
@@ -64,6 +76,13 @@ export async function getAuthSession() {
 function extractUser(session: any): AuthUser | null {
   if (!session?.user) return null;
   const u = session.user as any;
+  // A-3 FIX: If the JWT was invalidated (e.g. passwordChangedAt check in jwt
+  // callback returned {}), the session callback may still populate user.name
+  // and user.email from the token's standard claims, but user.id will be
+  // undefined. Without this check, downstream code calls db.user.findUnique
+  // with id: undefined → Prisma throws → HTTP 500. Return null instead so
+  // requireAuth() returns a clean 401.
+  if (!u.id) return null;
   return {
     id: u.id,
     email: u.email,
@@ -157,12 +176,35 @@ export async function audit(
 ): Promise<void> {
   try {
     const h = await headers();
-    // Middleware forwards client IP via x-client-ip header.
-    // Fall back to x-forwarded-for (standard proxy header) or "unknown".
-    const ip =
-      h.get("x-client-ip") ||
-      h.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown";
+    // FIX (A-1): Use the same anti-spoofing logic as middleware/auth.
+    // Priority: cf-connecting-ip (Cloudflare, non-forgeable) → x-client-ip
+    // (set by middleware) → x-forwarded-for LAST entry (if TRUST_PROXY) →
+    // "unknown". In production without TRUST_PROXY, x-forwarded-for is
+    // NOT trusted (client-forgeable).
+    const cfIp = h.get("cf-connecting-ip");
+    const clientIp = h.get("x-client-ip");
+    let ip: string;
+    if (cfIp && cfIp.trim()) {
+      ip = cfIp.trim();
+    } else if (clientIp && clientIp !== "unknown") {
+      ip = clientIp;
+    } else if (process.env.NODE_ENV === "production") {
+      if (process.env.TRUST_PROXY === "true") {
+        const xff = h.get("x-forwarded-for");
+        if (xff) {
+          const ips = xff.split(",").map((s) => s.trim()).filter(Boolean);
+          ip = ips.length > 0 ? ips[ips.length - 1] : "unknown";
+        } else {
+          ip = "unknown";
+        }
+      } else {
+        ip = "unknown";
+      }
+    } else {
+      // Dev: use x-forwarded-for first entry
+      const xff = h.get("x-forwarded-for");
+      ip = xff ? (xff.split(",")[0]?.trim() ?? "unknown") : "unknown";
+    }
     const userAgent = h.get("user-agent") || "unknown";
 
     await db.auditLog.create({

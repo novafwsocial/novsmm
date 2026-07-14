@@ -146,7 +146,7 @@ export function HeroDashboard() {
             <Search className="h-4 w-4" />
             <span className="hidden sm:inline">Search orders, services…</span>
             <span className="sm:hidden">Search…</span>
-            <kbd className="ml-auto hidden rounded border border-border/60 px-1.5 py-0.5 text-[10px] font-medium sm:inline">⌘K</kbd>
+            <kbd className="ml-auto hidden rounded border border-border/60 px-1.5 py-0.5 text-[11px] font-medium sm:inline">⌘K</kbd>
           </div>
           <div className="flex items-center gap-2">
             <div className="hidden items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-600 sm:flex">
@@ -227,7 +227,7 @@ export function HeroDashboard() {
                   <span className="text-base leading-none">{o.flag}</span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[12px] font-medium text-foreground">{o.svc}</div>
-                    <div className="text-[10px] text-muted-foreground">{o.id} · {o.time}</div>
+                    <div className="text-[11px] text-muted-foreground">{o.id} · {o.time}</div>
                   </div>
                   <span className="shrink-0 text-[12px] font-semibold tabular-nums text-emerald-600">{o.amt}</span>
                 </div>

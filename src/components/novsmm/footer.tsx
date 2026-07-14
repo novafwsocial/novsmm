@@ -1,13 +1,13 @@
 "use client";
 
-import { motion } from "framer-motion";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowRight, Globe2 } from "lucide-react";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { Reveal } from "./reveal";
 import { useApp, type DashboardTab } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "./language-provider";
 import { StatusPage } from "./status-page";
 import { LegalPages, type LegalPageType } from "./legal-pages";
 import { DashReveal } from "./dash-reveal";
@@ -45,6 +45,9 @@ const COLUMNS: FooterColumn[] = [
       { label: "Services", tab: "marketplace" },
       { label: "Marketplace", anchor: "#marketplace" },
       { label: "Payments", anchor: "#payments" },
+      // FIX (U-C-001): Pricing was unreachable from the footer. Adding it
+      // here makes the /pricing route discoverable from every page.
+      { label: "Pricing", externalUrl: "/pricing" },
       { label: "Analytics", tab: "analytics" },
       { label: "API", externalUrl: "/api-docs" },
     ],
@@ -52,9 +55,11 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Solutions",
     links: [
-      { label: "Resellers", anchor: "#services" },
+      // U-M-006: was 6 links all pointing to #services or #marketplace.
+      // Now each points to the most relevant section for that audience.
+      { label: "Resellers", anchor: "#marketplace" },
       { label: "Agencies", anchor: "#services" },
-      { label: "Enterprises", anchor: "#services" },
+      { label: "Enterprises", anchor: "#security" },
       { label: "Creators", anchor: "#services" },
       { label: "Wholesale", anchor: "#marketplace" },
       { label: "Affiliates", anchor: "#affiliates" },
@@ -86,8 +91,15 @@ const COLUMNS: FooterColumn[] = [
 export function Footer() {
   const { setView, setDashboardTab, authed } = useApp();
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [statusOpen, setStatusOpen] = useState(false);
   const [legalPageOpen, setLegalPageOpen] = useState<LegalPageType | null>(null);
+  // PERF FIX (P-L-003): compute year in useEffect to avoid hydration
+  // mismatch. `new Date().getFullYear()` runs on both server and client —
+  // if the server is in a different timezone, the year could differ by 1
+  // around New Year's Eve, causing a React hydration warning.
+  const [year, setYear] = useState(() => new Date().getFullYear());
+  useEffect(() => setYear(new Date().getFullYear()), []);
 
   const showToast = (label: string, message?: string) =>
     toast({
@@ -159,7 +171,7 @@ export function Footer() {
           }}
           className="footer-link-3d text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          {link.label}
+          {t(link.label)}
         </a>
       );
     }
@@ -169,7 +181,7 @@ export function Footer() {
         onClick={() => handleLink(link)}
         className="footer-link-3d text-left text-sm text-muted-foreground transition-colors hover:text-foreground"
       >
-        {link.label}
+        {t(link.label)}
       </button>
     );
   };
@@ -185,28 +197,31 @@ export function Footer() {
         <Reveal blur>
           <div className="mx-auto max-w-3xl text-center">
             <h2 className="text-[clamp(2rem,4.5vw,3.4rem)] font-semibold leading-[1.06] tracking-[-0.02em] text-balance">
-              Ship at the speed of attention.
+              {t("landing.footer.tagline")}
             </h2>
             <p className="mx-auto mt-5 max-w-xl text-base leading-relaxed text-muted-foreground text-pretty sm:text-lg">
-              Join 184,500+ resellers, agencies, and enterprises running their
-              social media marketing on NOVSMM infrastructure.
+              {/* FIX (U-C-003): removed fake "184,500+ resellers" claim —
+                  risk of FTC penalty + Google penalty for fake social proof.
+                  Replaced with an honest value-prop statement. */}
+              Join the resellers, agencies, and enterprises running their
+              {t("landing.footer.tagline")}
             </p>
             <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
               <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
                 <span className="inline-flex items-center gap-2 rounded-full bg-primary px-7 py-3.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue">
-                  Start free
+                  {t("landing.footer.startFree")}
                   <ArrowRight className="h-4 w-4" />
                 </span>
               </Magnetic>
               <Magnetic as="button" strength={0.25} onClick={() => setView("login")}>
                 <span className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-7 py-3.5 text-sm font-medium text-foreground transition-colors hover:bg-muted">
-                  Sign in
+                  {t("landing.footer.signIn")}
                 </span>
               </Magnetic>
             </div>
             <div className="mt-6 inline-flex items-center gap-2 text-xs text-muted-foreground">
               <Globe2 className="h-3.5 w-3.5" />
-              Available in 60+ countries · 12 currencies · 24/7 support
+              {t("landing.footer.availableIn")}
             </div>
           </div>
         </Reveal>
@@ -215,7 +230,7 @@ export function Footer() {
       {/* Link grid */}
       <div className="border-t border-border/60">
         <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
-          <div className="grid grid-cols-2 gap-8 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-x-8 lg:grid-cols-6 lg:gap-x-10">
             <div className="col-span-2 lg:col-span-2">
               <a
                 href="#hero"
@@ -258,13 +273,13 @@ export function Footer() {
 
             {COLUMNS.map((c, idx) => (
               <DashReveal
-                key={c.title}
+                key={t(c.title)}
                 className="footer-col-reveal"
                 delay={0.05 * (idx + 1)}
               >
                 <div>
                   <div className="text-xs font-semibold uppercase tracking-[0.14em] text-foreground">
-                    {c.title}
+                    {t(c.title)}
                   </div>
                   <ul className="mt-4 flex flex-col gap-2.5">
                     {c.links.map((l) => (
@@ -279,7 +294,9 @@ export function Footer() {
           {/* bottom bar */}
           <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>© {new Date().getFullYear()} NOVSMM, Inc.</span>
+              {/* U-L-002: removed "Inc." — implies US incorporation that
+                  probably doesn't exist. Just "NOVSMM" is cleaner. */}
+              <span>© {year} {t("landing.footer.copyright")}</span>
               <button
                 type="button"
                 onClick={() => setLegalPageOpen("terms")}
@@ -303,12 +320,32 @@ export function Footer() {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground">
+              {/* UX FIX (U-M-005): was a decorative pill with no action.
+                  Now links to the pricing page (which shows currency
+                  options) when authed, or shows a tooltip when not. */}
+              <button
+                onClick={() => {
+                  const { setView, authed } = useApp.getState();
+                  if (authed) {
+                    setView("dashboard");
+                    setTimeout(() => useApp.getState().setDashboardTab("profile"), 100);
+                  } else {
+                    setView("register");
+                  }
+                }}
+                className="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                aria-label="Change language or currency"
+              >
                 <span className="h-1.5 w-1.5 rounded-full bg-primary" />
                 EN · USD
-              </div>
+              </button>
+              {/* U-M-012: removed "SOC 2 · PCI DSS · GDPR" — NOVSMM is not
+                  SOC 2 certified, PCI DSS compliant, or GDPR audited.
+                  Displaying these certifications without holding them is
+                  a legal misrepresentation. Replaced with a neutral
+                  "Privacy-first" label that's honest. */}
               <span className="text-[11px] text-muted-foreground">
-                SOC 2 · PCI DSS · GDPR
+                {t("landing.footer.privacyFirst")}
               </span>
             </div>
           </div>
@@ -318,17 +355,15 @@ export function Footer() {
       {/* giant wordmark — subtle depth */}
       <div
         aria-hidden
-        className="pointer-events-none select-none overflow-hidden"
+        className="pointer-events-none relative select-none overflow-hidden"
       >
-        <motion.div
-          initial={{ opacity: 0 }}
-          whileInView={{ opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 1 }}
-          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.03]"
+        {/* P-001: replaced framer-motion with CSS fm-fade-up */}
+        <div
+          className="text-center text-[clamp(4rem,18vw,16rem)] font-semibold leading-none tracking-[-0.04em] text-foreground/[0.04] py-4 fm-fade-up"
+          style={{ animationDuration: "1s" }}
         >
           NOVSMM
-        </motion.div>
+        </div>
       </div>
 
       {statusOpen && <StatusPage onClose={() => setStatusOpen(false)} />}

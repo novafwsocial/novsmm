@@ -12,13 +12,28 @@ const promoSchema = z.object({
   endsAt: z.string(),
 });
 
-/** GET /api/admin/promotions */
-export async function GET() {
+/** GET /api/admin/promotions — paginated list.
+ *
+ * PERF FIX (P-H-004): added server-side pagination. Query params:
+ * page (default 1), limit (default 50, max 200).
+ */
+export async function GET(req: NextRequest) {
   const { error } = await requireAdmin();
   if (error) return error;
-  const promotions = await db.promotion.findMany({
-    orderBy: { createdAt: "desc" },
-  });
+
+  const { searchParams } = new URL(req.url);
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1", 10) || 1);
+  const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "50", 10) || 50));
+
+  const [promotions, total] = await Promise.all([
+    db.promotion.findMany({
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    db.promotion.count(),
+  ]);
+
   // Auto-update status based on dates
   const now = new Date();
   const updated = promotions.map((p) => {
@@ -27,7 +42,16 @@ export async function GET() {
     if ((p.status === "active" || p.status === "scheduled") && p.endsAt <= now) status = "ended";
     return { ...p, status };
   });
-  return apiOk({ promotions: updated });
+
+  return apiOk({
+    promotions: updated,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
 }
 
 /** POST /api/admin/promotions */

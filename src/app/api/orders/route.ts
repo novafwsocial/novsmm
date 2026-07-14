@@ -7,6 +7,7 @@ import { createOrderSchema } from "@/lib/validations";
 import { createNotification } from "@/lib/notify";
 import { nextPublicId } from "@/lib/ids";
 import { enqueueJob } from "@/lib/queues";
+import { cacheInvalidate } from "@/lib/cache";
 
 /**
  * Extended create-order schema with optional drip-feed configuration.
@@ -334,6 +335,9 @@ export async function POST(req: NextRequest) {
       dripFeed: !!dripConfig,
       dripDays: dripConfig ? dripDays : undefined,
     });
+
+    // PERF FIX (R-H-001): invalidate dashboard cache so user sees fresh data
+    await cacheInvalidate(`dashboard:${userId}:*`).catch(() => {});
 
     return apiOk({ order, message: "Order placed successfully" }, 201);
   } catch (e: any) {

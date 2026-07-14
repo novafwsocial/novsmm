@@ -66,10 +66,29 @@ export function DashboardNotifications() {
         // Token fetch failed — fall back to unauthenticated
       }
 
-      socket = io(`/?XTransformPort=3003${wsToken ? `&token=${wsToken}` : ""}`, {
-        transports: ["websocket", "polling"],
+      socket = io(`/?XTransformPort=3003`, {
+        // SEC FIX (R-L-004): token was passed via query string (?token=...)
+        // which appears in server logs, browser history, and proxy logs.
+        // Now passed via socket.io auth handshake (not visible in URL).
+        auth: wsToken ? { token: wsToken } : undefined,
+        // PERF FIX (P-L-005): was ["websocket", "polling"] — polling
+        // fallback causes HTTP request storms when WS is unavailable
+        // (each poll = 1 HTTP request every few seconds). WebSocket-only
+        // is the correct mode for a dashboard that already has reconnection
+        // with exponential backoff. If WS is truly unavailable, the
+        // reconnection logic handles it gracefully.
+        transports: ["websocket"],
         reconnection: true,
-        reconnectionAttempts: 10,
+        // PERF FIX (P-M-004): was 10 — too low for long dashboard sessions.
+        // If the user's network drops briefly (e.g., switching wifi, sleep/
+        // wake), 10 attempts at ~1s each = 10s before giving up. After that,
+        // real-time notifications stop working until page refresh.
+        // Infinity = keep trying with exponential backoff (socket.io default:
+        // starts at 1s, max 5s). The dashboard is a long-lived session, so
+        // persistent reconnection is the right behavior.
+        reconnectionAttempts: Infinity,
+        reconnectionDelay: 1000,
+        reconnectionDelayMax: 5000,
       });
       socketRef.current = socket;
 
@@ -192,7 +211,7 @@ export function DashboardNotifications() {
                         <div className="truncate text-sm font-semibold text-foreground">
                           {n.title}
                         </div>
-                        <span className="shrink-0 text-[10px] text-muted-foreground">
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
                           {timeAgo(n.createdAt)}
                         </span>
                       </div>

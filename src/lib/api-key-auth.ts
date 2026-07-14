@@ -109,9 +109,21 @@ export async function validateApiKey(req: NextRequest): Promise<{
       req.headers.get("x-client-ip") ||
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown";
+    // SECURITY FIX (S-C-001): fail-closed when IP is unknown.
+    // Previously the check was `!allowedIps.includes(clientIp) && clientIp !== "unknown"`
+    // which meant an unknown IP SKIPPED the allowlist entirely — an attacker
+    // could bypass the IP restriction by simply not sending X-Forwarded-For
+    // (or stripping the header before the request reaches the proxy).
+    //
+    // Now: if the key has an IP allowlist configured but we can't determine
+    // the client IP, we REJECT the request. A key with an allowlist must
+    // NEVER be usable from an unknown source.
+    if (clientIp === "unknown") {
+      return null; // Allowlist configured but IP unknown — fail-closed
+    }
     const allowedIps = apiKey.ipAllowlist.split(",").map((ip: string) => ip.trim());
-    if (!allowedIps.includes(clientIp) && clientIp !== "unknown") {
-      return null; // IP not allowed — reject
+    if (!allowedIps.includes(clientIp)) {
+      return null; // IP not in allowlist — reject
     }
   }
 
@@ -175,15 +187,47 @@ function checkApiRateLimit(
 
 /**
  * Require a specific permission on the API key.
+ *
+ * Z-2 FIX: Previously used `apiKey.permissions.includes(permission)` which
+ * is a substring match on the CSV string (e.g. "read,order".includes("read")
+ * returns true, but "order_read".includes("read") would ALSO return true —
+ * a false positive). Now splits the CSV into an array and does an exact
+ * match on each element. No current scope names collide, but this prevents
+ * future scope-name collisions from creating false positives.
  */
 export function hasPermission(apiKey: any, permission: string): boolean {
-  return apiKey?.permissions?.includes(permission) ?? false;
+  if (!apiKey?.permissions) return false;
+  // Split the CSV string into an array and trim each element
+  const perms = String(apiKey.permissions)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return perms.includes(permission);
+}
+
+/**
+ * Check if an API key has ANY of the given permissions.
+ * Z-4 FIX: Allows routes to accept multiple valid scopes (e.g. /api/v1/refill
+ * accepts both "refill" and "order" for backward compatibility).
+ */
+export function hasAnyPermission(apiKey: any, permissions: string[]): boolean {
+  if (!apiKey?.permissions) return false;
+  const perms = String(apiKey.permissions)
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return permissions.some((p) => perms.includes(p));
 }
 
 /**
  * API key auth wrapper — returns { user, apiKey, error }
+ *
+ * Z-4 FIX: `permission` can now be a string OR an array of strings.
+ * If it's an array, the key must have at least ONE of the permissions.
+ * This allows routes to accept both the specific scope (e.g. "refill")
+ * and the general scope (e.g. "order") for backward compatibility.
  */
-export async function requireApiKey(req: NextRequest, permission: string = "read") {
+export async function requireApiKey(req: NextRequest, permission: string | string[] = "read") {
   const result = await validateApiKey(req);
   if (!result) {
     return {
@@ -192,11 +236,15 @@ export async function requireApiKey(req: NextRequest, permission: string = "read
       error: apiError("Invalid or missing API key", 401),
     };
   }
-  if (!hasPermission(result.apiKey, permission)) {
+
+  // Z-4 FIX: Support array of permissions (OR logic)
+  const perms = Array.isArray(permission) ? permission : [permission];
+  if (!hasAnyPermission(result.apiKey, perms)) {
+    const permLabel = perms.length === 1 ? `'${perms[0]}'` : `one of [${perms.map((p) => `'${p}'`).join(", ")}]`;
     return {
       user: null,
       apiKey: null,
-      error: apiError(`Missing '${permission}' permission`, 403),
+      error: apiError(`Missing ${permLabel} permission`, 403),
     };
   }
   return { ...result, error: null };

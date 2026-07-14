@@ -1,0 +1,167 @@
+/* ═══════════════════════════════════════════════════════════════════
+   P-001: CSS animation utilities — replacements for framer-motion.
+   These can be used instead of framer-motion for simple animations
+   (fade, slide, scale) to reduce bundle size (~266KB).
+
+   Usage:
+   <div className="fm-fade-up">...</div>
+   <div className="fm-fade-blur" style={{ animationDelay: "0.1s" }}>...</div>
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* Fade up — slide from y:20 to y:0 with opacity */
+.fm-fade-up {
+  animation: fmFadeUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fmFadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Fade blur — from blur(12px) opacity:0 to blur(0) opacity:1 */
+.fm-fade-blur {
+  animation: fmFadeBlur 0.7s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fmFadeBlur {
+  from {
+    opacity: 0;
+    filter: blur(12px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0px);
+  }
+}
+
+/* Scale in — from scale(0.95) to scale(1) */
+.fm-scale-in {
+  animation: fmScaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fmScaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Slide in from left */
+.fm-slide-left {
+  animation: fmSlideLeft 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes fmSlideLeft {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Hover lift — for cards */
+.fm-hover-lift {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.fm-hover-lift:hover {
+  transform: translateY(-4px);
+}
+
+/* Float — continuous gentle floating */
+.fm-float {
+  animation: fmFloat 6s ease-in-out infinite;
+}
+
+@keyframes fmFloat {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+/* Pulse glow — for CTAs */
+.fm-pulse-glow {
+  animation: fmPulseGlow 2s ease-in-out infinite;
+}
+
+@keyframes fmPulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(0, 82, 255, 0.2);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(0, 82, 255, 0);
+  }
+}
+
+/* Spring bounce — for icons */
+.fm-spring {
+  animation: fmSpring 0.6s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes fmSpring {
+  0% {
+    opacity: 0;
+    transform: scale(0);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .fm-fade-up,
+  .fm-fade-blur,
+  .fm-scale-in,
+  .fm-slide-left,
+  .fm-float,
+  .fm-pulse-glow,
+  .fm-spring,
+  .fm-marquee,
+  .fm-marquee-reverse {
+    animation: none !important;
+  }
+  .fm-hover-lift:hover {
+    transform: none;
+  }
+}
+
+/* Marquee — infinite horizontal scroll, translateX(0% → -50%).
+   Pair with a duplicated content array (e.g. [...items, ...items]) so
+   the -50% offset aligns with the start of the second copy for a seamless
+   loop. Use .fm-marquee-reverse for the opposite direction.
+   Override the duration via inline style: style={{ animationDuration: "48s" }} */
+.fm-marquee {
+  animation: fmMarquee 48s linear infinite;
+}
+
+.fm-marquee-reverse {
+  animation: fmMarquee 48s linear infinite reverse;
+}
+
+@keyframes fmMarquee {
+  from {
+    transform: translateX(0%);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}

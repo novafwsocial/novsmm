@@ -49,7 +49,9 @@ export async function GET(req: NextRequest) {
   ]);
 
   return apiOk({
-    users,
+    // FIX (OAuth nullable username): coerce null → "" on each user so the
+    // admin table's `username: string` typing stays honest.
+    users: users.map((u) => ({ ...u, username: u.username ?? "" })),
     pagination: {
       page,
       limit,
@@ -169,6 +171,21 @@ export async function PATCH(req: NextRequest) {
   }
 
   const updated = await db.user.update({ where: { id }, data: updateData });
+
+  // Z-1 FIX: Invalidate the user cache so the jwt callback picks up the new
+  // role/status immediately. Without this, the demoted user's existing JWT
+  // continues to carry the old role (from cache) for up to 30 seconds — a
+  // window of elevated access after demotion. The jwt callback caches
+  // balance/role/status/etc under `user:{id}` with a 30s TTL; clearing it
+  // here forces a DB refresh on the next request.
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${id}`);
+    // Also clear dashboard cache so the demoted user sees updated data
+    await cacheInvalidate(`dashboard:${id}:*`);
+  } catch {
+    // best-effort — don't fail the role change if cache invalidation fails
+  }
 
   await audit(adminId, "update", "user", id, { role, status });
 

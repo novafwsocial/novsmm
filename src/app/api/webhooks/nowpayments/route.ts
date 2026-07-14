@@ -4,6 +4,7 @@ import { apiError, apiOk, getBaseUrl, audit } from "@/lib/api-utils";
 import { decryptJSON } from "@/lib/crypto-utils";
 import { verifyNowPaymentsWebhook } from "@/lib/nowpayments";
 import { createNotification } from "@/lib/notify";
+import { checkWebhookIp } from "@/lib/webhook-ip-check";
 
 /**
  * POST /api/webhooks/nowpayments
@@ -28,6 +29,13 @@ import { createNotification } from "@/lib/notify";
  *  - refunded     → reverse the credit
  */
 export async function POST(req: NextRequest) {
+  // SECURITY (S-M-007): optional IP allowlist (defense-in-depth on top of
+  // signature verification). Skipped if WEBHOOK_IP_ALLOWLIST env var is unset.
+  const ipCheck = checkWebhookIp(req);
+  if (!ipCheck.allowed) {
+    return apiError("Forbidden", 403);
+  }
+
   // ── Read the raw body (needed for signature verification) ──
   const rawBody = await req.text();
 
@@ -156,27 +164,44 @@ async function handlePaymentConfirmed(
     return;
   }
 
-  // Idempotency: skip if already completed
-  if (txn.status === "completed") return;
-
-  // ── Credit the balance atomically ──
-  await db.$transaction([
-    db.transaction.update({
-      where: { id: txn.id },
+  // ── Credit the balance atomically (race-safe) ──
+  // FIX (W-1): Use conditional updateMany with status:"pending" inside an
+  // interactive $transaction. Only ONE webhook can flip the status; the
+  // other gets count=0 and aborts before crediting. Prevents double-credit
+  // when NowPayments retries the webhook.
+  const result = await db.$transaction(async (tx) => {
+    const updated = await tx.transaction.updateMany({
+      where: { id: txn.id, status: "pending" },
       data: {
         status: "completed",
         reference: `nowpayments:${paymentId ?? txn.publicId}`,
         description: `Top-up via NowPayments — payment ${paymentId ?? txn.publicId}`,
       },
-    }),
-    db.user.update({
+    });
+    if (updated.count === 0) {
+      return { alreadyProcessed: true };
+    }
+    await tx.user.update({
       where: { id: txn.userId },
       data: {
         balance: { increment: txn.amount },
         lifetimeEarnings: { increment: txn.amount },
       },
-    }),
-  ]);
+    });
+    return { alreadyProcessed: false };
+  });
+
+  if (result.alreadyProcessed) {
+    console.log("[webhooks/nowpayments] Transaction already processed by concurrent webhook — skipping", { txnId: txn.id });
+    return;
+  }
+
+  // P-005 FIX: Invalidate user cache so the balance update is visible immediately.
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${txn.userId}`);
+    await cacheInvalidate(`dashboard:${txn.userId}:*`);
+  } catch {}
 
   // ── Notify the user ──
   await createNotification({
@@ -221,12 +246,14 @@ async function handlePaymentFailed(
 
   if (!txn) return;
 
-  if (txn.status === "pending") {
-    await db.transaction.update({
-      where: { id: txn.id },
-      data: { status: "failed" },
-    });
-
+  // FIX (W-1): Use conditional updateMany to prevent race with a concurrent
+  // CONFIRMED webhook. If another webhook already flipped the status, we
+  // get count=0 and skip (don't overwrite completed→failed).
+  const failResult = await db.transaction.updateMany({
+    where: { id: txn.id, status: "pending" },
+    data: { status: "failed" },
+  });
+  if (failResult.count > 0) {
     await createNotification({
       userId: txn.userId,
       type: "recharge",
@@ -256,20 +283,38 @@ async function handlePaymentRefunded(
 
   if (!txn) return;
 
-  // Reverse the credit
-  await db.$transaction([
-    db.transaction.update({
-      where: { id: txn.id },
+  // Reverse the credit (race-safe)
+  // FIX (W-1): Use conditional updateMany with status:"completed" → "refunded"
+  // to prevent double-debit if NowPayments retries the refund webhook.
+  const result = await db.$transaction(async (tx) => {
+    const updated = await tx.transaction.updateMany({
+      where: { id: txn.id, status: "completed" },
       data: { status: "refunded" },
-    }),
-    db.user.update({
+    });
+    if (updated.count === 0) {
+      return { alreadyProcessed: true };
+    }
+    await tx.user.update({
       where: { id: txn.userId },
       data: {
         balance: { decrement: txn.amount },
         lifetimeEarnings: { decrement: txn.amount },
       },
-    }),
-  ]);
+    });
+    return { alreadyProcessed: false };
+  });
+
+  if (result.alreadyProcessed) {
+    console.log("[webhooks/nowpayments] Refund already processed — skipping", { txnId: txn.id });
+    return;
+  }
+
+  // P-005 FIX: Invalidate user cache for the refund balance change.
+  try {
+    const { cacheInvalidate } = await import("@/lib/cache");
+    await cacheInvalidate(`user:${txn.userId}`);
+    await cacheInvalidate(`dashboard:${txn.userId}:*`);
+  } catch {}
 
   await createNotification({
     userId: txn.userId,

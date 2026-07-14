@@ -48,6 +48,10 @@ const ENV_PROVIDER_VARS: Record<SocialAuthProvider, [string, string]> = {
  * Returns which providers have credentials configured (without revealing
  * the secrets). Always returns an entry for every supported provider so the
  * UI can render all 4 cards deterministically.
+ *
+ * FIX: now also returns a masked clientId (last 4 chars) so the admin
+ * can verify that credentials were saved correctly without seeing the
+ * full secret.
  */
 export async function GET() {
   const { error } = await requireAdmin();
@@ -56,18 +60,50 @@ export async function GET() {
   const settings = await db.setting.findMany({
     where: { key: { startsWith: "oauth:" } },
   });
-  const configuredFromDb = new Set(settings.map((s) => s.key.replace("oauth:", "")));
 
-  const result: Record<string, { configured: boolean; source: "db" | "env" | null }> = {};
+  const result: Record<string, {
+    configured: boolean;
+    source: "db" | "env" | null;
+    maskedClientId?: string;
+  }> = {};
+
   for (const provider of SOCIAL_AUTH_PROVIDERS) {
     const [idVar, secretVar] = ENV_PROVIDER_VARS[provider];
     const hasEnv = Boolean(process.env[idVar] && process.env[secretVar]);
     if (hasEnv) {
-      result[provider] = { configured: true, source: "env" };
-    } else if (configuredFromDb.has(provider)) {
-      result[provider] = { configured: true, source: "db" };
+      const envId = process.env[idVar]!;
+      result[provider] = {
+        configured: true,
+        source: "env",
+        maskedClientId: envId.length > 8
+          ? `••••${envId.slice(-4)}`
+          : "••••",
+      };
     } else {
-      result[provider] = { configured: false, source: null };
+      // Check DB
+      const dbSetting = settings.find((s) => s.key === `oauth:${provider}`);
+      if (dbSetting) {
+        try {
+          const { decryptJSON } = await import("@/lib/crypto-utils");
+          const creds = decryptJSON(dbSetting.value);
+          const clientId = creds?.clientId as string | undefined;
+          result[provider] = {
+            configured: true,
+            source: "db",
+            maskedClientId: clientId && clientId.length > 8
+              ? `••••${clientId.slice(-4)}`
+              : "••••",
+          };
+        } catch {
+          // Decryption failed — credentials are corrupted
+          result[provider] = {
+            configured: false,
+            source: null,
+          };
+        }
+      } else {
+        result[provider] = { configured: false, source: null };
+      }
     }
   }
 
