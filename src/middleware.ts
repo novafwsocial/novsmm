@@ -312,7 +312,46 @@ function getCorsAllowlist(): string[] {
 }
 
 export function middleware(req: NextRequest) {
-  const { pathname } = req.nextUrl;
+  const { pathname, search } = req.nextUrl;
+
+  // ── SEC-1e-002 FIX: Force HTTPS redirect (defense-in-depth) ──
+  // Cloudflare's "Always Use HTTPS" toggle is OFF in production, so HTTP
+  // requests to novsmm.shop are passed through to the origin as HTTP
+  // (x-forwarded-proto: http). This middleware catches them and returns a
+  // 308 Permanent Redirect to the HTTPS version.
+  //
+  // This is defense-in-depth: even if Cloudflare's toggle is later turned
+  // ON (which it should be), this redirect handles the case where:
+  //   - Cloudflare is bypassed (direct origin access)
+  //   - Cloudflare's toggle is accidentally turned off
+  //   - A future CDN/proxy change doesn't redirect
+  //
+  // 308 (not 301) preserves the HTTP method + body — critical for POST
+  // requests like /api/auth/callback/credentials (login) which would
+  // otherwise be downgraded to GET by a 301, losing the form body.
+  //
+  // Gated on NODE_ENV=production: in dev, localhost is HTTP and
+  // x-forwarded-proto is rarely set, so the redirect would break local dev.
+  if (process.env.NODE_ENV === "production" && !isHttpsRequest(req)) {
+    // Build the HTTPS URL using the public Host header (preserves the
+    // original hostname, e.g. "novsmm.shop" — NOT the origin's internal host).
+    const host = req.headers.get("host") || getTrustedHost();
+    if (host) {
+      const httpsUrl = `https://${host}${pathname}${search}`;
+      const redirectRes = NextResponse.redirect(httpsUrl, 308);
+      // Add HSTS to the redirect response so the browser remembers to use
+      // HTTPS for future requests to this host (defense-in-depth — the
+      // browser will auto-upgrade before even hitting the network).
+      redirectRes.headers.set(
+        "Strict-Transport-Security",
+        "max-age=31536000; includeSubDomains; preload"
+      );
+      return redirectRes;
+    }
+    // If we can't determine the host (no Host header, no NEXTAUTH_URL),
+    // fall through to normal processing — the request will be served over
+    // HTTP but at least the HSTS header won't be set incorrectly.
+  }
 
   // Skip non-API routes (let Next.js handle pages/static)
   if (!pathname.startsWith("/api/")) {
