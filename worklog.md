@@ -17240,3 +17240,58 @@ Caveats / notes for reviewer:
 3. **`<tr>` transforms in dashboard-wallet.tsx**: The `fm-fade-up` class on `<tr>` elements includes `translateY(20px)`. CSS transforms on `<tr>` have inconsistent browser support (Chrome/Firefox apply them; Safari historically doesn't). On Safari, the rows will fade in (opacity part of fm-fade-up works) without the slide. Acceptable degradation.
 4. **affiliate-section.tsx commission bars**: The "grow from 0 width" animation (visualizing the 10%/90% commission split growing in) is replaced by a simple fade-in at the final width. If preserving the width-growth visual is important, a `.fm-grow-x` class using `clip-path: inset(0 100% 0 0) → inset(0 0 0 0)` could be added (5 lines of CSS) and the two bars would grow from left-to-right as in the original. Not done here to stay conservative with CSS additions.
 5. **No bundle-size measurement**: This task did not measure the actual framer-motion bundle-size reduction. Since `framer-motion` is still imported by 14+ other NOVSMM files (admin-panel, auth-fields, dashboard-notifications, status-page, dashboard-subscriptions, login-screen, dashboard-tickets, dashboard-orders, legal-pages, dashboard-shell, dashboard-child-panels, onboarding-screen, whatsapp-widget, faq), the `framer-motion` chunk is still loaded. The bundle-size savings from this task alone are zero until those files are also migrated. The migration is incremental progress toward P-001 (per the Phase 3/4 audit's recommendation #6: "P-001 ongoing — continue motion→CSS migration as opportunities arise").
+
+---
+Task ID: PAYMENT-LOGOS
+Agent: main (payment-logo official SVG migration)
+Task: Replace the invented/random payment logos in `src/components/novsmm/payment-logo.tsx` with OFFICIAL brand SVG marks sourced from their official sources (not invented). Do the same treatment that was previously applied to platform logos for the payment providers.
+
+Work Log:
+- Read worklog tail (A11Y-MODALS, P001-MIGRATION) for context — confirmed payment-logo.tsx previously only had ONE real entry (NowPayments hexagon which was INVENTED/random) and fell back to WhatsApp/manual via a separate branch; PayPal & Mercado Pago were missing entirely and rendered as a generic card-outline fallback icon.
+- Audited which payment provider names are actually rendered via `<PaymentLogo>`:
+  - `payments.tsx` (landing): PayPal, Mercado Pago, NowPayments, Manual
+  - `dashboard-wallet.tsx`: dynamic `m.name` from DB (any provider)
+  - `admin-panel.tsx`: dynamic `method.name` from DB (any provider)
+- Sourced OFFICIAL brand SVG paths + hex colors:
+  - **Simple Icons v16.26.0** (already installed at `node_modules/simple-icons`) — Simple Icons sources every SVG directly from each brand's official press kit / brand guidelines. Extracted verbatim paths + official hex from `node_modules/simple-icons/data/simple-icons.json` for:
+    - PayPal → #002991 (official PayPal Blue)
+    - Mercado Pago → #00B1EA (official Mercado Pago cyan)
+    - Stripe → #635BFF (official Stripe Purple)
+    - Visa → #1A1F71 (official Visa Blue)
+    - Mastercard → #EB001B (official Mastercard Red)
+    - American Express → #2E77BC (official Amex Blue)
+    - Bitcoin → #F7931A (official Bitcoin Orange)
+    - Ethereum → #3C3C3D (official Ethereum dark gray)
+    - Tether (USDT) → #50AF95 (official Tether green)
+    - WhatsApp → #25D366 (official WhatsApp green, used for manual payments)
+  - **NowPayments** — NOT in Simple Icons. Fetched the official wordmark directly from NowPayments' production website: `https://nowpayments.io/images/logo/logo.svg` (the `<img src="/images/logo/logo.svg" alt="NOWPayments">` on their homepage). Downloaded 5419 bytes, extracted both `<path>` elements verbatim: path 1 = "NOW" in official #64ACFF, path 2 = "Payments" in #FEFEFE. Adapted path 2's fill from hardcoded #FEFEFE to `currentColor` so the wordmark stays visible on light backgrounds (the official white is invisible on white) — this is a theme-adaptation, NOT an invention; the path geometry is verbatim from nowpayments.io.
+- Rewrote `src/components/novsmm/payment-logo.tsx`:
+  - Introduced a discriminated union `LogoDef = SquareIcon | Wordmark` to support both 24×24 square icons (Simple Icons) and horizontal wordmarks (NowPayments).
+  - `PAYMENT_LOGOS` record now contains 11 official entries (PayPal, Mercado Pago, Stripe, Visa, Mastercard, American Express, Bitcoin, Ethereum, Tether, WhatsApp, NowPayments).
+  - Matching logic: exact match → partial/contains match → manual/whatsapp/zelle/wire fallback → crypto abbreviation fallback (btc/eth/usdt) → generic card-outline fallback (only if nothing matches).
+  - Square icons render at `size × 0.72` inside a `size × size` span (matches the previous platform-logo sizing convention).
+  - Wordmarks render at `height: size` with auto width and `maxWidth: size * 4`, so the NowPayments wordmark displays at its native 163:21 aspect ratio without distortion.
+  - Every logo span carries `role="img"` + `aria-label={name}` for accessibility; the inner `<svg>` carries `aria-hidden="true"`.
+- Adjusted `src/components/novsmm/payments.tsx` provider-card logo container:
+  - Was: `flex h-10 w-10 ... ` (fixed 40×40 square — the NowPayments wordmark overflowed/clipped).
+  - Now: `flex h-10 min-w-10 ... px-2` (auto width, min 40px, 8px horizontal padding) so square icons render at 40×40 and the NowPayments wordmark renders wider (~88px) without clipping. Reduced `size` prop from 24 to 22 for tighter visual balance inside the padded container.
+- Deleted the old invented NowPayments hexagon path (`M12 2L4 7v10l8 5 8-5V7l-8-5zm0 2.3L17.5 7 12 9.7 6.5 7 12 4.3z` with fake #5dc9bc) — this was the "random logo" the user complained about.
+
+Verification:
+- `bun run lint` → 0 errors, 3 pre-existing warnings (load-test.js, opengraph-image.tsx, twitter-image.tsx — none related to this change).
+- Dev server: `bun run dev` → `✓ Ready in 540ms`, `GET / 200 in 18.4s` (first compile), subsequent recompiles ~200ms via Fast Refresh.
+- Agent Browser DOM inspection of `#payments` section confirmed all 4 logos render with correct viewBoxes, path counts, and official fills:
+  - PayPal: viewBox `0 0 24 24`, 1 path, fill #002991 ✓
+  - Mercado Pago: viewBox `0 0 24 24`, 1 path, fill #00B1EA ✓
+  - NowPayments: viewBox `0 0 163 21` (official wordmark), 2 paths, fills #64ACFF + currentColor ✓, container 88×22px (wordmark auto-width)
+  - Manual: viewBox `0 0 24 24`, 1 path, fill #25D366 ✓
+- VLM (glm-4.6v) visual verification of the screenshot confirmed: "1) PayPal: Visible; matches official dark blue logo. 2) Mercado Pago: Visible; matches official cyan/light blue logo. 3) NowPayments: Visible; matches official horizontal wordmark (blue 'NOW'). 4) Manual/WhatsApp: Visible; matches official green WhatsApp icon."
+- Console errors: none (only normal Fast Refresh log lines).
+- Page errors: none.
+
+Stage Summary:
+- `src/components/novsmm/payment-logo.tsx` fully rewritten — every payment logo is now an OFFICIAL brand SVG sourced from either Simple Icons (which pulls from each brand's official press kit) or, for NowPayments, the verbatim wordmark SVG hosted on nowpayments.io. Zero invented/random marks remain.
+- `src/components/novsmm/payments.tsx` container adjusted from fixed `h-10 w-10` to `h-10 min-w-10 px-2` to accommodate the NowPayments wordmark's native aspect ratio without clipping or distortion.
+- 11 official payment logos now available: PayPal, Mercado Pago, Stripe, Visa, Mastercard, American Express, Bitcoin, Ethereum, Tether, WhatsApp, NowPayments — all rendered as inline SVG (zero network requests, zero raster images).
+- Browser-verified (DOM inspection + VLM visual check) that all 4 landing-page payment providers display their correct official brand marks with correct official brand colors.
+- Files modified: 2 (`payment-logo.tsx`, `payments.tsx`) + this worklog append.
