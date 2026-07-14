@@ -27,10 +27,10 @@ export function Navbar() {
   // i18n (U-C-004): nav links now use translation keys
   const NAV_LINKS = [
     { label: t("landing.nav.platform"), href: "#hero" },
-    { label: t("landing.nav.services"), href: "#services" },
     { label: t("landing.nav.marketplace"), href: "#marketplace" },
     { label: t("landing.nav.payments"), href: "#payments" },
     { label: t("landing.nav.security"), href: "#security" },
+    { label: "Blog", href: "/blog" },
     { label: t("landing.nav.pricing"), href: "/pricing" },
   ];
 

@@ -79,6 +79,7 @@ const COLUMNS: FooterColumn[] = [
   {
     title: "Resources",
     links: [
+      { label: "Blog", externalUrl: "/blog" },
       { label: "Docs", externalUrl: "/api-docs" },
       { label: "API reference", externalUrl: "/api-docs" },
       { label: "Changelog", externalUrl: "/changelog" },
