@@ -106,7 +106,7 @@ export function Faq() {
   const displayItems = items.length > 0 ? items : DEFAULT_FAQ;
 
   return (
-    <section id="faq" className="relative py-8 sm:py-28">
+    <section id="faq" className="relative py-4 sm:py-28">
       <div className="mx-auto max-w-3xl px-4 sm:px-6">
         <Reveal>
           <SectionHeading

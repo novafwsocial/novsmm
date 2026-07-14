@@ -32,7 +32,6 @@ export function Navbar() {
     { label: t("landing.nav.payments"), href: "#payments" },
     { label: t("landing.nav.security"), href: "#security" },
     { label: "Blog", href: "/blog" },
-    { label: t("landing.nav.pricing"), href: "/pricing" },
   ];
 
   // If user is authed and browsing landing, show their balance + Dashboard button

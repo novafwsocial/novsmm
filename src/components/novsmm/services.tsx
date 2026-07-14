@@ -10,7 +10,7 @@ import { useLanguage } from "./language-provider";
 export function Services() {
   const { t } = useLanguage();
   return (
-    <section id="services" className="relative py-8 sm:py-32">
+    <section id="services" className="relative py-4 sm:py-32">
       <div className="mx-auto max-w-7xl px-5 sm:px-8">
         <SectionHeading
           eyebrow={t("landing.services.eyebrow")}

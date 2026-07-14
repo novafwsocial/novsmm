@@ -75,12 +75,6 @@ export function StickyCTA() {
             : "opacity-0 translate-y-4 pointer-events-none"
         }`}
       >
-        <a
-          href="/pricing"
-          className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background/80 px-5 py-2.5 text-sm font-medium text-foreground backdrop-blur-md transition-colors hover:bg-muted nov-ring"
-        >
-          {t("landing.stickyCta.viewPricing")}
-        </a>
         <button
           onClick={() => setView("register")}
           className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue btn-press shimmer-cta"

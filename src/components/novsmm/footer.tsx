@@ -45,9 +45,6 @@ const COLUMNS: FooterColumn[] = [
       { label: "Services", tab: "marketplace" },
       { label: "Marketplace", anchor: "#marketplace" },
       { label: "Payments", anchor: "#payments" },
-      // FIX (U-C-001): Pricing was unreachable from the footer. Adding it
-      // here makes the /pricing route discoverable from every page.
-      { label: "Pricing", externalUrl: "/pricing" },
       { label: "Analytics", tab: "analytics" },
       { label: "API", externalUrl: "/api-docs" },
     ],

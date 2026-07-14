@@ -44,12 +44,11 @@ export default function sitemap(): MetadataRoute.Sitemap {
       changeFrequency: "weekly",
       priority: 1,
     },
-    // Public pricing page
     {
-      url: `${SITE_ORIGIN}/pricing`,
+      url: `${SITE_ORIGIN}/blog`,
       lastModified: now,
-      changeFrequency: "monthly",
-      priority: 0.9,
+      changeFrequency: "weekly",
+      priority: 0.7,
     },
     // Public API docs page (formatted HTML, crawlable)
     {
