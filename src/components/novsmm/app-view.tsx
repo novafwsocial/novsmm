@@ -5,17 +5,21 @@ import dynamic from "next/dynamic";
 import { Loader2, X, Lock, CheckCircle2, ArrowRight, AlertCircle, LayoutDashboard } from "lucide-react";
 import { useSession } from "@/hooks/use-api";
 import { useApp } from "./app-store";
-import { LoginScreen } from "./login-screen";
-import { RegisterScreen } from "./register-screen";
-import { OnboardingScreen } from "./onboarding-screen";
-import { WelcomeScreen } from "./welcome-screen";
-import { DashboardShell } from "./dashboard-shell";
-const DashboardHome = dynamic(() => import("./dashboard-home").then(m => ({ default: m.DashboardHome })), { loading: () => <TabLoader /> });
 import { useToast } from "@/hooks/use-toast";
 import { api } from "@/lib/api-client";
 import { Field } from "./auth-fields";
 import { Magnetic } from "./magnetic";
 import { cn } from "@/lib/utils";
+
+// PERF: Lazy-load ALL auth/dashboard components — they import framer-motion
+// (291KB) which should NOT block the landing page first paint.
+// Only loaded when the user actually interacts (login, register, dashboard).
+const LoginScreen = dynamic(() => import("./login-screen").then(m => ({ default: m.LoginScreen })), { loading: () => <TabLoader /> });
+const RegisterScreen = dynamic(() => import("./register-screen").then(m => ({ default: m.RegisterScreen })), { loading: () => <TabLoader /> });
+const OnboardingScreen = dynamic(() => import("./onboarding-screen").then(m => ({ default: m.OnboardingScreen })), { loading: () => <TabLoader /> });
+const WelcomeScreen = dynamic(() => import("./welcome-screen").then(m => ({ default: m.WelcomeScreen })), { loading: () => <TabLoader /> });
+const DashboardShell = dynamic(() => import("./dashboard-shell").then(m => ({ default: m.DashboardShell })), { loading: () => <TabLoader /> });
+const DashboardHome = dynamic(() => import("./dashboard-home").then(m => ({ default: m.DashboardHome })), { loading: () => <TabLoader /> });
 
 // ── Lazy load heavy components for better initial load ──
 const DashboardAnalytics = dynamic(() => import("./dashboard-analytics").then(m => ({ default: m.DashboardAnalytics })), { loading: () => <TabLoader /> });

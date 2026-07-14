@@ -190,7 +190,7 @@ export function Footer() {
   return (
     <footer className="relative mt-auto overflow-hidden border-t border-border bg-background">
       {/* Final CTA band */}
-      <div className="relative mx-auto max-w-7xl px-5 py-20 sm:px-8 sm:py-28">
+      <div className="relative mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-28">
         <div
           aria-hidden
           className="pointer-events-none absolute left-1/2 top-1/2 -z-10 h-[360px] w-[680px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary/[0.06] blur-[120px]"
@@ -230,7 +230,7 @@ export function Footer() {
 
       {/* Link grid */}
       <div className="border-t border-border/60">
-        <div className="mx-auto max-w-7xl px-5 py-12 sm:px-8 sm:py-16">
+        <div className="mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-16">
           <div className="grid grid-cols-2 gap-x-6 gap-y-10 sm:grid-cols-3 sm:gap-x-8 lg:grid-cols-6 lg:gap-x-10">
             <div className="col-span-2 lg:col-span-2">
               <a
@@ -293,7 +293,7 @@ export function Footer() {
           </div>
 
           {/* bottom bar */}
-          <div className="mt-12 flex flex-col items-start justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
+          <div className="mt-8 flex flex-col items-start justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               {/* U-L-002: removed "Inc." — implies US incorporation that
                   probably doesn't exist. Just "NOVSMM" is cleaner. */}
