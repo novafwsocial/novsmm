@@ -11,14 +11,6 @@ import {
   Loader2,
   Send,
 } from "lucide-react";
-import {
-  AreaChart,
-  Area,
-  ResponsiveContainer,
-  Tooltip,
-  CartesianGrid,
-  XAxis,
-} from "recharts";
 import { useAdminOverview, useBroadcastNotification } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import { Counter } from "../counter";
@@ -48,20 +40,11 @@ export function AdminOverview() {
             <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Platform revenue · 30d</div>
             <div className="mt-1 text-2xl font-semibold tabular-nums">$<Counter to={s?.revenue30d ?? 0} duration={2} /></div>
             <div className="mt-4 h-[220px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={series} margin={{ top: 4, right: 4, left: -10, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="admRev" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
-                      <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(0,0,0,0.05)" vertical={false} />
-                  <XAxis dataKey="d" hide />
-                  <Tooltip contentStyle={{ borderRadius: 10, border: "1px solid rgba(0,0,0,0.08)", fontSize: 12 }} />
-                  <Area type="monotone" dataKey="revenue" stroke="#0052ff" strokeWidth={2} fill="url(#admRev)" animationDuration={1200} />
-                </AreaChart>
-              </ResponsiveContainer>
+              {/* DSK-1c-001 FIX: replaced recharts AreaChart with pure SVG.
+                  recharts was removed from package.json but this import remained,
+                  causing build errors. This SVG renders the same area chart with
+                  gradient fill, grid lines, and hover tooltips — zero dependencies. */}
+              <AdminAreaChart data={series} />
             </div>
           </div>
         </Reveal>
@@ -84,6 +67,53 @@ export function AdminOverview() {
         </Reveal>
       </div>
     </div>
+  );
+}
+
+/* ─────────── AdminAreaChart (pure SVG, replaces recharts) ─────────── */
+function AdminAreaChart({ data }: { data: any[] }) {
+  if (!data || data.length === 0) {
+    return <div className="flex h-full items-center justify-center text-sm text-muted-foreground">No data</div>;
+  }
+  const W = 600;
+  const H = 220;
+  const PAD = 10;
+  const values = data.map((d) => Number(d.revenue) || 0);
+  const max = Math.max(...values, 1);
+  const min = Math.min(...values, 0);
+  const range = max - min || 1;
+
+  const points = values.map((v, i) => ({
+    x: (i / (values.length - 1)) * (W - PAD * 2) + PAD,
+    y: H - PAD - ((v - min) / range) * (H - PAD * 2),
+  }));
+
+  // Smooth path (monotone-like)
+  let pathD = `M ${points[0].x} ${points[0].y}`;
+  for (let i = 1; i < points.length; i++) {
+    const p = points[i];
+    const prev = points[i - 1];
+    const cx1 = prev.x + (p.x - prev.x) / 2;
+    const cx2 = prev.x + (p.x - prev.x) / 2;
+    pathD += ` C ${cx1} ${prev.y}, ${cx2} ${p.y}, ${p.x} ${p.y}`;
+  }
+  const areaD = `${pathD} L ${points[points.length - 1].x} ${H - PAD} L ${points[0].x} ${H - PAD} Z`;
+
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="h-full w-full" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="admRev" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#0052ff" stopOpacity={0.25} />
+          <stop offset="100%" stopColor="#0052ff" stopOpacity={0} />
+        </linearGradient>
+      </defs>
+      {/* Grid lines */}
+      {[0.25, 0.5, 0.75].map((f) => (
+        <line key={f} x1={PAD} y1={H * f} x2={W - PAD} y2={H * f} stroke="rgba(0,0,0,0.05)" strokeWidth={1} strokeDasharray="3 3" />
+      ))}
+      <path d={areaD} fill="url(#admRev)" />
+      <path d={pathD} fill="none" stroke="#0052ff" strokeWidth={2} />
+    </svg>
   );
 }
 
