@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
   LayoutGrid,
   ShoppingCart,
@@ -99,9 +98,12 @@ function MiniChart({ data }: { data: number[] }) {
 }
 
 export function HeroDashboard() {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
-
+  // MOB-1b-001 FIX: removed `mounted` state — the chart was rendered only
+  // after mount ({mounted && <MiniChart />}), causing a 107px layout shift
+  // on Slow 4G when the chart appeared. The chart container already has
+  // h-[150px] so the space is reserved, but the SVG paths inside were
+  // not in the SSR HTML, causing the browser to reflow when they appeared.
+  // Now the chart renders in SSR (deterministic data, no Math.random).
   return (
     <div className="flex flex-col lg:flex-row">
       {/* Sidebar */}
@@ -130,7 +132,7 @@ export function HeroDashboard() {
             <span className="text-emerald-600">+12.4%</span>
           </div>
           <div className="mt-1 text-lg font-semibold tabular-nums">
-            $<Counter to={8420.5} decimals={2} duration={2.4} />
+            $<Counter to={8420.5} from={8420.5} decimals={2} duration={2.4} />
           </div>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-muted">
             <div className="h-full w-[68%] rounded-full bg-primary" />
@@ -167,25 +169,25 @@ export function HeroDashboard() {
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
             label="Balance"
-            value={<>$<Counter to={8420.5} decimals={2} duration={2.4} /></>}
+            value={<>$<Counter to={8420.5} from={8420.5} decimals={2} duration={2.4} /></>}
             delta="+12.4%"
             up
           />
           <StatCard
             label="Orders today"
-            value={<Counter to={1284} duration={2.2} />}
+            value={<Counter to={1284} from={1284} duration={2.2} />}
             delta="+8.1%"
             up
           />
           <StatCard
             label="Active services"
-            value={<Counter to={242} duration={2.2} />}
+            value={<Counter to={242} from={242} duration={2.2} />}
             delta="+3"
             up
           />
           <StatCard
             label="Conversion"
-            value={<><Counter to={94.2} decimals={1} duration={2.2} />%</>}
+            value={<><Counter to={94.2} from={94.2} decimals={1} duration={2.2} />%</>}
             delta="-0.4%"
           />
         </div>
@@ -197,7 +199,7 @@ export function HeroDashboard() {
               <div>
                 <div className="text-xs text-muted-foreground">Revenue · last 32 days</div>
                 <div className="mt-0.5 text-xl font-semibold tabular-nums">
-                  $<Counter to={128450} duration={2.6} />
+                  $<Counter to={128450} from={128450} duration={2.6} />
                 </div>
               </div>
               <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-600">
@@ -206,7 +208,7 @@ export function HeroDashboard() {
               </div>
             </div>
             <div className="mt-3 h-[150px] w-full">
-              {mounted && <MiniChart data={chartData} />}
+              <MiniChart data={chartData} />
             </div>
           </div>
 
