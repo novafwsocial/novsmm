@@ -1,6 +1,5 @@
 "use client";
 
-import { motion } from "framer-motion";
 import {
   ShieldCheck,
   Lock,
@@ -176,44 +175,38 @@ function ShieldVisual() {
       {/* concentric rings */}
       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
         {[180, 260, 340].map((s, i) => (
-          <motion.div
+          <div
             key={s}
-            initial={{ opacity: 0, scale: 0.8 }}
-            whileInView={{ opacity: 1, scale: 1 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.8, delay: i * 0.15 }}
-            className="absolute rounded-full border border-primary/15"
+            className="absolute rounded-full border border-primary/15 fm-scale-in"
             style={{
               width: s,
               height: s,
               left: -s / 2,
               top: -s / 2,
+              animationDuration: "0.8s",
+              animationDelay: `${i * 0.15}s`,
             }}
           />
         ))}
 
-        {/* radar sweep */}
-        <motion.div
+        {/* radar sweep — CSS rotation instead of framer-motion */}
+        <div
           className="absolute left-1/2 top-1/2 h-[170px] w-[170px] -translate-x-1/2 -translate-y-1/2 origin-center"
           style={{
             background:
               "conic-gradient(from 0deg, rgba(0, 82, 255, 0.25), transparent 70%)",
             borderRadius: "9999px",
+            animation: "fmRadarSweep 4s linear infinite",
           }}
-          animate={{ rotate: 360 }}
-          transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
         />
 
         {/* center shield */}
-        <motion.div
-          initial={{ scale: 0.8, opacity: 0 }}
-          whileInView={{ scale: 1, opacity: 1 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-          className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-primary text-primary-foreground nov-shadow-blue"
+        <div
+          className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-2xl bg-primary text-primary-foreground nov-shadow-blue fm-scale-in"
+          style={{ animationDuration: "0.7s" }}
         >
           <ShieldCheck className="h-9 w-9" />
-        </motion.div>
+        </div>
       </div>
 
       {/* floating layer labels */}
@@ -223,18 +216,14 @@ function ShieldVisual() {
         { label: t("landing.security.shield.data"), x: "16%", y: "78%" },
         { label: t("landing.security.shield.keys"), x: "80%", y: "74%" },
       ].map((p, i) => (
-        <motion.div
+        <div
           key={p.label}
-          initial={{ opacity: 0, y: 8 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.6, delay: 0.4 + i * 0.1 }}
-          className="absolute flex items-center gap-1.5 rounded-full border border-border/60 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-foreground/80 backdrop-blur-md"
-          style={{ left: p.x, top: p.y, transform: "translate(-50%, -50%)" }}
+          className="absolute flex items-center gap-1.5 rounded-full border border-border/60 bg-background/90 px-2.5 py-1 text-[11px] font-medium text-foreground/80 backdrop-blur-md fm-fade-up"
+          style={{ left: p.x, top: p.y, transform: "translate(-50%, -50%)", animationDuration: "0.6s", animationDelay: `${0.4 + i * 0.1}s` }}
         >
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
           {p.label}
-        </motion.div>
+        </div>
       ))}
 
       {/* bottom metric strip */}

@@ -107,6 +107,12 @@
   }
 }
 
+/* MOB-1b-003: Radar sweep — replaces framer-motion animate rotate:360 */
+@keyframes fmRadarSweep {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
 /* Pulse glow — for CTAs */
 .fm-pulse-glow {
   animation: fmPulseGlow 2s ease-in-out infinite;
