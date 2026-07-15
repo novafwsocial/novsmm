@@ -127,7 +127,11 @@ export function DashboardOrders() {
                   <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
                   <th scope="col" className="px-4 py-3 text-left font-medium">Progress</th>
                   <th scope="col" className="px-4 py-3 text-left font-medium">Fulfilled by</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">ETA</th>
+                  {/* WHITE-LABEL: ETA column removed — the eta field in the DB
+                      can contain provider names like 'Processing on HuntSMM'
+                      for legacy orders. Rather than risk leaking the upstream
+                      provider, the ETA info is removed entirely from the UI.
+                      Users still see real-time progress in the PROGRESS column. */}
                   <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
               </thead>
@@ -192,9 +196,7 @@ export function DashboardOrders() {
                           is never displayed to end users. */}
                       NOVSMM
                     </td>
-                    <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">
-                      {o.eta}
-                    </td>
+                    {/* ETA cell removed — see column header comment above */}
                     <td className="px-4 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1">
                         <button
@@ -461,7 +463,9 @@ function OrderDetailDrawer({
             {order.completedAt && (
               <DetailRow label="Completed" value={new Date(order.completedAt).toLocaleString()} />
             )}
-            <DetailRow label="ETA" value={order.eta} />
+            {/* WHITE-LABEL: ETA row removed — the eta field can contain
+                provider names for legacy orders. Progress is still visible
+                in the status/progress indicators. */}
           </DetailCard>
 
           {/* Action buttons */}
