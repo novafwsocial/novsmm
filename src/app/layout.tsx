@@ -188,6 +188,14 @@ export const metadata: Metadata = {
     email: false,
     address: false,
   },
+  // MOB-1d-004 FIX: iOS PWA meta tags for standalone experience.
+  // These enable "Add to Home Screen" on iOS to launch as a full-screen
+  // app without Safari's browser chrome.
+  appleWebApp: {
+    capable: true,
+    title: "NOVSMM",
+    statusBarStyle: "default",
+  },
   // Verification placeholders — orchestrator can set real keys in env
   verification: {
     other: {
