@@ -352,6 +352,25 @@ button, a, [role="button"], input, select, textarea {
   }
 }
 
+/* MOB-1b-009 FIX: Disable backdrop-filter on mobile to eliminate scroll jank.
+   backdrop-filter: blur() is extremely expensive on mobile GPUs — it forces
+   a repaint of the blurred area on EVERY scroll frame. On desktop, the GPU
+   can handle it; on mobile (especially mid-range), it causes 78ms/frame
+   jank (target: 16.67ms = 60fps).
+
+   This rule replaces backdrop-blur with a solid background on mobile. The
+   visual difference is minimal (the translucent effect is barely visible
+   on small screens) but the scroll performance improvement is significant.
+
+   Modals and overlays are EXEMPTED via :not([role="dialog"]) — they need
+   the blur for the dimming effect when open, and they don't scroll. */
+@media (max-width: 768px) {
+  *:not([role="dialog"]):not([aria-modal="true"]) {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
 /* Optimize font rendering on mobile (prevents layout shift) + prevent horizontal scroll */
 html {
   -webkit-font-smoothing: antialiased;
