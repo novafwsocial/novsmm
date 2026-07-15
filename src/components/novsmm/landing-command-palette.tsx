@@ -23,7 +23,7 @@ const COMMANDS = [
   { label: "API Docs", href: "#api-docs", section: "Landing" },
   { label: "Affiliates", href: "#affiliates", section: "Landing" },
   { label: "FAQ", href: "#faq", section: "Landing" },
-  { label: "Pricing", href: "/pricing", section: "Pages" },
+  // MOB-1c-012 FIX: removed "Pricing" entry — /pricing route was deleted.
   { label: "Changelog", href: "/changelog", section: "Pages" },
   { label: "API Reference", href: "/api-docs", section: "Pages" },
 ];
@@ -98,6 +98,9 @@ export function LandingCommandPalette() {
 
   return (
     <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Quick navigation"
       className="fixed inset-0 z-[100] flex items-start justify-center bg-foreground/40 p-4 pt-[15vh] backdrop-blur-sm"
       onClick={() => setOpen(false)}
     >
