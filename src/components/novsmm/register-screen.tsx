@@ -229,6 +229,7 @@ export function RegisterScreen() {
                 <Field
                   label="Full name"
                   icon={<User className="h-4 w-4" />}
+                  autoComplete="name"
                   placeholder="Daniela Ríos"
                   value={form.name}
                   onChange={update("name")}
@@ -239,6 +240,7 @@ export function RegisterScreen() {
                 <Field
                   label="Username"
                   icon={<span className="text-sm font-medium">@</span>}
+                  autoComplete="username"
                   placeholder="daniela"
                   value={form.username}
                   onChange={update("username")}
@@ -257,6 +259,8 @@ export function RegisterScreen() {
                 label="Email"
                 icon={<Mail className="h-4 w-4" />}
                 type="email"
+                inputMode="email"
+                autoComplete="email"
                 placeholder="you@company.com"
                 value={form.email}
                 onChange={update("email")}
@@ -274,6 +278,7 @@ export function RegisterScreen() {
                 label="Password"
                 icon={<Lock className="h-4 w-4" />}
                 type="password"
+                autoComplete="new-password"
                 placeholder="Create a strong password"
                 value={form.password}
                 onChange={update("password")}
@@ -287,6 +292,7 @@ export function RegisterScreen() {
                 label="Confirm password"
                 icon={<Lock className="h-4 w-4" />}
                 type="password"
+                autoComplete="new-password"
                 placeholder="Re-enter password"
                 value={form.confirm}
                 onChange={update("confirm")}

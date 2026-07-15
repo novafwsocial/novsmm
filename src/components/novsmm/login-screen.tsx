@@ -326,6 +326,7 @@ export function LoginScreen() {
                 label="Email or username"
                 icon={<Mail className="h-4 w-4" />}
                 type="email"
+                inputMode="email"
                 autoComplete="email"
                 placeholder="you@company.com"
                 value={email}
