@@ -215,9 +215,6 @@
       0 1px 2px rgba(0, 82, 255, 0.2),
       0 8px 24px -6px rgba(0, 82, 255, 0.35);
   }
-  .will-change-transform {
-    will-change: transform;
-  }
 }
 
 /* Premium thin scrollbar */
@@ -512,7 +509,6 @@ img, video, canvas, svg {
 .tilt-card {
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   transform-style: preserve-3d;
-  will-change: transform;
 }
 .tilt-card-inner {
   transform: translateZ(40px);
@@ -538,7 +534,6 @@ img, video, canvas, svg {
   transform: perspective(800px) rotateX(15deg) translateY(60px);
   transform-origin: center bottom;
   transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
 }
 .reveal-3d.in-view {
   opacity: 1;
@@ -657,7 +652,6 @@ img, video, canvas, svg {
 .stat-card-3d {
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
   transform-style: preserve-3d;
-  will-change: transform;
 }
 .stat-card-3d:hover {
   transform: translateY(-4px) perspective(600px) rotateX(2deg);
@@ -687,7 +681,6 @@ img, video, canvas, svg {
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
 }
 .dash-reveal.in-view {
   opacity: 1;
@@ -776,7 +769,6 @@ img, video, canvas, svg {
 .footer-link-3d {
   position: relative;
   transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s ease;
-  will-change: transform;
   transform-style: preserve-3d;
 }
 .footer-link-3d:hover {
@@ -804,7 +796,6 @@ img, video, canvas, svg {
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: opacity, transform;
 }
 .footer-col-reveal.in-view {
   opacity: 1;
