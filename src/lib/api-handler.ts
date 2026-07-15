@@ -26,7 +26,7 @@ import { randomUUID } from "crypto";
  *   - All other errors → 500 Internal Error (sanitized message)
  *
  * SECURITY:
- *   - SDK errors (Stripe, PayPal, etc.) are logged in full but returned
+ *   - SDK errors (PayPal, etc.) are logged in full but returned
  *     to the client as generic "Internal error" — no SDK internals leaked
  *   - The request-id is included in the error response so support can
  *     correlate the client's error with the server logs

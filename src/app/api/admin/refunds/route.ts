@@ -11,7 +11,7 @@ import { raiseSecurityAlert } from "@/lib/security-alert";
  * POST /api/admin/refunds — process a refund for a transaction.
  * Body: { transactionId, reason? }
  *
- * If the transaction was via Stripe, creates a real Stripe refund.
+ * If the transaction was a payment provider sale, the refund is processed.
  * Credits the user's balance back (negative = deduct from balance since
  * the original transaction was a credit).
  *

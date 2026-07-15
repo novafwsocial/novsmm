@@ -443,7 +443,7 @@ export function renderInvoiceHtml(inv: InvoiceInput): string {
         ${
           inv.notes
             ? escapeHtml(inv.notes)
-            : `This invoice was generated automatically by NOVSMM. Payments are processed securely via our payment partners (Stripe, PayPal, Mercado Pago, NowPayments). For billing questions, reply to ${escapeHtml(issuerEmail)} or open a support ticket from your dashboard.`
+            : `This invoice was generated automatically by NOVSMM. Payments are processed securely via our payment partners (PayPal, Mercado Pago, NowPayments). For billing questions, reply to ${escapeHtml(issuerEmail)} or open a support ticket from your dashboard.`
         }
       </div>
       <div class="footer-thanks">Thank you for your business — NOVSMM Team</div>

@@ -1896,11 +1896,8 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
   const { toast } = useToast();
 
   // Define credential fields per payment method
+  // NOTE: Stripe was completely removed from NOVSMM — no credentials config.
   const credentialFields: Record<string, { key: string; label: string; type?: string; placeholder?: string }[]> = {
-    Stripe: [
-      { key: "secretKey", label: "Secret Key", placeholder: "sk_live_... or sk_test_..." },
-      { key: "webhookSecret", label: "Webhook Secret", placeholder: "whsec_..." },
-    ],
     PayPal: [
       { key: "clientId", label: "Client ID", placeholder: "AY..." },
       { key: "clientSecret", label: "Client Secret", placeholder: "EL..." },
@@ -1921,7 +1918,6 @@ function ConfigureCredentialsModal({ method, onClose }: { method: any; onClose: 
 
   // Manual payment has no credentials — just a note
   const isManual = method.name === "Manual";
-  // Stripe has its own help panel — fields + help
 
   const fields = credentialFields[method.name] ?? [
     { key: "apiKey", label: "API Key", placeholder: "" },

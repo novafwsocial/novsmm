@@ -502,7 +502,7 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
             {methods
               .filter(
                 (m: any) =>
-                  !["Stripe", "PayPal", "Mercado Pago", "NowPayments", "Manual"].includes(m.name)
+                  !["PayPal", "Mercado Pago", "NowPayments", "Manual"].includes(m.name)
               )
               .map((m: any) => (
                 <option key={m.id} value={m.name}>

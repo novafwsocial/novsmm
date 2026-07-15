@@ -67,7 +67,7 @@ const ROW_A: Testimonial[] = [
 const ROW_B: Testimonial[] = [
   {
     quote:
-      "The dashboard looks like it was built by Stripe. Our clients trust it on first sight — signups converted 22% higher the week we switched.",
+      "The dashboard looks like it was built by a fintech company. Our clients trust it on first sight — signups converted 22% higher the week we switched.",
     name: "Sophie Laurent",
     role: "CRO, NorthPeak",
     result: "+22% conversion",

@@ -13,7 +13,7 @@ import { cacheInvalidate } from "@/lib/cache";
  *
  * Dispatch logic per payment method:
  *
- *  • Stripe          → if creds.secretKey set  → real Checkout Session (returns checkoutUrl)
+ *  • (Stripe removed — no longer supported)
  *  • PayPal          → if creds.clientId + clientSecret → create PayPal order,
  *                                                          return { provider, checkoutUrl }
  *  • Mercado Pago    → if creds.accessToken    → create MP preference,

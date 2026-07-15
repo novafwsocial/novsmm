@@ -267,7 +267,7 @@ function PrivacyContent() {
 
       <H>1. Information We Collect</H>
       <P><strong className="text-foreground">Account information:</strong> name, username, email, password (bcrypt-hashed), country, preferred currency and language, business name and tax ID (when provided).</P>
-      <P><strong className="text-foreground">Payment information:</strong> we do not store full card numbers. Card payments are processed by PCI-DSS-compliant providers (Stripe, PayPal, MercadoPago). We retain the last 4 digits, brand, and expiry for receipts.</P>
+      <P><strong className="text-foreground">Payment information:</strong> we do not store full card numbers. Card payments are processed by PCI-DSS-compliant providers (PayPal, MercadoPago). We retain the last 4 digits, brand, and expiry for receipts.</P>
       <P><strong className="text-foreground">Transaction data:</strong> wallet top-ups, withdrawals, order history, referral activity, and invoice metadata.</P>
       <P><strong className="text-foreground">Usage data:</strong> IP address, browser type, device fingerprint, pages visited, timestamps, and feature interactions — collected via cookies and similar technologies (see our Cookie Policy).</P>
       <P><strong className="text-foreground">Communications:</strong> support tickets, chat messages, and emails you send to us.</P>
@@ -408,7 +408,7 @@ function CookiesContent() {
       <H>3. Third-Party Cookies</H>
       <P>We work with trusted third parties that may set cookies on your device:</P>
       <UL>
-        <LI><strong className="text-foreground">Stripe, PayPal, MercadoPago, NowPayments</strong> — payment processing and fraud detection;</LI>
+        <LI><strong className="text-foreground">PayPal, MercadoPago, NowPayments</strong> — payment processing and fraud detection;</LI>
         <LI><strong className="text-foreground">Google Analytics &amp; Tag Manager</strong> — anonymized traffic analytics;</LI>
         <LI><strong className="text-foreground">Sentry</strong> — error monitoring (no PII);</LI>
         <LI><strong className="text-foreground">Cloudflare</strong> — DDoS protection and bot mitigation;</LI>

@@ -97,7 +97,7 @@ export async function createAurpayOrder(
 
   // ── Build the order body ──
   // Amount is sent in the smallest currency unit (cents) — standard practice
-  // for payment gateways (Stripe, PayPal, etc. all do this).
+  // for payment gateways (PayPal, etc. all do this).
   const amountInCents = Math.round(params.amount * 100);
 
   const body = JSON.stringify({

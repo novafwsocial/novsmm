@@ -103,7 +103,7 @@ const FAQS: FAQ[] = [
         </p>
         <ul className="ml-5 list-disc space-y-1">
           <li>
-            <strong>Cards:</strong> Visa, Mastercard, AMEX, Discover via Stripe
+            <strong>Cards:</strong> Visa, Mastercard, AMEX, Discover via PayPal
             (PCI-DSS Level 1).
           </li>
           <li>

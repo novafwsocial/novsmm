@@ -10,7 +10,7 @@ import { useEffect } from "react";
  * SECURITY (OWASP A05-3, P2): the user-facing page NO LONGER renders
  * `error.message`. In dev mode `error.message` can include stack-trace
  * snippets, file paths, and SQL/Prisma error text; in production it can
- * propagate upstream API error messages (Stripe request IDs, internal
+ * propagate upstream API error messages (payment provider request IDs, internal
  * parameter names). All of that is useful to an attacker probing the
  * integration surface.
  *

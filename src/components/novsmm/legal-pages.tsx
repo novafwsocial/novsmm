@@ -73,7 +73,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             uses a service-oriented architecture with BullMQ background workers, Socket.IO
             real-time notifications, and AES-256-GCM encryption at rest. All API keys are
             stored as bcrypt hashes with SHA-256 lookup indices for O(1) validation.
-            Webhook signatures are verified via HMAC-SHA256 for Stripe, Mercado Pago, and
+            Webhook signatures are verified via HMAC-SHA256 for Mercado Pago, and
             NowPayments integrations.
           </p>
         </section>
@@ -154,7 +154,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                 </div>
                 <span className="rounded-full bg-primary/10 px-2.5 py-0.5 text-[11px] font-medium text-primary">Open</span>
               </div>
-              <p className="mt-2 text-xs text-muted-foreground">Stripe, Mercado Pago, PayPal, NowPayments, crypto gateways. You'll build and maintain payment flows, webhook handlers, and reconciliation logic.</p>
+              <p className="mt-2 text-xs text-muted-foreground">Mercado Pago, PayPal, NowPayments, crypto gateways. You'll build and maintain payment flows, webhook handlers, and reconciliation logic.</p>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
               <div className="flex items-center justify-between">
@@ -396,7 +396,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
             are trademarks of NOVSMM, Inc.
           </p>
           <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
-            Third-party trademarks (Instagram, TikTok, YouTube, PayPal, Stripe, Mercado Pago, etc.)
+            Third-party trademarks (Instagram, TikTok, YouTube, PayPal, Mercado Pago, etc.)
             are the property of their respective owners and are used on this platform for
             identification purposes only. NOVSMM is not affiliated with or endorsed by any social
             media platform.
@@ -455,7 +455,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">2. How we use your data</h2>
           <ul className="mt-2 space-y-2 text-sm text-muted-foreground">
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> To provide the NOVSMM platform (order processing, wallet management, analytics)</li>
-            <li className="flex items-start gap-2"><span className="text-primary">▸</span> To process payments via third-party providers (Stripe, PayPal, Mercado Pago, NowPayments)</li>
+            <li className="flex items-start gap-2"><span className="text-primary">▸</span> To process payments via third-party providers (PayPal, Mercado Pago, NowPayments)</li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> To send transactional emails (order confirmations, ticket replies, security alerts)</li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> To prevent fraud, abuse, and unauthorized access (brute-force protection, rate limiting)</li>
             <li className="flex items-start gap-2"><span className="text-primary">▸</span> To comply with legal obligations and law enforcement requests (with valid legal process)</li>
@@ -590,7 +590,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                 `limits.minWithdrawal: "50"` seed setting. The previous $10
                 copy was inconsistent with both the seed and the FAQ's $50
                 referral-payout floor. */}
-            Wallet top-ups are processed via Stripe, PayPal, Mercado Pago,
+            Wallet top-ups are processed via PayPal, Mercado Pago,
             NowPayments (crypto), or Manual (WhatsApp / Zelle / Wire).
             Top-ups are credited to your wallet after the payment provider
             confirms the transaction. Crypto payments require 1-3 on-chain
@@ -713,7 +713,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
         <section>
           <h2 className="text-xl font-semibold text-foreground">Third-party cookies</h2>
           <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-            NOVSMM does not set third-party cookies. However, when you use payment methods (Stripe,
+            NOVSMM does not set third-party cookies. However, when you use payment methods (
             PayPal, Mercado Pago), those providers may set their own cookies on their domains.
             These are governed by the respective provider's cookie policy. We do not control and
             are not responsible for third-party cookies.

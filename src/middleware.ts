@@ -179,7 +179,7 @@ function addSecurityHeaders(res: NextResponse, nonce?: string, isHttps = false) 
   //   - clipboard-write: copy-to-clipboard buttons (dashboard orders, API keys)
   //   - autoplay: video testimonials in the hero (silent/muted, optional)
   //   - fullscreen: dashboard charts can go fullscreen
-  //   - payment: Stripe/PayPal/MercadoPago hosted checkout (Web Payments API)
+  //   - payment: PayPal/MercadoPago hosted checkout (Web Payments API)
   // Everything else (camera, mic, geolocation, USB, Bluetooth, etc.) is
   // explicitly disabled — so a compromised third-party script cannot
   // request them.
@@ -227,7 +227,7 @@ function addSecurityHeaders(res: NextResponse, nonce?: string, isHttps = false) 
   // break payment provider iframes (those are cross-origin, isolated by
   // the same-origin policy already).
   // NOTE: We intentionally do NOT set COEP=require-corp because it would
-  // break the third-party payment SDK iframes (Stripe Elements, PayPal
+  // break the third-party payment SDK iframes (PayPal
   // Smart Buttons) that load resources without CORP headers. COOP alone
   // is the safe baseline.
   res.headers.set("Cross-Origin-Opener-Policy", "same-origin");
@@ -457,7 +457,7 @@ export function middleware(req: NextRequest) {
 
   // ── CSRF protection: verify Origin on state-changing requests ──
   // NextAuth already has its own CSRF tokens for /api/auth/*.
-  // Webhooks from payment providers (Stripe, NowPayments, Mercado Pago) are
+  // Webhooks from payment providers (NowPayments, Mercado Pago) are
   // authenticated via HMAC signatures in their own route handlers, so we
   // exempt them from the Origin check (providers don't send Origin).
   //

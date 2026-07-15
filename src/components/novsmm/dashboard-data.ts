@@ -54,7 +54,7 @@ export const MARKETPLACE_OFFERS = [
 
 export const WALLET_TXNS = [
   { id: "TX-8842", type: "sale", desc: "Order #A-10432 — Instagram Followers", amount: 2.4, time: "Just now", status: "completed" },
-  { id: "TX-8841", type: "topup", desc: "Top-up via Stripe •••• 4242", amount: 500, time: "2h ago", status: "completed" },
+  { id: "TX-8841", type: "topup", desc: "Top-up via PayPal •••• 4242", amount: 500, time: "2h ago", status: "completed" },
   { id: "TX-8840", type: "withdrawal", desc: "Withdrawal to PayPal · EUR", amount: -1200, time: "5h ago", status: "completed" },
   { id: "TX-8839", type: "sale", desc: "Order #A-10430 — YouTube Watch hours", amount: 24.0, time: "12m ago", status: "completed" },
   { id: "TX-8838", type: "fee", desc: "Marketplace fee · 3%", amount: -0.42, time: "Just now", status: "completed" },
@@ -133,7 +133,6 @@ export const ROLES = [
 ];
 
 export const TOPUP_METHODS = [
-  { id: "stripe", name: "Stripe", share: 42, trend: "up", color: "from-violet-500 to-violet-400" },
   { id: "paypal", name: "PayPal", share: 28, trend: "up", color: "from-blue-500 to-blue-400" },
   { id: "mercadopago", name: "Mercado Pago", share: 18, trend: "up", color: "from-cyan-500 to-cyan-400" },
   { id: "nowpayments", name: "NowPayments", share: 8, trend: "up", color: "from-amber-500 to-amber-400" },

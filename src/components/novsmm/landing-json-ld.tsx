@@ -52,12 +52,8 @@ const webApplicationLd = {
   featureList: [
     "Real-time order automation across 11+ social platforms",
     "Open reseller marketplace with wholesale rates",
-    // FIX (U-C-005): removed "8 integrated payment gateways" claim — the
-    // actual count is 5 (Stripe, PayPal, MercadoPago, NowPayments, Manual).
-    // Stripe is also not yet wired up (no webhook route exists), so only
-    // 4 are functional. Listing "5 integrated payment gateways" matches
-    // the seeded PaymentMethod rows without overclaiming.
-    "5 integrated payment gateways (PayPal, MercadoPago, NowPayments, and more)",
+    // Stripe was completely removed from NOVSMM — only 4 payment methods remain.
+    "4 integrated payment gateways (PayPal, MercadoPago, NowPayments, and more)",
     "Multi-currency wallet with instant top-up",
     "24/7 ticket support + 99.99% uptime SLA",
     "Public REST API with webhooks",
