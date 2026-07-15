@@ -5,6 +5,7 @@ import "./fm-animations.css";
 import { Toaster } from "@/components/ui/toaster";
 import { AppProviders } from "@/lib/app-providers";
 import { SwRegister } from "@/components/novsmm/sw-register";
+import { ModalAccessibilityProvider } from "@/components/novsmm/modal-accessibility-provider";
 import { WebVitals } from "@/components/novsmm/web-vitals";
 import { OfflineDetector } from "@/components/novsmm/offline-detector";
 
@@ -320,6 +321,8 @@ export default async function RootLayout({
           {children}
           <Toaster />
           <SwRegister />
+          {/* MOB-1c-005/007/025: Global Escape key + focus trap for ALL modals */}
+          <ModalAccessibilityProvider />
           <WebVitals />
           <OfflineDetector />
         </AppProviders>
