@@ -100,7 +100,13 @@ export async function fulfillWithFailover(
           data: {
             status: "in_progress",
             progress: 10,
-            eta: `Processing on ${provider.name}`,
+            // WHITE-LABEL: never expose the real provider name in the ETA.
+            // Previously this was `Processing on ${provider.name}` which
+            // revealed the upstream provider (HuntSMM, etc.) to users.
+            // Now shows a generic "Processing…" — the user already sees
+            // progress in the PROGRESS column. The real provider is kept
+            // in providerName for admin/audit traceability.
+            eta: "Processing…",
             providerName: `${provider.name} #${result.orderId}`,
           },
         });
@@ -151,7 +157,9 @@ export async function fulfillWithFailover(
             data: {
               status: "in_progress",
               progress: 10,
-              eta: `Processing on ${legacyProvider.name}`,
+              // WHITE-LABEL: never expose the real provider name in the ETA.
+              // See comment above (line 103) for full explanation.
+              eta: "Processing…",
               providerName: `${legacyProvider.name} #${result.orderId}`,
             },
           });
