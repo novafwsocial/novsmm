@@ -1082,3 +1082,10 @@ button[disabled]:hover,
     margin: 0 !important;
   }
 }
+
+/* DSK-1c-011 FIX: cursor: not-allowed on disabled buttons */
+button:disabled,
+button[disabled],
+[aria-disabled="true"] {
+  cursor: not-allowed !important;
+}

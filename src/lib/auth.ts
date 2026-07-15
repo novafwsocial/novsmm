@@ -688,7 +688,7 @@ export async function getConfiguredSocialProviders(): Promise<
 async function getConfiguredOAuthProviders(): Promise<Provider[]> {
   const configured = await getConfiguredSocialProviders();
   // DIAGNOSTIC LOG: helps debug "Google login redirects to landing" issues.
-  console.log(`[auth] getConfiguredOAuthProviders: configured=[${configured.join(",")}]`);
+  if (process.env.NODE_ENV !== "production") console.log(`[auth] getConfiguredOAuthProviders: configured=[${configured.join(",")}]`);
   const oauthProviders: Provider[] = [];
 
   // For each configured provider, look up the credentials (env var first,
@@ -878,7 +878,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
         // to the existing user, so PrismaAdapter doesn't try to create a new
         // user and trigger the "OAuthAccountNotLinked" error.
         if (account?.provider && account.provider !== "credentials" && account.provider !== "impersonate") {
-          console.log(`[auth] signIn callback: provider=${account.provider}, userId=${user.id ?? "(none)"}`);
+          if (process.env.NODE_ENV !== "production") console.log(`[auth] signIn callback: provider=${account.provider}, userId=${user.id ?? "(none)"}`);
           try {
             const email = user.email?.toLowerCase();
             if (!email) {
@@ -887,7 +887,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
             }
 
             const dbUser = await db.user.findUnique({ where: { email } });
-            console.log(`[auth] signIn callback: dbUser=${dbUser ? `found (id=${dbUser.id}, username=${dbUser.username})` : "not found"}`);
+            if (process.env.NODE_ENV !== "production") console.log(`[auth] signIn callback: dbUser=${dbUser ? `found (id=${dbUser.id}, username=${dbUser.username})` : "not found"}`);
 
             if (dbUser) {
               // User already exists — check if they have an Account row for
@@ -904,7 +904,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                 });
 
                 if (!existingAccount) {
-                  console.log(`[auth] signIn callback: linking ${account.provider} account to existing user ${dbUser.id}`);
+                  if (process.env.NODE_ENV !== "production") console.log(`[auth] signIn callback: linking ${account.provider} account to existing user ${dbUser.id}`);
                   await db.account.create({
                     data: {
                       userId: dbUser.id,
@@ -920,9 +920,9 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                       session_state: (account as any).session_state ?? null,
                     },
                   });
-                  console.log(`[auth] signIn callback: account linked successfully`);
+                  if (process.env.NODE_ENV !== "production") console.log(`[auth] signIn callback: account linked successfully`);
                 } else {
-                  console.log(`[auth] signIn callback: account already linked`);
+                  if (process.env.NODE_ENV !== "production") console.log(`[auth] signIn callback: account already linked`);
                 }
               }
 
@@ -948,7 +948,7 @@ function buildBaseAuthOptions(extraProviders: Provider[]): NextAuthOptions {
                   data: { username },
                 });
                 (user as any).username = username;
-                console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
+                if (process.env.NODE_ENV !== "production") console.log(`[auth] signIn callback: generated username "${username}" for existing user`);
               }
             }
             // If dbUser is null, PrismaAdapter will create the user + account

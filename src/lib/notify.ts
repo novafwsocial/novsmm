@@ -110,7 +110,7 @@ export async function sendEmail(opts: {
 
   if (!SMTP_HOST || !SMTP_USER) {
     // Sandbox mode — log the email
-    console.log(`\n📧 [EMAIL · sandbox] ────────────────────`);
+    if (process.env.NODE_ENV !== "production") console.log(`\n📧 [EMAIL · sandbox] ────────────────────`);
     console.log(`  To:      ${opts.to}`);
     console.log(`  From:    ${EMAIL_FROM ?? "noreply@novsmm.shop"}`);
     console.log(`  Subject: ${opts.subject}`);

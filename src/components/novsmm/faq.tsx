@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { ChevronDown, MessageCircle } from "lucide-react";
 import { Reveal } from "./reveal";
 import { SectionHeading } from "./section-heading";
 import { cn } from "@/lib/utils";
 import { useLanguage } from "./language-provider";
+import { useCachedFetch } from "@/hooks/use-cached-fetch";
 
 type FaqItem = {
   id: string;
@@ -15,6 +16,58 @@ type FaqItem = {
   sortOrder?: number;
 };
 
+// Default FAQ items — shown when CMS has no published FAQ entries
+const DEFAULT_FAQ: FaqItem[] = [
+  {
+    id: "faq-1",
+    title: "What is NOVSMM?",
+    body: "NOVSMM is an automation infrastructure platform for social media marketing. We unify order automation, a reseller marketplace, and payments into one platform — engineered for teams that ship at the speed of attention.",
+    excerpt: "NOVSMM is an automation infrastructure platform for social media marketing. We unify order automation, a reseller marketplace, and payments into one platform.",
+  },
+  {
+    id: "faq-2",
+    title: "How do I place an order?",
+    body: "Create a free account, top up your wallet balance via PayPal, Mercado Pago, NowPayments (crypto), or manual settlement. Then browse the marketplace, select a service, enter your link and quantity, and click Order. Most orders start within 0-2 minutes.",
+    excerpt: "Create a free account, top up your wallet, browse the marketplace, select a service, enter your link and quantity, and click Order.",
+  },
+  {
+    id: "faq-3",
+    title: "Which payment methods do you accept?",
+    body: "We accept PayPal, Mercado Pago, NowPayments (100+ cryptocurrencies including Bitcoin, Ethereum, USDT), and manual settlement via WhatsApp/Zelle/Wire. All transactions are routed through secure payment gateways with FX conversion at mid-market rates.",
+    excerpt: "PayPal, Mercado Pago, NowPayments (crypto), and manual settlement via WhatsApp/Zelle/Wire.",
+  },
+  {
+    id: "faq-4",
+    title: "Do you offer an API?",
+    body: "Yes! Our REST API is PerfectPanel/JAP-compatible and available to all users. Generate an API key from your profile, choose your permission scopes (read, order, balance, refill, cancel), and start integrating. Rate limit: 60 requests/minute per key.",
+    excerpt: "Yes! Our REST API is PerfectPanel/JAP-compatible. Generate an API key from your profile and start integrating.",
+  },
+  {
+    id: "faq-5",
+    title: "Can I resell your services?",
+    body: "Absolutely! NOVSMM is built for resellers. Buy services at wholesale prices, set your own markup, and resell through your own panel or our marketplace. The affiliate program also offers 10% lifetime commission on referrals.",
+    excerpt: "Yes! Buy at wholesale prices, set your markup, and resell. Plus 10% lifetime affiliate commission.",
+  },
+  {
+    id: "faq-6",
+    title: "Is my account secure?",
+    body: "Security is our top priority. We use AES-256-GCM encryption for sensitive data, bcrypt for passwords, TOTP-based 2FA (with backup codes), nonce-based CSP, HSTS, and regular security audits. Your wallet balance is protected by atomic database transactions — no race conditions, no double-spending.",
+    excerpt: "We use AES-256-GCM encryption, bcrypt, 2FA, nonce-based CSP, HSTS, and atomic database transactions for wallet protection.",
+  },
+  {
+    id: "faq-7",
+    title: "What happens if an order doesn't deliver?",
+    body: "If an order fails to deliver within the estimated time, you can request a refill or cancel it for a full refund to your wallet balance. Our support team is available 24/7 via tickets to help resolve any issues.",
+    excerpt: "Request a refill or cancel for a full refund. 24/7 support via tickets.",
+  },
+  {
+    id: "faq-8",
+    title: "Do you support child panels?",
+    body: "Yes! Pro and Enterprise plans support child panels — create separate panels for your clients with their own branding, pricing, and balance. Each child panel operates independently while pulling from your master service catalog.",
+    excerpt: "Yes! Pro and Enterprise plans support child panels with custom branding, pricing, and balance.",
+  },
+];
+
 /**
  * Public FAQ section for the landing page.
  * Fetches published FAQ entries from /api/cms?type=faq (no auth required).
@@ -23,86 +76,16 @@ type FaqItem = {
  */
 export function Faq() {
   const { t } = useLanguage();
-  const [items, setItems] = useState<FaqItem[]>([]);
-  const [loading, setLoading] = useState(true);
   const [openIdx, setOpenIdx] = useState<number | null>(0);
 
-  // Default FAQ items — shown when CMS has no published FAQ entries
-  const DEFAULT_FAQ: FaqItem[] = [
-    {
-      id: "faq-1",
-      title: "What is NOVSMM?",
-      body: "NOVSMM is an automation infrastructure platform for social media marketing. We unify order automation, a reseller marketplace, and payments into one platform — engineered for teams that ship at the speed of attention.",
-      excerpt: "NOVSMM is an automation infrastructure platform for social media marketing. We unify order automation, a reseller marketplace, and payments into one platform.",
-    },
-    {
-      id: "faq-2",
-      title: "How do I place an order?",
-      body: "Create a free account, top up your wallet balance via PayPal, Mercado Pago, NowPayments (crypto), or manual settlement. Then browse the marketplace, select a service, enter your link and quantity, and click Order. Most orders start within 0-2 minutes.",
-      excerpt: "Create a free account, top up your wallet, browse the marketplace, select a service, enter your link and quantity, and click Order.",
-    },
-    {
-      id: "faq-3",
-      title: "Which payment methods do you accept?",
-      body: "We accept PayPal, Mercado Pago, NowPayments (100+ cryptocurrencies including Bitcoin, Ethereum, USDT), and manual settlement via WhatsApp/Zelle/Wire. All transactions are routed through secure payment gateways with FX conversion at mid-market rates.",
-      excerpt: "PayPal, Mercado Pago, NowPayments (crypto), and manual settlement via WhatsApp/Zelle/Wire.",
-    },
-    {
-      id: "faq-4",
-      title: "Do you offer an API?",
-      body: "Yes! Our REST API is PerfectPanel/JAP-compatible and available to all users. Generate an API key from your profile, choose your permission scopes (read, order, balance, refill, cancel), and start integrating. Rate limit: 60 requests/minute per key.",
-      excerpt: "Yes! Our REST API is PerfectPanel/JAP-compatible. Generate an API key from your profile and start integrating.",
-    },
-    {
-      id: "faq-5",
-      title: "Can I resell your services?",
-      body: "Absolutely! NOVSMM is built for resellers. Buy services at wholesale prices, set your own markup, and resell through your own panel or our marketplace. The affiliate program also offers 10% lifetime commission on referrals.",
-      excerpt: "Yes! Buy at wholesale prices, set your markup, and resell. Plus 10% lifetime affiliate commission.",
-    },
-    {
-      id: "faq-6",
-      title: "Is my account secure?",
-      body: "Security is our top priority. We use AES-256-GCM encryption for sensitive data, bcrypt for passwords, TOTP-based 2FA (with backup codes), nonce-based CSP, HSTS, and regular security audits. Your wallet balance is protected by atomic database transactions — no race conditions, no double-spending.",
-      excerpt: "We use AES-256-GCM encryption, bcrypt, 2FA, nonce-based CSP, HSTS, and atomic database transactions for wallet protection.",
-    },
-    {
-      id: "faq-7",
-      title: "What happens if an order doesn't deliver?",
-      body: "If an order fails to deliver within the estimated time, you can request a refill or cancel it for a full refund to your wallet balance. Our support team is available 24/7 via tickets to help resolve any issues.",
-      excerpt: "Request a refill or cancel for a full refund. 24/7 support via tickets.",
-    },
-    {
-      id: "faq-8",
-      title: "Do you support child panels?",
-      body: "Yes! Pro and Enterprise plans support child panels — create separate panels for your clients with their own branding, pricing, and balance. Each child panel operates independently while pulling from your master service catalog.",
-      excerpt: "Yes! Pro and Enterprise plans support child panels with custom branding, pricing, and balance.",
-    },
-  ];
-
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/cms?type=faq&limit=50");
-        if (!res.ok) return;
-        const data = await res.json();
-        if (cancelled) return;
-        const cmsItems = data.items ?? [];
-        // Use CMS items if available, otherwise use defaults
-        setItems(cmsItems.length > 0 ? cmsItems : DEFAULT_FAQ);
-      } catch {
-        if (!cancelled) setItems(DEFAULT_FAQ);
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  // DSK-1b-007 FIX: use useCachedFetch instead of raw fetch to deduplicate
+  // API calls across Strict Mode double-renders and concurrent mounts.
+  const cmsData = useCachedFetch<any>("/api/cms?type=faq&limit=50");
+  const cmsItems = cmsData?.items ?? [];
+  const items = cmsItems.length > 0 ? cmsItems : DEFAULT_FAQ;
 
   // Show defaults while loading or if no items at all
-  const displayItems = items.length > 0 ? items : DEFAULT_FAQ;
+  const displayItems = items;
 
   return (
     <section id="faq" className="relative py-4 sm:py-28">
