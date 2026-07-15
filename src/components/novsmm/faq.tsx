@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { ChevronDown, MessageCircle } from "lucide-react";
 import { Reveal } from "./reveal";
 import { SectionHeading } from "./section-heading";
@@ -139,33 +138,31 @@ export function Faq() {
                     <span className="text-sm font-semibold text-foreground sm:text-base">
                       {item.title}
                     </span>
-                    <motion.span
-                      animate={{ rotate: isOpen ? 180 : 0 }}
-                      transition={{ duration: 0.18 }}
+                    {/* MOB-1b-003 FIX: CSS transition instead of framer-motion */}
+                    <span
                       className={cn(
-                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-full",
-                        isOpen ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                        "flex h-7 w-7 shrink-0 items-center justify-center rounded-full transition-transform duration-200",
+                        isOpen ? "bg-primary/10 text-primary rotate-180" : "bg-muted text-muted-foreground"
                       )}
                     >
                       <ChevronDown className="h-4 w-4" />
-                    </motion.span>
+                    </span>
                   </button>
-                  <AnimatePresence initial={false}>
-                    {isOpen && (
-                      <motion.div
-                        id={`faq-panel-${i}`}
-                        initial={{ height: 0, opacity: 0 }}
-                        animate={{ height: "auto", opacity: 1 }}
-                        exit={{ height: 0, opacity: 0 }}
-                        transition={{ duration: 0.22 }}
-                        className="overflow-hidden"
-                      >
-                        <div className="px-5 pb-4 text-sm text-muted-foreground whitespace-pre-line">
-                          {answer}
-                        </div>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  {/* MOB-1b-003 FIX: CSS grid-rows accordion instead of AnimatePresence */}
+                  <div
+                    id={`faq-panel-${i}`}
+                    className="grid transition-all duration-200 ease-out"
+                    style={{
+                      gridTemplateRows: isOpen ? "1fr" : "0fr",
+                      opacity: isOpen ? 1 : 0,
+                    }}
+                  >
+                    <div className="overflow-hidden">
+                      <div className="px-5 pb-4 text-sm text-muted-foreground whitespace-pre-line">
+                        {answer}
+                      </div>
+                    </div>
+                  </div>
                 </div>
               );
             })}
