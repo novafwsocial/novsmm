@@ -159,14 +159,22 @@ export const metadata: Metadata = {
     // twitter-image.tsx auto-generates the actual image
     images: ["/icon.png"],
   },
-  // App icons — Next.js auto-detects app/icon.png but we add explicit refs
-  // for non-Next.js consumers (e.g. link scanners).
+  // App icons — MOB-1b-006 FIX: multi-size favicon set for optimal loading.
+  // Previously a single 97KB icon.png was used for ALL sizes. Now each size
+  // has its own optimized file:
+  //   - 16x16 (0.5KB) for browser tab favicon
+  //   - 32x32 (1.2KB) for browser tab favicon (retina)
+  //   - 180x180 (15.3KB) for apple-touch-icon
+  //   - 192x192 (17.1KB) for PWA manifest
+  //   - 512x512 (30.3KB) for OG image + PWA manifest (was 97KB)
   icons: {
     icon: [
-      { url: "/icon.png", sizes: "any" },
-      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon.png", sizes: "512x512", type: "image/png" },
     ],
-    apple: [{ url: "/icon.png" }],
+    apple: [{ url: "/apple-icon.png", sizes: "180x180" }],
   },
   // Format detection — prevent iOS from auto-linking phone numbers etc.
   formatDetection: {
