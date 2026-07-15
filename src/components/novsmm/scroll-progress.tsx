@@ -47,7 +47,6 @@ export function ScrollProgress() {
       aria-hidden
       style={{
         transform: `scaleX(${progress})`,
-        willChange: "transform",
       }}
       className="fixed left-0 top-0 z-[60] h-[2px] w-full origin-left bg-primary transition-transform duration-75 ease-out"
     />

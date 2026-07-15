@@ -71,7 +71,6 @@ export function Reveal({
     transform: `translateY(${y}px)${scale ? " scale(0.96)" : ""}`,
     filter: blur ? "blur(12px)" : "none",
     transition: `opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1) ${delay}s, filter 0.6s ease ${delay}s`,
-    willChange: "opacity, transform",
   };
 
   const visibleStyle: React.CSSProperties = {
