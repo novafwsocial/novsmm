@@ -21,7 +21,7 @@ import { useEffect } from "react";
  * registrations, but we were logging "registered" on every mount which
  * cluttered the console. Now we only register once per page lifecycle.
  */
-const SW_VERSION = "v5"; // MUST match CACHE_VERSION in public/sw.js
+const SW_VERSION = "v6"; // MUST match CACHE_VERSION in public/sw.js
 let hasRegistered = false;
 
 export function SwRegister() {

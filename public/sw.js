@@ -32,7 +32,13 @@
 //     chunks from the v4 cache. Bumping to v5 ensures the activate handler
 //     deletes the "novsmm-v4" cache, forcing all assets to be re-fetched
 //     from the network on the next visit.
-const CACHE_VERSION = "novsmm-v5";
+// v6 (ETA-WHITE-LABEL): bumped to force-evict all v5 caches. Users were
+//     still seeing the old ETA column with "Processing on HuntSMM" because
+//     the v5 SW cache was serving old JS chunks. Bumping to v6 ensures the
+//     activate handler deletes the "novsmm-v5" cache, forcing all assets
+//     to be re-fetched from the network on the next visit. This is critical
+//     because the ETA column removal (commit bec24f4) must reach all users.
+const CACHE_VERSION = "novsmm-v6";
 const CACHE = CACHE_VERSION;
 // PERF FIX (P-L-006): removed /icon.png from APP_SHELL precache.
 // Was 186KB (now 11KB after Lote A resize), but still unnecessary to
