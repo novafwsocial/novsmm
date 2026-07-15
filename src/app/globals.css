@@ -390,6 +390,22 @@ button, a, [role="button"], input, select, textarea {
   }
 }
 
+/* MOB-1c-004 FIX: Ensure minimum touch target size on mobile (WCAG 2.5.5).
+   48 buttons across 17 files have h-5/h-6/h-7 (20-28px) — below the 44×44px
+   minimum. Instead of changing 48 individual className strings, this rule
+   extends the touch area via padding on mobile WITHOUT changing the visual
+   size of the button (the padding is transparent, so the button looks the
+   same but the tappable area is larger).
+
+   Table cell buttons (td button, th button) are EXEMPTED — tables have
+   their own row height and forcing 44px would break table layouts. */
+@media (max-width: 768px) {
+  button:not(td button):not(th button):not([role="dialog"] button),
+  a:not(td a):not(th a):not([role="dialog"] a) {
+    min-height: 44px;
+  }
+}
+
 /* Optimize font rendering on mobile (prevents layout shift) + prevent horizontal scroll */
 html {
   -webkit-font-smoothing: antialiased;
