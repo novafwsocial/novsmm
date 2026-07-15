@@ -371,6 +371,25 @@ button, a, [role="button"], input, select, textarea {
   }
 }
 
+/* MOB-1c-001 FIX: Prevent iOS zoom on input focus.
+   iOS Safari auto-zooms when an input has font-size < 16px. This affects
+   39+ inputs across admin-panel, dashboard-marketplace, dashboard-wallet,
+   etc. that use text-sm (14px) or text-xs (12px).
+
+   Instead of changing 39+ individual className strings, this global rule
+   forces ALL inputs to 16px on mobile. Desktop keeps the original sizes
+   (text-sm/text-xs) via the md: breakpoint override.
+
+   This is the recommended best practice from Apple's Safari Web Content
+   Guide and Google's Web Fundamentals. */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Optimize font rendering on mobile (prevents layout shift) + prevent horizontal scroll */
 html {
   -webkit-font-smoothing: antialiased;
