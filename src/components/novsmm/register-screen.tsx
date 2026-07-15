@@ -224,7 +224,8 @@ export function RegisterScreen() {
           )}
 
           <form onSubmit={submit} className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3">
+            {/* MOB-1d-009 FIX: grid-cols-1 on mobile (was grid-cols-2, too narrow) */}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="auth-input-3d">
                 <Field
                   label="Full name"
