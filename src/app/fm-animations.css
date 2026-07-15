@@ -96,6 +96,17 @@
   }
 }
 
+/* MOB-1b-003: Floating coin animation — replaces framer-motion animate prop.
+   Includes both Y translation and rotation for the coin spin effect. */
+@keyframes fmCoinFloat {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(var(--coin-spin, 0deg));
+  }
+}
+
 /* Pulse glow — for CTAs */
 .fm-pulse-glow {
   animation: fmPulseGlow 2s ease-in-out infinite;

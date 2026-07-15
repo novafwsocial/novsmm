@@ -1,6 +1,5 @@
 "use client";
 
-import { motion, useMotionValue, useSpring, useTransform, type MotionValue } from "framer-motion";
 import { ShieldCheck, Globe2, Clock, Zap } from "lucide-react";
 import { SectionHeading } from "./section-heading";
 import { Reveal } from "./reveal";
@@ -210,32 +209,38 @@ function ClientOnly({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/* ── CoinField: gravity + mouse parallax ──────────────── */
+/* ── CoinField: gravity + mouse parallax (CSS-only, no framer-motion) ── */
 function CoinField() {
   const { t } = useLanguage();
-  // mouse parallax
-  const mx = useMotionValue(0);
-  const my = useMotionValue(0);
-  const smx = useSpring(mx, { stiffness: 60, damping: 18 });
-  const smy = useSpring(my, { stiffness: 60, damping: 18 });
+  const fieldRef = useRef<HTMLDivElement>(null);
 
+  // MOB-1b-003 FIX: replaced framer-motion useMotionValue/useSpring with
+  // CSS custom properties + a simple onMouseMove handler. The coins read
+  // --mx and --my CSS vars for parallax (via transform in inline style).
+  // On mobile (no mouse), the coins stay static — same as before.
   const handleMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
+    const el = fieldRef.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
     const px = (e.clientX - r.left) / r.width - 0.5;
     const py = (e.clientY - r.top) / r.height - 0.5;
-    mx.set(px * 40);
-    my.set(py * 40);
+    el.style.setProperty("--mx", String(px * 40));
+    el.style.setProperty("--my", String(py * 40));
   };
   const handleLeave = () => {
-    mx.set(0);
-    my.set(0);
+    const el = fieldRef.current;
+    if (!el) return;
+    el.style.setProperty("--mx", "0");
+    el.style.setProperty("--my", "0");
   };
 
   return (
     <div
+      ref={fieldRef}
       onMouseMove={handleMove}
       onMouseLeave={handleLeave}
       className="relative aspect-square w-full max-w-[460px] mx-auto overflow-hidden rounded-3xl border border-border/60 bg-gradient-to-b from-muted/40 to-background nov-ring"
+      style={{ "--mx": "0", "--my": "0" } as React.CSSProperties}
     >
       {/* gravity floor */}
       <div
@@ -244,9 +249,9 @@ function CoinField() {
       />
       <div className="absolute inset-0 nov-grid-bg opacity-40" />
 
-      {/* coins */}
+      {/* coins — CSS animation, no framer-motion */}
       {COINS.map((c, i) => (
-        <FloatingCoin key={c.label} coin={c} index={i} smx={smx} smy={smy} />
+        <FloatingCoin key={c.label} coin={c} index={i} />
       ))}
 
       {/* center label */}
@@ -259,49 +264,37 @@ function CoinField() {
   );
 }
 
-function FloatingCoin({
-  coin: c,
-  index: i,
-  smx,
-  smy,
-}: {
-  coin: Coin;
-  index: number;
-  smx: MotionValue<number>;
-  smy: MotionValue<number>;
-}) {
-  const px = useTransform(smx, (v) => v * c.depth);
-  const py = useTransform(smy, (v) => v * c.depth);
+function FloatingCoin({ coin: c, index: i }: { coin: Coin; index: number }) {
+  // MOB-1b-003 FIX: CSS animation replaces framer-motion. The float effect
+  // uses a CSS keyframe animation (fm-float defined in fm-animations.css).
+  // The parallax uses calc() with --mx/--my CSS vars from the parent.
+  const parallaxX = `calc(var(--mx, 0) * ${c.depth})`;
+  const parallaxY = `calc(var(--my, 0) * ${c.depth})`;
   return (
-    <motion.div
-      style={{ x: px, y: py, left: `${c.x}%`, top: `${c.y}%` }}
-      className="absolute"
-      initial={{ opacity: 0, scale: 0.6 }}
-      whileInView={{ opacity: 1, scale: 1 }}
-      viewport={{ once: true }}
-      transition={{
-        duration: 0.8,
-        delay: i * 0.08,
-        ease: [0.16, 1, 0.3, 1],
+    <div
+      className="absolute fm-fade-up"
+      style={{
+        left: `${c.x}%`,
+        top: `${c.y}%`,
+        transform: `translate(${parallaxX}, ${parallaxY})`,
+        transition: "transform 0.3s cubic-bezier(0.16, 1, 0.3, 1)",
+        animationDuration: "0.8s",
+        animationDelay: `${i * 0.08}s`,
       }}
     >
-      <motion.div
-        animate={{ y: [0, -10, 0], rotate: [0, c.spin, 0] }}
-        transition={{
-          duration: 4 + i * 0.4,
-          repeat: Infinity,
-          ease: "easeInOut",
-          delay: i * 0.2,
-        }}
+      <div
         className="flex flex-col items-center gap-1"
+        style={{
+          animation: `fmCoinFloat ${4 + i * 0.4}s ease-in-out ${i * 0.2}s infinite`,
+          ["--coin-spin" as string]: `${c.spin}deg`,
+        }}
       >
         <div
           className="flex items-center justify-center rounded-full font-semibold text-white"
           style={{
             width: c.size,
             height: c.size,
-            background:
-              "linear-gradient(135deg, #0052ff, #0042cc)",
+            background: "linear-gradient(135deg, #0052ff, #0042cc)",
             fontSize: c.size * 0.42,
             boxShadow:
               "inset 0 2px 4px rgba(255,255,255,0.35), inset 0 -3px 6px rgba(0,0,0,0.25), 0 12px 24px -8px rgba(0, 82, 255, 0.5)",
@@ -312,7 +305,7 @@ function FloatingCoin({
         <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
           {c.label}
         </span>
-      </motion.div>
-    </motion.div>
+      </div>
+    </div>
   );
 }
