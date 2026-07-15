@@ -1022,3 +1022,18 @@ main, section, footer, header, nav {
 *, *::before, *::after {
   box-sizing: border-box;
 }
+
+/* DSK-1c-005 FIX: Disable hover effects on disabled buttons.
+   49 buttons across the app have hover: classes that still apply when
+   the button is disabled, misleading users into thinking they can click.
+   This global rule removes hover effects on [disabled] buttons. */
+button:disabled:hover,
+button[disabled]:hover,
+[role="button"][aria-disabled="true"]:hover {
+  background-color: inherit !important;
+  color: inherit !important;
+  transform: none !important;
+  box-shadow: inherit !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
