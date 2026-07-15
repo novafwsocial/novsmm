@@ -30,12 +30,11 @@ export default function manifest(): MetadataRoute.Manifest {
     dir: "ltr",
     categories: ["business", "productivity", "social", "marketing", "finance"],
     icons: [
-      { src: "/icon.png", sizes: "192x192", type: "image/png", purpose: "any" },
+      // MOB-1b-017 FIX: use icon-192.png (17KB) instead of icon.png (30KB) for 192×192.
+      // icon.png (512×512, 30KB) is only used for the 512×512 entry.
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon.png", sizes: "512x512", type: "image/png", purpose: "any" },
       // PWA maskable icons — dedicated variants with safe zone margin.
-      // AUDIT-14 RESOLVED: previously reused /icon.png for maskable (Android
-      // would crop the logo). Now using dedicated maskable PNGs with proper
-      // ~20% safe zone padding on solid background.
       { src: "/icon-maskable-192.png", sizes: "192x192", type: "image/png", purpose: "maskable" },
       { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
