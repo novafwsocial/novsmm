@@ -57,6 +57,8 @@ import {
   Save,
   ExternalLink,
   Ticket,
+  Wallet,
+  AlertCircle,
 } from "lucide-react";
 import { MiniAreaChart } from "./mini-area-chart";
 import { useApp, type AdminTab } from "./app-store";
@@ -462,6 +464,8 @@ const AdminUsers = memo(function AdminUsers() {
   // AUDIT R3: step-up auth modal for role changes to/from admin
   const [roleChangeTarget, setRoleChangeTarget] = useState<{ id: string; name: string; currentRole: string; newRole: string } | null>(null);
   const [confirmPw, setConfirmPw] = useState("");
+  // Manual balance adjustment modal — admin credits/debits a user's wallet
+  const [balanceTarget, setBalanceTarget] = useState<any | null>(null);
 
   // Debounce search input 300ms
   useEffect(() => {
@@ -646,6 +650,16 @@ const AdminUsers = memo(function AdminUsers() {
                             <LogIn className="h-3.5 w-3.5" />
                           </button>
                         )}
+                        {/* Adjust balance — admin-only, active users only */}
+                        {u.status === "active" && (
+                          <button
+                            onClick={() => setBalanceTarget(u)}
+                            title={`Adjust balance for ${u.name}`}
+                            className="flex h-7 w-7 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-emerald-500/10 hover:text-emerald-600"
+                          >
+                            <Wallet className="h-3.5 w-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -666,6 +680,17 @@ const AdminUsers = memo(function AdminUsers() {
         <ImpersonateModal
           user={impersonateTarget}
           onClose={() => setImpersonateTarget(null)}
+        />
+      )}
+      {balanceTarget && (
+        <AdjustBalanceModal
+          user={balanceTarget}
+          onClose={() => setBalanceTarget(null)}
+          onSuccess={() => {
+            setBalanceTarget(null);
+            // Refresh the users list to show the new balance
+            window.location.reload();
+          }}
         />
       )}
       {/* AUDIT R3: Step-up auth modal for admin role changes */}
@@ -948,6 +973,265 @@ function ImpersonateModal({ user, onClose }: { user: any; onClose: () => void })
             </>
           )}
         </button>
+      </form>
+    </div>
+  );
+}
+
+/**
+ * Adjust Balance Modal — lets an admin manually credit or debit a user's wallet.
+ *
+ * SECURITY UX:
+ * - Amount input: numeric, min 0.01, max 100000, step 0.01
+ * - Direction toggle: "Add" (credit) or "Subtract" (debit)
+ * - Reason field: REQUIRED for subtractions (enforced by Zod backend),
+ *   optional for additions. UI shows a warning when debit has no reason.
+ * - Confirm button disabled until amount > 0 and (add OR reason.length >= 3)
+ * - Shows the user's current balance + projected new balance in real time
+ * - On success: calls onSuccess() which closes the modal + refreshes the list
+ *
+ * The backend endpoint (/api/admin/users/adjust-balance) does the authoritative
+ * validation. This UI is defense-in-depth — even if a user bypasses the
+ * disabled button via devtools, the server rejects invalid input.
+ */
+function AdjustBalanceModal({
+  user,
+  onClose,
+  onSuccess,
+}: {
+  user: any;
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
+  const { toast } = useToast();
+  const [direction, setDirection] = useState<"add" | "subtract">("add");
+  const [amountStr, setAmountStr] = useState("");
+  const [reason, setReason] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const currentBalance = Number(user.balance ?? 0);
+  const amount = parseFloat(amountStr) || 0;
+  const signedAmount = direction === "add" ? amount : -amount;
+  const projectedBalance = currentBalance + signedAmount;
+  const isDebit = direction === "subtract";
+  const isDebitWithoutReason = isDebit && reason.trim().length < 3;
+  const isOverBalance = isDebit && amount > currentBalance;
+  const isValid =
+    amount > 0 &&
+    amount <= 100000 &&
+    !isDebitWithoutReason &&
+    !isOverBalance &&
+    /^\d+(\.\d{1,2})?$/.test(amountStr);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isValid || loading) return;
+    setLoading(true);
+    try {
+      const res = await fetch("/api/admin/users/adjust-balance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          amount: signedAmount,
+          reason: reason.trim() || undefined,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data?.error ?? `HTTP ${res.status}`);
+      }
+      toast({
+        title: "Balance adjusted ✅",
+        description: data?.message ?? `New balance: $${(data?.newBalance ?? 0).toFixed(2)}`,
+      });
+      onSuccess();
+    } catch (e: any) {
+      toast({
+        title: "Adjustment failed",
+        description: e?.message ?? "Unknown error",
+        variant: "destructive",
+      });
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Adjust user balance"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <form
+        onClick={(e) => e.stopPropagation()}
+        onSubmit={handleSubmit}
+        className="relative modal-3d-enter w-full max-w-md rounded-3xl border border-emerald-500/40 bg-background p-6 nov-ring-lg"
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted"
+          aria-label="Close"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
+            <Wallet className="h-5 w-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold">Adjust balance</h2>
+            <p className="text-xs text-muted-foreground">
+              Manual credit or debit — all adjustments are audited.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 p-3 text-xs">
+          <div className="font-medium text-emerald-700">User:</div>
+          <div className="mt-1 text-foreground">
+            {user.name} · <span className="text-muted-foreground">{user.email}</span>
+          </div>
+          <div className="mt-1 text-muted-foreground">
+            Current balance: <span className="font-semibold text-foreground tabular-nums">${currentBalance.toFixed(2)}</span>
+          </div>
+        </div>
+
+        {/* Direction toggle */}
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            onClick={() => setDirection("add")}
+            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-colors ${
+              direction === "add"
+                ? "bg-emerald-500 text-white"
+                : "bg-muted text-muted-foreground hover:bg-muted/70"
+            }`}
+          >
+            <Plus className="h-4 w-4" />
+            Add credit
+          </button>
+          <button
+            type="button"
+            onClick={() => setDirection("subtract")}
+            className={`flex items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-medium transition-colors ${
+              direction === "subtract"
+                ? "bg-rose-500 text-white"
+                : "bg-muted text-muted-foreground hover:bg-muted/70"
+            }`}
+          >
+            <RotateCcw className="h-4 w-4" />
+            Subtract debit
+          </button>
+        </div>
+
+        {/* Amount input */}
+        <label className="mt-4 block">
+          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Amount (USD)
+          </span>
+          <div className="relative">
+            <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">$</span>
+            <input
+              type="text"
+              inputMode="decimal"
+              value={amountStr}
+              onChange={(e) => {
+                // Only allow digits and up to 2 decimal places
+                const v = e.target.value.replace(/[^0-9.]/g, "");
+                // Prevent multiple dots
+                const parts = v.split(".");
+                if (parts.length > 2) return;
+                // Limit to 2 decimal places
+                if (parts[1] && parts[1].length > 2) return;
+                setAmountStr(v);
+              }}
+              placeholder="0.00"
+              autoFocus
+              className="h-11 w-full rounded-xl border border-border bg-background pl-7 pr-3.5 text-sm tabular-nums focus:outline-none focus:shadow-[0_0_0_4px_rgba(16,185,129,0.15)]"
+            />
+          </div>
+        </label>
+
+        {/* Reason input */}
+        <label className="mt-4 block">
+          <span className="mb-1.5 block text-xs font-medium text-muted-foreground">
+            Reason {isDebit && <span className="text-rose-500">*</span>}
+            {!isDebit && <span className="text-muted-foreground/60"> (optional)</span>}
+          </span>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value.slice(0, 500))}
+            placeholder={isDebit ? "Required: explain why balance is reduced…" : "Optional note for audit log…"}
+            rows={2}
+            className="w-full resize-none rounded-xl border border-border bg-background px-3.5 py-2.5 text-sm focus:outline-none focus:shadow-[0_0_0_4px_rgba(16,185,129,0.15)]"
+          />
+        </label>
+
+        {/* Projected balance */}
+        {amount > 0 && (
+          <div className="mt-4 rounded-xl border border-border/60 bg-muted/30 p-3 text-xs">
+            <div className="flex items-center justify-between">
+              <span className="text-muted-foreground">Current balance</span>
+              <span className="tabular-nums font-medium">${currentBalance.toFixed(2)}</span>
+            </div>
+            <div className="mt-1 flex items-center justify-between">
+              <span className="text-muted-foreground">
+                {isDebit ? "Subtracting" : "Adding"}
+              </span>
+              <span className={`tabular-nums font-medium ${isDebit ? "text-rose-600" : "text-emerald-600"}`}>
+                {isDebit ? "−" : "+"}${amount.toFixed(2)}
+              </span>
+            </div>
+            <div className="mt-1.5 flex items-center justify-between border-t border-border/60 pt-1.5">
+              <span className="font-medium text-foreground">New balance</span>
+              <span className={`tabular-nums font-semibold ${
+                projectedBalance < 0 ? "text-rose-600" : "text-foreground"
+              }`}>
+                ${projectedBalance.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* Warnings */}
+        {isOverBalance && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-rose-500/30 bg-rose-500/5 p-3 text-xs text-rose-700">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>Cannot subtract more than the current balance (${currentBalance.toFixed(2)}).</span>
+          </div>
+        )}
+        {isDebitWithoutReason && !isOverBalance && (
+          <div className="mt-3 flex items-start gap-2 rounded-xl border border-amber-500/30 bg-amber-500/5 p-3 text-xs text-amber-700">
+            <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+            <span>A reason is required when subtracting balance (min 3 characters).</span>
+          </div>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading || !isValid}
+          className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-500 py-3 text-sm font-medium text-white transition-colors hover:bg-emerald-600 disabled:opacity-60"
+        >
+          {loading ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Processing…
+            </>
+          ) : (
+            <>
+              <Wallet className="h-4 w-4" />
+              {isDebit ? "Subtract" : "Add"} ${amount.toFixed(2)} {isDebit ? "from" : "to"} {user.name?.split(" ")[0] || "user"}
+            </>
+          )}
+        </button>
+
+        <p className="mt-3 text-center text-[11px] text-muted-foreground">
+          This action is logged in the audit trail with your admin ID.
+        </p>
       </form>
     </div>
   );
