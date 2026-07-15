@@ -114,12 +114,13 @@ export const metadata: Metadata = {
   // Canonical URL — explicit per-page override happens in each route's metadata
   alternates: {
     canonical: "/",
-    // i18n (U-C-004): hreflang tags for multi-language SEO
+    // DSK-1c-008 FIX: hreflang tags — NOVSMM uses client-side i18n
+    // (LanguageProvider with localStorage), not URL-based routing. All
+    // languages are served from the same URL "/". Google treats this as
+    // a single page with language switching, which is correct for our
+    // architecture. We use a single x-default entry instead of 4 identical
+    // entries pointing to "/" (which Google may flag as duplicate).
     languages: {
-      "en": "/",
-      "es": "/",
-      "pt": "/",
-      "fr": "/",
       "x-default": "/",
     },
   },
