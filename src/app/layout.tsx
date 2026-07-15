@@ -58,6 +58,11 @@ export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 5,
+  // MOB-1c-010 FIX: viewport-fit=cover enables env(safe-area-inset-*) on
+  // iPhone X+ (notch/home indicator). Without this, safe-area-inset returns
+  // 0 and the sticky CTA, WhatsApp widget, and CompareBar overlap the notch.
+  // Components that already use env(safe-area-inset-*) will now work correctly.
+  viewportFit: "cover",
   colorScheme: "light dark",
 };
 
