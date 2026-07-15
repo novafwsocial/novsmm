@@ -81,7 +81,7 @@ export function DashboardOrders() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by ID, platform, service, provider…"
+              placeholder="Search by ID, platform, service…"
               className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             />
           </div>
@@ -126,7 +126,7 @@ export function DashboardOrders() {
                   <th scope="col" className="px-4 py-3 text-right font-medium">Price</th>
                   <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
                   <th scope="col" className="px-4 py-3 text-left font-medium">Progress</th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium">Provider</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">Fulfilled by</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">ETA</th>
                   <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
                 </tr>
@@ -186,7 +186,11 @@ export function DashboardOrders() {
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-xs text-muted-foreground">
-                      {o.providerName ?? "—"}
+                      {/* WHITE-LABEL: always show "NOVSMM" — never expose the real
+                          upstream provider name to users. The actual provider is
+                          stored in providerName for admin/audit traceability but
+                          is never displayed to end users. */}
+                      NOVSMM
                     </td>
                     <td className="px-4 py-3 text-right text-xs tabular-nums text-muted-foreground">
                       {o.eta}
@@ -421,7 +425,9 @@ function OrderDetailDrawer({
             <DetailRow label="Order ID" value={`#${order.publicId}`} />
             <DetailRow label="Platform" value={order.platform} />
             <DetailRow label="Service" value={order.serviceName} />
-            <DetailRow label="Provider" value={order.providerName ?? "—"} />
+            {/* WHITE-LABEL: show "NOVSMM" instead of the real upstream provider.
+                The actual providerName is kept in the DB for admin/audit. */}
+            <DetailRow label="Fulfilled by" value="NOVSMM" />
             {order.link ? (
               <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
                 <span className="truncate font-mono text-muted-foreground">{order.link}</span>
