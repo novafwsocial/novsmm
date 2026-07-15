@@ -34,8 +34,13 @@ const DashboardProfile = dynamic(() => import("./dashboard-profile").then(m => (
 const AdminPanel = dynamic(() => import("./admin-panel").then(m => ({ default: m.AdminPanel })), { loading: () => <TabLoader /> });
 
 function TabLoader() {
+  // MOB-1b-002 FIX: use min-h-screen (not h-64) so the loader reserves the
+  // same vertical space as the LoginScreen/RegisterScreen/OnboardingScreen
+  // that will replace it. Previously the loader was h-64 (256px) but the
+  // auth screens are min-h-screen (~844px on iPhone 14), causing a 588px
+  // layout shift (CLS 0.4225) when the dynamic import resolved.
   return (
-    <div className="flex h-64 items-center justify-center">
+    <div className="flex min-h-screen items-center justify-center">
       <Loader2 className="h-6 w-6 animate-spin text-primary" />
     </div>
   );
