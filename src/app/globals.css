@@ -1037,3 +1037,48 @@ button[disabled]:hover,
   cursor: not-allowed !important;
   opacity: 0.6 !important;
 }
+
+/* DSK-1c-006 FIX: Print styles for invoices, legal pages, and receipts.
+   Hides navigation, sidebars, and interactive elements when printing.
+   Ensures text is black on white, links show their URL, and page breaks
+   don't cut content awkwardly. */
+@media print {
+  /* Hide non-essential UI elements */
+  nav, footer, .no-print, [aria-label="Open WhatsApp chat"],
+  .sticky-cta, .whatsapp-widget, button:not(.print-button) {
+    display: none !important;
+  }
+
+  /* Force black text on white background */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  /* Show URLs after links */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Don't show URL for internal anchor links */
+  a[href^="#"]::after,
+  a[href^="javascript"]::after {
+    content: "";
+  }
+
+  /* Avoid breaking inside these elements */
+  h1, h2, h3, table, .rounded-2xl {
+    page-break-inside: avoid;
+  }
+
+  /* Full-width content */
+  main, .max-w-7xl, .max-w-3xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
