@@ -45,11 +45,9 @@ export default function manifest(): MetadataRoute.Manifest {
     // landing page instead of the dashboard. Changed to use hash anchors
     // that actually work — they scroll to the relevant section.
     shortcuts: [
-      {
-        name: "Pricing",
-        short_name: "Plans",
-        url: "/pricing",
-      },
+      // MOB-001 FIX: removed "Pricing" shortcut — /pricing route was deleted
+      // per user request to eliminate pricing from everywhere. Users who had
+      // the PWA installed won't see a broken shortcut anymore.
       {
         name: "Marketplace",
         short_name: "Services",

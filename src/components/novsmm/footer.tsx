@@ -319,8 +319,9 @@ export function Footer() {
             </div>
             <div className="flex items-center gap-3">
               {/* UX FIX (U-M-005): was a decorative pill with no action.
-                  Now links to the pricing page (which shows currency
-                  options) when authed, or shows a tooltip when not. */}
+                  Now opens the dashboard (currency settings) when authed,
+                  or shows a tooltip when not. MOB-001: /pricing page was
+                  removed — no longer linked from anywhere. */}
               <button
                 onClick={() => {
                   const { setView, authed } = useApp.getState();
