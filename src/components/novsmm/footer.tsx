@@ -8,6 +8,7 @@ import { Reveal } from "./reveal";
 import { useApp, type DashboardTab } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
 import { useLanguage } from "./language-provider";
+import { LanguageSwitcher } from "./language-switcher";
 import { StatusPage } from "./status-page";
 import { LegalPages, type LegalPageType } from "./legal-pages";
 import { DashReveal } from "./dash-reveal";
@@ -318,26 +319,11 @@ export function Footer() {
               </button>
             </div>
             <div className="flex items-center gap-3">
-              {/* UX FIX (U-M-005): was a decorative pill with no action.
-                  Now opens the dashboard (currency settings) when authed,
-                  or shows a tooltip when not. MOB-001: /pricing page was
-                  removed — no longer linked from anywhere. */}
-              <button
-                onClick={() => {
-                  const { setView, authed } = useApp.getState();
-                  if (authed) {
-                    setView("dashboard");
-                    setTimeout(() => useApp.getState().setDashboardTab("profile"), 100);
-                  } else {
-                    setView("register");
-                  }
-                }}
-                className="flex items-center gap-1.5 rounded-full border border-border/60 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                aria-label="Change language or currency"
-              >
-                <span className="h-1.5 w-1.5 rounded-full bg-primary" />
-                EN · USD
-              </button>
+              {/* MOB-1d-001 FIX: replaced the broken button (that navigated to
+                  register on mobile) with the actual LanguageSwitcher component.
+                  This shows a dropdown with all 4 supported languages (EN, ES,
+                  PT, FR) and works for both authed and non-authed users. */}
+              <LanguageSwitcher className="text-[11px]" />
               {/* U-M-012: removed "SOC 2 · PCI DSS · GDPR" — NOVSMM is not
                   SOC 2 certified, PCI DSS compliant, or GDPR audited.
                   Displaying these certifications without holding them is
