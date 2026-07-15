@@ -203,7 +203,15 @@ function Card({ t }: { t: Testimonial }) {
         </span>
       </div>
       <Quote className="mt-3 h-5 w-5 text-muted-foreground/40" />
-      <p className="mt-1.5 text-sm leading-relaxed text-foreground/90">
+      {/* AUDIT-FIX: line-clamp cuts the quote cleanly with "…" after N lines.
+          Previously, overflow-hidden on the card container cut text mid-word,
+          producing garbled fragments like "ty posture is the real deal — ole
+          — based access". The clamp gives a graceful ellipsis on long quotes.
+          Mobile (320px card): line-clamp-6 — more lines because the card is
+          narrower so each line holds fewer characters.
+          Desktop (400px card): line-clamp-4 — fewer lines needed since each
+          line is wider. This keeps card heights uniform within each row. */}
+      <p className="mt-1.5 line-clamp-6 sm:line-clamp-4 text-sm leading-relaxed text-foreground/90">
         {t.quote}
       </p>
       <div className="mt-4 flex items-center gap-3 border-t border-border/60 pt-3">
