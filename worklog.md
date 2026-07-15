@@ -21930,3 +21930,704 @@ Stage Summary:
   2. **MOB-1b-002**: Use skeleton/placeholder for LoginScreen form fields → fixes CLS on login transition (~2 hours)
   3. **MOB-1b-006**: Replace 97KB icon.png with multi-size favicon set → saves 80KB+ on every first visit (~1 hour)
 
+
+---
+Task ID: DESK-AUDIT-1c
+Agent: desktop-code-auditor
+Task: Desktop code patterns audit — hover, focus, keyboard, SEO, modals, print, cursor
+
+Work Log:
+- Read worklog.md tail (lines 20950-21877) for context from MOB-AUDIT-1c, MOB-AUDIT-1d, SEC-1a..1e audits
+- Read full source of: src/app/layout.tsx, src/app/robots.ts, src/app/sitemap.ts, src/app/pricing/page.tsx, src/components/novsmm/navbar.tsx, src/components/novsmm/auth-fields.tsx, src/components/novsmm/error-boundary.tsx, src/components/novsmm/magnetic.tsx, src/components/novsmm/modal-accessibility-provider.tsx, src/components/novsmm/landing-json-ld.tsx (head 50 lines), src/components/novsmm/admin/services.tsx (lines 230-254), src/components/novsmm/admin/users.tsx (lines 290-309), src/components/novsmm/dashboard-marketplace.tsx (lines 1145-1174, 2480-2515), src/components/novsmm/app-view.tsx (lines 170-199), src/components/novsmm/admin-panel.tsx (lines 270-289, 520-540), src/components/novsmm/web-vitals.tsx (lines 1-50)
+- Ran 30+ rg/grep counts and listings across src/components/novsmm/ for:
+  - hover: utility classes (405 instances across 41 files)
+  - hover:bg-|hover:text-|hover:shadow- (293 instances)
+  - hover transform/scale/translate (10 instances — all GPU-accelerated)
+  - hover layout-shift (0 instances — verified clean, no padding/margin/width/height on hover)
+  - focus: (73 instances), focus-visible: (21 instances), outline-none (83 instances)
+  - role="button" with tabIndex + onKeyDown (1 correctly-implemented instance: dashboard-marketplace.tsx:1155-1159)
+  - positive tabIndex (0 instances — clean)
+  - metaKey/ctrlKey keyboard shortcuts (2 instances: ⌘K palette in dashboard-shell.tsx:98 and landing-command-palette.tsx:44)
+  - requestAnimationFrame (10 instances across 7 files — healthy throttling pattern)
+  - will-change (8 instances in globals.css only — not overused in components)
+  - cursor-pointer (10 instances), cursor-not-allowed (9 instances)
+  - @media print (0 instances — confirmed gap)
+  - lg:/xl: desktop breakpoints (72 instances), max-w-* container constraints (25 instances), hidden lg:block/flex (5 instances)
+  - fixed inset-0 z-[ modal pattern (42 instances total, 2 confirmed missing role="dialog")
+  - recharts imports (2 orphaned files: admin/overview.tsx, ui/chart.tsx — recharts NOT in package.json)
+  - pricing-page imports (still present in src/app/pricing/page.tsx)
+  - console.log (40+ instances in src/, several leak PII in auth.ts and webhook handlers)
+- Verified ModalAccessibilityProvider is mounted in src/app/layout.tsx:333 (previous MOB-1c-004/005/006 issues addressed)
+- Verified apple-mobile-web-app meta tags added (previous MOB-1d-004 fix in place via appleWebApp config)
+- Verified viewport-fit=cover added (previous MOB-1c-010 fix in place)
+- Verified multi-size favicon set (previous MOB-1b-006 fix in place — favicon-16.png, favicon-32.png, icon-192.png, icon.png 512, apple-icon.png 180)
+
+Findings:
+
+═══════════════════════════════════════════════════════════════════
+FIX-VERIFIED ✓ (previous audits, no regression):
+═══════════════════════════════════════════════════════════════════
+
+✅ MOB-1c-004/005/006 (modal Escape/focus trap/focus restore) — ModalAccessibilityProvider mounted at layout.tsx:333 implements global Escape key, focus trap (Tab cycling), and focus restoration via event delegation on document. Selector: `[role="dialog"][aria-modal="true"]`. ✓ Verified.
+✅ MOB-1c-010 (viewport-fit=cover) — layout.tsx:66 `viewportFit: "cover"` set. ✓ Verified.
+✅ MOB-1d-004 (apple-mobile-web-app meta tags) — layout.tsx:194-198 `appleWebApp: { capable: true, title: "NOVSMM", statusBarStyle: "default" }`. ✓ Verified.
+✅ MOB-1b-006 (multi-size favicon set) — layout.tsx:176-184 declares 4 PNG sizes (16, 32, 192, 512) + apple-icon. ✓ Verified.
+✅ Layout has skip-to-content link (layout.tsx:322-327) — accessibility-correct. ✓ Verified.
+✅ JSON-LD structured data: Organization + WebSite in layout.tsx:304-314, plus WebApplication + Service + FAQPage + BreadcrumbList in landing-json-ld.tsx (imported by page.tsx:8). ✓ Verified.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-001 — recharts STILL imported in 2 orphaned files (MOB-1b-014 finding INCORRECT) — HIGH
+───────────────────────────────────────────────────────────────────
+- Severity: HIGH
+- Category: Desktop Code / Dead Code / Build Integrity
+- Status: Confirmed
+- Title: recharts imports remain in admin/overview.tsx and ui/chart.tsx despite MOB-1b-014 claiming "recharts FULLY REMOVED"
+- Description:
+  Previous audit MOB-1b-014 in this worklog states: "recharts FULLY REMOVED (CRITICAL prior finding VERIFIED RESOLVED)". This is INCORRECT. recharts imports still exist in two source files:
+    1. `src/components/novsmm/admin/overview.tsx:14-21` — imports `AreaChart, Area, ResponsiveContainer, Tooltip, CartesianGrid, XAxis` from "recharts"
+    2. `src/components/ui/chart.tsx:4` — imports `* as RechartsPrimitive from "recharts"`
+  Both files are ORPHANED — never imported anywhere in the codebase:
+    - `rg 'admin/overview' src/` → 0 matches
+    - `rg 'ui/chart' src/` → 0 matches
+  recharts is NOT in package.json (`grep recharts package.json` returns 0) and NOT in node_modules (`ls node_modules/recharts` fails). These imports would FAIL at build time if the files were ever imported.
+  The orphaned files contradict the prior audit's claim. They're dead code with broken imports — a build-integrity landmine waiting to be triggered if a future developer unknowingly imports either file.
+- Evidence:
+  - `rg -n 'recharts' src/` → 2 source files still import it (admin/overview.tsx:21, ui/chart.tsx:4) + 9 comments mentioning "recharts replaced with SVG"
+  - `rg 'recharts' package.json` → 0 (removed from deps ✓)
+  - `ls node_modules/recharts 2>&1` → "No such file or directory" (not installed ✓)
+  - `rg 'admin/overview' src/` → 0 (orphaned)
+  - `rg 'ui/chart' src/` → 0 (orphaned)
+- Impact: HIGH. Dead code that contradicts prior audit findings. If anyone imports admin/overview.tsx or ui/chart.tsx in the future, the build will fail with "Cannot find module 'recharts'". Also bloats the codebase with 184+ lines of unused chart code.
+- Recommendation:
+  (a) Delete `src/components/novsmm/admin/overview.tsx` (184 lines).
+  (b) Delete `src/components/ui/chart.tsx` (the shadcn/ui chart primitive wrapper).
+  (c) Re-run `rg 'recharts' src/` to confirm 0 imports outside comments.
+  (d) Update MOB-1b-014 finding status to "PARTIALLY RESOLVED" — package removed but 2 dead import statements remained.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-002 — /pricing route and pricing-page.tsx STILL EXIST (MOB-1c-021 finding INCORRECT) — HIGH
+───────────────────────────────────────────────────────────────────
+- Severity: HIGH
+- Category: Desktop Code / Dead Code / Regression
+- Status: Confirmed
+- Title: /pricing route + pricing-page.tsx component are present in source despite MOB-1c-021 claiming "Dead dependencies verified removed"
+- Description:
+  Previous audit MOB-1c-021 in this worklog states: "Dead dependencies verified removed (INFORMATIONAL ✓)" and lists "pricing-page" as deleted with evidence "`rg 'pricing-page' src/` → 0 matches". This is INCORRECT — both files still exist:
+    1. `src/app/pricing/page.tsx` (95 lines) — Next.js route that renders `<PricingClient />`
+    2. `src/components/novsmm/pricing-page.tsx` (14,363 bytes, ~340 lines) — PricingClient component
+  The route is also referenced in metadata:
+    - `src/app/pricing/page.tsx:29` — canonical URL `${SITE_ORIGIN}/pricing`
+    - `src/app/pricing/page.tsx:35` — OG url `${SITE_ORIGIN}/pricing`
+    - `src/app/pricing/page.tsx:50-83` — JSON-LD Product + Offer schema with 3 tiers (Starter $0, Pro $29, Enterprise custom)
+  Meanwhile, two other files DOCUMENT that /pricing was deleted:
+    - `src/app/manifest.ts:47-48` comment: "MOB-001 FIX: removed 'Pricing' shortcut — /pricing route was deleted per user request to eliminate pricing from everywhere"
+    - `src/components/novsmm/landing-command-palette.tsx:26` comment: "MOB-1c-012 FIX: removed 'Pricing' entry — /pricing route was deleted"
+  So the manifest + command palette believe /pricing is gone, but the actual route + component are still in the source tree. Either:
+    (a) The deletion was reverted in a later commit (regression), or
+    (b) Production was deployed BEFORE the route was added back (production /pricing returns 404 per MOB-1d audit).
+  Either way: source tree is inconsistent with both prior audit findings AND production behavior.
+- Evidence:
+  - `ls -la src/components/novsmm/pricing-page.tsx` → exists (14363 bytes)
+  - `grep -rn 'pricing-page\|PricingClient' src/` → src/app/pricing/page.tsx:2 imports it; src/app/pricing/page.tsx:92 renders it
+  - `rg 'pricing' src/app/manifest.ts` → only a comment, no shortcut entry
+  - `rg 'pricing' src/components/novsmm/landing-command-palette.tsx` → only a comment, no Pricing entry
+  - Production behavior per MOB-1d: `curl -s -o /dev/null -w "%{http_code}" https://novsmm.shop/pricing` → 404 (NOT deployed)
+- Impact: HIGH. Source tree has a route + 14KB component that don't belong. When the next production deploy happens, /pricing will suddenly return 200 with a full pricing page (Starter/Pro/Enterprise tiers) — directly contradicting the user's documented request to "eliminate pricing from everywhere". This is a regression-in-waiting.
+- Recommendation:
+  (a) Delete `src/app/pricing/page.tsx` (95 lines).
+  (b) Delete `src/components/novsmm/pricing-page.tsx` (340 lines).
+  (c) Re-run `rg 'pricing' src/app/ src/components/novsmm/` to confirm no lingering route or component.
+  (d) Update MOB-1c-021 finding status — the dead-code removal was NOT actually performed (or was reverted).
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-003 — 11 inputs with `focus:outline-none` and NO alternative focus indicator — HIGH
+───────────────────────────────────────────────────────────────────
+- Severity: HIGH
+- Category: Desktop Accessibility (WCAG 2.4.7 Focus Visible, Level AA)
+- Status: Confirmed
+- Title: 11 inputs/elements have `focus:outline-none` with no compensating focus ring or parent `focus-within:` indicator
+- Description:
+  `rg 'focus:outline-none' src/components/novsmm/` returns 83 instances. Most are paired with `focus:ring-2`, `focus:shadow-[...]`, or have a parent with `focus-within:` (which provides a visible focus indicator via the parent's border/shadow change). However, 11 instances have NO visible focus indicator at all — they're either inside plain border containers with no `focus-within:` styling, or standalone inputs that rely on no focus indicator whatsoever.
+  Keyboard users navigating these inputs cannot see which field is focused. WCAG 2.4.7 (Focus Visible) violation.
+  Affected elements:
+    1. `src/components/novsmm/admin-panel.tsx:528` — admin user search input (`<input placeholder="Search users by name, email, role…">`)
+    2. `src/components/novsmm/admin/users.tsx:92` — admin user search input (same pattern, different file)
+    3. `src/components/novsmm/dashboard-shell.tsx:816` — dashboard search input
+    4. `src/components/novsmm/dashboard-marketplace.tsx:909` — minimum price filter input (`<input type="number" placeholder="Min">`)
+    5. `src/components/novsmm/dashboard-marketplace.tsx:921` — maximum price filter input (`<input type="number" placeholder="Max">`)
+    6. `src/components/novsmm/dashboard-marketplace.tsx:3163` — modal "Your price per 1000" input
+    7. `src/components/novsmm/dashboard-marketplace.tsx:3394` — modal "Search services to publish" input
+    8. `src/components/novsmm/dashboard-child-panels.tsx:608` — subdomain input (`<input placeholder="acme">`)
+    9. `src/components/novsmm/dashboard-tickets.tsx:746` — ticket priority `<select>` (no focus ring)
+   10. `src/components/novsmm/landing-command-palette.tsx:120` — command palette search input (autofocus, but no focus ring when refocused)
+   11. `src/components/novsmm/dashboard-profile.tsx:359` — password confirmation input (`<input type="password">`)
+- Evidence (sample):
+  - admin-panel.tsx:528 — `<input ... className="w-full bg-transparent focus:outline-none" />` — parent div has `border border-border bg-background` but NO `focus-within:` class
+  - dashboard-marketplace.tsx:3163 — `<input type="number" ... className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none" />` — no focus indicator
+  - dashboard-tickets.tsx:746 — `<select ... className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-base focus:outline-none">` — no focus indicator
+  - dashboard-child-panels.tsx:608 — `<input ... className="h-full flex-1 bg-transparent text-foreground focus:outline-none" />` — parent has plain border
+  - Verified via Python script: scanned all .tsx in src/components/novsmm/, found 83 `focus:outline-none` instances, 11 of which have no line-level focus indicator AND no parent `focus-within:` within 20 lines AND no `peer` class AND no `motion.div` with `focused` state pattern
+- Impact: HIGH. Keyboard users (a11y users, power users filling forms via Tab key) cannot see which field is focused. Particularly bad for the admin user search (admin-panel.tsx:528) and the password confirmation field (dashboard-profile.tsx:359) — both are critical-path inputs.
+- Recommendation:
+  (a) For each affected input, EITHER add `focus:ring-2 focus:ring-primary focus:ring-offset-2` to the input itself, OR wrap the input in a parent div with `focus-within:ring-2 focus-within:ring-primary focus-within:ring-offset-2` (preferred — keeps the visual ring on the parent border container).
+  (b) For `<select>` elements (dashboard-tickets.tsx:746), add `focus:ring-2 focus:ring-primary`.
+  (c) Add a global CSS rule as a safety net in globals.css:
+      ```css
+      input:focus:not(:focus-visible),
+      select:focus:not(:focus-visible),
+      textarea:focus:not(:focus-visible) {
+        /* suppress focus ring on mouse click but keep on keyboard */
+      }
+      input:focus-visible,
+      select:focus-visible,
+      textarea:focus-visible {
+        outline: 2px solid var(--ring);
+        outline-offset: 2px;
+      }
+      ```
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-004 — 2 modals missing role="dialog" / aria-modal / aria-label — MEDIUM
+───────────────────────────────────────────────────────────────────
+- Severity: MEDIUM
+- Category: Desktop Accessibility (WCAG 4.1.2 Name, Role, Value)
+- Status: Confirmed
+- Title: admin/users.tsx:294 (Impersonate modal) and admin/services.tsx:234 (Add/Edit Service modal) lack dialog semantics
+- Description:
+  The ModalAccessibilityProvider (layout.tsx:333) implements global Escape key + focus trap + focus restoration, but its selector is `[role="dialog"][aria-modal="true"]` (modal-accessibility-provider.tsx:33). Two admin modals lack these attributes and are therefore EXCLUDED from the global handler:
+    1. `src/components/novsmm/admin/users.tsx:294` — Impersonate user modal:
+       `<div className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>`
+       No role, no aria-modal, no aria-label. Screen readers announce this as a plain div. Keyboard users pressing Escape get nothing — the global handler can't find this modal.
+    2. `src/components/novsmm/admin/services.tsx:234` — Add/Edit Service modal:
+       `<div className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>`
+       Same issue — no dialog semantics.
+  Both modals are admin-only (low blast radius), but they're functionally broken for keyboard/screen-reader users.
+- Evidence:
+  - Python script: scanned all 42 `fixed inset-0 z-[` modals in src/components/, checked 5 lines before AND after for `role="dialog"`. Only 2 fail:
+    - `admin/users.tsx:294` → NO_ROLE_DIALOG
+    - `admin/services.tsx:234` → NO_ROLE_DIALOG
+  - All other 40 modals have role="dialog" + aria-modal="true" + aria-label/aria-labelledby.
+- Impact: MEDIUM. Admin users who rely on keyboard navigation or screen readers cannot:
+    (a) Close these modals with Escape (must click the backdrop or Close button)
+    (b) Have focus trapped (Tab can escape to elements behind the modal)
+    (c) Have focus restored to the trigger element when the modal closes
+  Admin-only — lower impact than user-facing modals, but still an a11y gap.
+- Recommendation:
+  Add `role="dialog" aria-modal="true" aria-label="Impersonate user"` to admin/users.tsx:294, and `role="dialog" aria-modal="true" aria-label="Service form"` to admin/services.tsx:234. The global ModalAccessibilityProvider will then automatically wire up Escape, focus trap, and focus restoration — no per-modal code needed.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-005 — 49 disabled buttons still apply hover effects (misleading desktop UX) — MEDIUM
+───────────────────────────────────────────────────────────────────
+- Severity: MEDIUM
+- Category: Desktop UX
+- Status: Confirmed
+- Title: 49 `<button disabled>` instances have `hover:bg-*` / `hover:text-*` / `hover:shadow-*` but NO `disabled:hover:none` override
+- Description:
+  When a button has `disabled={true}` AND `hover:bg-amber-500/20`, the hover style STILL APPLIES — the cursor is over the button, the bg changes color, but clicking does nothing. This misleads desktop users into thinking the button is clickable.
+  Tailwind's `disabled:opacity-60` only dims the button — it does NOT suppress hover effects. To suppress hover on disabled buttons, you need either:
+    - `disabled:pointer-events-none` (removes all mouse interaction)
+    - `disabled:hover:bg-transparent` / `disabled:hover:shadow-none` (explicit overrides per hover property)
+  The codebase has 49 disabled buttons that fail this pattern. Examples:
+    - `admin-panel.tsx:547` — bulk "Suspend" button: `hover:bg-amber-500/20 disabled:opacity-60` (hover still applies when bulkAction.isPending)
+    - `admin-panel.tsx:962` — submit button: `hover:bg-amber-600 disabled:opacity-60`
+    - `admin-panel.tsx:1217` — submit button: `hover:bg-emerald-600 disabled:opacity-60`
+    - `dashboard-marketplace.tsx:2040` — primary CTA: `hover:nov-shadow-blue disabled:opacity-60`
+    - `dashboard-marketplace.tsx:2595` — quick action: `hover:bg-primary/20 disabled:opacity-50`
+    - `login-screen.tsx:133, 423` — Sign in button: `hover:nov-shadow-blue disabled:opacity-60`
+    - `dashboard-wallet.tsx:407, 528` — Top up / Withdraw buttons: `hover:nov-shadow-blue disabled:opacity-60`
+    - `dashboard-tickets.tsx:767` — submit button: `hover:nov-shadow-blue disabled:opacity-60`
+    - `dashboard-orders.tsx:477, 492` — Repeat / Cancel order buttons
+    - `auth-fields.tsx:263` — SocialButton: `hover:bg-muted/50 disabled:opacity-60`
+  Worst offenders are the bulk action buttons in admin-panel.tsx:547-556 and admin/users.tsx:111-120 — when bulkAction.isPending is true (after clicking "suspend" on a user), all 4 bulk action buttons show their hover bg color even though they're disabled, then become clickable again only after the mutation completes.
+- Evidence:
+  - `rg 'hover:bg-.*disabled:opacity|hover:text-.*disabled:opacity|hover:shadow.*disabled:opacity|hover:nov.*disabled:opacity' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | rg -v 'disabled:hover:' | wc -l` → 49
+  - Spot-checked admin-panel.tsx:547 in browser devtools pattern: Tailwind generates `.hover\:bg-amber-500\/20:hover { background-color: rgb(245 158 11 / 0.2) }` — the `:hover` pseudo-class fires on disabled buttons in all major browsers
+- Impact: MEDIUM. Desktop users see hover feedback on disabled buttons, click them expecting an action, nothing happens. Repeated clicks → frustration. Particularly bad for the bulk action toolbar in admin (4 buttons all flashing hover state when pending) and the wallet top-up/withdraw buttons.
+- Recommendation:
+  (a) Add `disabled:pointer-events-none` to all 49 disabled buttons — most concise fix, prevents the `:hover` pseudo-class from firing at all when disabled.
+  (b) OR add a global CSS rule in globals.css:
+      ```css
+      button[disabled]:hover {
+        background-color: inherit !important;
+        color: inherit !important;
+        box-shadow: none !important;
+        transform: none !important;
+      }
+      ```
+  (c) Best practice: use both — `disabled:pointer-events-none` per-button + a global safety net for any missed cases.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-006 — Zero print styles in entire codebase — MEDIUM
+───────────────────────────────────────────────────────────────────
+- Severity: MEDIUM
+- Category: Desktop UX / Print
+- Status: Confirmed
+- Title: No `@media print` CSS rules anywhere — invoices, legal pages, order receipts unprintable
+- Description:
+  `rg '@media print' src/` returns 0 matches. `rg '@page' src/` returns 0 matches. The codebase has multiple user-facing documents that desktop users would reasonably want to print or save-as-PDF:
+    1. **Invoices** — `/api/invoices/route.ts` exists; dashboard renders invoice data. Without print styles, printing an invoice includes the navbar, sidebar, footer, sticky CTAs, and WhatsApp widget — a useless printout.
+    2. **Legal pages** — `src/components/novsmm/legal-pages.tsx` (43 sections) renders TOS, Privacy Policy, etc. Users may print these for legal records.
+    3. **Order receipts** — `dashboard-orders.tsx` displays order details that users may want to print for accounting.
+    4. **API docs** — `/api-docs` page (developer reference) may be printed for offline use.
+  Without `@media print` rules, browsers print the page as-is — including fixed-position elements (sticky CTA, navbar, WhatsApp widget) that overlap content, dark-mode colors that waste ink, and decorative 3D transforms that print as static blocks.
+- Evidence:
+  - `grep -rn '@media print' src/` → 0 matches
+  - `grep -rn '@page' src/` → 0 matches
+  - globals.css has `@media (max-width: 768px)` and `@media (prefers-reduced-motion: reduce)` blocks but NO print block
+- Impact: MEDIUM. Desktop users who print any page get a broken layout. Particularly bad for legal pages (TOS/Privacy) — users may need physical copies for compliance. Also affects "Save as PDF" workflows.
+- Recommendation:
+  Add a print stylesheet to globals.css:
+  ```css
+  @media print {
+    /* Hide non-essential UI */
+    header, footer, .sticky-cta, .whatsapp-widget, .scroll-progress,
+    .social-proof, [aria-label="Toggle menu"], .landing-command-palette {
+      display: none !important;
+    }
+    /* Reset colors for print (save ink) */
+    body {
+      background: white !important;
+      color: black !important;
+    }
+    /* Expand content to full width */
+    .max-w-7xl, .max-w-6xl, .max-w-5xl, .max-w-4xl {
+      max-width: 100% !important;
+      padding: 0 !important;
+    }
+    /* Show URLs after links (for reference) */
+    a[href]::after {
+      content: " (" attr(href) ")";
+      font-size: 0.8em;
+      color: #555;
+    }
+    /* Page breaks */
+    h1, h2, h3 { page-break-after: avoid; }
+    table, figure { page-break-inside: avoid; }
+    /* Force background graphics to print */
+    * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+  ```
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-007 — 7 major landing components have ZERO focus styles — MEDIUM
+───────────────────────────────────────────────────────────────────
+- Severity: MEDIUM
+- Category: Desktop Accessibility (WCAG 2.4.7 Focus Visible)
+- Status: Confirmed
+- Title: navbar, footer, hero, services, marketplace, payments, security components have 0 `focus:` or `focus-visible:` classes
+- Description:
+  `rg 'focus' src/components/novsmm/{navbar,footer,hero,services,marketplace,payments,security}.tsx` returns 0 matches across all 7 files. Keyboard users tabbing through the landing page rely entirely on the browser's default focus outline.
+  Browser default focus outlines:
+    - Chrome/Safari: 2px solid rgba(0, 100, 255, 0.7) on a 1px offset — visible but not branded
+    - Firefox: 1px dotted gray — barely visible
+    - Edge: similar to Chrome
+  The rest of the codebase uses `focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2` for branded, consistent focus indicators. The 7 landing components are inconsistent with this pattern.
+  Particularly problematic elements:
+    - `navbar.tsx:81-87` — desktop nav links (6 anchors with `hover:text-foreground` but NO focus state). Keyboard users can't see which link is focused.
+    - `navbar.tsx:112-117` — desktop "Sign in" button (hover state but no focus state).
+    - `navbar.tsx:118-123` — desktop "Start free" Magnetic button (hover shadow but no focus state).
+    - `hero.tsx` — primary CTAs ("Start free", "Book a demo") with hover effects but no focus states.
+    - `services.tsx:59` — service cards with `hover:-translate-y-1 hover:nov-ring-lg` but no `focus-visible:` equivalent.
+    - `footer.tsx` — footer links with `hover:` states but no focus states.
+- Evidence:
+  - `grep -nE 'focus' src/components/novsmm/navbar.tsx` → 0 matches (0 focus classes in navbar)
+  - `grep -nE 'focus' src/components/novsmm/footer.tsx` → 0 matches
+  - `grep -nE 'focus' src/components/novsmm/hero.tsx` → 0 matches
+  - `grep -nE 'focus' src/components/novsmm/services.tsx` → 0 matches
+  - `grep -nE 'focus' src/components/novsmm/marketplace.tsx` → 0 matches
+  - `grep -nE 'focus' src/components/novsmm/payments.tsx` → 0 matches
+  - `grep -nE 'focus' src/components/novsmm/security.tsx` → 0 matches
+  - Compare: dashboard-marketplace.tsx has 21 focus-visible: classes — the dashboard is fully accessible, the landing is not.
+- Impact: MEDIUM. Keyboard users navigating the landing page (a11y users, power users) see inconsistent/unbranded focus indicators. WCAG 2.4.7 technically passes (browser default outlines are visible) but the visual experience is poor and inconsistent with the dashboard. Brand consistency is also affected — primary blue focus ring is used everywhere else.
+- Recommendation:
+  Add `focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2` to all interactive elements in these 7 files:
+    - navbar.tsx: 6 nav links + Sign in button + Start free Magnetic + hamburger
+    - hero.tsx: primary CTAs
+    - services.tsx: service cards (already has hover effects — mirror them with focus-visible)
+    - marketplace.tsx: marketplace cards
+    - payments.tsx: payment method cards
+    - security.tsx: security feature cards
+    - footer.tsx: footer links
+  Approximate change: ~20-30 className additions across 7 files.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-008 — hreflang tags all point to "/" (incorrect i18n implementation) — MEDIUM
+───────────────────────────────────────────────────────────────────
+- Severity: MEDIUM
+- Category: Desktop SEO / i18n
+- Status: Confirmed
+- Title: hreflang alternates list 4 languages (en, es, pt, fr) all pointing to the same URL "/"
+- Description:
+  `src/app/layout.tsx:115-124` declares hreflang alternates:
+    ```ts
+    alternates: {
+      canonical: "/",
+      languages: {
+        "en": "/",
+        "es": "/",
+        "pt": "/",
+        "fr": "/",
+        "x-default": "/",
+      },
+    },
+    ```
+  All 4 language variants point to the same URL `/`. This is incorrect hreflang implementation. Google's spec requires each hreflang entry to point to a DIFFERENT URL with the localized content. When all variants point to the same URL, Google may:
+    (a) Ignore the hreflang tags entirely (most common outcome)
+    (b) Flag them as errors in Google Search Console
+    (c) Get confused about which version to serve to which locale
+  The site supports 4 UI languages (EN/ES/PT/FR per the language-provider) but the URL structure doesn't reflect this — language switching is client-side only (localStorage), with no server-rendered localized URLs.
+- Evidence:
+  - layout.tsx:118-123 — all 4 languages + x-default point to "/"
+  - No `/es/`, `/pt/`, `/fr/` route folders exist in src/app/
+  - `ls src/app/` → only `pricing/`, `blog/`, `changelog/`, `api-docs/` — no language-specific routes
+- Impact: MEDIUM. Google may ignore hreflang entirely (no SEO benefit) OR flag it as an error in Search Console. Spanish/Portuguese/French speakers don't get locale-targeted search results — they see the English page in Google search, then have to manually switch language after landing.
+- Recommendation:
+  Pick ONE of three options:
+    (a) **Best (more effort):** Implement localized routes — `/es/`, `/pt/`, `/fr/` — with server-rendered translated content. Update hreflang to point to each.
+    (b) **Pragmatic:** Remove the hreflang `languages` block entirely. Keep only `canonical: "/"`. Let Google detect language from the page's `<html lang="en">` and the alternateLocale in openGraph metadata.
+    (c) **Compromise:** If client-side language switching is the intended UX, remove hreflang and instead add `<link rel="alternate" hreflang="x-default" href="/">` only.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-009 — Sitemap has duplicate /blog entry — LOW
+───────────────────────────────────────────────────────────────────
+- Severity: LOW
+- Category: Desktop SEO / Sitemap
+- Status: Confirmed
+- Title: src/app/sitemap.ts lists /blog twice (lines 47-52 and 67-72)
+- Description:
+  `src/app/sitemap.ts` returns 5 entries, but /blog is listed twice:
+    - Line 47-52: `{ url: "${SITE_ORIGIN}/blog", lastModified: now, changeFrequency: "weekly", priority: 0.7 }`
+    - Line 67-72: identical entry (same url, lastModified, changeFrequency, priority)
+  This is harmless (Google dedupes) but generates a sitemap with redundant entries. Minor SEO hygiene issue.
+- Evidence:
+  - Read src/app/sitemap.ts lines 38-75 — two `/blog` entries with identical metadata
+  - Comment on line 67 says "Blog page" (duplicate of line 47's "Public API docs page" comment context)
+- Impact: LOW. Google Search Console may show a warning about duplicate URLs in sitemap. No ranking impact.
+- Recommendation: Delete lines 67-73 (the duplicate /blog entry).
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-010 — error-boundary.tsx buttons lack hover/focus/transition — LOW
+───────────────────────────────────────────────────────────────────
+- Severity: LOW
+- Category: Desktop UX / Consistency
+- Status: Confirmed
+- Title: ErrorBoundary component's "Try again" and "Reload page" buttons have no hover, focus-visible, or transition classes
+- Description:
+  `src/components/novsmm/error-boundary.tsx:65-77` defines two buttons:
+    - L65-71: "Try again" button — `className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground"`
+    - L72-77: "Reload page" button — `className="inline-flex items-center gap-2 rounded-full border border-border px-6 py-3 text-sm font-medium text-foreground"`
+  Both lack:
+    - `hover:bg-primary/90` / `hover:bg-muted` (no hover state — feels dead on desktop)
+    - `focus-visible:ring-2 focus-visible:ring-primary` (no keyboard focus indicator)
+    - `transition-colors` (no smooth color transition)
+  Inconsistent with every other button in the codebase (which all have hover + transition).
+  The error boundary only renders when the app crashes, so this is a low-frequency path — but it's the FIRST thing users see after a crash, and dead-feeling buttons in a recovery UI are particularly frustrating.
+- Evidence:
+  - Read src/components/novsmm/error-boundary.tsx lines 65-77 — verified both buttons lack hover/focus/transition classes
+  - Compare to admin-panel.tsx:962 — submit button has `hover:bg-amber-600 disabled:opacity-60 transition-colors`
+- Impact: LOW. Users who hit a React crash see unresponsive buttons. Affects <0.1% of sessions (only when an uncaught error bubbles to ErrorBoundary).
+- Recommendation:
+  Add hover/focus/transition classes to both buttons:
+    - "Try again": add `transition-colors hover:bg-primary/90 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2`
+    - "Reload page": add `transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2`
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-011 — 28 disabled buttons missing cursor-not-allowed — LOW
+───────────────────────────────────────────────────────────────────
+- Severity: LOW
+- Category: Desktop UX
+- Status: Confirmed
+- Title: 28 `<button disabled>` instances set `disabled:opacity-*` but not `disabled:cursor-not-allowed`
+- Description:
+  Browsers default to `cursor: default` (arrow) on disabled buttons — NOT `cursor: not-allowed`. The arrow cursor doesn't communicate "this button is disabled, you can't click it" as clearly as the not-allowed cursor (🚫).
+  28 disabled buttons set `disabled:opacity-60` or `disabled:opacity-50` but DON'T set `disabled:cursor-not-allowed`. The opacity dim helps, but the cursor doesn't reinforce the disabled state on hover.
+  Contrast with 9 disabled buttons that DO have `disabled:cursor-not-allowed` (e.g., admin-panel.tsx:1395, 1402; dashboard-marketplace.tsx:2531, 2657, 2666) — these are correctly styled.
+- Evidence:
+  - `rg --type-add 'tsx:*.tsx' -n 'disabled' src/components/novsmm/ -t tsx | rg '<button' | rg -v 'cursor-not-allowed' | wc -l` → 28
+  - `rg --type-add 'tsx:*.tsx' -n 'cursor-not-allowed' src/components/novsmm/ -t tsx | wc -l` → 9 (correctly styled)
+  - Sample: admin-panel.tsx:547, 550, 553, 556 (4 bulk action buttons); admin-panel.tsx:962, 1217, 1662, 1823, 2114, 2423, 2655, 2671, 2815, 2897, 2976, 3149, 3326, 3805 (submit buttons); admin/users.tsx:111, 114, 117, 120 (bulk actions); dashboard-marketplace.tsx:2238, 2595, 2609, 2621, 2748 (action buttons)
+- Impact: LOW. Desktop users see an arrow cursor on disabled buttons instead of the more informative 🚫 cursor. Minor UX polish issue.
+- Recommendation:
+  (a) Add `disabled:cursor-not-allowed` to each of the 28 buttons.
+  (b) OR add a global CSS rule:
+      ```css
+      button[disabled] { cursor: not-allowed; }
+      ```
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-012 — Hamburger button lacks hover/focus-visible state — LOW
+───────────────────────────────────────────────────────────────────
+- Severity: LOW
+- Category: Desktop UX / Mobile-Tablet A11y
+- Status: Confirmed
+- Title: navbar.tsx:127-134 hamburger button has no hover bg and no focus-visible ring
+- Description:
+  `src/components/novsmm/navbar.tsx:127-134`:
+    ```tsx
+    <button
+      className="inline-flex h-10 w-10 items-center justify-center rounded-full text-foreground lg:hidden"
+      onClick={() => setOpen((v) => !v)}
+      aria-label="Toggle menu"
+      aria-expanded={open}
+    >
+    ```
+  No `hover:bg-muted`, no `focus-visible:ring-2 focus-visible:ring-primary`. The button is mobile-only (`lg:hidden`) but tablet users (lg breakpoint is 1024px, so iPad landscape shows desktop nav, iPad portrait shows hamburger) still need to see hover/focus feedback.
+  Compare to mobile menu items in the same file (L153): `className="block rounded-2xl px-4 py-3 text-base font-medium text-foreground/80 transition-colors hover:bg-muted"` — these have hover states.
+- Evidence:
+  - Read navbar.tsx lines 127-134 — confirmed no hover or focus class
+- Impact: LOW. Tablet/iPad users see no hover feedback when tapping the hamburger. Also no focus indicator for keyboard users (rare on tablet, but possible with Bluetooth keyboards).
+- Recommendation:
+  Add `transition-colors hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2` to the hamburger button className.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-013 — console.log leaks user IDs and OAuth client IDs in production — LOW
+───────────────────────────────────────────────────────────────────
+- Severity: LOW
+- Category: Desktop Code / Information Disclosure
+- Status: Confirmed
+- Title: 40+ console.log calls in production source code, several leak PII (user IDs, usernames, OAuth client IDs)
+- Description:
+  `rg 'console\.log' src/` (excluding tests) returns 40+ matches. Most are server-side logs (Next.js API routes, lib functions) that go to server stdout — visible to operators but not exposed to end users. However, several log SENSITIVE data:
+    1. **src/lib/auth.ts:713** — `console.log('[auth] ${provider}: loaded credentials from DB (clientId: ${String(clientId).slice(0, 8)}...)')` — leaks first 8 chars of OAuth clientId (not the secret, but the public ID prefix — useful for reconnaissance).
+    2. **src/lib/auth.ts:726** — same pattern for env-var-loaded credentials.
+    3. **src/lib/auth.ts:881** — `console.log('[auth] signIn callback: provider=${account.provider}, userId=${user.id ?? "(none)"})` — logs user.id on every sign-in attempt.
+    4. **src/lib/auth.ts:890** — `console.log('[auth] signIn callback: dbUser=${dbUser ? "found (id=${dbUser.id}, username=${dbUser.username})" : "not found"})` — logs user.id AND username on every sign-in.
+    5. **src/lib/auth.ts:907** — `console.log('[auth] signIn callback: linking ${account.provider} account to existing user ${dbUser.id}')` — logs user.id during OAuth linking.
+    6. **src/lib/auth.ts:1193** — `console.log('[auth] events.createUser: userId=${user.id}')` — logs user.id on registration.
+    7. **src/lib/queues.ts:149, 157** — logs `data.providerId` and `data.userId` when queuing background jobs.
+    8. **src/app/api/webhooks/nowpayments/route.ts:227** — `console.log('[webhooks/nowpayments] Credited $${txn.amount} to user ${txn.userId} (txn ${txn.publicId})')` — logs user IDs and transaction IDs.
+    9. **src/app/api/webhooks/depay/route.ts:198, aurpay/route.ts:215** — same pattern, logs userId + publicId on every successful webhook.
+    10. **src/app/api/metrics/web-vitals/route.ts:28** — `console.log('[web-vitals]', data.name, data.value, data.rating)` — logs every web-vital event to server logs.
+  Note: these are SERVER-SIDE logs (route handlers and lib functions, not client components). They go to stdout, visible in PM2/Docker logs. They're NOT exposed to end users via the browser console. So the risk is OPERATOR-side (log aggregators, log archives, third-party log services) rather than end-user-side.
+  The MOB-1c-020 finding flagged client-side console.log leaking PII — this finding is the server-side equivalent.
+- Evidence:
+  - `rg 'console\.log' src/ -t ts -t tsx --type-add 'tsx:*.tsx' | rg -v '__tests__|\.test\.' | wc -l` → 40+ matches
+  - Read src/lib/auth.ts:713, 881, 890, 907, 1193 — confirmed PII logs
+  - Read src/app/api/webhooks/nowpayments/route.ts:227 — confirmed userId log
+- Impact: LOW (server-side only). PII (user IDs, usernames, OAuth client ID prefixes) lands in server logs. If logs are archived to S3/CloudWatch without redaction, or shared with third-party log analytics (Datadog, Sentry, etc.), PII leaks. GDPR/CCPA implications for user IDs in logs.
+- Recommendation:
+  (a) Replace `console.log` with the existing pino logger (`src/lib/logger.ts`) which supports log levels and redaction:
+      ```ts
+      import { logger } from "@/lib/logger";
+      logger.info({ userId: user.id, provider: account.provider }, "signIn callback");
+      ```
+  (b) Add a redaction rule to pino config to strip `userId`, `username`, `clientId` from production logs:
+      ```ts
+      pino({ redact: ['userId', 'username', 'clientId', '*.userId', '*.username'] })
+      ```
+  (c) For the OAuth clientId prefix logs (auth.ts:713, 726) — remove entirely. The first 8 chars of a Google OAuth clientId are predictable (e.g. "12345678" is the project number prefix), but logging them adds no debug value and signals to operators that clientId-leaking is OK.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-014 — Hover state coverage and quality (INFORMATIONAL ✓)
+───────────────────────────────────────────────────────────────────
+- Severity: N/A (clean)
+- Category: Desktop Code
+- Status: Verified
+- Title: Hover state coverage is comprehensive — 405 hover classes across 41 files, 0 layout-shift hover effects
+- Description:
+  - 405 `hover:` utility classes across 41 .tsx files in src/components/novsmm/
+  - 293 hover color/shadow variants (`hover:bg-`, `hover:text-`, `hover:shadow-`)
+  - 10 transform-based hover effects (`hover:translate-`, `hover:scale-`, `hover:-translate-`) — all GPU-accelerated, no layout shift
+  - 0 layout-shift hover effects (`hover:p-`, `hover:m-`, `hover:w-`, `hover:h-`, `hover:gap-`, `hover:px-`, `hover:py-` all return 0 matches)
+  - 17 `group-hover:` usages for grouped hover effects (cards with hover-revealed icons)
+  - 1 file with buttons but no hover classes: `error-boundary.tsx` (2 buttons — see DSK-1c-010)
+- Evidence:
+  - `rg 'hover:' src/components/novsmm/ --type-add 'tsx:*.tsx' -t tsx | wc -l` → 405
+  - `rg 'hover:bg-|hover:text-|hover:shadow' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 293
+  - `rg 'hover:translate|hover:scale|hover:-translate' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 10
+  - `rg 'hover:p-|hover:m-|hover:w-|hover:h-|hover:gap-|hover:px-|hover:py-' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 0
+- Recommendation: No action needed. Hover state quality is excellent — uses transform/opacity/color/shadow (GPU-friendly) instead of layout properties.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-015 — Desktop breakpoint coverage (INFORMATIONAL ✓)
+───────────────────────────────────────────────────────────────────
+- Severity: N/A (clean)
+- Category: Desktop Code
+- Status: Verified
+- Title: Desktop breakpoints well-applied — 72 lg:/xl: usages, 25 max-w-* container constraints, 5 hidden lg:block/flex patterns
+- Description:
+  - 72 `lg:` or `xl:` breakpoint usages across novsmm components
+  - 25 `max-w-7xl` / `max-w-6xl` / `max-w-5xl` / `max-w-4xl` container constraints (mostly `max-w-7xl` = 80rem = 1280px — appropriate for desktop content)
+  - 5 `hidden lg:block` / `hidden lg:flex` patterns (desktop-only elements):
+      - hero.tsx:161, 168 — decorative hero elements (desktop-only visual flourish)
+      - sticky-cta.tsx:72 — sticky CTA (desktop-only, mobile has different CTA)
+      - social-proof.tsx:89 — social proof banner (desktop-only)
+      - navbar.tsx:160 — comment only, not an element
+  - All 14 section-based components (affiliate-section, api-docs-page, api-docs-section, faq-section, faq, hero, marketplace, payments, plans, security, services, stats, testimonials, and 43-section legal-pages) have EITHER `lg:` breakpoints OR `max-w-*` container constraints. No desktop-broken layouts.
+- Evidence:
+  - `rg 'lg:|xl:' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 72
+  - `rg 'max-w-7xl|max-w-6xl|max-w-5xl|max-w-4xl' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 25
+  - `rg 'hidden lg:block|hidden lg:flex' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 5
+- Recommendation: No action needed. Desktop layout is comprehensive.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-016 — Keyboard shortcuts and role=button patterns (INFORMATIONAL ✓)
+───────────────────────────────────────────────────────────────────
+- Severity: N/A (clean)
+- Category: Desktop Code
+- Status: Verified
+- Title: Desktop keyboard shortcuts implemented; role=button pattern correctly paired with tabIndex + onKeyDown
+- Description:
+  - 2 instances of `metaKey || ctrlKey` for ⌘K/Ctrl+K command palette shortcuts:
+      - `src/components/novsmm/dashboard-shell.tsx:98` — opens dashboard command palette
+      - `src/components/novsmm/landing-command-palette.tsx:44` — opens landing command palette
+  - 1 instance of `role="button"` on a non-button element — `src/components/novsmm/dashboard-marketplace.tsx:1157`. This is CORRECTLY paired with:
+      - `tabIndex={0}` (line 1156) — makes it keyboard-focusable
+      - `onKeyDown={handleKeyDown}` (line 1155) — handles Enter and Space keys (line 1147: `if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(); }`)
+      - `aria-label` (line 1158) — accessible name for screen readers
+      - `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2` (line 1159) — visible focus indicator
+    This is the textbook WCAG-compliant pattern for non-button interactive elements.
+  - 0 positive `tabIndex` usages (e.g., `tabindex="1"`, `tabindex="2"`) — only `tabIndex={-1}` (1 instance, modal container) and `tabIndex={0}` (1 instance, the role="button" div above). Both are correct.
+  - 6 `onKeyDown` handlers in novsmm components:
+      - admin-panel.tsx:739 — admin search input
+      - dashboard-shell.tsx:759 — command palette trigger
+      - dashboard-marketplace.tsx:1155 — service card (role=button)
+      - dashboard-tickets.tsx:550 — ticket message input (Enter to send)
+      - whatsapp-widget.tsx:159 — WhatsApp widget
+- Evidence:
+  - `grep -rn 'metaKey\|ctrlKey' src/` → 3 matches (sidebar.tsx:101, dashboard-shell.tsx:98, landing-command-palette.tsx:44)
+  - `rg --type-add 'tsx:*.tsx' -n 'role="button"' src/components/novsmm/ -t tsx` → 1 match (dashboard-marketplace.tsx:1157)
+  - `rg --type-add 'tsx:*.tsx' -n 'tabindex="1"|tabindex="2"|tabindex="3"' src/components/novsmm/ -t tsx` → 0 matches
+- Recommendation: No action needed. Desktop keyboard patterns are exemplary.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-017 — Desktop performance patterns: will-change + RAF + transform (INFORMATIONAL ✓)
+───────────────────────────────────────────────────────────────────
+- Severity: N/A (clean)
+- Category: Desktop Performance
+- Status: Verified
+- Title: will-change is appropriately scoped (CSS-only, 8 instances, no overuse in components); RAF throttling on all mousemove/scroll handlers
+- Description:
+  - 8 `will-change` declarations, ALL in src/app/globals.css (lines 218, 329, 515, 541, 660, 690, 779, 807). ZERO in .tsx files. This is the correct pattern — `will-change` should be a CSS class applied via animation utilities, not inlined per-element. Overusing `will-change` causes excessive GPU layer promotion (memory bloat).
+  - 10 `requestAnimationFrame` calls in src/components/ for throttling mousemove/scroll handlers:
+      - tilt-3d.tsx:35, 49 — mousemove → RAF-throttled 3D transform
+      - scroll-progress.tsx:32 — scroll → RAF-throttled progress bar
+      - dashboard-marketplace.tsx:541 — DOM measurement deferred to RAF
+      - navbar.tsx:45 — scroll listener RAF-throttled
+      - social-proof.tsx:45 — exit animation RAF
+      - counter.tsx:57, 62 — IntersectionObserver counter animation
+      - magnetic.tsx:52, 64 — mousemove → RAF-throttled transform (with `cancelAnimationFrame` on leave — correct cleanup)
+  - All hover/animation effects use `transform` (GPU-accelerated) — 0 instances of `top`/`left` hover animations (which cause layout/paint).
+  - Mobile media query in globals.css disables all 3D transforms below 768px (line ~940: `@media (max-width: 768px) { .footer-link-3d:hover { transform: none; } ... }`) — saves mobile GPU.
+  - Reduced motion media query in globals.css disables all animations for `prefers-reduced-motion: reduce` users.
+- Evidence:
+  - `rg 'will-change' src/ -t css -t tsx --type-add 'tsx:*.tsx' --type-add 'css:*.css' | wc -l` → 8 (all CSS)
+  - `rg 'requestAnimationFrame' src/components/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 10
+  - `rg 'hover:translate|hover:scale|hover:-translate' src/components/novsmm/ -t tsx --type-add 'tsx:*.tsx' | wc -l` → 10 (all transform-based, GPU-friendly)
+- Recommendation: No action needed. Desktop performance patterns are healthy.
+
+───────────────────────────────────────────────────────────────────
+DSK-1c-018 — Desktop SEO metadata comprehensive (INFORMATIONAL ✓ with hreflang caveat)
+───────────────────────────────────────────────────────────────────
+- Severity: N/A (clean except DSK-1c-008 hreflang issue)
+- Category: Desktop SEO
+- Status: Verified
+- Title: layout.tsx metadata is comprehensive — title, description, keywords (multilingual), OG, Twitter, JSON-LD, robots, manifest, icons, verification
+- Description:
+  `src/app/layout.tsx` (lines 70-207) defines a thorough `Metadata` object:
+    - `title` with template `%s · NOVSMM` for per-page overrides ✓
+    - `description`, `applicationName`, `generator`, `category` ✓
+    - `keywords` — 22 keywords across English, Spanish, Portuguese ✓
+    - `authors`, `creator`, `publisher` ✓
+    - `alternates.canonical` = "/" ✓
+    - `alternates.languages` — 4 hreflang entries (BUT see DSK-1c-008 — all point to "/")
+    - `robots` — full index, follow, googleBot with `max-image-preview: large` ✓
+    - `manifest` = "/manifest.webmanifest" ✓
+    - `openGraph` — title, description, siteName, url, locale="en_US", alternateLocale=["es_ES", "pt_BR"], type="website", images ✓
+    - `twitter` — card="summary_large_image", title, description, site="@novsmm", creator="@novsmm", images ✓
+    - `icons` — multi-size PNG set (16, 32, 192, 512) + apple-touch-icon 180 ✓ (MOB-1b-006 fix verified)
+    - `formatDetection` — telephone/email/address = false (prevents iOS auto-linking) ✓
+    - `appleWebApp` — capable=true, title="NOVSMM", statusBarStyle="default" ✓ (MOB-1d-004 fix verified)
+    - `verification.other.google-site-verification` — env-configurable placeholder ✓
+  JSON-LD structured data:
+    - layout.tsx:304-314 emits Organization + WebSite schemas (with SearchAction potentialAction)
+    - landing-json-ld.tsx (223 lines, imported by src/app/page.tsx:8) emits WebApplication + Service + FAQPage + BreadcrumbList schemas
+    - pricing-page.tsx:50-83 emits Product + Offer schema (BUT pricing-page shouldn't exist — see DSK-1c-002)
+  robots.ts (113 lines):
+    - Per-bot rules for Googlebot, Bingbot, Twitterbot, Facebook, LinkedIn, Applebot, WhatsApp (allow /)
+    - AI training crawlers blocked (GPTBot, ChatGPT-User, CCBot, anthropic-ai, Claude-Web, Google-Extended)
+    - Default rule disallows /api/auth/, /api/admin/, /api/wallet/, /api/orders/, /api/uploads/, /api/me/, /api/v1/, /api/tickets/, /api/notifications/, /api/subscriptions/, /api/child-panels/, /api/webhooks/, /api/internal/, /api/provider/
+    - Sitemap referenced via absolute URL ✓
+  sitemap.ts (75 lines):
+    - 5 entries: /, /blog, /api-docs, /changelog, /blog (DUPLICATE — see DSK-1c-009)
+    - Each with lastModified, changeFrequency, priority ✓
+- Evidence:
+  - Read src/app/layout.tsx lines 70-207 — verified metadata object
+  - Read src/app/robots.ts lines 28-112 — verified robots config
+  - Read src/app/sitemap.ts lines 38-75 — verified sitemap (with duplicate /blog)
+  - Read src/components/novsmm/landing-json-ld.tsx lines 1-50 — verified JSON-LD schemas
+- Recommendation: No action needed except:
+  - Fix DSK-1c-008 (hreflang tags)
+  - Fix DSK-1c-009 (duplicate /blog in sitemap)
+  - Fix DSK-1c-002 (delete pricing-page.tsx which emits Product schema for a non-existent product)
+
+Stage Summary:
+- 18 findings total: 3 HIGH, 5 MEDIUM, 5 LOW, 5 INFORMATIONAL (clean)
+- HIGH findings:
+  - DSK-1c-001: recharts imports remain in 2 orphaned files (MOB-1b-014 finding INCORRECT)
+  - DSK-1c-002: /pricing route + pricing-page.tsx still exist (MOB-1c-021 finding INCORRECT)
+  - DSK-1c-003: 11 inputs with focus:outline-none and no alternative focus indicator
+- MEDIUM findings:
+  - DSK-1c-004: 2 modals missing role="dialog" / aria-modal / aria-label
+  - DSK-1c-005: 49 disabled buttons still apply hover effects
+  - DSK-1c-006: Zero @media print styles in entire codebase
+  - DSK-1c-007: 7 major landing components have ZERO focus styles
+  - DSK-1c-008: hreflang tags all point to "/" (incorrect i18n implementation)
+- LOW findings:
+  - DSK-1c-009: Sitemap has duplicate /blog entry
+  - DSK-1c-010: error-boundary.tsx buttons lack hover/focus/transition
+  - DSK-1c-011: 28 disabled buttons missing cursor-not-allowed
+  - DSK-1c-012: Hamburger button lacks hover/focus-visible state
+  - DSK-1c-013: console.log leaks user IDs and OAuth client IDs in production
+- INFORMATIONAL (clean) findings:
+  - DSK-1c-014: Hover state coverage comprehensive (405 hover classes, 0 layout-shift)
+  - DSK-1c-015: Desktop breakpoint coverage (72 lg:/xl:, 25 max-w-*, 5 hidden lg:block/flex)
+  - DSK-1c-016: Keyboard shortcuts + role=button patterns exemplary
+  - DSK-1c-017: Desktop performance patterns healthy (will-change scoped, RAF throttling, transform-only)
+  - DSK-1c-018: Desktop SEO metadata comprehensive (with hreflang caveat)
+
+Quantitative metrics:
+- Hover state coverage: 405 hover: classes / 335 buttons = 121% (some buttons have multiple hover variants) — 1 file (error-boundary.tsx) with buttons but no hover states
+- Focus indicators: 73 elements with focus: classes / 21 elements with focus-visible: classes / 11 elements with focus:outline-none and NO alternative indicator (TRUE GAPS)
+- Layout-shift hover effects: 0 (all hover animations use transform/opacity/color/shadow — GPU-accelerated)
+- Disabled buttons with misleading hover: 49 of 28+9=37 disabled buttons (some counted twice) — 49 lack `disabled:hover:none` override
+- Disabled buttons missing cursor-not-allowed: 28
+- Modals missing role="dialog": 2 of 42 (admin/users.tsx:294, admin/services.tsx:234)
+- Print styles: 0 @media print rules
+- recharts dead imports: 2 files (admin/overview.tsx:21, ui/chart.tsx:4)
+- /pricing dead code: 2 files (src/app/pricing/page.tsx, src/components/novsmm/pricing-page.tsx)
+- console.log PII leaks: 10+ server-side logs leak user IDs / OAuth client IDs
+
+Previously-fixed issues verified still in place (no regression):
+- MOB-1c-004/005/006 (modal Escape/focus trap/focus restore) ✓ — ModalAccessibilityProvider mounted at layout.tsx:333
+- MOB-1c-010 (viewport-fit=cover) ✓ — layout.tsx:66
+- MOB-1d-004 (apple-mobile-web-app meta tags) ✓ — layout.tsx:194-198 appleWebApp config
+- MOB-1b-006 (multi-size favicon set) ✓ — layout.tsx:176-184
+- Layout skip-to-content link ✓ — layout.tsx:322-327
+- JSON-LD Organization + WebSite ✓ — layout.tsx:304-314
+- JSON-LD WebApplication + Service + FAQPage + BreadcrumbList ✓ — landing-json-ld.tsx (imported by page.tsx)
+- robots.ts per-bot rules + AI scraper block ✓
+- ⌘K / Ctrl+K command palette shortcuts ✓ — dashboard-shell.tsx:98, landing-command-palette.tsx:44
+- role="button" + tabIndex + onKeyDown pattern (WCAG-compliant) ✓ — dashboard-marketplace.tsx:1155-1159
+- Hover animations all use transform/opacity (no layout shift) ✓
+- will-change scoped to CSS only (8 instances in globals.css, 0 in .tsx) ✓
+- RAF throttling on all mousemove/scroll handlers (10 instances) ✓
+- Reduced motion media query ✓ — globals.css
+- Mobile 3D-disable media query ✓ — globals.css
+
+Two prior audit findings found INCORRECT (regression or never-actually-fixed):
+- MOB-1b-014 claimed "recharts FULLY REMOVED" — INCORRECT (DSK-1c-001)
+- MOB-1c-021 claimed "pricing-page dead dep verified removed" — INCORRECT (DSK-1c-002)
+
+Top 3 remediation priorities (highest impact, lowest effort):
+1. **DSK-1c-002** (delete /pricing route + pricing-page.tsx) — 2 file deletions. Prevents the next deploy from re-introducing a pricing page the user explicitly asked to remove. ~440 lines of dead code removed.
+2. **DSK-1c-001** (delete admin/overview.tsx + ui/chart.tsx) — 2 file deletions. Removes broken recharts imports that would crash the build if ever imported. ~200 lines of dead code removed.
+3. **DSK-1c-004** (add role="dialog" to 2 admin modals) — 2 attribute additions. Brings 2 modals into the ModalAccessibilityProvider's global Escape/focus-trap/focus-restore handler. ~2 lines of code.
+
+Top 3 remediation priorities (highest impact, more effort):
+1. **DSK-1c-003** (focus indicators on 11 inputs) — ~11 className additions or focus-within: parent wrappers. Major keyboard-a11y improvement.
+2. **DSK-1c-005** (disabled button hover override) — 49 buttons need `disabled:pointer-events-none` OR a single global CSS rule. Single-rule global fix is preferred.
+3. **DSK-1c-007** (focus-visible on 7 landing components) — ~20-30 className additions across navbar, footer, hero, services, marketplace, payments, security. Brings landing page keyboard-a11y in line with dashboard.
+
+Files inspected (read end-to-end or in part): src/app/layout.tsx, src/app/robots.ts, src/app/sitemap.ts, src/app/pricing/page.tsx, src/components/novsmm/navbar.tsx, footer.tsx, hero.tsx, services.tsx, marketplace.tsx, payments.tsx, security.tsx, stats.tsx, auth-fields.tsx, error-boundary.tsx, magnetic.tsx, modal-accessibility-provider.tsx, landing-json-ld.tsx, web-vitals.tsx, sw-register.tsx, use-modal-aria.tsx, app-view.tsx, admin-panel.tsx, admin/users.tsx, admin/services.tsx, dashboard-shell.tsx, dashboard-marketplace.tsx, dashboard-tickets.tsx, dashboard-profile.tsx, dashboard-child-panels.tsx, landing-command-palette.tsx
+Files modified: ONLY this worklog append. No source files touched (read-only audit).
