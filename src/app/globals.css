@@ -403,6 +403,20 @@ button, a, [role="button"], input, select, textarea {
   }
 }
 
+/* DSK-1c-003 FIX: Focus indicators for inputs with focus:outline-none.
+   15+ inputs across the app use focus:outline-none to remove the default
+   browser outline, but many don't add an alternative focus ring. This
+   global rule adds a focus-visible ring to ALL inputs, selects, and
+   textareas — keyboard users get a visible indicator, mouse clicks don't.
+   Uses :focus-visible (modern best practice) so the ring only shows on
+   keyboard navigation, not on mouse clicks. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(0, 82, 255, 0.5);
+  outline-offset: 2px;
+}
+
 /* Optimize font rendering on mobile (prevents layout shift) + prevent horizontal scroll */
 html {
   -webkit-font-smoothing: antialiased;
