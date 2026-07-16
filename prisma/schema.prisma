@@ -152,6 +152,13 @@ model Service {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
+  // SERVICE-AVAILABILITY: tags for marking services as unavailable or new.
+  //   "unavailable" → service no longer exists in provider catalog (no refills)
+  //   "new" → service was just added in the latest sync
+  //   null → normal service
+  availabilityTag String?
+  lastSyncedAt    DateTime?
+
   @@index([platform])
   @@index([status])
   @@index([status, platform, price])

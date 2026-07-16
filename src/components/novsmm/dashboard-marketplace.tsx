@@ -1142,6 +1142,9 @@ function ServiceCard({
   rating: ReviewEntry | null;
 }) {
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
+  // SERVICE-AVAILABILITY: check if service is unavailable or new
+  const isUnavailable = service.availabilityTag === "unavailable" || service.status === "paused";
+  const isNew = service.availabilityTag === "new";
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Activate on Enter or Space — same as a native button.
     if (e.key === "Enter" || e.key === " ") {
@@ -1151,13 +1154,29 @@ function ServiceCard({
   };
   return (
     <div
-      onClick={onClick}
-      onKeyDown={handleKeyDown}
-      tabIndex={0}
-      role="button"
-      aria-label={`${service.name} — ${service.platform}. Press Enter to view details and place an order.`}
-      className="group relative flex h-full cursor-pointer flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-all hover:-translate-y-0.5 hover:nov-ring-lg stat-card-3d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+      onClick={isUnavailable ? undefined : onClick}
+      onKeyDown={isUnavailable ? undefined : handleKeyDown}
+      tabIndex={isUnavailable ? -1 : 0}
+      role={isUnavailable ? undefined : "button"}
+      aria-label={`${service.name} — ${service.platform}.${isUnavailable ? " No disponible." : " Press Enter to view details and place an order."}`}
+      className={cn(
+        "group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-all stat-card-3d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
+        isUnavailable
+          ? "cursor-not-allowed opacity-60"
+          : "cursor-pointer hover:-translate-y-0.5 hover:nov-ring-lg"
+      )}
     >
+      {/* SERVICE-AVAILABILITY: availability tags */}
+      {isUnavailable && (
+        <div className="absolute left-0 right-0 top-0 z-20 bg-rose-500 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-white">
+          No disponible
+        </div>
+      )}
+      {isNew && !isUnavailable && (
+        <div className="absolute left-0 right-0 top-0 z-20 bg-emerald-500 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-white">
+          Nuevo
+        </div>
+      )}
       {/* Favorite star — absolute top-right corner */}
       <button
         onClick={(e) => {

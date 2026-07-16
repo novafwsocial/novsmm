@@ -84,6 +84,7 @@ export async function GET(req: NextRequest) {
         maxQty: true,
         rate: true,
         status: true,
+        availabilityTag: true,
       },
       orderBy: [{ platform: "asc" }, { price: "asc" }],
       skip,

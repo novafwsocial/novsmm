@@ -155,18 +155,30 @@ export async function POST(
 
   try {
     // ── Fetch the live catalog from the provider ──
-    // Prefer the per-provider apiKey from the DB; fall back to the env var
-    // (legacy single-provider path still relies on HUNTSMM_API_KEY).
     const apiKey = provider.apiKey || process.env.HUNTSMM_API_KEY || "";
     const remoteServices = await getHuntSmmServices(apiKey, provider.apiUrl);
 
     let synced = 0;
+    let added = 0;
     const batchSize = 100;
+    const now = new Date();
+
+    // ── SERVICE-AVAILABILITY: Build a set of remote service names ──
+    // After upserting, any existing DB service NOT in this set is no longer
+    // available from the provider → mark as "unavailable" + status "paused".
+    const remoteNames = new Set<string>();
+    for (const s of remoteServices) {
+      remoteNames.add(`[${s.service}] ${s.name}`.slice(0, 200));
+    }
+
+    // ── Get existing service names from DB for this provider ──
+    const existingServices = await db.service.findMany({
+      where: { providerId: provider.id },
+      select: { id: true, name: true, availabilityTag: true },
+    });
+    const existingNames = new Set(existingServices.map((s) => s.name));
 
     // ── Upsert each remote service into the Service table ──
-    // We upsert by `name` (unique). The composite `[<remote-id>] <remote-name>`
-    // matches the format used by `prisma/sync-huntsmm.ts` so re-syncing the
-    // same catalog is a no-op for unchanged rows.
     for (let i = 0; i < remoteServices.length; i += batchSize) {
       const batch = remoteServices.slice(i, i + batchSize);
       await Promise.all(
@@ -179,6 +191,9 @@ export async function POST(
           const minQty = parseInt(s.min) || 1;
           const maxQty = parseInt(s.max) || 1000000;
           const name = `[${s.service}] ${s.name}`.slice(0, 200);
+          const isNew = !existingNames.has(name);
+
+          if (isNew) added++;
 
           return db.service.upsert({
             where: { name },
@@ -195,6 +210,8 @@ export async function POST(
               status: "active",
               rate: "Varies",
               providerId: provider.id,
+              availabilityTag: isNew ? "new" : null,
+              lastSyncedAt: now,
             },
             create: {
               name,
@@ -210,11 +227,36 @@ export async function POST(
               status: "active",
               rate: "Varies",
               providerId: provider.id,
+              availabilityTag: "new",
+              lastSyncedAt: now,
             },
           });
         })
       );
       synced += batch.length;
+    }
+
+    // ── SERVICE-AVAILABILITY: Mark disappeared services as "unavailable" ──
+    // Any DB service that belongs to this provider but is NOT in the remote
+    // catalog → the provider removed it. Mark as "unavailable" + "paused" so
+    // users can't create new orders for it (avoids refunds).
+    let removed = 0;
+    const disappearedIds: string[] = [];
+    for (const existing of existingServices) {
+      if (!remoteNames.has(existing.name)) {
+        disappearedIds.push(existing.id);
+      }
+    }
+    if (disappearedIds.length > 0) {
+      const updateResult = await db.service.updateMany({
+        where: { id: { in: disappearedIds } },
+        data: {
+          status: "paused",
+          availabilityTag: "unavailable",
+          lastSyncedAt: now,
+        },
+      });
+      removed = updateResult.count;
     }
 
     const latency = Date.now() - startTime;
@@ -228,6 +270,8 @@ export async function POST(
     await audit(adminId, "provider.sync", "provider", provider.id, {
       provider: provider.name,
       synced,
+      added,
+      removed,
       latency,
       status: "healthy",
     });
@@ -247,10 +291,10 @@ export async function POST(
         status: "healthy",
         servicesChecked: remoteServices.length,
         servicesUpdated: synced,
-        servicesAdded: 0,
-        servicesRemoved: 0,
+        servicesAdded: added,
+        servicesRemoved: removed,
       },
-      message: `Synced ${synced} services from ${provider.name} in ${latency}ms`,
+      message: `Synced ${synced} services (${added} new, ${removed} unavailable) from ${provider.name} in ${latency}ms`,
     });
   } catch (e: any) {
     const latency = Date.now() - startTime;
