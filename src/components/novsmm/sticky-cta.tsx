@@ -44,7 +44,7 @@ export function StickyCTA() {
         style={{
           background:
             "linear-gradient(to top, var(--background), var(--background) 80%, transparent)",
-          padding: "12px 16px env(safe-area-inset-bottom, 0px)",
+          padding: "12px 16px max(12px, env(safe-area-inset-bottom, 0px))",
           borderTop: "1px solid var(--border)",
         }}
       >

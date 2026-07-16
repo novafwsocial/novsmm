@@ -396,11 +396,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <button
             type="button"
             onClick={openPalette}
-            className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-background"
+            className="flex min-w-0 flex-1 items-center gap-2 rounded-full border border-border bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-background"
             aria-label={t("dashboard.openCommandPalette", "Open command palette")}
           >
             <Search className="h-3.5 w-3.5" />
-            <span className="w-full text-left text-foreground/80">
+            <span className="min-w-0 flex-1 truncate text-left text-foreground/80">
               {t("dashboard.search", "Search orders, services, clients…")}
             </span>
             <kbd className="hidden rounded border border-border bg-background px-1.5 text-[11px] sm:inline">

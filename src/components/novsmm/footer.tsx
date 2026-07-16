@@ -292,7 +292,7 @@ export function Footer() {
 
           {/* bottom bar */}
           <div className="mt-8 flex flex-col items-start justify-between gap-4 border-t border-border/60 pt-6 sm:flex-row sm:items-center">
-            <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted-foreground">
               {/* U-L-002: removed "Inc." — implies US incorporation that
                   probably doesn't exist. Just "NOVSMM" is cleaner. */}
               <span>© {year} {t("landing.footer.copyright")}</span>
