@@ -57,7 +57,7 @@ describe("Wallet Withdraw — Race Condition", () => {
             },
           });
           return { success: true, label };
-        });
+        }, { maxWait: 30_000, timeout: 30_000 });
         return result;
       } catch (e: any) {
         return { success: false, label, reason: e.message };
@@ -119,7 +119,7 @@ describe("Wallet Withdraw — Race Condition", () => {
             },
           });
           return { success: true };
-        });
+        }, { maxWait: 30_000, timeout: 30_000 });
         return result;
       } catch {
         return { success: false };
