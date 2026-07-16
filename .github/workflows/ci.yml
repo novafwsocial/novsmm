@@ -132,7 +132,9 @@ jobs:
       - name: Run bun audit
         # FIX (M-011): was non-blocking (`|| true`). Now blocking — high
         # severity vulnerabilities fail the CI build.
-        run: bun audit --severity high
+        # Audit runtime dependencies in the blocking release gate. Dev-tool
+        # advisories are reviewed separately and must not block production.
+        run: bun audit --prod --audit-level=high
 
       - name: Run Semgrep SAST
         uses: returntocorp/semgrep-action@v1
