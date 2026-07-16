@@ -1,4 +1,4 @@
-import { getRedis, isRedisAvailable } from "./redis";
+import { getRedis } from "./redis";
 
 /**
  * Rate limiter with Redis primary + in-memory fallback.
@@ -74,15 +74,15 @@ export async function checkRateLimit(
   maxRequests: number,
   windowMs: number
 ): Promise<RateLimitResult> {
-  // Try Redis sliding window
-  if (isRedisAvailable()) {
-    const redis = await getRedis();
-    if (redis) {
-      try {
-        return await redisSlidingWindow(redis, key, maxRequests, windowMs);
-      } catch {
-        // Fall through to in-memory
-      }
+  // Initialize Redis lazily, then use the shared sliding window when it is
+  // configured. Checking availability before calling getRedis() would leave
+  // every fresh app process on the in-memory fallback forever.
+  const redis = await getRedis();
+  if (redis) {
+    try {
+      return await redisSlidingWindow(redis, key, maxRequests, windowMs);
+    } catch {
+      // Fall through to in-memory
     }
   }
 

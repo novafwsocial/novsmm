@@ -2,16 +2,6 @@ import { NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireAuth, apiOk, apiError } from "@/lib/api-utils";
 
-// Phase 5: Business logic extracted to src/lib/services/loyalty.service.ts
-// Re-export for backward compatibility (other modules may import from here)
-export {
-  ACHIEVEMENTS,
-  TIERS,
-  resolveTier,
-  reconcileAchievements,
-  awardOrderPoints,
-} from "@/lib/services/loyalty.service";
-
 // Import for local use in the GET handler
 import {
   ACHIEVEMENTS,

@@ -2122,12 +2122,14 @@ function AddPaymentMethodModal({ onClose, onCreate }: { onClose: () => void; onC
 /* ─────────── Security ─────────── */
 function AdminSecurity() {
   const layers = [
-    { icon: Fingerprint, title: "2FA enforcement", desc: "TOTP / WebAuthn / passkeys", status: "92% adoption", ok: true },
-    { icon: Globe2, title: "IP allowlists", desc: "Per-role geographic restrictions", status: "48 rules", ok: true },
-    { icon: Activity, title: "Anomaly detection", desc: "ML-based fraud scoring", status: "0.01% FP", ok: true },
-    { icon: Ban, title: "Bot protection", desc: "Rate limit + WAF + CAPTCHA", status: "2.4M blocked", ok: true },
-    { icon: AlertTriangle, title: "CSRF / XSS / SQLi", desc: "Edge-filtered on every request", status: "0 breaches", ok: true },
-    { icon: Clock, title: "Audit logs", desc: "Immutable, 12-month retention", status: "8.2M events", ok: true },
+    // Do not present invented security metrics as production telemetry.  Until
+    // each control is backed by a verifiable source, show its state honestly.
+    { icon: Fingerprint, title: "2FA enforcement", desc: "TOTP / WebAuthn / passkeys", status: "Métrica no disponible", ok: false },
+    { icon: Globe2, title: "IP allowlists", desc: "Per-role geographic restrictions", status: "Configuración no verificada", ok: false },
+    { icon: Activity, title: "Anomaly detection", desc: "ML-based fraud scoring", status: "Métrica no disponible", ok: false },
+    { icon: Ban, title: "Bot protection", desc: "Rate limit + WAF + CAPTCHA", status: "Métrica no disponible", ok: false },
+    { icon: AlertTriangle, title: "CSRF / XSS / SQLi", desc: "Edge-filtered on every request", status: "Sin historial verificado", ok: false },
+    { icon: Clock, title: "Audit logs", desc: "Immutable, 12-month retention", status: "Retención no verificada", ok: false },
   ];
   return (
     <RevealStagger stagger={0.05} className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -2138,12 +2140,12 @@ function AdminSecurity() {
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600">
                 <l.icon className="h-4 w-4" />
               </span>
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[11px] font-medium text-emerald-700">
+              <span className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-[11px] font-medium ${l.ok ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-700" : "border-amber-500/30 bg-amber-500/10 text-amber-700"}`}>
                 <span className="relative flex h-1.5 w-1.5">
-                  <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                  <span className={`nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full ${l.ok ? "bg-emerald-500" : "bg-amber-500"}`} />
+                  <span className={`relative inline-flex h-1.5 w-1.5 rounded-full ${l.ok ? "bg-emerald-500" : "bg-amber-500"}`} />
                 </span>
-                active
+                {l.ok ? "active" : "requiere verificación"}
               </span>
             </div>
             <div className="mt-3 text-sm font-semibold text-foreground">{l.title}</div>

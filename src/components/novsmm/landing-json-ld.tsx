@@ -55,7 +55,7 @@ const webApplicationLd = {
     // Stripe was completely removed from NOVSMM — only 4 payment methods remain.
     "4 integrated payment gateways (PayPal, MercadoPago, NowPayments, and more)",
     "Multi-currency wallet with instant top-up",
-    "24/7 ticket support + 99.99% uptime SLA",
+    "24/7 ticket support + live status monitoring",
     "Public REST API with webhooks",
     "Real-time WebSocket notifications",
     "Child panel infrastructure for resellers",
@@ -180,7 +180,7 @@ const faqLd = {
       name: "Is NOVSMM secure?",
       acceptedAnswer: {
         "@type": "Answer",
-        text: "Yes. NOVSMM is engineered with SOC 2 controls including bcrypt password hashing, JWT session tokens, CSRF protection, role-based access control, comprehensive CSP and security headers, 2FA support, and full audit logging on all privileged actions.",
+        text: "NOVSMM uses layered security controls including password hashing, session protection, CSRF protection, role-based access, security headers, optional 2FA, and audit logging. Certification status is not represented by this FAQ.",
       },
     },
   ],

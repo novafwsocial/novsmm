@@ -8,8 +8,10 @@ import { useAnalytics, useRefreshAnalytics } from "@/hooks/use-api";
 import { formatPrice } from "@/lib/currency-utils";
 import { useSession } from "@/hooks/use-api";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "./language-provider";
 
 export function DashboardAnalytics() {
+  const { t } = useLanguage();
   const { data, isLoading } = useAnalytics();
   const refresh = useRefreshAnalytics();
   const { data: sessionData } = useSession();
@@ -23,11 +25,11 @@ export function DashboardAnalytics() {
     const url = `${window.location.origin}/?ref=${username}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast({ title: "Referral link copied!", description: url });
+      toast({ title: t("analytics.referralCopied", "Referral link copied!"), description: url });
     } catch {
       toast({
-        title: "Couldn't copy",
-        description: "Your browser blocked clipboard access.",
+        title: t("analytics.couldNotCopy", "Couldn't copy"),
+        description: t("analytics.clipboardBlocked", "Your browser blocked clipboard access."),
         variant: "destructive",
       });
     }
@@ -48,13 +50,13 @@ export function DashboardAnalytics() {
       <Reveal>
         <div>
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-            Analytics
+            {t("analytics.eyebrow", "Analytics")}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Performance
+            {t("analytics.title", "Performance")}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Real-time metrics from your transaction history.
+            {t("analytics.subtitle", "Real-time metrics from your transaction history.")}
           </p>
         </div>
       </Reveal>
@@ -72,16 +74,16 @@ export function DashboardAnalytics() {
       {/* KPI strip */}
       <RevealStagger stagger={0.05} className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
         <RevealItem>
-          <Kpi icon={<ShoppingCart className="h-3.5 w-3.5" />} label="Orders (30d)" value={<Counter to={kpis.totalOrders} duration={1.5} />} delta="live" />
+          <Kpi icon={<ShoppingCart className="h-3.5 w-3.5" />} label={t("analytics.orders30d", "Orders (30d)")} value={<Counter to={kpis.totalOrders} duration={1.5} />} delta={t("analytics.live", "live")} />
         </RevealItem>
         <RevealItem>
-          <Kpi icon={<DollarSign className="h-3.5 w-3.5" />} label="Revenue (30d)" value={formatPrice(kpis.totalRevenue, currency)} delta="live" />
+          <Kpi icon={<DollarSign className="h-3.5 w-3.5" />} label={t("analytics.revenue30d", "Revenue (30d)")} value={formatPrice(kpis.totalRevenue, currency)} delta={t("analytics.live", "live")} />
         </RevealItem>
         <RevealItem>
-          <Kpi icon={<TrendingUp className="h-3.5 w-3.5" />} label="Conversion" value={<><Counter to={kpis.conversionRate} decimals={1} duration={1.5} />%</>} delta="live" />
+          <Kpi icon={<TrendingUp className="h-3.5 w-3.5" />} label={t("analytics.conversion", "Conversion")} value={<><Counter to={kpis.conversionRate} decimals={1} duration={1.5} />%</>} delta={t("analytics.live", "live")} />
         </RevealItem>
         <RevealItem>
-          <Kpi icon={<Repeat2 className="h-3.5 w-3.5" />} label="Active orders" value={<Counter to={kpis.activeOrders} duration={1.5} />} delta="live" />
+          <Kpi icon={<Repeat2 className="h-3.5 w-3.5" />} label={t("analytics.activeOrders", "Active orders")} value={<Counter to={kpis.activeOrders} duration={1.5} />} delta={t("analytics.live", "live")} />
         </RevealItem>
       </RevealStagger>
 
@@ -92,9 +94,9 @@ export function DashboardAnalytics() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Revenue & orders
+                  {t("analytics.revenueOrders", "Revenue & orders")}
                 </div>
-                <div className="mt-1 text-xl font-semibold">Last 30 days</div>
+                <div className="mt-1 text-xl font-semibold">{t("analytics.last30Days", "Last 30 days")}</div>
               </div>
               <Legend />
             </div>
@@ -108,9 +110,9 @@ export function DashboardAnalytics() {
         <Reveal blur delay={0.06}>
           <div className="h-full rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
             <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              By platform
+              {t("analytics.byPlatform", "By platform")}
             </div>
-            <div className="text-base font-semibold">Marketplace share</div>
+            <div className="text-base font-semibold">{t("analytics.marketplaceShare", "Marketplace share")}</div>
             {marketplaceBreakdown.length > 0 ? (
               <div>
                 {/* P-002: PieChart replaced with CSS conic-gradient donut */}
@@ -147,7 +149,7 @@ export function DashboardAnalytics() {
               </div>
             ) : (
               <div className="flex h-[200px] items-center justify-center text-sm text-muted-foreground">
-                No completed orders yet
+                {t("analytics.noCompletedOrders", "No completed orders yet")}
               </div>
             )}
           </div>
@@ -161,14 +163,14 @@ export function DashboardAnalytics() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Hourly orders · today
+                  {t("analytics.hourlyOrders", "Hourly orders · today")}
                 </div>
                 <div className="text-base font-semibold">
-                  Peak: {Math.max(...hourlyOrders.map((h: any) => h.v))} orders/hour
+                  {t("analytics.peak", "Peak: {count} orders/hour").replace("{count}", String(Math.max(...hourlyOrders.map((h: any) => h.v))))}
                 </div>
               </div>
               <span className="inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
-                <ArrowUpRight className="h-3 w-3" /> live
+                <ArrowUpRight className="h-3 w-3" /> {t("analytics.live", "live")}
               </span>
             </div>
             {/* P-002: BarChart replaced with CSS flex bars — full width + hover */}
@@ -180,7 +182,7 @@ export function DashboardAnalytics() {
                     key={i}
                     className="group relative flex-1 transition-opacity hover:opacity-100"
                     style={{ opacity: 0.85 }}
-                    title={`${h.h}:00 — ${h.v} orders`}
+                    title={t("analytics.hourTooltip", "{hour}:00 — {count} orders").replace("{hour}", String(h.h)).replace("{count}", String(h.v))}
                   >
                     <div
                       className="w-full rounded-t-md bg-primary/80 transition-all group-hover:bg-primary group-hover:opacity-100"
@@ -196,20 +198,20 @@ export function DashboardAnalytics() {
         <Reveal blur delay={0.06}>
           <div className="h-full rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
             <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-              <Gift className="h-3.5 w-3.5" /> Referrals
+              <Gift className="h-3.5 w-3.5" /> {t("analytics.referrals", "Referrals")}
             </div>
             <div className="mt-2 text-2xl font-semibold tabular-nums">
               <Counter to={referrals.count} duration={1.5} />{" "}
-              <span className="text-sm font-normal text-muted-foreground">referrals</span>
+              <span className="text-sm font-normal text-muted-foreground">{t("analytics.referrals", "referrals")}</span>
             </div>
             <div className="text-xs text-muted-foreground">
-              <span className="font-medium text-emerald-600">{formatPrice(referrals.total, currency)}</span> earned · 5% lifetime
+              <span className="font-medium text-emerald-600">{formatPrice(referrals.total, currency)}</span> {t("analytics.earnedLifetime", "earned · 5% lifetime")}
             </div>
             <div className="mt-4 h-[120px] w-full">
               <MiniAreaChart data={referrals.series.map((s: any) => ({ d: s.d, revenue: s.revenue }))} height={120} color="#10b981" formatValue={(v) => `$${v.toFixed(2)}`} />
             </div>
             <button onClick={handleShareReferral} className="mt-3 w-full rounded-lg border border-border py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted">
-              Share referral link
+              {t("analytics.shareReferral", "Share referral link")}
             </button>
           </div>
         </Reveal>
@@ -247,13 +249,14 @@ function Kpi({
 }
 
 function Legend() {
+  const { t } = useLanguage();
   return (
     <div className="flex items-center gap-3 text-[11px]">
       <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-        <span className="h-2 w-2 rounded-full bg-primary" /> Revenue
+        <span className="h-2 w-2 rounded-full bg-primary" /> {t("analytics.revenue", "Revenue")}
       </span>
       <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-        <span className="h-2 w-2 rounded-full bg-emerald-500" /> Orders
+        <span className="h-2 w-2 rounded-full bg-emerald-500" /> {t("analytics.orders", "Orders")}
       </span>
     </div>
   );
@@ -274,6 +277,7 @@ function AiInsightsCard({
   onRefresh: () => void;
   isRefreshing: boolean;
 }) {
+  const { t } = useLanguage();
   // Render insight content with simple line breaks and bullet styling.
   const rendered = (content ?? "")
     .split(/\n+/)
@@ -291,10 +295,10 @@ function AiInsightsCard({
             </span>
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                AI Insights
+                {t("analytics.aiInsights", "AI Insights")}
               </div>
               <div className="text-base font-semibold">
-                Análisis automático de tu actividad
+                {t("analytics.autoAnalysis", "Automatic analysis of your activity")}
               </div>
             </div>
           </div>
@@ -302,14 +306,14 @@ function AiInsightsCard({
             onClick={onRefresh}
             disabled={isRefreshing || !eligible}
             className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted disabled:opacity-50"
-            title={eligible ? "Regenerate insights" : "Available after 5 orders"}
+            title={eligible ? t("analytics.regenerate", "Regenerate insights") : t("analytics.availableAfter", "Available after 5 orders")}
           >
             {isRefreshing ? (
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
             ) : (
               <RefreshCw className="h-3.5 w-3.5" />
             )}
-            {isRefreshing ? "Generating…" : "Refresh"}
+            {isRefreshing ? t("analytics.generating", "Generating…") : t("analytics.refresh", "Refresh")}
           </button>
         </div>
 
@@ -326,13 +330,12 @@ function AiInsightsCard({
               </div>
             ) : (
               <div className="text-sm text-muted-foreground">
-                No insights available yet. Click refresh to generate.
+                {t("analytics.noInsights", "No insights available yet. Click refresh to generate.")}
               </div>
             )
           ) : (
             <div className="text-sm text-muted-foreground">
-              Place at least 6 orders to unlock AI-powered spending insights and
-              growth recommendations.
+              {t("analytics.unlockInsights", "Place at least 6 orders to unlock AI-powered spending insights and growth recommendations.")}
             </div>
           )}
         </div>
@@ -341,12 +344,12 @@ function AiInsightsCard({
           <div className="relative mt-3 flex items-center gap-2 text-[11px] text-muted-foreground">
             {refreshed && (
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/10 px-2 py-0.5 font-medium text-emerald-700">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> Fresh
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> {t("analytics.fresh", "Fresh")}
               </span>
             )}
             {generatedAt && (
               <span>
-                Generated {new Date(generatedAt).toLocaleString()} · cached 1h
+                {t("analytics.generatedCached", "Generated {date} · cached 1h").replace("{date}", new Date(generatedAt).toLocaleString())}
               </span>
             )}
           </div>

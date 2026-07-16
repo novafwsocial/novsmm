@@ -1,5 +1,5 @@
 import { Queue, QueueEvents } from "bullmq";
-import { getRedis, isRedisAvailable } from "./redis";
+import { getRedis } from "./redis";
 
 /**
  * BullMQ queue definitions for background job processing.
@@ -58,8 +58,6 @@ const queueCache = new Map<QueueName, Queue>();
  * Get a BullMQ Queue instance (or null if Redis is not available).
  */
 export async function getQueue(name: QueueName): Promise<Queue | null> {
-  if (!isRedisAvailable()) return null;
-
   if (queueCache.has(name)) return queueCache.get(name)!;
 
   const connection = await getRedis();
@@ -149,7 +147,7 @@ const JOB_HANDLERS: Record<QueueName, (data: any) => Promise<void>> = {
     console.log("[queue:provider.sync] Syncing provider:", data.providerId);
   },
   "loyalty.reconcile": async (data) => {
-    const { reconcileAchievements } = await import("@/app/api/me/loyalty/route");
+    const { reconcileAchievements } = await import("./services/loyalty.service");
     await reconcileAchievements(data.userId);
   },
   "ai.insights": async (data) => {

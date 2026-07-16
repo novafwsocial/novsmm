@@ -2,6 +2,10 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiOk, apiError, audit } from "@/lib/api-utils";
 import { encryptJSON } from "@/lib/crypto-utils";
+import {
+  SOCIAL_AUTH_PROVIDERS,
+  type SocialAuthProvider,
+} from "@/lib/auth";
 
 /**
  * /api/admin/social-auth — manage OAuth provider credentials.
@@ -18,16 +22,6 @@ import { encryptJSON } from "@/lib/crypto-utils";
  * The GET response shape is:
  *   { google: { configured: bool }, facebook: {...}, github: {...}, twitter: {...} }
  */
-
-// Canonical list of supported providers, in the order they should appear in
-// the admin UI. Exported so the frontend can import the same list.
-export const SOCIAL_AUTH_PROVIDERS = [
-  "google",
-  "facebook",
-  "github",
-  "twitter",
-] as const;
-export type SocialAuthProvider = (typeof SOCIAL_AUTH_PROVIDERS)[number];
 
 function isValidProvider(p: unknown): p is SocialAuthProvider {
   return typeof p === "string" && (SOCIAL_AUTH_PROVIDERS as readonly string[]).includes(p);

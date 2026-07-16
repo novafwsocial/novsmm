@@ -15,15 +15,16 @@ import {
 } from "lucide-react";
 import { Logo } from "./logo";
 import { Counter } from "./counter";
+import { useLanguage } from "./language-provider";
 
 const NAV = [
-  { icon: LayoutGrid, label: "Dashboard", active: true },
-  { icon: ShoppingCart, label: "Orders" },
-  { icon: Store, label: "Marketplace" },
-  { icon: Wallet, label: "Wallet" },
-  { icon: Users, label: "Clients" },
-  { icon: Ticket, label: "Tickets" },
-  { icon: Settings, label: "Settings" },
+  { icon: LayoutGrid, key: "dashboard.nav.dashboard", active: true },
+  { icon: ShoppingCart, key: "dashboard.nav.orders" },
+  { icon: Store, key: "dashboard.nav.marketplace" },
+  { icon: Wallet, key: "dashboard.nav.wallet" },
+  { icon: Users, key: "dashboard.nav.clients" },
+  { icon: Ticket, key: "dashboard.nav.tickets" },
+  { icon: Settings, key: "dashboard.nav.settings" },
 ];
 
 const ORDERS = [
@@ -98,6 +99,7 @@ function MiniChart({ data }: { data: number[] }) {
 }
 
 export function HeroDashboard() {
+  const { t } = useLanguage();
   // MOB-1b-001 FIX: removed `mounted` state — the chart was rendered only
   // after mount ({mounted && <MiniChart />}), causing a 107px layout shift
   // on Slow 4G when the chart appeared. The chart container already has
@@ -114,7 +116,7 @@ export function HeroDashboard() {
         <nav className="mt-5 flex flex-col gap-1">
           {NAV.map((n) => (
             <div
-              key={n.label}
+              key={n.key}
               className={`flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-[13px] font-medium transition-colors ${
                 n.active
                   ? "bg-background text-foreground nov-ring"
@@ -122,13 +124,13 @@ export function HeroDashboard() {
               }`}
             >
               <n.icon className="h-4 w-4" />
-              {n.label}
+              {t(n.key)}
             </div>
           ))}
         </nav>
         <div className="mt-auto rounded-xl border border-border/60 bg-background p-3">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>Wallet</span>
+            <span>{t("dashboard.nav.wallet")}</span>
             <span className="text-emerald-600">+12.4%</span>
           </div>
           <div className="mt-1 text-lg font-semibold tabular-nums">
@@ -146,8 +148,8 @@ export function HeroDashboard() {
         <div className="flex items-center justify-between gap-3">
           <div className="flex flex-1 items-center gap-2 rounded-lg border border-border/60 bg-background px-3 py-2 text-sm text-muted-foreground">
             <Search className="h-4 w-4" />
-            <span className="hidden sm:inline">Search orders, services…</span>
-            <span className="sm:hidden">Search…</span>
+            <span className="hidden sm:inline">{t("dashboard.search")}</span>
+            <span className="sm:hidden">{t("dashboard.searchShort")}</span>
             <kbd className="ml-auto hidden rounded border border-border/60 px-1.5 py-0.5 text-[11px] font-medium sm:inline">⌘K</kbd>
           </div>
           <div className="flex items-center gap-2">
@@ -156,7 +158,7 @@ export function HeroDashboard() {
                 <span className="nov-pulse-dot absolute inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
                 <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
               </span>
-              All systems operational
+              {t("dashboard.allSystemsOperational")}
             </div>
             <button className="flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted">
               <Bell className="h-4 w-4" />
@@ -168,25 +170,25 @@ export function HeroDashboard() {
         {/* Stat cards */}
         <div className="mt-4 grid grid-cols-2 gap-3 lg:grid-cols-4">
           <StatCard
-            label="Balance"
+            label={t("dashboard.balance")}
             value={<>$<Counter to={8420.5} from={8420.5} decimals={2} duration={2.4} /></>}
             delta="+12.4%"
             up
           />
           <StatCard
-            label="Orders today"
+            label={t("dashboard.ordersToday")}
             value={<Counter to={1284} from={1284} duration={2.2} />}
             delta="+8.1%"
             up
           />
           <StatCard
-            label="Active services"
+            label={t("dashboard.activeServices")}
             value={<Counter to={242} from={242} duration={2.2} />}
             delta="+3"
             up
           />
           <StatCard
-            label="Conversion"
+            label={t("dashboard.conversion")}
             value={<><Counter to={94.2} from={94.2} decimals={1} duration={2.2} />%</>}
             delta="-0.4%"
           />
@@ -197,7 +199,7 @@ export function HeroDashboard() {
           <div className="lg:col-span-3 rounded-2xl border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between">
               <div>
-                <div className="text-xs text-muted-foreground">Revenue · last 32 days</div>
+                <div className="text-xs text-muted-foreground">{t("dashboard.revenueLastDays")}</div>
                 <div className="mt-0.5 text-xl font-semibold tabular-nums">
                   $<Counter to={128450} from={128450} duration={2.6} />
                 </div>
@@ -214,10 +216,10 @@ export function HeroDashboard() {
 
           <div className="lg:col-span-2 rounded-2xl border border-border/60 bg-background p-4">
             <div className="flex items-center justify-between">
-              <div className="text-xs text-muted-foreground">Live orders</div>
+              <div className="text-xs text-muted-foreground">{t("dashboard.liveOrders")}</div>
               <span className="flex items-center gap-1 text-[11px] font-medium text-emerald-600">
                 <span className="nov-pulse-dot inline-flex h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                streaming
+                {t("dashboard.streaming")}
               </span>
             </div>
             <div className="mt-3 flex flex-col gap-2">
@@ -229,7 +231,7 @@ export function HeroDashboard() {
                   <span className="text-base leading-none">{o.flag}</span>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-[12px] font-medium text-foreground">{o.svc}</div>
-                    <div className="text-[11px] text-muted-foreground">{o.id} · {o.time}</div>
+                    <div className="text-[11px] text-muted-foreground">{o.id} · {o.time === "just now" ? t("dashboard.justNow") : o.time}</div>
                   </div>
                   <span className="shrink-0 text-[12px] font-semibold tabular-nums text-emerald-600">{o.amt}</span>
                 </div>

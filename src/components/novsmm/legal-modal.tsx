@@ -344,7 +344,8 @@ function PrivacyContent() {
         We implement bank-grade security measures including TLS 1.3 encryption in
         transit, AES-256 at rest, bcrypt password hashing, mandatory 2FA for admin and
         reseller accounts, regular penetration testing, and continuous monitoring. We
-        maintain SOC 2 Type II and PCI DSS compliance. Despite these safeguards, no
+        do not represent the service as SOC 2 Type II or PCI DSS certified. Despite
+        these safeguards, no
         method of transmission over the Internet is 100% secure — see our{" "}
         <a
           href="#security"

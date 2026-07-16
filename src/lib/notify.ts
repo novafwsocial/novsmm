@@ -120,6 +120,15 @@ export async function sendEmail(opts: {
   }
 
   // Real SMTP delivery
+  // Keep all header-derived values single-line and disable Nodemailer's file/
+  // URL resolution paths. These are defense-in-depth because subjects and
+  // recipients can originate in database-backed notification templates.
+  const cleanHeader = (value: string) => value.replace(/[\r\n]+/g, " ").trim();
+  const to = cleanHeader(opts.to);
+  const subject = cleanHeader(opts.subject).slice(0, 998);
+  const from = cleanHeader(EMAIL_FROM ?? "NOVSMM <noreply@novsmm.shop>");
+  if (!to) throw new Error("Email recipient is required");
+
   const nodemailer = await import("nodemailer");
   const transporter = nodemailer.createTransport({
     host: SMTP_HOST,
@@ -129,11 +138,13 @@ export async function sendEmail(opts: {
   });
 
   const info = await transporter.sendMail({
-    from: EMAIL_FROM ?? "NOVSMM <noreply@novsmm.shop>",
-    to: opts.to,
-    subject: opts.subject,
+    from,
+    to,
+    subject,
     text: opts.text,
     html: opts.html,
+    disableFileAccess: true,
+    disableUrlAccess: true,
   });
 
   return { sandbox: false, delivered: true, messageId: info.messageId };
@@ -177,4 +188,3 @@ export async function notifyAdmins(input: Omit<NotifInput, "userId">) {
     await createNotification({ ...input, userId: admin.id, sendEmail: true });
   }
 }
-

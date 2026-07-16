@@ -26,15 +26,17 @@ export async function GET() {
     ]);
 
   const totalRevenue = revenueAgg._sum.totalPrice ?? 0;
-  const ordersPerMin = Math.max(1, Math.round(orders24h / (24 * 60)));
+  // Keep zero as zero: a public status endpoint must not turn an idle
+  // platform into a fabricated throughput claim.
+  const ordersPerMin = Math.round(orders24h / (24 * 60));
 
   const response = apiOk({
     status: "operational",
     services: {
       api: { status: "operational", latency: "~30ms" },
-      dashboard: { status: "operational" },
-      payments: { status: "operational" },
-      websocket: { status: "operational" },
+      dashboard: { status: "unknown" },
+      payments: { status: "unknown" },
+      websocket: { status: "unknown" },
     },
     stats: {
       totalUsers,

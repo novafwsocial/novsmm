@@ -77,6 +77,7 @@ export default function TwitterImage() {
             src="https://novsmm.shop/logo-new.png"
             width={56}
             height={56}
+            alt="NOVSMM"
             style={{ borderRadius: 0 }}
           />
           <div
@@ -130,7 +131,7 @@ export default function TwitterImage() {
             zIndex: 1,
           }}
         >
-          {["99.99% uptime", "SOC 2", "4 gateways"].map((chip) => (
+          {["Live monitoring", "Layered security", "4 gateways"].map((chip) => (
             <div
               key={chip}
               style={{

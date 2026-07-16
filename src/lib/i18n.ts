@@ -81,36 +81,786 @@ export type TranslationKey =
   | "marketplace.perThousand"
   | "marketplace.placeOrder"
   | "marketplace.viewDetails"
+  | "marketplace.buySellHistory"
+  | "marketplace.subtitle"
+  | "marketplace.massOrder"
+  | "marketplace.sections"
+  | "marketplace.searchPlaceholder"
+  | "marketplace.clearSearch"
+  | "marketplace.sortServices"
+  | "marketplace.sort.popular"
+  | "marketplace.sort.price-asc"
+  | "marketplace.sort.price-desc"
+  | "marketplace.sort.fastest"
+  | "marketplace.sort.name-asc"
+  | "marketplace.viewMode"
+  | "marketplace.gridView"
+  | "marketplace.listView"
+  | "marketplace.favoritesOnly"
+  | "marketplace.favorites"
+  | "marketplace.min"
+  | "marketplace.max"
+  | "marketplace.minimumPrice"
+  | "marketplace.maximumPrice"
+  | "marketplace.apply"
+  | "marketplace.price"
+  | "marketplace.all"
+  | "marketplace.showing"
+  | "marketplace.of"
+  | "marketplace.services"
+  | "marketplace.noServices"
+  | "marketplace.adjustFilters"
+  | "marketplace.clearFilters"
+  | "marketplace.service"
+  | "marketplace.pricePer1k"
+  | "marketplace.minMax"
+  | "marketplace.delivery"
+  | "marketplace.action"
+  | "marketplace.loadMore"
+  | "marketplace.endCatalog"
+  | "marketplace.showMore"
+  | "marketplace.moreIn"
+  | "marketplace.hidden"
+  | "marketplace.unavailable"
+  | "marketplace.pressEnterOrder"
+  | "marketplace.new"
+  | "marketplace.remove"
+  | "marketplace.fromFavorites"
+  | "marketplace.add"
+  | "marketplace.toFavorites"
+  | "marketplace.fromComparison"
+  | "marketplace.toComparison"
+  | "marketplace.details"
+  | "marketplace.order"
+  | "marketplace.now"
+  | "marketplace.trending"
+  | "marketplace.trendingSubtitle"
+  | "marketplace.comparisonTray"
+  | "marketplace.compare"
+  | "marketplace.maxReached"
+  | "marketplace.pickAnother"
+  | "marketplace.clearComparison"
+  | "marketplace.clear"
+  | "marketplace.compareNow"
+  | "marketplace.pricePerThousand"
+  | "marketplace.deliveryTime"
+  | "marketplace.minMaxQty"
+  | "marketplace.quality"
+  | "marketplace.compareServices"
+  | "marketplace.closeComparison"
+  | "marketplace.sideBySide"
+  | "marketplace.clickRemove"
+  | "marketplace.attribute"
+  | "marketplace.compareTip"
+  | "marketplace.servicesForComparison"
+  | "marketplace.ratingThanks"
+  | "marketplace.youRated"
+  | "marketplace.stars"
+  | "marketplace.orderPlaced"
+  | "marketplace.orderProcessing"
+  | "marketplace.serviceDetails"
+  | "marketplace.speed"
+  | "marketplace.minQuantity"
+  | "marketplace.maxQuantity"
+  | "marketplace.yourRating"
+  | "marketplace.reviews"
+  | "marketplace.noRatings"
+  | "marketplace.rateService"
+  | "marketplace.rateStars"
+  | "marketplace.clickSubmit"
+  | "marketplace.hoverRate"
+  | "marketplace.yourBalance"
+  | "marketplace.quantity"
+  | "marketplace.linkOptional"
+  | "marketplace.linkPlaceholder"
+  | "marketplace.dripFeed"
+  | "marketplace.dripFeedDescription"
+  | "marketplace.daysChunks"
+  | "marketplace.delayMinutes"
+  | "marketplace.preview"
+  | "marketplace.totalCost"
+  | "marketplace.placingOrder"
+  | "marketplace.insufficientBalance"
+  | "marketplace.placeDripOrder"
   | "wallet.title"
   | "wallet.topUp"
   | "wallet.withdraw"
   | "wallet.available"
   | "wallet.held"
   | "wallet.transactions"
+  | "wallet.eyebrow"
+  | "wallet.balanceActivity"
+  | "wallet.subtitle"
+  | "wallet.export"
+  | "wallet.live"
+  | "wallet.pendingCompletion"
+  | "wallet.lifetimeEarnings"
+  | "wallet.allTimeRevenue"
+  | "wallet.cashFlow30"
+  | "wallet.liveFromTransactions"
+  | "wallet.revenue"
+  | "wallet.transactionHistory"
+  | "wallet.encrypted"
+  | "wallet.txn"
+  | "wallet.description"
+  | "wallet.type"
+  | "wallet.amount"
+  | "wallet.status"
+  | "wallet.time"
+  | "wallet.noTransactions"
+  | "wallet.topUpMethods"
+  | "wallet.railsAvailable"
+  | "wallet.noPaymentMethods"
+  | "wallet.type.sale"
+  | "wallet.type.topup"
+  | "wallet.type.withdrawal"
+  | "wallet.type.fee"
+  | "wallet.type.referral"
+  | "wallet.type.held"
+  | "wallet.type.release"
+  | "wallet.redirectingNowPayments"
+  | "wallet.completeCryptoPayment"
+  | "wallet.contactWhatsApp"
+  | "wallet.manualCredit"
+  | "wallet.redirecting"
+  | "wallet.completePayment"
+  | "wallet.sandboxSuccess"
+  | "wallet.sandboxCredited"
+  | "wallet.topUpProcessed"
+  | "wallet.done"
+  | "wallet.topUpFailed"
+  | "wallet.tryAgainSupport"
+  | "wallet.topUpDialog"
+  | "wallet.topUpWallet"
+  | "wallet.addFunds"
+  | "wallet.amountUsd"
+  | "wallet.paymentMethod"
+  | "wallet.processingPayment"
+  | "wallet.topUpAmount"
+  | "wallet.sandboxNotice"
+  | "wallet.withdrawalRequested"
+  | "wallet.withdrawalPending"
+  | "wallet.withdrawalFailed"
+  | "wallet.withdrawDialog"
+  | "wallet.withdrawFunds"
+  | "wallet.withdrawFromWallet"
+  | "wallet.availablePending"
+  | "wallet.insufficientBalance"
+  | "wallet.method"
+  | "wallet.destination"
+  | "wallet.destinationPlaceholder"
+  | "wallet.processing"
+  | "wallet.withdrawNotice"
+  | "childPanels.eyebrow"
+  | "childPanels.title"
+  | "childPanels.subtitle"
+  | "childPanels.purchase"
+  | "childPanels.activePanels"
+  | "childPanels.monthlyFees"
+  | "childPanels.markupEarned"
+  | "childPanels.emptyTitle"
+  | "childPanels.emptyDescription"
+  | "childPanels.confirmCancel"
+  | "childPanels.status.active"
+  | "childPanels.status.suspended"
+  | "childPanels.status.expired"
+  | "childPanels.status.cancelled"
+  | "childPanels.subdomain"
+  | "childPanels.plan"
+  | "childPanels.plan.reseller"
+  | "childPanels.plan.agency"
+  | "childPanels.plan.enterprise"
+  | "childPanels.markup"
+  | "childPanels.monthlyFee"
+  | "childPanels.paidUntil"
+  | "childPanels.expired"
+  | "childPanels.edit"
+  | "childPanels.suspend"
+  | "childPanels.resume"
+  | "childPanels.cancel"
+  | "childPanels.cancelled"
+  | "childPanels.provisioned"
+  | "childPanels.saveApiKey"
+  | "childPanels.copied"
+  | "childPanels.copy"
+  | "childPanels.dismiss"
+  | "childPanels.createDialog"
+  | "childPanels.newTitle"
+  | "childPanels.newSubtitle"
+  | "childPanels.panelName"
+  | "childPanels.markupOver"
+  | "childPanels.atCost"
+  | "childPanels.doubleCost"
+  | "childPanels.duration"
+  | "childPanels.30Days"
+  | "childPanels.90Days"
+  | "childPanels.year365"
+  | "childPanels.monthlyFeeFor"
+  | "childPanels.days"
+  | "childPanels.yourBalance"
+  | "childPanels.insufficientBalance"
+  | "childPanels.provisioning"
+  | "childPanels.purchaseProvision"
+  | "childPanels.tagline.reseller"
+  | "childPanels.tagline.agency"
+  | "childPanels.tagline.enterprise"
+  | "childPanels.editDialog"
+  | "childPanels.editTitle"
+  | "childPanels.markupLabel"
+  | "childPanels.saving"
+  | "childPanels.saveChanges"
+  | "analytics.referralCopied"
+  | "analytics.couldNotCopy"
+  | "analytics.clipboardBlocked"
+  | "analytics.eyebrow"
+  | "analytics.title"
+  | "analytics.subtitle"
+  | "analytics.orders30d"
+  | "analytics.revenue30d"
+  | "analytics.live"
+  | "analytics.conversion"
+  | "analytics.activeOrders"
+  | "analytics.revenueOrders"
+  | "analytics.last30Days"
+  | "analytics.byPlatform"
+  | "analytics.marketplaceShare"
+  | "analytics.noCompletedOrders"
+  | "analytics.hourlyOrders"
+  | "analytics.peak"
+  | "analytics.referrals"
+  | "analytics.earnedLifetime"
+  | "analytics.shareReferral"
+  | "analytics.revenue"
+  | "analytics.orders"
+  | "analytics.aiInsights"
+  | "analytics.autoAnalysis"
+  | "analytics.regenerate"
+  | "analytics.availableAfter"
+  | "analytics.generating"
+  | "analytics.refresh"
+  | "analytics.noInsights"
+  | "analytics.unlockInsights"
+  | "analytics.fresh"
+  | "analytics.generatedCached"
+  | "analytics.hourTooltip"
   | "orders.title"
   | "orders.all"
   | "orders.processing"
   | "orders.completed"
   | "orders.repeat"
   | "orders.export"
+  | "orders.allOrders"
+  | "orders.shown"
+  | "orders.clickRow"
+  | "orders.searchPlaceholder"
+  | "orders.search"
+  | "orders.filter.all"
+  | "orders.filter.processing"
+  | "orders.filter.in_progress"
+  | "orders.filter.completed"
+  | "orders.filter.partial"
+  | "orders.filter.pending"
+  | "orders.order"
+  | "orders.service"
+  | "orders.qty"
+  | "orders.cost"
+  | "orders.price"
+  | "orders.status"
+  | "orders.progress"
+  | "orders.fulfilledBy"
+  | "orders.actions"
+  | "orders.requestRefill"
+  | "orders.noMatch"
+  | "orders.refillRequest"
+  | "orders.processRefill"
+  | "orders.link"
+  | "orders.details"
+  | "orders.priority"
+  | "orders.dripFeed"
+  | "orders.timeline"
+  | "orders.cancelledRefund"
+  | "orders.dripConfig"
+  | "orders.totalQuantity"
+  | "orders.chunks"
+  | "orders.perChunk"
+  | "orders.delay"
+  | "orders.startDate"
+  | "orders.serviceTarget"
+  | "orders.orderId"
+  | "orders.platform"
+  | "orders.open"
+  | "orders.quantityPricing"
+  | "orders.quantity"
+  | "orders.unitPrice"
+  | "orders.unitCost"
+  | "orders.totalPrice"
+  | "orders.dates"
+  | "orders.created"
+  | "orders.updated"
+  | "orders.completedAt"
+  | "orders.cancelOrder"
+  | "orders.left"
+  | "orders.orderCancelled"
+  | "orders.completedNoCancel"
+  | "orders.cancelExpired"
   | "tickets.title"
   | "tickets.new"
   | "tickets.subject"
   | "tickets.message"
   | "tickets.send"
+  | "tickets.eyebrow"
+  | "tickets.count"
+  | "tickets.open"
+  | "tickets.conversation"
+  | "tickets.noMatch"
+  | "tickets.empty"
+  | "tickets.searchPlaceholder"
+  | "tickets.clearSearch"
+  | "tickets.noMessages"
+  | "tickets.backToList"
+  | "tickets.waitingReply"
+  | "tickets.respondShortly"
+  | "tickets.uploadFailed"
+  | "tickets.tryAgain"
+  | "tickets.tryAgainSupport"
+  | "tickets.uploading"
+  | "tickets.messagePlaceholder"
+  | "tickets.enterHint"
+  | "tickets.shiftEnterHint"
+  | "tickets.cannedReplies"
+  | "tickets.noCannedReplies"
+  | "tickets.createDialog"
+  | "tickets.createTitle"
+  | "tickets.subjectPlaceholder"
+  | "tickets.priority"
+  | "tickets.priorityLow"
+  | "tickets.priorityMedium"
+  | "tickets.priorityHigh"
+  | "tickets.messageCreatePlaceholder"
+  | "tickets.creating"
+  | "tickets.create"
+  | "tickets.priority.low"
+  | "tickets.priority.medium"
+  | "tickets.priority.high"
+  | "tickets.status.open"
+  | "tickets.status.waiting"
+  | "tickets.status.resolved"
+  | "subscriptions.eyebrow"
+  | "subscriptions.title"
+  | "subscriptions.subtitle"
+  | "subscriptions.create"
+  | "subscriptions.active"
+  | "subscriptions.postsDelivered"
+  | "subscriptions.totalSubscriptions"
+  | "subscriptions.totalSpent"
+  | "subscriptions.emptyTitle"
+  | "subscriptions.emptyDescription"
+  | "subscriptions.target"
+  | "subscriptions.perPostQty"
+  | "subscriptions.expiry"
+  | "subscriptions.postsCovered"
+  | "subscriptions.lastCheck"
+  | "subscriptions.pendingFirstCheck"
+  | "subscriptions.lastPost"
+  | "subscriptions.pause"
+  | "subscriptions.resume"
+  | "subscriptions.cancel"
+  | "subscriptions.allPostsDelivered"
+  | "subscriptions.expiredBeforeCompletion"
+  | "subscriptions.cancelled"
+  | "subscriptions.status.active"
+  | "subscriptions.status.paused"
+  | "subscriptions.status.completed"
+  | "subscriptions.status.expired"
+  | "subscriptions.status.cancelled"
+  | "subscriptions.createDialog"
+  | "subscriptions.newTitle"
+  | "subscriptions.newSubtitle"
+  | "subscriptions.service"
+  | "subscriptions.loadingServices"
+  | "subscriptions.selectService"
+  | "subscriptions.min"
+  | "subscriptions.max"
+  | "subscriptions.per1000"
+  | "subscriptions.username"
+  | "subscriptions.profileLink"
+  | "subscriptions.minQtyPost"
+  | "subscriptions.maxQtyPost"
+  | "subscriptions.postsRange"
+  | "subscriptions.delayMin"
+  | "subscriptions.expiryDays"
+  | "subscriptions.perPostCost"
+  | "subscriptions.posts"
+  | "subscriptions.yourBalance"
+  | "subscriptions.insufficientBalance"
+  | "subscriptions.creating"
   | "notifications.title"
   | "notifications.markAllRead"
   | "notifications.live"
+  | "notifications.eyebrow"
+  | "notifications.subtitle"
+  | "notifications.liveConnected"
+  | "notifications.connecting"
+  | "notifications.empty"
+  | "notifications.justNow"
+  | "notifications.minutesAgo"
+  | "notifications.hoursAgo"
+  | "notifications.daysAgo"
+  | "notifications.filter.all"
+  | "notifications.filter.order"
+  | "notifications.filter.sale"
+  | "notifications.filter.marketplace"
+  | "notifications.filter.ticket"
+  | "notifications.filter.recharge"
+  | "notifications.filter.withdrawal"
+  | "notifications.filter.referral"
+  | "notifications.filter.system"
   | "profile.title"
   | "profile.currency"
   | "profile.language"
   | "profile.save"
+  | "profile.personalize"
+  | "profile.subtitle"
+  | "profile.tabProfile"
+  | "profile.tabSecurity"
+  | "profile.tabAchievements"
+  | "profile.tabReferrals"
+  | "profile.tabNotifications"
+  | "profile.tabSessions"
+  | "profile.personalInfo"
+  | "profile.fullName"
+  | "profile.country"
+  | "profile.currencyDescription"
+  | "profile.preview"
+  | "profile.previewText"
+  | "profile.inCurrency"
+  | "profile.saving"
+  | "profile.dangerZone"
+  | "profile.dangerDescription"
+  | "profile.deleteAccount"
+  | "profile.accountDeleted"
+  | "profile.accountDeletedDescription"
+  | "profile.deleteWarning"
+  | "profile.confirmPassword"
+  | "profile.reenterPassword"
+  | "profile.hidePassword"
+  | "profile.showPassword"
+  | "profile.acknowledgeDelete"
+  | "profile.deleting"
+  | "profile.deleteMyAccount"
+  | "profile.passwordChanged"
+  | "profile.passwordUpdated"
+  | "profile.failed"
+  | "profile.2faSetupFailed"
+  | "profile.2faEnabled"
+  | "profile.2faActive"
+  | "profile.verificationFailed"
+  | "profile.2faDisabled"
+  | "profile.changePassword"
+  | "profile.currentPassword"
+  | "profile.newPassword"
+  | "profile.updatePassword"
+  | "profile.twoFactor"
+  | "profile.enabled"
+  | "profile.twoFactorDescription"
+  | "profile.setup2fa"
+  | "profile.enterCodeManually"
+  | "profile.backupCodes"
+  | "profile.enter6Code"
+  | "profile.verifyEnable"
+  | "profile.enter6Disable"
+  | "profile.disable2fa"
+  | "profile.preferencesSaved"
+  | "profile.prefOrders"
+  | "profile.prefOrdersDesc"
+  | "profile.prefSales"
+  | "profile.prefSalesDesc"
+  | "profile.prefTickets"
+  | "profile.prefTicketsDesc"
+  | "profile.prefRecharges"
+  | "profile.prefRechargesDesc"
+  | "profile.prefWithdrawals"
+  | "profile.prefWithdrawalsDesc"
+  | "profile.prefMarketplace"
+  | "profile.prefMarketplaceDesc"
+  | "profile.prefReferrals"
+  | "profile.prefReferralsDesc"
+  | "profile.prefSystem"
+  | "profile.prefSystemDesc"
+  | "profile.prefEmailOrders"
+  | "profile.prefEmailOrdersDesc"
+  | "profile.prefEmailTickets"
+  | "profile.prefEmailTicketsDesc"
+  | "profile.prefEmailMarketing"
+  | "profile.prefEmailMarketingDesc"
+  | "profile.notificationPreferences"
+  | "profile.notificationDescription"
+  | "profile.savePreferences"
+  | "profile.sessionsRevoked"
+  | "profile.activeSessions"
+  | "profile.revokeAll"
+  | "profile.sessionsDescription"
+  | "profile.current"
+  | "profile.noSessions"
+  | "profile.referralCopied"
+  | "profile.couldNotCopy"
+  | "profile.clipboardBlocked"
+  | "profile.referEarn"
+  | "profile.earnCommission"
+  | "profile.lifetimeCommission"
+  | "profile.copyReferralLink"
+  | "profile.totalReferrals"
+  | "profile.active"
+  | "profile.totalEarned"
+  | "profile.commission"
+  | "profile.yourTier"
+  | "profile.rank"
+  | "profile.inMore"
+  | "profile.unlockTier"
+  | "profile.tierUnlocked"
+  | "profile.maximumCommission"
+  | "profile.tier"
+  | "profile.referrals"
+  | "profile.status"
+  | "profile.currentTier"
+  | "profile.unlocked"
+  | "profile.locked"
+  | "profile.recentPayouts"
+  | "profile.referralCommission"
+  | "profile.noPayouts"
+  | "profile.topReferrers"
+  | "profile.emptyLeaderboard"
+  | "profile.referredUsers"
+  | "profile.pendingSignup"
+  | "profile.noReferrals"
+  | "profile.loyaltyLoading"
+  | "profile.loyaltyProgram"
+  | "profile.pointsToNext"
+  | "profile.maximumRewards"
+  | "profile.achievements"
+  | "profile.totalSpent"
+  | "profile.completedOrders"
+  | "profile.achievementDescription"
+  | "profile.pointsOnUnlock"
+  | "profile.pointsHistory"
+  | "profile.pointsDescription"
+  | "profile.linkedOrder"
+  | "profile.noPoints"
+  | "profile.reasonOrderCompleted"
+  | "profile.reasonReferral"
+  | "profile.reasonDailyLogin"
+  | "profile.reasonAchievement"
   | "auth.signIn"
   | "auth.signUp"
   | "auth.signOut"
   | "auth.email"
   | "auth.password"
   | "auth.forgotPassword"
+  | "auth.backHome"
+  | "auth.welcomeBack"
+  | "auth.workspace"
+  | "auth.orEmail"
+  | "auth.emailOrUsername"
+  | "auth.rememberMe"
+  | "auth.signingIn"
+  | "auth.verifyAndSignIn"
+  | "auth.noAccount"
+  | "auth.createOne"
+  | "auth.twoFactorRequired"
+  | "auth.twoFactorInstructions"
+  | "auth.twoFactorCode"
+  | "auth.layeredSecurity"
+  | "auth.encryption"
+  | "auth.liveMonitoring"
+  | "auth.forgotPasswordTitle"
+  | "auth.forgotPasswordDescription"
+  | "auth.resetLinkSent"
+  | "auth.resetLinkNotice"
+  | "auth.checkInbox"
+  | "auth.sendingLink"
+  | "auth.sendResetLink"
+  | "auth.backToLogin"
+  | "auth.close"
+  | "auth.loginTimedOut"
+  | "auth.invalidTwoFactor"
+  | "auth.invalidCredentials"
+  | "auth.loginFailed"
+  | "auth.requestFailed"
+  | "auth.tryAgain"
+  | "auth.redirecting"
+  | "auth.continueWith"
+  | "auth.createWorkspace"
+  | "auth.createWorkspaceSubtitle"
+  | "auth.orSignUpEmail"
+  | "auth.fullName"
+  | "auth.username"
+  | "auth.usernameHint"
+  | "auth.validEmail"
+  | "auth.createStrongPassword"
+  | "auth.confirmPassword"
+  | "auth.reenterPassword"
+  | "auth.passwordMismatch"
+  | "auth.country"
+  | "auth.currency"
+  | "auth.language"
+  | "auth.creatingAccount"
+  | "auth.createAccount"
+  | "auth.agreeTerms"
+  | "auth.terms"
+  | "auth.and"
+  | "auth.privacyPolicy"
+  | "auth.alreadyAccount"
+  | "auth.freeTrial"
+  | "auth.noCreditCard"
+  | "auth.cancelAnytime"
+  | "auth.passwordWeak"
+  | "auth.passwordFair"
+  | "auth.passwordGood"
+  | "auth.passwordStrong"
+  | "auth.passwordTipLength"
+  | "auth.passwordTipCase"
+  | "auth.passwordTipNumber"
+  | "auth.passwordTipSymbol"
+  | "auth.accountCreated"
+  | "auth.registrationFailed"
+  | "onboarding.step"
+  | "onboarding.back"
+  | "onboarding.previous"
+  | "onboarding.enterDashboard"
+  | "onboarding.continue"
+  | "onboarding.skip"
+  | "onboarding.welcome.title"
+  | "onboarding.welcome.subtitle"
+  | "onboarding.role.reseller"
+  | "onboarding.role.resellerDesc"
+  | "onboarding.role.agency"
+  | "onboarding.role.agencyDesc"
+  | "onboarding.role.creator"
+  | "onboarding.role.creatorDesc"
+  | "onboarding.role.enterprise"
+  | "onboarding.role.enterpriseDesc"
+  | "onboarding.profile.title"
+  | "onboarding.profile.subtitle"
+  | "onboarding.profile.displayName"
+  | "onboarding.profile.yourName"
+  | "onboarding.profile.verifiedEmail"
+  | "onboarding.currency.title"
+  | "onboarding.currency.subtitle"
+  | "onboarding.currency.usd"
+  | "onboarding.currency.eur"
+  | "onboarding.currency.mxn"
+  | "onboarding.currency.brl"
+  | "onboarding.currency.gbp"
+  | "onboarding.currency.inr"
+  | "onboarding.language.title"
+  | "onboarding.language.subtitle"
+  | "onboarding.notifications.title"
+  | "onboarding.notifications.subtitle"
+  | "onboarding.notifications.orders"
+  | "onboarding.notifications.ordersDesc"
+  | "onboarding.notifications.sales"
+  | "onboarding.notifications.salesDesc"
+  | "onboarding.notifications.tickets"
+  | "onboarding.notifications.ticketsDesc"
+  | "onboarding.notifications.system"
+  | "onboarding.notifications.systemDesc"
+  | "onboarding.tour.title"
+  | "onboarding.tour.subtitle"
+  | "onboarding.tour.dashboard"
+  | "onboarding.tour.dashboardDesc"
+  | "onboarding.tour.marketplace"
+  | "onboarding.tour.marketplaceDesc"
+  | "onboarding.tour.notifications"
+  | "onboarding.tour.notificationsDesc"
+  | "onboarding.tour.security"
+  | "onboarding.tour.securityDesc"
+  | "dashboard.nav.dashboard"
+  | "dashboard.nav.analytics"
+  | "dashboard.nav.services"
+  | "dashboard.nav.orders"
+  | "dashboard.nav.subscriptions"
+  | "dashboard.nav.childPanels"
+  | "dashboard.nav.marketplace"
+  | "dashboard.nav.wallet"
+  | "dashboard.nav.clients"
+  | "dashboard.nav.tickets"
+  | "dashboard.nav.notifications"
+  | "dashboard.nav.profile"
+  | "dashboard.nav.settings"
+  | "dashboard.workspace"
+  | "dashboard.admin"
+  | "dashboard.adminPanel"
+  | "dashboard.availableBalance"
+  | "dashboard.live"
+  | "dashboard.returnToAdmin"
+  | "dashboard.exit"
+  | "dashboard.impersonating"
+  | "dashboard.asAdminAudited"
+  | "dashboard.failedReturn"
+  | "dashboard.contactSupport"
+  | "dashboard.goHome"
+  | "dashboard.backHome"
+  | "dashboard.closeMenu"
+  | "dashboard.openMenu"
+  | "dashboard.openCommandPalette"
+  | "dashboard.operational"
+  | "dashboard.degraded"
+  | "dashboard.account"
+  | "dashboard.user"
+  | "dashboard.viewProfile"
+  | "dashboard.overview"
+  | "dashboard.welcomeName"
+  | "dashboard.there"
+  | "dashboard.todaySummary"
+  | "dashboard.inProgress"
+  | "dashboard.completedAll"
+  | "dashboard.total"
+  | "dashboard.7d"
+  | "dashboard.30d"
+  | "dashboard.90d"
+  | "dashboard.wallet"
+  | "dashboard.quickStats"
+  | "dashboard.lifetimeEarnings"
+  | "dashboard.openTickets"
+  | "dashboard.recentOrders"
+  | "dashboard.liveActivity"
+  | "dashboard.viewAll"
+  | "dashboard.noOrders"
+  | "dashboard.favoriteServices"
+  | "dashboard.browse"
+  | "dashboard.noFavorites"
+  | "dashboard.recentTickets"
+  | "dashboard.noTickets"
+  | "dashboard.referEarn"
+  | "dashboard.referralProgram"
+  | "dashboard.commission"
+  | "dashboard.earned"
+  | "dashboard.referralsTo"
+  | "dashboard.toGo"
+  | "dashboard.maxTier"
+  | "dashboard.copyReferral"
+  | "dashboard.referralCopied"
+  | "dashboard.couldNotCopy"
+  | "dashboard.clipboardBlocked"
+  | "dashboard.viewReferralDashboard"
+  | "dashboard.loyaltyRewards"
+  | "dashboard.loyaltyLoading"
+  | "dashboard.loyaltyProgram"
+  | "dashboard.pointsTo"
+  | "dashboard.maxRewards"
+  | "dashboard.recentAchievements"
+  | "dashboard.placeOrderAchievement"
+  | "dashboard.viewAchievements"
+  | "dashboard.search"
+  | "dashboard.searchShort"
+  | "dashboard.allSystemsOperational"
+  | "dashboard.ordersToday"
+  | "dashboard.activeServices"
+  | "dashboard.conversion"
+  | "dashboard.revenueLastDays"
+  | "dashboard.liveOrders"
+  | "dashboard.streaming"
+  | "dashboard.justNow"
   | "common.loading"
   | "common.save"
   | "common.cancel"
@@ -118,6 +868,7 @@ export type TranslationKey =
   | "common.search"
   | "common.actions"
   | "common.status"
+  | "common.close"
   // Landing — Services
   | "landing.services.eyebrow"
   | "landing.services.titleLine1"
@@ -607,36 +1358,786 @@ const en: Translations = {
   "marketplace.perThousand": "Per 1000",
   "marketplace.placeOrder": "Place order",
   "marketplace.viewDetails": "View details",
+  "marketplace.buySellHistory": "Buy · Sell · History",
+  "marketplace.subtitle": "Browse services, place orders, and repeat past purchases.",
+  "marketplace.massOrder": "Mass order",
+  "marketplace.sections": "Marketplace sections",
+  "marketplace.searchPlaceholder": "Search services — Instagram, TikTok, followers, views…",
+  "marketplace.clearSearch": "Clear search",
+  "marketplace.sortServices": "Sort services",
+  "marketplace.sort.popular": "Popular",
+  "marketplace.sort.price-asc": "Price: Low to High",
+  "marketplace.sort.price-desc": "Price: High to Low",
+  "marketplace.sort.fastest": "Fastest delivery",
+  "marketplace.sort.name-asc": "Name: A-Z",
+  "marketplace.viewMode": "View mode",
+  "marketplace.gridView": "Grid view",
+  "marketplace.listView": "List view",
+  "marketplace.favoritesOnly": "Show only favorited services",
+  "marketplace.favorites": "Favorites",
+  "marketplace.min": "Min",
+  "marketplace.max": "Max",
+  "marketplace.minimumPrice": "Minimum price",
+  "marketplace.maximumPrice": "Maximum price",
+  "marketplace.apply": "Apply",
+  "marketplace.price": "Price",
+  "marketplace.all": "All",
+  "marketplace.showing": "Showing",
+  "marketplace.of": "of",
+  "marketplace.services": "services",
+  "marketplace.noServices": "No services found",
+  "marketplace.adjustFilters": "Try adjusting your search or filters",
+  "marketplace.clearFilters": "Clear filters",
+  "marketplace.service": "Service",
+  "marketplace.pricePer1k": "Price/1k",
+  "marketplace.minMax": "Min/Max",
+  "marketplace.delivery": "Delivery",
+  "marketplace.action": "Action",
+  "marketplace.loadMore": "Load more",
+  "marketplace.endCatalog": "End of catalog",
+  "marketplace.showMore": "Show",
+  "marketplace.moreIn": "more in",
+  "marketplace.hidden": "hidden",
+  "marketplace.unavailable": "Unavailable",
+  "marketplace.pressEnterOrder": "Press Enter to view details and place an order.",
+  "marketplace.new": "New",
+  "marketplace.remove": "Remove",
+  "marketplace.fromFavorites": "from favorites",
+  "marketplace.add": "Add",
+  "marketplace.toFavorites": "to favorites",
+  "marketplace.fromComparison": "from comparison",
+  "marketplace.toComparison": "to comparison",
+  "marketplace.details": "Details",
+  "marketplace.order": "Order",
+  "marketplace.now": "now",
+  "marketplace.trending": "Trending services",
+  "marketplace.trendingSubtitle": "Most established services on NOVSMM — chosen by catalog age.",
+  "marketplace.comparisonTray": "Comparison tray",
+  "marketplace.compare": "Compare",
+  "marketplace.maxReached": "max reached",
+  "marketplace.pickAnother": "pick another to add",
+  "marketplace.clearComparison": "Clear comparison list",
+  "marketplace.clear": "Clear",
+  "marketplace.compareNow": "Compare now",
+  "marketplace.pricePerThousand": "Price per 1000",
+  "marketplace.deliveryTime": "Delivery time",
+  "marketplace.minMaxQty": "Min / Max qty",
+  "marketplace.quality": "Quality",
+  "marketplace.compareServices": "Compare services",
+  "marketplace.closeComparison": "Close comparison",
+  "marketplace.sideBySide": "Side-by-side view of",
+  "marketplace.clickRemove": "Click ✕ to remove.",
+  "marketplace.attribute": "Attribute",
+  "marketplace.compareTip": "Tip: pick up to",
+  "marketplace.servicesForComparison": "services for an at-a-glance comparison.",
+  "marketplace.ratingThanks": "Thanks for rating!",
+  "marketplace.youRated": "You rated",
+  "marketplace.stars": "stars",
+  "marketplace.orderPlaced": "Order placed",
+  "marketplace.orderProcessing": "Your order is now processing",
+  "marketplace.serviceDetails": "Service details",
+  "marketplace.speed": "Speed",
+  "marketplace.minQuantity": "Min quantity",
+  "marketplace.maxQuantity": "Max quantity",
+  "marketplace.yourRating": "Your rating",
+  "marketplace.reviews": "reviews",
+  "marketplace.noRatings": "No ratings yet — be the first to review.",
+  "marketplace.rateService": "Rate this service",
+  "marketplace.rateStars": "Rate this service from 1 to 5 stars",
+  "marketplace.clickSubmit": "Click to submit",
+  "marketplace.hoverRate": "Hover and click to rate",
+  "marketplace.yourBalance": "Your balance",
+  "marketplace.quantity": "Quantity",
+  "marketplace.linkOptional": "Link (optional — for services that need a target URL)",
+  "marketplace.linkPlaceholder": "https://instagram.com/yourpost",
+  "marketplace.dripFeed": "Drip-feed delivery",
+  "marketplace.dripFeedDescription": "Split your order into smaller chunks delivered over time for a natural growth pattern.",
+  "marketplace.daysChunks": "Days (chunks)",
+  "marketplace.delayMinutes": "Delay (minutes)",
+  "marketplace.preview": "Preview",
+  "marketplace.totalCost": "Total cost",
+  "marketplace.placingOrder": "Placing order…",
+  "marketplace.insufficientBalance": "Insufficient balance — top up your wallet",
+  "marketplace.placeDripOrder": "Place drip-feed order",
   "wallet.title": "Balance & activity",
   "wallet.topUp": "Top up",
   "wallet.withdraw": "Withdraw",
   "wallet.available": "Available",
   "wallet.held": "Held",
   "wallet.transactions": "Transaction history",
+  "wallet.eyebrow": "Wallet",
+  "wallet.balanceActivity": "Balance & activity",
+  "wallet.subtitle": "Real-time balance, top up, withdraw, and export statements.",
+  "wallet.export": "Export",
+  "wallet.live": "live",
+  "wallet.pendingCompletion": "Pending order completion",
+  "wallet.lifetimeEarnings": "Lifetime earnings",
+  "wallet.allTimeRevenue": "All-time revenue",
+  "wallet.cashFlow30": "Cash flow · 30 days",
+  "wallet.liveFromTransactions": "Live from transactions",
+  "wallet.revenue": "Revenue",
+  "wallet.transactionHistory": "Transaction history",
+  "wallet.encrypted": "Encrypted",
+  "wallet.txn": "Txn",
+  "wallet.description": "Description",
+  "wallet.type": "Type",
+  "wallet.amount": "Amount",
+  "wallet.status": "Status",
+  "wallet.time": "Time",
+  "wallet.noTransactions": "No transactions yet.",
+  "wallet.topUpMethods": "Top-up methods",
+  "wallet.railsAvailable": "rails available",
+  "wallet.noPaymentMethods": "No payment methods configured yet.",
+  "wallet.type.sale": "Sale",
+  "wallet.type.topup": "Top-up",
+  "wallet.type.withdrawal": "Withdrawal",
+  "wallet.type.fee": "Fee",
+  "wallet.type.referral": "Referral",
+  "wallet.type.held": "Held",
+  "wallet.type.release": "Release",
+  "wallet.redirectingNowPayments": "Redirecting to NowPayments…",
+  "wallet.completeCryptoPayment": "Complete your crypto payment on NowPayments. Your balance will update after confirmation.",
+  "wallet.contactWhatsApp": "Contact us on WhatsApp",
+  "wallet.manualCredit": "We'll credit your balance manually after confirming your payment.",
+  "wallet.redirecting": "Redirecting to",
+  "wallet.completePayment": "Complete your payment. Your balance will update after payment.",
+  "wallet.sandboxSuccess": "Top-up successful (sandbox)",
+  "wallet.sandboxCredited": "{amount} credited to your wallet via {method}. Configure real credentials in Admin → Payments for live payments.",
+  "wallet.topUpProcessed": "Top-up processed",
+  "wallet.done": "Done.",
+  "wallet.topUpFailed": "Top-up failed",
+  "wallet.tryAgainSupport": "Please try again or contact support.",
+  "wallet.topUpDialog": "Top up wallet",
+  "wallet.topUpWallet": "Top up wallet",
+  "wallet.addFunds": "Add funds",
+  "wallet.amountUsd": "Amount (USD)",
+  "wallet.paymentMethod": "Payment method",
+  "wallet.processingPayment": "Processing payment…",
+  "wallet.topUpAmount": "Top up",
+  "wallet.sandboxNotice": "Sandbox mode · no real charge · processes in ~2s",
+  "wallet.withdrawalRequested": "Withdrawal requested",
+  "wallet.withdrawalPending": "{amount} withdrawal via {method} is pending admin approval.",
+  "wallet.withdrawalFailed": "Withdrawal failed",
+  "wallet.withdrawDialog": "Withdraw funds",
+  "wallet.withdrawFunds": "Withdraw funds",
+  "wallet.withdrawFromWallet": "Withdraw from wallet",
+  "wallet.availablePending": "Available: {balance} · Pending admin approval",
+  "wallet.insufficientBalance": "Insufficient balance",
+  "wallet.method": "Method",
+  "wallet.destination": "Destination (account / address / email)",
+  "wallet.destinationPlaceholder": "e.g. IBAN, USDT wallet address, PayPal email",
+  "wallet.processing": "Processing…",
+  "wallet.withdrawNotice": "Withdrawals are reviewed by admin before processing · 1% fee applies",
+  "childPanels.eyebrow": "Reseller",
+  "childPanels.title": "Child Panels",
+  "childPanels.subtitle": "White-label sub-panels for your reseller business.",
+  "childPanels.purchase": "Purchase child panel",
+  "childPanels.activePanels": "Active panels",
+  "childPanels.monthlyFees": "Monthly fees",
+  "childPanels.markupEarned": "Markup earned (est.)",
+  "childPanels.emptyTitle": "No child panels yet",
+  "childPanels.emptyDescription": "Purchase one to start your white-label reseller business. You'll get a subdomain + API key auto-provisioned — your customers see your brand, we do the fulfilment.",
+  "childPanels.confirmCancel": "Cancel {name}? The subdomain will be released.",
+  "childPanels.status.active": "Active",
+  "childPanels.status.suspended": "Suspended",
+  "childPanels.status.expired": "Expired",
+  "childPanels.status.cancelled": "Cancelled",
+  "childPanels.subdomain": "Subdomain",
+  "childPanels.plan": "Plan",
+  "childPanels.plan.reseller": "Reseller",
+  "childPanels.plan.agency": "Agency",
+  "childPanels.plan.enterprise": "Enterprise",
+  "childPanels.markup": "Markup",
+  "childPanels.monthlyFee": "Monthly fee",
+  "childPanels.paidUntil": "Paid until",
+  "childPanels.expired": "expired",
+  "childPanels.edit": "Edit",
+  "childPanels.suspend": "Suspend",
+  "childPanels.resume": "Resume",
+  "childPanels.cancel": "Cancel",
+  "childPanels.cancelled": "Cancelled",
+  "childPanels.provisioned": "Child panel {id} provisioned",
+  "childPanels.saveApiKey": "Save this API key now — it won't be shown again. Your panel is live at",
+  "childPanels.copied": "Copied",
+  "childPanels.copy": "Copy",
+  "childPanels.dismiss": "Dismiss",
+  "childPanels.createDialog": "Create child panel",
+  "childPanels.newTitle": "New child panel",
+  "childPanels.newSubtitle": "Auto-provisioned subdomain + API key · billed upfront for {days} days.",
+  "childPanels.panelName": "Panel name",
+  "childPanels.markupOver": "Markup over parent prices:",
+  "childPanels.atCost": "0% (at cost)",
+  "childPanels.doubleCost": "100% (2× cost)",
+  "childPanels.duration": "Duration (days, 1-365)",
+  "childPanels.30Days": "30 days",
+  "childPanels.90Days": "90 days",
+  "childPanels.year365": "1 year (365d)",
+  "childPanels.monthlyFeeFor": "Monthly fee ({plan})",
+  "childPanels.days": "days",
+  "childPanels.yourBalance": "Your balance",
+  "childPanels.insufficientBalance": "Insufficient balance — top up your wallet first.",
+  "childPanels.provisioning": "Provisioning…",
+  "childPanels.purchaseProvision": "Purchase & provision",
+  "childPanels.tagline.reseller": "Solo resellers · 1 sub-panel · 20% default markup",
+  "childPanels.tagline.agency": "Small agencies · up to 5 admins · priority support",
+  "childPanels.tagline.enterprise": "High-volume · white-glove onboarding · dedicated IP",
+  "childPanels.editDialog": "Edit child panel",
+  "childPanels.editTitle": "Edit {id}",
+  "childPanels.markupLabel": "Markup:",
+  "childPanels.saving": "Saving…",
+  "childPanels.saveChanges": "Save changes",
+  "analytics.referralCopied": "Referral link copied!",
+  "analytics.couldNotCopy": "Couldn't copy",
+  "analytics.clipboardBlocked": "Your browser blocked clipboard access.",
+  "analytics.eyebrow": "Analytics",
+  "analytics.title": "Performance",
+  "analytics.subtitle": "Real-time metrics from your transaction history.",
+  "analytics.orders30d": "Orders (30d)",
+  "analytics.revenue30d": "Revenue (30d)",
+  "analytics.live": "live",
+  "analytics.conversion": "Conversion",
+  "analytics.activeOrders": "Active orders",
+  "analytics.revenueOrders": "Revenue & orders",
+  "analytics.last30Days": "Last 30 days",
+  "analytics.byPlatform": "By platform",
+  "analytics.marketplaceShare": "Marketplace share",
+  "analytics.noCompletedOrders": "No completed orders yet",
+  "analytics.hourlyOrders": "Hourly orders · today",
+  "analytics.peak": "Peak: {count} orders/hour",
+  "analytics.referrals": "Referrals",
+  "analytics.earnedLifetime": "earned · 5% lifetime",
+  "analytics.shareReferral": "Share referral link",
+  "analytics.revenue": "Revenue",
+  "analytics.orders": "Orders",
+  "analytics.aiInsights": "AI Insights",
+  "analytics.autoAnalysis": "Automatic analysis of your activity",
+  "analytics.regenerate": "Regenerate insights",
+  "analytics.availableAfter": "Available after 5 orders",
+  "analytics.generating": "Generating…",
+  "analytics.refresh": "Refresh",
+  "analytics.noInsights": "No insights available yet. Click refresh to generate.",
+  "analytics.unlockInsights": "Place at least 6 orders to unlock AI-powered spending insights and growth recommendations.",
+  "analytics.fresh": "Fresh",
+  "analytics.generatedCached": "Generated {date} · cached 1h",
+  "analytics.hourTooltip": "{hour}:00 — {count} orders",
   "orders.title": "All orders",
   "orders.all": "All",
   "orders.processing": "Processing",
   "orders.completed": "Completed",
   "orders.repeat": "Repeat",
   "orders.export": "Export CSV",
+  "orders.allOrders": "All orders",
+  "orders.shown": "shown",
+  "orders.clickRow": "click any row for full details.",
+  "orders.searchPlaceholder": "Search by ID, platform, service…",
+  "orders.search": "Search orders",
+  "orders.filter.all": "All",
+  "orders.filter.processing": "Processing",
+  "orders.filter.in_progress": "In progress",
+  "orders.filter.completed": "Completed",
+  "orders.filter.partial": "Partial",
+  "orders.filter.pending": "Pending",
+  "orders.order": "Order",
+  "orders.service": "Service",
+  "orders.qty": "Qty",
+  "orders.cost": "Cost",
+  "orders.price": "Price",
+  "orders.status": "Status",
+  "orders.progress": "Progress",
+  "orders.fulfilledBy": "Fulfilled by",
+  "orders.actions": "Actions",
+  "orders.requestRefill": "Request refill",
+  "orders.noMatch": "No orders match your filters.",
+  "orders.refillRequest": "Refill request",
+  "orders.processRefill": "Please process a refill for order",
+  "orders.link": "Link",
+  "orders.details": "Order details",
+  "orders.priority": "priority",
+  "orders.dripFeed": "Drip-feed",
+  "orders.timeline": "Timeline",
+  "orders.cancelledRefund": "Order was cancelled — refund issued",
+  "orders.dripConfig": "Drip-feed configuration",
+  "orders.totalQuantity": "Total quantity",
+  "orders.chunks": "Chunks",
+  "orders.perChunk": "Per chunk",
+  "orders.delay": "Delay",
+  "orders.startDate": "Start date",
+  "orders.serviceTarget": "Service & target",
+  "orders.orderId": "Order ID",
+  "orders.platform": "Platform",
+  "orders.open": "Open",
+  "orders.quantityPricing": "Quantity & pricing",
+  "orders.quantity": "Quantity",
+  "orders.unitPrice": "Unit price",
+  "orders.unitCost": "Unit cost",
+  "orders.totalPrice": "Total price",
+  "orders.dates": "Dates",
+  "orders.created": "Created",
+  "orders.updated": "Updated",
+  "orders.completedAt": "Completed",
+  "orders.cancelOrder": "Cancel order",
+  "orders.left": "left",
+  "orders.orderCancelled": "Order cancelled",
+  "orders.completedNoCancel": "Order completed — no cancellation possible",
+  "orders.cancelExpired": "Cancel window expired (60s after placement)",
   "tickets.title": "Tickets",
   "tickets.new": "New ticket",
   "tickets.subject": "Subject",
   "tickets.message": "Message",
   "tickets.send": "Type your message…",
+  "tickets.eyebrow": "Support",
+  "tickets.count": "tickets",
+  "tickets.open": "open",
+  "tickets.conversation": "Conversation",
+  "tickets.noMatch": "No tickets match",
+  "tickets.empty": "No tickets yet. Create one to get help from our support team.",
+  "tickets.searchPlaceholder": "Search tickets…",
+  "tickets.clearSearch": "Clear search",
+  "tickets.noMessages": "No messages",
+  "tickets.backToList": "Back to ticket list",
+  "tickets.waitingReply": "Waiting for support reply",
+  "tickets.respondShortly": "Support will respond shortly",
+  "tickets.uploadFailed": "Upload failed",
+  "tickets.tryAgain": "Please try again.",
+  "tickets.tryAgainSupport": "Please try again or contact support.",
+  "tickets.uploading": "Uploading…",
+  "tickets.messagePlaceholder": "Type your message…",
+  "tickets.enterHint": "Press Enter to send",
+  "tickets.shiftEnterHint": "Shift+Enter for newline",
+  "tickets.cannedReplies": "Canned replies",
+  "tickets.noCannedReplies": "No canned replies yet.",
+  "tickets.createDialog": "Create ticket",
+  "tickets.createTitle": "Create new ticket",
+  "tickets.subjectPlaceholder": "Brief description of your issue",
+  "tickets.priority": "Priority",
+  "tickets.priorityLow": "Low",
+  "tickets.priorityMedium": "Medium",
+  "tickets.priorityHigh": "High",
+  "tickets.messageCreatePlaceholder": "Describe your issue in detail…",
+  "tickets.creating": "Creating…",
+  "tickets.create": "Create ticket",
+  "tickets.priority.low": "Low",
+  "tickets.priority.medium": "Medium",
+  "tickets.priority.high": "High",
+  "tickets.status.open": "Open",
+  "tickets.status.waiting": "Waiting",
+  "tickets.status.resolved": "Resolved",
+  "subscriptions.eyebrow": "Subscriptions",
+  "subscriptions.title": "SMM Subscriptions",
+  "subscriptions.subtitle": "Auto-deliver likes/followers to every new post.",
+  "subscriptions.create": "Create subscription",
+  "subscriptions.active": "Active",
+  "subscriptions.postsDelivered": "Posts delivered",
+  "subscriptions.totalSubscriptions": "Total subscriptions",
+  "subscriptions.totalSpent": "Total spent",
+  "subscriptions.emptyTitle": "No subscriptions yet",
+  "subscriptions.emptyDescription": "Create one to auto-deliver to every new post. Pick a service, target @username, and per-post quantity range — we'll handle the rest.",
+  "subscriptions.target": "Target",
+  "subscriptions.perPostQty": "Per-post qty",
+  "subscriptions.expiry": "Expiry",
+  "subscriptions.postsCovered": "Posts covered",
+  "subscriptions.lastCheck": "Last check",
+  "subscriptions.pendingFirstCheck": "Pending first check",
+  "subscriptions.lastPost": "Last post",
+  "subscriptions.pause": "Pause",
+  "subscriptions.resume": "Resume",
+  "subscriptions.cancel": "Cancel",
+  "subscriptions.allPostsDelivered": "All posts delivered",
+  "subscriptions.expiredBeforeCompletion": "Expired before completion",
+  "subscriptions.cancelled": "Cancelled",
+  "subscriptions.status.active": "Active",
+  "subscriptions.status.paused": "Paused",
+  "subscriptions.status.completed": "Completed",
+  "subscriptions.status.expired": "Expired",
+  "subscriptions.status.cancelled": "Cancelled",
+  "subscriptions.createDialog": "Create subscription",
+  "subscriptions.newTitle": "New SMM subscription",
+  "subscriptions.newSubtitle": "Auto-deliver to every new post for {days} days (or until {posts} posts covered).",
+  "subscriptions.service": "Service",
+  "subscriptions.loadingServices": "Loading services…",
+  "subscriptions.selectService": "Select a service…",
+  "subscriptions.min": "Min",
+  "subscriptions.max": "Max",
+  "subscriptions.per1000": "per 1000 units",
+  "subscriptions.username": "Username",
+  "subscriptions.profileLink": "Profile link (optional)",
+  "subscriptions.minQtyPost": "Min qty / post",
+  "subscriptions.maxQtyPost": "Max qty / post",
+  "subscriptions.postsRange": "Posts (1-365)",
+  "subscriptions.delayMin": "Delay (min)",
+  "subscriptions.expiryDays": "Expiry (days)",
+  "subscriptions.perPostCost": "Per-post cost (max)",
+  "subscriptions.posts": "posts",
+  "subscriptions.yourBalance": "Your balance",
+  "subscriptions.insufficientBalance": "Insufficient balance. Top up your wallet to cover the estimated cost.",
+  "subscriptions.creating": "Creating…",
   "notifications.title": "Notifications",
   "notifications.markAllRead": "Mark all read",
   "notifications.live": "Live · connected",
+  "notifications.eyebrow": "Real-time feed",
+  "notifications.subtitle": "Live, WebSocket-delivered from the database. No refresh required.",
+  "notifications.liveConnected": "Live · connected",
+  "notifications.connecting": "Connecting…",
+  "notifications.empty": "No notifications of this type yet.",
+  "notifications.justNow": "just now",
+  "notifications.minutesAgo": "{count}m ago",
+  "notifications.hoursAgo": "{count}h ago",
+  "notifications.daysAgo": "{count}d ago",
+  "notifications.filter.all": "All",
+  "notifications.filter.order": "Order",
+  "notifications.filter.sale": "Sale",
+  "notifications.filter.marketplace": "Marketplace",
+  "notifications.filter.ticket": "Ticket",
+  "notifications.filter.recharge": "Recharge",
+  "notifications.filter.withdrawal": "Withdrawal",
+  "notifications.filter.referral": "Referral",
+  "notifications.filter.system": "System",
   "profile.title": "Profile settings",
   "profile.currency": "Preferred currency",
   "profile.language": "Preferred language",
   "profile.save": "Save changes",
+  "profile.personalize": "Personalize your workspace",
+  "profile.subtitle": "Manage your profile, security, notifications, and sessions.",
+  "profile.tabProfile": "Profile",
+  "profile.tabSecurity": "Security",
+  "profile.tabAchievements": "Achievements",
+  "profile.tabReferrals": "Referrals",
+  "profile.tabNotifications": "Notifications",
+  "profile.tabSessions": "Sessions",
+  "profile.personalInfo": "Personal information",
+  "profile.fullName": "Full name",
+  "profile.country": "Country",
+  "profile.currencyDescription": "All prices will be displayed in this currency with real-time conversion.",
+  "profile.preview": "Preview:",
+  "profile.previewText": "A $2.40 USD service costs",
+  "profile.inCurrency": "in",
+  "profile.saving": "Saving…",
+  "profile.dangerZone": "Danger Zone",
+  "profile.dangerDescription": "Permanently delete your account and anonymize your personal data. This action is irreversible. Orders and transactions are retained for financial audit.",
+  "profile.deleteAccount": "Delete account",
+  "profile.accountDeleted": "Account deleted",
+  "profile.accountDeletedDescription": "Your personal data has been anonymized. Redirecting…",
+  "profile.deleteWarning": "This will permanently delete your account. Your orders and transactions are retained for financial audit but your personal data will be anonymized. This action CANNOT be undone.",
+  "profile.confirmPassword": "Confirm your password",
+  "profile.reenterPassword": "Re-enter your password",
+  "profile.hidePassword": "Hide password",
+  "profile.showPassword": "Show password",
+  "profile.acknowledgeDelete": "I understand this action is irreversible and that my personal data will be anonymized.",
+  "profile.deleting": "Deleting…",
+  "profile.deleteMyAccount": "Delete my account",
+  "profile.passwordChanged": "Password changed",
+  "profile.passwordUpdated": "Your password has been updated.",
+  "profile.failed": "Failed",
+  "profile.2faSetupFailed": "2FA setup failed",
+  "profile.2faEnabled": "2FA enabled",
+  "profile.2faActive": "Two-factor authentication is now active.",
+  "profile.verificationFailed": "Verification failed",
+  "profile.2faDisabled": "2FA disabled",
+  "profile.changePassword": "Change password",
+  "profile.currentPassword": "Current password",
+  "profile.newPassword": "New password (min 8 characters)",
+  "profile.updatePassword": "Update password",
+  "profile.twoFactor": "Two-factor authentication (2FA)",
+  "profile.enabled": "Enabled",
+  "profile.twoFactorDescription": "Protect your account with an authenticator app (Google Authenticator, Authy, etc.).",
+  "profile.setup2fa": "Set up 2FA",
+  "profile.enterCodeManually": "Or enter this code manually:",
+  "profile.backupCodes": "Backup codes — save these now!",
+  "profile.enter6Code": "Enter the 6-digit code from your authenticator app",
+  "profile.verifyEnable": "Verify and enable",
+  "profile.enter6Disable": "Enter a 6-digit code to disable 2FA",
+  "profile.disable2fa": "Disable 2FA",
+  "profile.preferencesSaved": "Preferences saved",
+  "profile.prefOrders": "Order updates",
+  "profile.prefOrdersDesc": "Start, progress, completion",
+  "profile.prefSales": "Sales & revenue",
+  "profile.prefSalesDesc": "New sales, payouts",
+  "profile.prefTickets": "Support tickets",
+  "profile.prefTicketsDesc": "Replies, status changes",
+  "profile.prefRecharges": "Wallet top-ups",
+  "profile.prefRechargesDesc": "Payment confirmations",
+  "profile.prefWithdrawals": "Withdrawals",
+  "profile.prefWithdrawalsDesc": "Approval status changes",
+  "profile.prefMarketplace": "Marketplace",
+  "profile.prefMarketplaceDesc": "New offers, sales",
+  "profile.prefReferrals": "Referrals",
+  "profile.prefReferralsDesc": "New referrals, earnings",
+  "profile.prefSystem": "System & security",
+  "profile.prefSystemDesc": "Maintenance, alerts",
+  "profile.prefEmailOrders": "Email: Orders",
+  "profile.prefEmailOrdersDesc": "Receive order emails",
+  "profile.prefEmailTickets": "Email: Tickets",
+  "profile.prefEmailTicketsDesc": "Receive ticket emails",
+  "profile.prefEmailMarketing": "Email: Marketing",
+  "profile.prefEmailMarketingDesc": "Promotions, newsletters",
+  "profile.notificationPreferences": "Notification preferences",
+  "profile.notificationDescription": "Choose which notifications you receive in-app and via email.",
+  "profile.savePreferences": "Save preferences",
+  "profile.sessionsRevoked": "All sessions revoked",
+  "profile.activeSessions": "Active sessions",
+  "profile.revokeAll": "Revoke all",
+  "profile.sessionsDescription": "Recent login activity on your account.",
+  "profile.current": "CURRENT",
+  "profile.noSessions": "No recent sessions found.",
+  "profile.referralCopied": "Referral link copied!",
+  "profile.couldNotCopy": "Couldn't copy",
+  "profile.clipboardBlocked": "Your browser blocked clipboard access.",
+  "profile.referEarn": "Refer & earn",
+  "profile.earnCommission": "Earn",
+  "profile.lifetimeCommission": "lifetime commission on every order from users you refer. Scale your network to unlock higher tiers.",
+  "profile.copyReferralLink": "Copy referral link",
+  "profile.totalReferrals": "Total referrals",
+  "profile.active": "Active",
+  "profile.totalEarned": "Total earned",
+  "profile.commission": "Commission",
+  "profile.yourTier": "Your tier",
+  "profile.rank": "Rank",
+  "profile.inMore": "in {count} more",
+  "profile.unlockTier": "{current} / {target} successful referrals to unlock {tier}",
+  "profile.tierUnlocked": "tier unlocked.",
+  "profile.maximumCommission": "You're earning the maximum {rate}% commission on every referral.",
+  "profile.tier": "Tier",
+  "profile.referrals": "Referrals",
+  "profile.status": "Status",
+  "profile.currentTier": "Current",
+  "profile.unlocked": "Unlocked",
+  "profile.locked": "Locked",
+  "profile.recentPayouts": "Recent payouts",
+  "profile.referralCommission": "Referral commission",
+  "profile.noPayouts": "No payouts yet. Share your link to start earning.",
+  "profile.topReferrers": "Top referrers",
+  "profile.emptyLeaderboard": "Leaderboard is empty — be the first to refer someone!",
+  "profile.referredUsers": "Referred users",
+  "profile.pendingSignup": "Pending signup",
+  "profile.noReferrals": "No referrals yet. Share your link above!",
+  "profile.loyaltyLoading": "Loyalty data is loading. Place an order to start earning points.",
+  "profile.loyaltyProgram": "NOVSMM Loyalty Program",
+  "profile.pointsToNext": "in {count} pts",
+  "profile.maximumRewards": "You're earning the maximum rewards.",
+  "profile.achievements": "Achievements",
+  "profile.totalSpent": "Total spent",
+  "profile.completedOrders": "Completed orders",
+  "profile.achievementDescription": "Unlock milestones to earn bonus loyalty points. Each tier-up unlocks bigger rewards.",
+  "profile.pointsOnUnlock": "pts on unlock",
+  "profile.pointsHistory": "Points history",
+  "profile.pointsDescription": "Last 20 loyalty point entries.",
+  "profile.linkedOrder": "linked to order",
+  "profile.noPoints": "No points yet. Place your first order to start earning.",
+  "profile.reasonOrderCompleted": "Order completed",
+  "profile.reasonReferral": "Referral bonus",
+  "profile.reasonDailyLogin": "Daily login",
+  "profile.reasonAchievement": "Achievement unlocked",
   "auth.signIn": "Sign in",
   "auth.signUp": "Sign up",
   "auth.signOut": "Sign out",
   "auth.email": "Email",
   "auth.password": "Password",
   "auth.forgotPassword": "Forgot password?",
+  "auth.backHome": "Back to home",
+  "auth.welcomeBack": "Welcome back",
+  "auth.workspace": "Sign in to your NOVSMM workspace",
+  "auth.orEmail": "or continue with email",
+  "auth.emailOrUsername": "Email or username",
+  "auth.rememberMe": "Remember me",
+  "auth.signingIn": "Signing in…",
+  "auth.verifyAndSignIn": "Verify & sign in",
+  "auth.noAccount": "Don't have an account?",
+  "auth.createOne": "Create one",
+  "auth.twoFactorRequired": "Two-factor authentication required",
+  "auth.twoFactorInstructions": "Enter the 6-digit code from your authenticator app.",
+  "auth.twoFactorCode": "2FA code",
+  "auth.layeredSecurity": "Layered security controls",
+  "auth.encryption": "256-bit encryption",
+  "auth.liveMonitoring": "Live monitoring",
+  "auth.forgotPasswordTitle": "Reset your password",
+  "auth.forgotPasswordDescription": "Enter your account email and we'll send you a secure link to reset your password.",
+  "auth.resetLinkSent": "Reset link sent",
+  "auth.resetLinkNotice": "If that email exists, a reset link has been sent.",
+  "auth.checkInbox": "Check your inbox",
+  "auth.sendingLink": "Sending link…",
+  "auth.sendResetLink": "Send reset link",
+  "auth.backToLogin": "Back to login",
+  "auth.close": "Close",
+  "auth.loginTimedOut": "Login timed out. Please check your connection and try again.",
+  "auth.invalidTwoFactor": "Invalid 2FA code. Please try again.",
+  "auth.invalidCredentials": "Invalid email or password. Please try again.",
+  "auth.loginFailed": "Login failed. Please check your connection and try again.",
+  "auth.requestFailed": "Request failed",
+  "auth.tryAgain": "Please try again in a moment.",
+  "auth.redirecting": "Redirecting…",
+  "auth.continueWith": "Continue with {provider}",
+  "auth.createWorkspace": "Create your workspace",
+  "auth.createWorkspaceSubtitle": "Start automating in minutes. No credit card required.",
+  "auth.orSignUpEmail": "or sign up with email",
+  "auth.fullName": "Full name",
+  "auth.username": "Username",
+  "auth.usernameHint": "3+ chars, letters/numbers/_",
+  "auth.validEmail": "Enter a valid email address",
+  "auth.createStrongPassword": "Create a strong password",
+  "auth.confirmPassword": "Confirm password",
+  "auth.reenterPassword": "Re-enter password",
+  "auth.passwordMismatch": "Passwords don't match",
+  "auth.country": "Country",
+  "auth.currency": "Currency",
+  "auth.language": "Language",
+  "auth.creatingAccount": "Creating account…",
+  "auth.createAccount": "Create account",
+  "auth.agreeTerms": "By creating an account you agree to our",
+  "auth.terms": "Terms",
+  "auth.and": "and",
+  "auth.privacyPolicy": "Privacy Policy",
+  "auth.alreadyAccount": "Already have an account?",
+  "auth.freeTrial": "Free 14-day trial",
+  "auth.noCreditCard": "No credit card",
+  "auth.cancelAnytime": "Cancel anytime",
+  "auth.passwordWeak": "Weak",
+  "auth.passwordFair": "Fair",
+  "auth.passwordGood": "Good",
+  "auth.passwordStrong": "Strong",
+  "auth.passwordTipLength": "Use at least 8 characters",
+  "auth.passwordTipCase": "Mix uppercase and lowercase",
+  "auth.passwordTipNumber": "Add a number",
+  "auth.passwordTipSymbol": "Add a symbol",
+  "auth.accountCreated": "Account created! Please sign in with your credentials.",
+  "auth.registrationFailed": "Registration failed. Please try again.",
+  "onboarding.step": "Step {current} of {total}",
+  "onboarding.back": "Back",
+  "onboarding.previous": "Previous",
+  "onboarding.enterDashboard": "Enter dashboard",
+  "onboarding.continue": "Continue",
+  "onboarding.skip": "Skip onboarding →",
+  "onboarding.welcome.title": "Welcome to NOVSMM",
+  "onboarding.welcome.subtitle": "Tell us how you'll use the platform so we can tailor your workspace.",
+  "onboarding.role.reseller": "Reseller",
+  "onboarding.role.resellerDesc": "Buy wholesale, resell at your price.",
+  "onboarding.role.agency": "Agency",
+  "onboarding.role.agencyDesc": "Manage multiple creators & brands.",
+  "onboarding.role.creator": "Creator",
+  "onboarding.role.creatorDesc": "Grow your own audience.",
+  "onboarding.role.enterprise": "Enterprise",
+  "onboarding.role.enterpriseDesc": "Dedicated infrastructure and controls.",
+  "onboarding.profile.title": "Set up your profile",
+  "onboarding.profile.subtitle": "Add a few details so collaborators can recognize you.",
+  "onboarding.profile.displayName": "Display name",
+  "onboarding.profile.yourName": "Your name",
+  "onboarding.profile.verifiedEmail": "Verified email",
+  "onboarding.currency.title": "Choose your currency",
+  "onboarding.currency.subtitle": "This sets your default wallet, pricing, and payouts. Changeable anytime.",
+  "onboarding.currency.usd": "US Dollar",
+  "onboarding.currency.eur": "Euro",
+  "onboarding.currency.mxn": "Mexican Peso",
+  "onboarding.currency.brl": "Brazilian Real",
+  "onboarding.currency.gbp": "British Pound",
+  "onboarding.currency.inr": "Indian Rupee",
+  "onboarding.language.title": "Pick your language",
+  "onboarding.language.subtitle": "We'll localize your dashboard, receipts, and notifications.",
+  "onboarding.notifications.title": "Notification preferences",
+  "onboarding.notifications.subtitle": "Choose what lands in your real-time feed. Adjust anytime in Settings.",
+  "onboarding.notifications.orders": "Order updates",
+  "onboarding.notifications.ordersDesc": "Start, progress, completion",
+  "onboarding.notifications.sales": "Sales & revenue",
+  "onboarding.notifications.salesDesc": "New sales, payouts",
+  "onboarding.notifications.tickets": "Support tickets",
+  "onboarding.notifications.ticketsDesc": "Replies, status changes",
+  "onboarding.notifications.system": "System & security",
+  "onboarding.notifications.systemDesc": "Maintenance, alerts",
+  "onboarding.tour.title": "Take the tour",
+  "onboarding.tour.subtitle": "Here's what you'll find inside. You can replay this tour anytime from Settings.",
+  "onboarding.tour.dashboard": "Dashboard",
+  "onboarding.tour.dashboardDesc": "Your live ops cockpit.",
+  "onboarding.tour.marketplace": "Marketplace",
+  "onboarding.tour.marketplaceDesc": "Buy, sell, set your margins.",
+  "onboarding.tour.notifications": "Notifications",
+  "onboarding.tour.notificationsDesc": "Real-time, WebSocket-powered.",
+  "onboarding.tour.security": "Security",
+  "onboarding.tour.securityDesc": "2FA, sessions, audit logs.",
+  "dashboard.nav.dashboard": "Dashboard",
+  "dashboard.nav.analytics": "Analytics",
+  "dashboard.nav.services": "Services",
+  "dashboard.nav.orders": "Orders",
+  "dashboard.nav.subscriptions": "Subscriptions",
+  "dashboard.nav.childPanels": "Child Panels",
+  "dashboard.nav.marketplace": "Marketplace",
+  "dashboard.nav.wallet": "Wallet",
+  "dashboard.nav.clients": "Clients",
+  "dashboard.nav.tickets": "Tickets",
+  "dashboard.nav.notifications": "Notifications",
+  "dashboard.nav.profile": "Profile",
+  "dashboard.nav.settings": "Settings",
+  "dashboard.workspace": "Workspace",
+  "dashboard.admin": "Admin",
+  "dashboard.adminPanel": "Admin Panel",
+  "dashboard.availableBalance": "Available balance",
+  "dashboard.live": "live",
+  "dashboard.returnToAdmin": "Return to admin",
+  "dashboard.exit": "Exit",
+  "dashboard.impersonating": "You are impersonating",
+  "dashboard.asAdminAudited": "as admin. All actions are audited.",
+  "dashboard.failedReturn": "Failed to return to admin",
+  "dashboard.contactSupport": "Please try again or contact support.",
+  "dashboard.goHome": "Go to NOVSMM home",
+  "dashboard.backHome": "Back to NOVSMM home — your session stays active",
+  "dashboard.closeMenu": "Close menu",
+  "dashboard.openMenu": "Open menu",
+  "dashboard.openCommandPalette": "Open command palette",
+  "dashboard.operational": "Operational",
+  "dashboard.degraded": "Degraded",
+  "dashboard.account": "Account",
+  "dashboard.user": "User",
+  "dashboard.viewProfile": "View profile",
+  "dashboard.overview": "Workspace overview",
+  "dashboard.welcomeName": "Welcome back, {name} 👋",
+  "dashboard.there": "there",
+  "dashboard.todaySummary": "Here's what's happening across your workspace today.",
+  "dashboard.inProgress": "in progress",
+  "dashboard.completedAll": "Completed (all)",
+  "dashboard.total": "total",
+  "dashboard.7d": "last 7 days",
+  "dashboard.30d": "last 30 days",
+  "dashboard.90d": "last 90 days",
+  "dashboard.wallet": "NOVSMM Wallet",
+  "dashboard.quickStats": "Quick stats",
+  "dashboard.lifetimeEarnings": "Lifetime earnings",
+  "dashboard.openTickets": "Open tickets",
+  "dashboard.recentOrders": "Recent orders",
+  "dashboard.liveActivity": "Live activity",
+  "dashboard.viewAll": "View all",
+  "dashboard.noOrders": "No orders yet. Browse the marketplace to place your first order.",
+  "dashboard.favoriteServices": "Favorite services",
+  "dashboard.browse": "Browse",
+  "dashboard.noFavorites": "No favorites yet. Star a service to pin it here.",
+  "dashboard.recentTickets": "Recent tickets",
+  "dashboard.noTickets": "No tickets yet.",
+  "dashboard.referEarn": "Refer & earn",
+  "dashboard.referralProgram": "NOVSMM Referral Program",
+  "dashboard.commission": "commission",
+  "dashboard.earned": "earned",
+  "dashboard.referralsTo": "referrals to",
+  "dashboard.toGo": "to go",
+  "dashboard.maxTier": "Maximum tier reached — you're earning top commission.",
+  "dashboard.copyReferral": "Copy referral link",
+  "dashboard.referralCopied": "Referral link copied!",
+  "dashboard.couldNotCopy": "Couldn't copy",
+  "dashboard.clipboardBlocked": "Your browser blocked clipboard access.",
+  "dashboard.viewReferralDashboard": "View full referral dashboard",
+  "dashboard.loyaltyRewards": "Loyalty rewards",
+  "dashboard.loyaltyLoading": "Loyalty data is loading. Place an order to start earning points.",
+  "dashboard.loyaltyProgram": "NOVSMM Loyalty Program",
+  "dashboard.pointsTo": "pts to",
+  "dashboard.maxRewards": "Maximum tier reached — you're earning top rewards.",
+  "dashboard.recentAchievements": "Recent achievements",
+  "dashboard.placeOrderAchievement": "Place an order to unlock your first achievement.",
+  "dashboard.viewAchievements": "View all achievements",
+  "dashboard.search": "Search orders, services…",
+  "dashboard.searchShort": "Search…",
+  "dashboard.allSystemsOperational": "All systems operational",
+  "dashboard.ordersToday": "Orders today",
+  "dashboard.activeServices": "Active services",
+  "dashboard.conversion": "Conversion",
+  "dashboard.revenueLastDays": "Revenue · last 32 days",
+  "dashboard.liveOrders": "Live orders",
+  "dashboard.streaming": "streaming",
+  "dashboard.justNow": "just now",
   "common.loading": "Loading…",
   "common.save": "Save",
   "common.cancel": "Cancel",
@@ -644,6 +2145,7 @@ const en: Translations = {
   "common.search": "Search",
   "common.actions": "Actions",
   "common.status": "Status",
+  "common.close": "Close",
 };
 
 const es: Partial<Translations> = {
@@ -925,36 +2427,786 @@ const es: Partial<Translations> = {
   "marketplace.perThousand": "Por 1000",
   "marketplace.placeOrder": "Realizar pedido",
   "marketplace.viewDetails": "Ver detalles",
+  "marketplace.buySellHistory": "Comprar · Vender · Historial",
+  "marketplace.subtitle": "Explora servicios, haz pedidos y repite compras anteriores.",
+  "marketplace.massOrder": "Pedido masivo",
+  "marketplace.sections": "Secciones del marketplace",
+  "marketplace.searchPlaceholder": "Buscar servicios — Instagram, TikTok, seguidores, vistas…",
+  "marketplace.clearSearch": "Limpiar búsqueda",
+  "marketplace.sortServices": "Ordenar servicios",
+  "marketplace.sort.popular": "Populares",
+  "marketplace.sort.price-asc": "Precio: menor a mayor",
+  "marketplace.sort.price-desc": "Precio: mayor a menor",
+  "marketplace.sort.fastest": "Entrega más rápida",
+  "marketplace.sort.name-asc": "Nombre: A-Z",
+  "marketplace.viewMode": "Modo de vista",
+  "marketplace.gridView": "Vista de cuadrícula",
+  "marketplace.listView": "Vista de lista",
+  "marketplace.favoritesOnly": "Mostrar solo servicios favoritos",
+  "marketplace.favorites": "Favoritos",
+  "marketplace.min": "Mín",
+  "marketplace.max": "Máx",
+  "marketplace.minimumPrice": "Precio mínimo",
+  "marketplace.maximumPrice": "Precio máximo",
+  "marketplace.apply": "Aplicar",
+  "marketplace.price": "Precio",
+  "marketplace.all": "Todos",
+  "marketplace.showing": "Mostrando",
+  "marketplace.of": "de",
+  "marketplace.services": "servicios",
+  "marketplace.noServices": "No se encontraron servicios",
+  "marketplace.adjustFilters": "Prueba a ajustar la búsqueda o los filtros",
+  "marketplace.clearFilters": "Limpiar filtros",
+  "marketplace.service": "Servicio",
+  "marketplace.pricePer1k": "Precio/1k",
+  "marketplace.minMax": "Mín/Máx",
+  "marketplace.delivery": "Entrega",
+  "marketplace.action": "Acción",
+  "marketplace.loadMore": "Cargar más",
+  "marketplace.endCatalog": "Fin del catálogo",
+  "marketplace.showMore": "Mostrar",
+  "marketplace.moreIn": "más en",
+  "marketplace.hidden": "ocultos",
+  "marketplace.unavailable": "No disponible",
+  "marketplace.pressEnterOrder": "Pulsa Enter para ver detalles y hacer un pedido.",
+  "marketplace.new": "Nuevo",
+  "marketplace.remove": "Quitar",
+  "marketplace.fromFavorites": "de favoritos",
+  "marketplace.add": "Añadir",
+  "marketplace.toFavorites": "a favoritos",
+  "marketplace.fromComparison": "de la comparación",
+  "marketplace.toComparison": "a la comparación",
+  "marketplace.details": "Detalles",
+  "marketplace.order": "Pedir",
+  "marketplace.now": "ahora",
+  "marketplace.trending": "Servicios destacados",
+  "marketplace.trendingSubtitle": "Los servicios más consolidados de NOVSMM, elegidos por antigüedad del catálogo.",
+  "marketplace.comparisonTray": "Bandeja de comparación",
+  "marketplace.compare": "Comparar",
+  "marketplace.maxReached": "máximo alcanzado",
+  "marketplace.pickAnother": "elige otro para añadir",
+  "marketplace.clearComparison": "Limpiar comparación",
+  "marketplace.clear": "Limpiar",
+  "marketplace.compareNow": "Comparar ahora",
+  "marketplace.pricePerThousand": "Precio por 1000",
+  "marketplace.deliveryTime": "Tiempo de entrega",
+  "marketplace.minMaxQty": "Cantidad mín/máx",
+  "marketplace.quality": "Calidad",
+  "marketplace.compareServices": "Comparar servicios",
+  "marketplace.closeComparison": "Cerrar comparación",
+  "marketplace.sideBySide": "Vista lado a lado de",
+  "marketplace.clickRemove": "Pulsa ✕ para quitar.",
+  "marketplace.attribute": "Atributo",
+  "marketplace.compareTip": "Consejo: compara hasta",
+  "marketplace.servicesForComparison": "servicios para verlos de un vistazo.",
+  "marketplace.ratingThanks": "¡Gracias por valorar!",
+  "marketplace.youRated": "Has valorado",
+  "marketplace.stars": "estrellas",
+  "marketplace.orderPlaced": "Pedido realizado",
+  "marketplace.orderProcessing": "Tu pedido está procesándose",
+  "marketplace.serviceDetails": "Detalles del servicio",
+  "marketplace.speed": "Velocidad",
+  "marketplace.minQuantity": "Cantidad mínima",
+  "marketplace.maxQuantity": "Cantidad máxima",
+  "marketplace.yourRating": "Tu valoración",
+  "marketplace.reviews": "reseñas",
+  "marketplace.noRatings": "Aún no hay valoraciones; sé el primero en opinar.",
+  "marketplace.rateService": "Valora este servicio",
+  "marketplace.rateStars": "Valora este servicio de 1 a 5 estrellas",
+  "marketplace.clickSubmit": "Pulsa para enviar",
+  "marketplace.hoverRate": "Pasa el cursor y pulsa para valorar",
+  "marketplace.yourBalance": "Tu saldo",
+  "marketplace.quantity": "Cantidad",
+  "marketplace.linkOptional": "Enlace (opcional; para servicios que necesitan una URL objetivo)",
+  "marketplace.linkPlaceholder": "https://instagram.com/tu-publicacion",
+  "marketplace.dripFeed": "Entrega gradual",
+  "marketplace.dripFeedDescription": "Divide el pedido en partes pequeñas entregadas con el tiempo para un crecimiento natural.",
+  "marketplace.daysChunks": "Días (partes)",
+  "marketplace.delayMinutes": "Retraso (minutos)",
+  "marketplace.preview": "Vista previa",
+  "marketplace.totalCost": "Costo total",
+  "marketplace.placingOrder": "Realizando pedido…",
+  "marketplace.insufficientBalance": "Saldo insuficiente; recarga tu billetera",
+  "marketplace.placeDripOrder": "Hacer pedido gradual",
   "wallet.title": "Saldo y actividad",
   "wallet.topUp": "Recargar",
   "wallet.withdraw": "Retirar",
   "wallet.available": "Disponible",
   "wallet.held": "Retenido",
   "wallet.transactions": "Historial de transacciones",
+  "wallet.eyebrow": "Billetera",
+  "wallet.balanceActivity": "Saldo y actividad",
+  "wallet.subtitle": "Saldo en tiempo real, recargas, retiros y exportación de estados.",
+  "wallet.export": "Exportar",
+  "wallet.live": "en vivo",
+  "wallet.pendingCompletion": "Pedido pendiente de completar",
+  "wallet.lifetimeEarnings": "Ganancias acumuladas",
+  "wallet.allTimeRevenue": "Ingresos históricos",
+  "wallet.cashFlow30": "Flujo de caja · 30 días",
+  "wallet.liveFromTransactions": "En vivo desde transacciones",
+  "wallet.revenue": "Ingresos",
+  "wallet.transactionHistory": "Historial de transacciones",
+  "wallet.encrypted": "Cifrado",
+  "wallet.txn": "Transacción",
+  "wallet.description": "Descripción",
+  "wallet.type": "Tipo",
+  "wallet.amount": "Importe",
+  "wallet.status": "Estado",
+  "wallet.time": "Hora",
+  "wallet.noTransactions": "Aún no hay transacciones.",
+  "wallet.topUpMethods": "Métodos de recarga",
+  "wallet.railsAvailable": "métodos disponibles",
+  "wallet.noPaymentMethods": "Aún no hay métodos de pago configurados.",
+  "wallet.type.sale": "Venta",
+  "wallet.type.topup": "Recarga",
+  "wallet.type.withdrawal": "Retiro",
+  "wallet.type.fee": "Comisión",
+  "wallet.type.referral": "Referido",
+  "wallet.type.held": "Retenido",
+  "wallet.type.release": "Liberación",
+  "wallet.redirectingNowPayments": "Redirigiendo a NowPayments…",
+  "wallet.completeCryptoPayment": "Completa tu pago cripto en NowPayments. Tu saldo se actualizará tras la confirmación.",
+  "wallet.contactWhatsApp": "Contáctanos por WhatsApp",
+  "wallet.manualCredit": "Acreditaremos tu saldo manualmente tras confirmar el pago.",
+  "wallet.redirecting": "Redirigiendo a",
+  "wallet.completePayment": "Completa tu pago. Tu saldo se actualizará después.",
+  "wallet.sandboxSuccess": "Recarga exitosa (sandbox)",
+  "wallet.sandboxCredited": "Se acreditaron {amount} en tu billetera mediante {method}. Configura credenciales reales en Admin → Pagos para pagos en vivo.",
+  "wallet.topUpProcessed": "Recarga procesada",
+  "wallet.done": "Listo.",
+  "wallet.topUpFailed": "Error en la recarga",
+  "wallet.tryAgainSupport": "Inténtalo de nuevo o contacta a soporte.",
+  "wallet.topUpDialog": "Recargar billetera",
+  "wallet.topUpWallet": "Recargar billetera",
+  "wallet.addFunds": "Agregar fondos",
+  "wallet.amountUsd": "Importe (USD)",
+  "wallet.paymentMethod": "Método de pago",
+  "wallet.processingPayment": "Procesando pago…",
+  "wallet.topUpAmount": "Recargar",
+  "wallet.sandboxNotice": "Modo sandbox · sin cargo real · procesa en ~2 s",
+  "wallet.withdrawalRequested": "Retiro solicitado",
+  "wallet.withdrawalPending": "El retiro de {amount} mediante {method} está pendiente de aprobación administrativa.",
+  "wallet.withdrawalFailed": "Error en el retiro",
+  "wallet.withdrawDialog": "Retirar fondos",
+  "wallet.withdrawFunds": "Retirar fondos",
+  "wallet.withdrawFromWallet": "Retirar de la billetera",
+  "wallet.availablePending": "Disponible: {balance} · Pendiente de aprobación administrativa",
+  "wallet.insufficientBalance": "Saldo insuficiente",
+  "wallet.method": "Método",
+  "wallet.destination": "Destino (cuenta / dirección / correo)",
+  "wallet.destinationPlaceholder": "p. ej., IBAN, dirección de wallet USDT, correo de PayPal",
+  "wallet.processing": "Procesando…",
+  "wallet.withdrawNotice": "Los retiros son revisados por administración · se aplica una comisión del 1%",
+  "childPanels.eyebrow": "Revendedor",
+  "childPanels.title": "Paneles hijos",
+  "childPanels.subtitle": "Subpaneles de marca blanca para tu negocio de reventa.",
+  "childPanels.purchase": "Comprar panel hijo",
+  "childPanels.activePanels": "Paneles activos",
+  "childPanels.monthlyFees": "Cuotas mensuales",
+  "childPanels.markupEarned": "Margen ganado (est.)",
+  "childPanels.emptyTitle": "Aún no tienes paneles hijos",
+  "childPanels.emptyDescription": "Compra uno para iniciar tu negocio de reventa de marca blanca. Obtendrás un subdominio y una clave API aprovisionados automáticamente; tus clientes verán tu marca y nosotros gestionaremos el cumplimiento.",
+  "childPanels.confirmCancel": "¿Cancelar {name}? Se liberará el subdominio.",
+  "childPanels.status.active": "Activo",
+  "childPanels.status.suspended": "Suspendido",
+  "childPanels.status.expired": "Vencido",
+  "childPanels.status.cancelled": "Cancelado",
+  "childPanels.subdomain": "Subdominio",
+  "childPanels.plan": "Plan",
+  "childPanels.plan.reseller": "Revendedor",
+  "childPanels.plan.agency": "Agencia",
+  "childPanels.plan.enterprise": "Empresarial",
+  "childPanels.markup": "Margen",
+  "childPanels.monthlyFee": "Cuota mensual",
+  "childPanels.paidUntil": "Pagado hasta",
+  "childPanels.expired": "vencido",
+  "childPanels.edit": "Editar",
+  "childPanels.suspend": "Suspender",
+  "childPanels.resume": "Reanudar",
+  "childPanels.cancel": "Cancelar",
+  "childPanels.cancelled": "Cancelado",
+  "childPanels.provisioned": "Panel hijo {id} aprovisionado",
+  "childPanels.saveApiKey": "Guarda esta clave API ahora; no volverá a mostrarse. Tu panel está activo en",
+  "childPanels.copied": "Copiada",
+  "childPanels.copy": "Copiar",
+  "childPanels.dismiss": "Descartar",
+  "childPanels.createDialog": "Crear panel hijo",
+  "childPanels.newTitle": "Nuevo panel hijo",
+  "childPanels.newSubtitle": "Subdominio y clave API aprovisionados automáticamente · cobro anticipado por {days} días.",
+  "childPanels.panelName": "Nombre del panel",
+  "childPanels.markupOver": "Margen sobre precios del panel principal:",
+  "childPanels.atCost": "0% (a costo)",
+  "childPanels.doubleCost": "100% (2× costo)",
+  "childPanels.duration": "Duración (días, 1-365)",
+  "childPanels.30Days": "30 días",
+  "childPanels.90Days": "90 días",
+  "childPanels.year365": "1 año (365 días)",
+  "childPanels.monthlyFeeFor": "Cuota mensual ({plan})",
+  "childPanels.days": "días",
+  "childPanels.yourBalance": "Tu saldo",
+  "childPanels.insufficientBalance": "Saldo insuficiente; recarga tu billetera primero.",
+  "childPanels.provisioning": "Aprovisionando…",
+  "childPanels.purchaseProvision": "Comprar y aprovisionar",
+  "childPanels.tagline.reseller": "Revendedores individuales · 1 subpanel · margen predeterminado del 20%",
+  "childPanels.tagline.agency": "Agencias pequeñas · hasta 5 administradores · soporte prioritario",
+  "childPanels.tagline.enterprise": "Alto volumen · onboarding personalizado · IP dedicada",
+  "childPanels.editDialog": "Editar panel hijo",
+  "childPanels.editTitle": "Editar {id}",
+  "childPanels.markupLabel": "Margen:",
+  "childPanels.saving": "Guardando…",
+  "childPanels.saveChanges": "Guardar cambios",
+  "analytics.referralCopied": "¡Enlace de referido copiado!",
+  "analytics.couldNotCopy": "No se pudo copiar",
+  "analytics.clipboardBlocked": "Tu navegador bloqueó el acceso al portapapeles.",
+  "analytics.eyebrow": "Analítica",
+  "analytics.title": "Rendimiento",
+  "analytics.subtitle": "Métricas en tiempo real de tu historial de transacciones.",
+  "analytics.orders30d": "Pedidos (30 d)",
+  "analytics.revenue30d": "Ingresos (30 d)",
+  "analytics.live": "en vivo",
+  "analytics.conversion": "Conversión",
+  "analytics.activeOrders": "Pedidos activos",
+  "analytics.revenueOrders": "Ingresos y pedidos",
+  "analytics.last30Days": "Últimos 30 días",
+  "analytics.byPlatform": "Por plataforma",
+  "analytics.marketplaceShare": "Distribución del marketplace",
+  "analytics.noCompletedOrders": "Aún no hay pedidos completados",
+  "analytics.hourlyOrders": "Pedidos por hora · hoy",
+  "analytics.peak": "Pico: {count} pedidos/hora",
+  "analytics.referrals": "Referidos",
+  "analytics.earnedLifetime": "ganado · 5% de por vida",
+  "analytics.shareReferral": "Compartir enlace de referido",
+  "analytics.revenue": "Ingresos",
+  "analytics.orders": "Pedidos",
+  "analytics.aiInsights": "Insights de IA",
+  "analytics.autoAnalysis": "Análisis automático de tu actividad",
+  "analytics.regenerate": "Regenerar insights",
+  "analytics.availableAfter": "Disponible después de 5 pedidos",
+  "analytics.generating": "Generando…",
+  "analytics.refresh": "Actualizar",
+  "analytics.noInsights": "Aún no hay insights. Pulsa actualizar para generarlos.",
+  "analytics.unlockInsights": "Realiza al menos 6 pedidos para desbloquear insights de gasto y recomendaciones de crecimiento con IA.",
+  "analytics.fresh": "Reciente",
+  "analytics.generatedCached": "Generado {date} · en caché 1 h",
+  "analytics.hourTooltip": "{hour}:00 — {count} pedidos",
   "orders.title": "Todos los pedidos",
   "orders.all": "Todos",
   "orders.processing": "Procesando",
   "orders.completed": "Completados",
   "orders.repeat": "Repetir",
   "orders.export": "Exportar CSV",
+  "orders.allOrders": "Todos los pedidos",
+  "orders.shown": "mostrados",
+  "orders.clickRow": "pulsa una fila para ver los detalles.",
+  "orders.searchPlaceholder": "Buscar por ID, plataforma o servicio…",
+  "orders.search": "Buscar pedidos",
+  "orders.filter.all": "Todos",
+  "orders.filter.processing": "Procesando",
+  "orders.filter.in_progress": "En progreso",
+  "orders.filter.completed": "Completados",
+  "orders.filter.partial": "Parciales",
+  "orders.filter.pending": "Pendientes",
+  "orders.order": "Pedido",
+  "orders.service": "Servicio",
+  "orders.qty": "Cant.",
+  "orders.cost": "Costo",
+  "orders.price": "Precio",
+  "orders.status": "Estado",
+  "orders.progress": "Progreso",
+  "orders.fulfilledBy": "Gestionado por",
+  "orders.actions": "Acciones",
+  "orders.requestRefill": "Solicitar reposición",
+  "orders.noMatch": "Ningún pedido coincide con tus filtros.",
+  "orders.refillRequest": "Solicitud de reposición",
+  "orders.processRefill": "Procesa una reposición para el pedido",
+  "orders.link": "Enlace",
+  "orders.details": "Detalles del pedido",
+  "orders.priority": "prioridad",
+  "orders.dripFeed": "Entrega gradual",
+  "orders.timeline": "Cronología",
+  "orders.cancelledRefund": "El pedido se canceló y se emitió el reembolso",
+  "orders.dripConfig": "Configuración de entrega gradual",
+  "orders.totalQuantity": "Cantidad total",
+  "orders.chunks": "Partes",
+  "orders.perChunk": "Por parte",
+  "orders.delay": "Retraso",
+  "orders.startDate": "Fecha de inicio",
+  "orders.serviceTarget": "Servicio y objetivo",
+  "orders.orderId": "ID del pedido",
+  "orders.platform": "Plataforma",
+  "orders.open": "Abrir",
+  "orders.quantityPricing": "Cantidad y precios",
+  "orders.quantity": "Cantidad",
+  "orders.unitPrice": "Precio unitario",
+  "orders.unitCost": "Costo unitario",
+  "orders.totalPrice": "Precio total",
+  "orders.dates": "Fechas",
+  "orders.created": "Creado",
+  "orders.updated": "Actualizado",
+  "orders.completedAt": "Completado",
+  "orders.cancelOrder": "Cancelar pedido",
+  "orders.left": "restantes",
+  "orders.orderCancelled": "Pedido cancelado",
+  "orders.completedNoCancel": "Pedido completado; ya no se puede cancelar",
+  "orders.cancelExpired": "La ventana de cancelación expiró (60 s después de crear el pedido)",
   "tickets.title": "Tickets",
   "tickets.new": "Nuevo ticket",
   "tickets.subject": "Asunto",
   "tickets.message": "Mensaje",
   "tickets.send": "Escribe tu mensaje…",
+  "tickets.eyebrow": "Soporte",
+  "tickets.count": "tickets",
+  "tickets.open": "abiertos",
+  "tickets.conversation": "Conversación",
+  "tickets.noMatch": "No hay tickets que coincidan con",
+  "tickets.empty": "Aún no tienes tickets. Crea uno para recibir ayuda de nuestro equipo de soporte.",
+  "tickets.searchPlaceholder": "Buscar tickets…",
+  "tickets.clearSearch": "Limpiar búsqueda",
+  "tickets.noMessages": "Sin mensajes",
+  "tickets.backToList": "Volver a la lista de tickets",
+  "tickets.waitingReply": "Esperando respuesta de soporte",
+  "tickets.respondShortly": "Soporte responderá pronto",
+  "tickets.uploadFailed": "Error al subir",
+  "tickets.tryAgain": "Inténtalo de nuevo.",
+  "tickets.tryAgainSupport": "Inténtalo de nuevo o contacta a soporte.",
+  "tickets.uploading": "Subiendo…",
+  "tickets.messagePlaceholder": "Escribe tu mensaje…",
+  "tickets.enterHint": "Pulsa Enter para enviar",
+  "tickets.shiftEnterHint": "Shift+Enter para una nueva línea",
+  "tickets.cannedReplies": "Respuestas guardadas",
+  "tickets.noCannedReplies": "Aún no hay respuestas guardadas.",
+  "tickets.createDialog": "Crear ticket",
+  "tickets.createTitle": "Crear nuevo ticket",
+  "tickets.subjectPlaceholder": "Descripción breve de tu problema",
+  "tickets.priority": "Prioridad",
+  "tickets.priorityLow": "Baja",
+  "tickets.priorityMedium": "Media",
+  "tickets.priorityHigh": "Alta",
+  "tickets.messageCreatePlaceholder": "Describe tu problema en detalle…",
+  "tickets.creating": "Creando…",
+  "tickets.create": "Crear ticket",
+  "tickets.priority.low": "Baja",
+  "tickets.priority.medium": "Media",
+  "tickets.priority.high": "Alta",
+  "tickets.status.open": "Abierto",
+  "tickets.status.waiting": "En espera",
+  "tickets.status.resolved": "Resuelto",
+  "subscriptions.eyebrow": "Suscripciones",
+  "subscriptions.title": "Suscripciones SMM",
+  "subscriptions.subtitle": "Entrega automática de likes/seguidores en cada publicación nueva.",
+  "subscriptions.create": "Crear suscripción",
+  "subscriptions.active": "Activas",
+  "subscriptions.postsDelivered": "Publicaciones entregadas",
+  "subscriptions.totalSubscriptions": "Suscripciones totales",
+  "subscriptions.totalSpent": "Total gastado",
+  "subscriptions.emptyTitle": "Aún no tienes suscripciones",
+  "subscriptions.emptyDescription": "Crea una para entregar automáticamente en cada publicación nueva. Elige un servicio, el objetivo @usuario y un rango por publicación; nosotros nos encargamos.",
+  "subscriptions.target": "Objetivo",
+  "subscriptions.perPostQty": "Cantidad por publicación",
+  "subscriptions.expiry": "Vencimiento",
+  "subscriptions.postsCovered": "Publicaciones cubiertas",
+  "subscriptions.lastCheck": "Última comprobación",
+  "subscriptions.pendingFirstCheck": "Pendiente de la primera comprobación",
+  "subscriptions.lastPost": "Última publicación",
+  "subscriptions.pause": "Pausar",
+  "subscriptions.resume": "Reanudar",
+  "subscriptions.cancel": "Cancelar",
+  "subscriptions.allPostsDelivered": "Todas las publicaciones entregadas",
+  "subscriptions.expiredBeforeCompletion": "Venció antes de completarse",
+  "subscriptions.cancelled": "Cancelada",
+  "subscriptions.status.active": "Activa",
+  "subscriptions.status.paused": "Pausada",
+  "subscriptions.status.completed": "Completada",
+  "subscriptions.status.expired": "Vencida",
+  "subscriptions.status.cancelled": "Cancelada",
+  "subscriptions.createDialog": "Crear suscripción",
+  "subscriptions.newTitle": "Nueva suscripción SMM",
+  "subscriptions.newSubtitle": "Entrega automática en cada publicación nueva durante {days} días (o hasta cubrir {posts} publicaciones).",
+  "subscriptions.service": "Servicio",
+  "subscriptions.loadingServices": "Cargando servicios…",
+  "subscriptions.selectService": "Selecciona un servicio…",
+  "subscriptions.min": "Mín",
+  "subscriptions.max": "Máx",
+  "subscriptions.per1000": "por cada 1000 unidades",
+  "subscriptions.username": "Usuario",
+  "subscriptions.profileLink": "Enlace del perfil (opcional)",
+  "subscriptions.minQtyPost": "Cantidad mín. / publicación",
+  "subscriptions.maxQtyPost": "Cantidad máx. / publicación",
+  "subscriptions.postsRange": "Publicaciones (1-365)",
+  "subscriptions.delayMin": "Retraso (min)",
+  "subscriptions.expiryDays": "Vencimiento (días)",
+  "subscriptions.perPostCost": "Costo por publicación (máx.)",
+  "subscriptions.posts": "publicaciones",
+  "subscriptions.yourBalance": "Tu saldo",
+  "subscriptions.insufficientBalance": "Saldo insuficiente. Recarga tu billetera para cubrir el costo estimado.",
+  "subscriptions.creating": "Creando…",
   "notifications.title": "Notificaciones",
   "notifications.markAllRead": "Marcar todo como leído",
   "notifications.live": "En vivo · conectado",
+  "notifications.eyebrow": "Flujo en tiempo real",
+  "notifications.subtitle": "En vivo, enviado por WebSocket desde la base de datos. No requiere actualizar.",
+  "notifications.liveConnected": "En vivo · conectado",
+  "notifications.connecting": "Conectando…",
+  "notifications.empty": "Aún no hay notificaciones de este tipo.",
+  "notifications.justNow": "justo ahora",
+  "notifications.minutesAgo": "hace {count} min",
+  "notifications.hoursAgo": "hace {count} h",
+  "notifications.daysAgo": "hace {count} d",
+  "notifications.filter.all": "Todas",
+  "notifications.filter.order": "Pedido",
+  "notifications.filter.sale": "Venta",
+  "notifications.filter.marketplace": "Marketplace",
+  "notifications.filter.ticket": "Ticket",
+  "notifications.filter.recharge": "Recarga",
+  "notifications.filter.withdrawal": "Retiro",
+  "notifications.filter.referral": "Referido",
+  "notifications.filter.system": "Sistema",
   "profile.title": "Configuración de perfil",
   "profile.currency": "Moneda preferida",
   "profile.language": "Idioma preferido",
   "profile.save": "Guardar cambios",
+  "profile.personalize": "Personaliza tu espacio de trabajo",
+  "profile.subtitle": "Gestiona tu perfil, seguridad, notificaciones y sesiones.",
+  "profile.tabProfile": "Perfil",
+  "profile.tabSecurity": "Seguridad",
+  "profile.tabAchievements": "Logros",
+  "profile.tabReferrals": "Referidos",
+  "profile.tabNotifications": "Notificaciones",
+  "profile.tabSessions": "Sesiones",
+  "profile.personalInfo": "Información personal",
+  "profile.fullName": "Nombre completo",
+  "profile.country": "País",
+  "profile.currencyDescription": "Todos los precios se mostrarán en esta moneda con conversión en tiempo real.",
+  "profile.preview": "Vista previa:",
+  "profile.previewText": "Un servicio de $2.40 USD cuesta",
+  "profile.inCurrency": "en",
+  "profile.saving": "Guardando…",
+  "profile.dangerZone": "Zona peligrosa",
+  "profile.dangerDescription": "Elimina permanentemente tu cuenta y anonimiza tus datos personales. Esta acción es irreversible. Los pedidos y transacciones se conservan para auditoría financiera.",
+  "profile.deleteAccount": "Eliminar cuenta",
+  "profile.accountDeleted": "Cuenta eliminada",
+  "profile.accountDeletedDescription": "Tus datos personales fueron anonimizados. Redirigiendo…",
+  "profile.deleteWarning": "Esto eliminará permanentemente tu cuenta. Tus pedidos y transacciones se conservan para auditoría financiera, pero tus datos personales serán anonimizados. Esta acción NO se puede deshacer.",
+  "profile.confirmPassword": "Confirma tu contraseña",
+  "profile.reenterPassword": "Vuelve a introducir tu contraseña",
+  "profile.hidePassword": "Ocultar contraseña",
+  "profile.showPassword": "Mostrar contraseña",
+  "profile.acknowledgeDelete": "Entiendo que esta acción es irreversible y que mis datos personales serán anonimizados.",
+  "profile.deleting": "Eliminando…",
+  "profile.deleteMyAccount": "Eliminar mi cuenta",
+  "profile.passwordChanged": "Contraseña cambiada",
+  "profile.passwordUpdated": "Tu contraseña se actualizó.",
+  "profile.failed": "Error",
+  "profile.2faSetupFailed": "Error al configurar 2FA",
+  "profile.2faEnabled": "2FA activado",
+  "profile.2faActive": "La autenticación de dos factores ya está activa.",
+  "profile.verificationFailed": "Error de verificación",
+  "profile.2faDisabled": "2FA desactivado",
+  "profile.changePassword": "Cambiar contraseña",
+  "profile.currentPassword": "Contraseña actual",
+  "profile.newPassword": "Nueva contraseña (mín. 8 caracteres)",
+  "profile.updatePassword": "Actualizar contraseña",
+  "profile.twoFactor": "Autenticación de dos factores (2FA)",
+  "profile.enabled": "Activado",
+  "profile.twoFactorDescription": "Protege tu cuenta con una app de autenticación (Google Authenticator, Authy, etc.).",
+  "profile.setup2fa": "Configurar 2FA",
+  "profile.enterCodeManually": "O introduce este código manualmente:",
+  "profile.backupCodes": "Códigos de respaldo; ¡guárdalos ahora!",
+  "profile.enter6Code": "Introduce el código de 6 dígitos de tu app de autenticación",
+  "profile.verifyEnable": "Verificar y activar",
+  "profile.enter6Disable": "Introduce un código de 6 dígitos para desactivar 2FA",
+  "profile.disable2fa": "Desactivar 2FA",
+  "profile.preferencesSaved": "Preferencias guardadas",
+  "profile.prefOrders": "Actualizaciones de pedidos",
+  "profile.prefOrdersDesc": "Inicio, progreso y finalización",
+  "profile.prefSales": "Ventas e ingresos",
+  "profile.prefSalesDesc": "Nuevas ventas y pagos",
+  "profile.prefTickets": "Tickets de soporte",
+  "profile.prefTicketsDesc": "Respuestas y cambios de estado",
+  "profile.prefRecharges": "Recargas de billetera",
+  "profile.prefRechargesDesc": "Confirmaciones de pago",
+  "profile.prefWithdrawals": "Retiros",
+  "profile.prefWithdrawalsDesc": "Cambios en el estado de aprobación",
+  "profile.prefMarketplace": "Marketplace",
+  "profile.prefMarketplaceDesc": "Nuevas ofertas y ventas",
+  "profile.prefReferrals": "Referidos",
+  "profile.prefReferralsDesc": "Nuevos referidos y ganancias",
+  "profile.prefSystem": "Sistema y seguridad",
+  "profile.prefSystemDesc": "Mantenimiento y alertas",
+  "profile.prefEmailOrders": "Correo: pedidos",
+  "profile.prefEmailOrdersDesc": "Recibir correos de pedidos",
+  "profile.prefEmailTickets": "Correo: tickets",
+  "profile.prefEmailTicketsDesc": "Recibir correos de tickets",
+  "profile.prefEmailMarketing": "Correo: marketing",
+  "profile.prefEmailMarketingDesc": "Promociones y boletines",
+  "profile.notificationPreferences": "Preferencias de notificaciones",
+  "profile.notificationDescription": "Elige qué notificaciones recibes en la app y por correo.",
+  "profile.savePreferences": "Guardar preferencias",
+  "profile.sessionsRevoked": "Todas las sesiones fueron revocadas",
+  "profile.activeSessions": "Sesiones activas",
+  "profile.revokeAll": "Revocar todas",
+  "profile.sessionsDescription": "Actividad reciente de inicio de sesión en tu cuenta.",
+  "profile.current": "ACTUAL",
+  "profile.noSessions": "No se encontraron sesiones recientes.",
+  "profile.referralCopied": "¡Enlace de referido copiado!",
+  "profile.couldNotCopy": "No se pudo copiar",
+  "profile.clipboardBlocked": "Tu navegador bloqueó el acceso al portapapeles.",
+  "profile.referEarn": "Refiere y gana",
+  "profile.earnCommission": "Gana",
+  "profile.lifetimeCommission": "de comisión de por vida por cada pedido de usuarios que refieras. Haz crecer tu red para desbloquear niveles superiores.",
+  "profile.copyReferralLink": "Copiar enlace de referido",
+  "profile.totalReferrals": "Referidos totales",
+  "profile.active": "Activos",
+  "profile.totalEarned": "Total ganado",
+  "profile.commission": "Comisión",
+  "profile.yourTier": "Tu nivel",
+  "profile.rank": "Puesto",
+  "profile.inMore": "en {count} más",
+  "profile.unlockTier": "{current} / {target} referidos exitosos para desbloquear {tier}",
+  "profile.tierUnlocked": "nivel desbloqueado.",
+  "profile.maximumCommission": "Ganas la comisión máxima del {rate}% por cada referido.",
+  "profile.tier": "Nivel",
+  "profile.referrals": "Referidos",
+  "profile.status": "Estado",
+  "profile.currentTier": "Actual",
+  "profile.unlocked": "Desbloqueado",
+  "profile.locked": "Bloqueado",
+  "profile.recentPayouts": "Pagos recientes",
+  "profile.referralCommission": "Comisión por referido",
+  "profile.noPayouts": "Aún no hay pagos. Comparte tu enlace para empezar a ganar.",
+  "profile.topReferrers": "Mejores referidores",
+  "profile.emptyLeaderboard": "El ranking está vacío; ¡sé el primero en referir a alguien!",
+  "profile.referredUsers": "Usuarios referidos",
+  "profile.pendingSignup": "Registro pendiente",
+  "profile.noReferrals": "Aún no hay referidos. ¡Comparte tu enlace de arriba!",
+  "profile.loyaltyLoading": "Cargando datos de lealtad. Haz un pedido para comenzar a ganar puntos.",
+  "profile.loyaltyProgram": "Programa de lealtad NOVSMM",
+  "profile.pointsToNext": "en {count} puntos",
+  "profile.maximumRewards": "Estás obteniendo las recompensas máximas.",
+  "profile.achievements": "Logros",
+  "profile.totalSpent": "Total gastado",
+  "profile.completedOrders": "Pedidos completados",
+  "profile.achievementDescription": "Desbloquea hitos para ganar puntos de lealtad extra. Cada subida de nivel desbloquea mejores recompensas.",
+  "profile.pointsOnUnlock": "puntos al desbloquear",
+  "profile.pointsHistory": "Historial de puntos",
+  "profile.pointsDescription": "Últimas 20 entradas de puntos de lealtad.",
+  "profile.linkedOrder": "vinculado al pedido",
+  "profile.noPoints": "Aún no hay puntos. Haz tu primer pedido para comenzar a ganar.",
+  "profile.reasonOrderCompleted": "Pedido completado",
+  "profile.reasonReferral": "Bono por referido",
+  "profile.reasonDailyLogin": "Inicio de sesión diario",
+  "profile.reasonAchievement": "Logro desbloqueado",
   "auth.signIn": "Iniciar sesión",
   "auth.signUp": "Registrarse",
   "auth.signOut": "Cerrar sesión",
   "auth.email": "Correo",
   "auth.password": "Contraseña",
   "auth.forgotPassword": "¿Olvidaste tu contraseña?",
+  "auth.backHome": "Volver al inicio",
+  "auth.welcomeBack": "Bienvenido de nuevo",
+  "auth.workspace": "Inicia sesión en tu espacio de trabajo de NOVSMM",
+  "auth.orEmail": "o continúa con correo",
+  "auth.emailOrUsername": "Correo o usuario",
+  "auth.rememberMe": "Recordarme",
+  "auth.signingIn": "Iniciando sesión…",
+  "auth.verifyAndSignIn": "Verificar e iniciar sesión",
+  "auth.noAccount": "¿No tienes una cuenta?",
+  "auth.createOne": "Crea una",
+  "auth.twoFactorRequired": "Se requiere autenticación de dos factores",
+  "auth.twoFactorInstructions": "Ingresa el código de 6 dígitos de tu aplicación autenticadora.",
+  "auth.twoFactorCode": "Código 2FA",
+  "auth.layeredSecurity": "Controles de seguridad por capas",
+  "auth.encryption": "Cifrado de 256 bits",
+  "auth.liveMonitoring": "Monitoreo en vivo",
+  "auth.forgotPasswordTitle": "Restablece tu contraseña",
+  "auth.forgotPasswordDescription": "Ingresa el correo de tu cuenta y te enviaremos un enlace seguro para restablecer tu contraseña.",
+  "auth.resetLinkSent": "Enlace de restablecimiento enviado",
+  "auth.resetLinkNotice": "Si ese correo existe, se ha enviado un enlace de restablecimiento.",
+  "auth.checkInbox": "Revisa tu bandeja de entrada",
+  "auth.sendingLink": "Enviando enlace…",
+  "auth.sendResetLink": "Enviar enlace de restablecimiento",
+  "auth.backToLogin": "Volver al inicio de sesión",
+  "auth.close": "Cerrar",
+  "auth.loginTimedOut": "La sesión tardó demasiado. Revisa tu conexión e inténtalo de nuevo.",
+  "auth.invalidTwoFactor": "Código 2FA no válido. Inténtalo de nuevo.",
+  "auth.invalidCredentials": "Correo o contraseña no válidos. Inténtalo de nuevo.",
+  "auth.loginFailed": "No se pudo iniciar sesión. Revisa tu conexión e inténtalo de nuevo.",
+  "auth.requestFailed": "La solicitud falló",
+  "auth.tryAgain": "Inténtalo de nuevo en un momento.",
+  "auth.redirecting": "Redirigiendo…",
+  "auth.continueWith": "Continuar con {provider}",
+  "auth.createWorkspace": "Crea tu espacio de trabajo",
+  "auth.createWorkspaceSubtitle": "Empieza a automatizar en minutos. Sin tarjeta de crédito.",
+  "auth.orSignUpEmail": "o regístrate con correo",
+  "auth.fullName": "Nombre completo",
+  "auth.username": "Usuario",
+  "auth.usernameHint": "3+ caracteres, letras/números/_",
+  "auth.validEmail": "Ingresa un correo válido",
+  "auth.createStrongPassword": "Crea una contraseña segura",
+  "auth.confirmPassword": "Confirma la contraseña",
+  "auth.reenterPassword": "Vuelve a ingresar la contraseña",
+  "auth.passwordMismatch": "Las contraseñas no coinciden",
+  "auth.country": "País",
+  "auth.currency": "Moneda",
+  "auth.language": "Idioma",
+  "auth.creatingAccount": "Creando cuenta…",
+  "auth.createAccount": "Crear cuenta",
+  "auth.agreeTerms": "Al crear una cuenta aceptas nuestros",
+  "auth.terms": "Términos",
+  "auth.and": "y",
+  "auth.privacyPolicy": "Política de privacidad",
+  "auth.alreadyAccount": "¿Ya tienes una cuenta?",
+  "auth.freeTrial": "Prueba gratuita de 14 días",
+  "auth.noCreditCard": "Sin tarjeta de crédito",
+  "auth.cancelAnytime": "Cancela cuando quieras",
+  "auth.passwordWeak": "Débil",
+  "auth.passwordFair": "Regular",
+  "auth.passwordGood": "Buena",
+  "auth.passwordStrong": "Fuerte",
+  "auth.passwordTipLength": "Usa al menos 8 caracteres",
+  "auth.passwordTipCase": "Combina mayúsculas y minúsculas",
+  "auth.passwordTipNumber": "Agrega un número",
+  "auth.passwordTipSymbol": "Agrega un símbolo",
+  "auth.accountCreated": "¡Cuenta creada! Inicia sesión con tus credenciales.",
+  "auth.registrationFailed": "No se pudo registrar la cuenta. Inténtalo de nuevo.",
+  "onboarding.step": "Paso {current} de {total}",
+  "onboarding.back": "Atrás",
+  "onboarding.previous": "Anterior",
+  "onboarding.enterDashboard": "Entrar al panel",
+  "onboarding.continue": "Continuar",
+  "onboarding.skip": "Omitir onboarding →",
+  "onboarding.welcome.title": "Bienvenido a NOVSMM",
+  "onboarding.welcome.subtitle": "Cuéntanos cómo usarás la plataforma para adaptar tu espacio de trabajo.",
+  "onboarding.role.reseller": "Revendedor",
+  "onboarding.role.resellerDesc": "Compra al por mayor y revende a tu precio.",
+  "onboarding.role.agency": "Agencia",
+  "onboarding.role.agencyDesc": "Administra varios creadores y marcas.",
+  "onboarding.role.creator": "Creador",
+  "onboarding.role.creatorDesc": "Haz crecer tu propia audiencia.",
+  "onboarding.role.enterprise": "Empresa",
+  "onboarding.role.enterpriseDesc": "Infraestructura y controles dedicados.",
+  "onboarding.profile.title": "Configura tu perfil",
+  "onboarding.profile.subtitle": "Agrega algunos datos para que tus colaboradores te reconozcan.",
+  "onboarding.profile.displayName": "Nombre visible",
+  "onboarding.profile.yourName": "Tu nombre",
+  "onboarding.profile.verifiedEmail": "Correo verificado",
+  "onboarding.currency.title": "Elige tu moneda",
+  "onboarding.currency.subtitle": "Define tu saldo, precios y retiros predeterminados. Puedes cambiarlo cuando quieras.",
+  "onboarding.currency.usd": "Dólar estadounidense",
+  "onboarding.currency.eur": "Euro",
+  "onboarding.currency.mxn": "Peso mexicano",
+  "onboarding.currency.brl": "Real brasileño",
+  "onboarding.currency.gbp": "Libra esterlina",
+  "onboarding.currency.inr": "Rupia india",
+  "onboarding.language.title": "Elige tu idioma",
+  "onboarding.language.subtitle": "Traduciremos tu panel, recibos y notificaciones.",
+  "onboarding.notifications.title": "Preferencias de notificaciones",
+  "onboarding.notifications.subtitle": "Elige qué aparece en tu feed en tiempo real. Puedes ajustarlo en Configuración.",
+  "onboarding.notifications.orders": "Actualizaciones de pedidos",
+  "onboarding.notifications.ordersDesc": "Inicio, progreso y finalización",
+  "onboarding.notifications.sales": "Ventas e ingresos",
+  "onboarding.notifications.salesDesc": "Nuevas ventas y retiros",
+  "onboarding.notifications.tickets": "Tickets de soporte",
+  "onboarding.notifications.ticketsDesc": "Respuestas y cambios de estado",
+  "onboarding.notifications.system": "Sistema y seguridad",
+  "onboarding.notifications.systemDesc": "Mantenimiento y alertas",
+  "onboarding.tour.title": "Conoce el panel",
+  "onboarding.tour.subtitle": "Esto es lo que encontrarás dentro. Puedes repetir el recorrido desde Configuración.",
+  "onboarding.tour.dashboard": "Panel",
+  "onboarding.tour.dashboardDesc": "Tu centro de operaciones en vivo.",
+  "onboarding.tour.marketplace": "Marketplace",
+  "onboarding.tour.marketplaceDesc": "Compra, vende y define tus márgenes.",
+  "onboarding.tour.notifications": "Notificaciones",
+  "onboarding.tour.notificationsDesc": "En tiempo real, con WebSocket.",
+  "onboarding.tour.security": "Seguridad",
+  "onboarding.tour.securityDesc": "2FA, sesiones y registros de auditoría.",
+  "dashboard.nav.dashboard": "Panel",
+  "dashboard.nav.analytics": "Analítica",
+  "dashboard.nav.services": "Servicios",
+  "dashboard.nav.orders": "Pedidos",
+  "dashboard.nav.subscriptions": "Suscripciones",
+  "dashboard.nav.childPanels": "Paneles hijos",
+  "dashboard.nav.marketplace": "Marketplace",
+  "dashboard.nav.wallet": "Billetera",
+  "dashboard.nav.clients": "Clientes",
+  "dashboard.nav.tickets": "Tickets",
+  "dashboard.nav.notifications": "Notificaciones",
+  "dashboard.nav.profile": "Perfil",
+  "dashboard.nav.settings": "Configuración",
+  "dashboard.workspace": "Espacio de trabajo",
+  "dashboard.admin": "Admin",
+  "dashboard.adminPanel": "Panel de administración",
+  "dashboard.availableBalance": "Saldo disponible",
+  "dashboard.live": "en vivo",
+  "dashboard.returnToAdmin": "Volver al panel admin",
+  "dashboard.exit": "Salir",
+  "dashboard.impersonating": "Estás suplantando a",
+  "dashboard.asAdminAudited": "como admin. Todas las acciones se auditan.",
+  "dashboard.failedReturn": "No se pudo volver al panel admin",
+  "dashboard.contactSupport": "Inténtalo de nuevo o contacta con soporte.",
+  "dashboard.goHome": "Ir al inicio de NOVSMM",
+  "dashboard.backHome": "Volver al inicio de NOVSMM — tu sesión sigue activa",
+  "dashboard.closeMenu": "Cerrar menú",
+  "dashboard.openMenu": "Abrir menú",
+  "dashboard.openCommandPalette": "Abrir paleta de comandos",
+  "dashboard.operational": "Operativo",
+  "dashboard.degraded": "Degradado",
+  "dashboard.account": "Cuenta",
+  "dashboard.user": "Usuario",
+  "dashboard.viewProfile": "Ver perfil",
+  "dashboard.overview": "Resumen del espacio de trabajo",
+  "dashboard.welcomeName": "Bienvenido de nuevo, {name} 👋",
+  "dashboard.there": "ahí",
+  "dashboard.todaySummary": "Esto es lo que ocurre hoy en tu espacio de trabajo.",
+  "dashboard.inProgress": "en progreso",
+  "dashboard.completedAll": "Completados (todos)",
+  "dashboard.total": "total",
+  "dashboard.7d": "últimos 7 días",
+  "dashboard.30d": "últimos 30 días",
+  "dashboard.90d": "últimos 90 días",
+  "dashboard.wallet": "Billetera NOVSMM",
+  "dashboard.quickStats": "Estadísticas rápidas",
+  "dashboard.lifetimeEarnings": "Ingresos históricos",
+  "dashboard.openTickets": "Tickets abiertos",
+  "dashboard.recentOrders": "Pedidos recientes",
+  "dashboard.liveActivity": "Actividad en vivo",
+  "dashboard.viewAll": "Ver todos",
+  "dashboard.noOrders": "Aún no hay pedidos. Explora el marketplace para hacer tu primer pedido.",
+  "dashboard.favoriteServices": "Servicios favoritos",
+  "dashboard.browse": "Explorar",
+  "dashboard.noFavorites": "Aún no tienes favoritos. Marca un servicio para fijarlo aquí.",
+  "dashboard.recentTickets": "Tickets recientes",
+  "dashboard.noTickets": "Aún no hay tickets.",
+  "dashboard.referEarn": "Refiere y gana",
+  "dashboard.referralProgram": "Programa de referidos NOVSMM",
+  "dashboard.commission": "comisión",
+  "dashboard.earned": "ganado",
+  "dashboard.referralsTo": "referidos para",
+  "dashboard.toGo": "restantes",
+  "dashboard.maxTier": "Nivel máximo alcanzado: estás ganando la comisión más alta.",
+  "dashboard.copyReferral": "Copiar enlace de referido",
+  "dashboard.referralCopied": "¡Enlace de referido copiado!",
+  "dashboard.couldNotCopy": "No se pudo copiar",
+  "dashboard.clipboardBlocked": "Tu navegador bloqueó el acceso al portapapeles.",
+  "dashboard.viewReferralDashboard": "Ver panel completo de referidos",
+  "dashboard.loyaltyRewards": "Recompensas de lealtad",
+  "dashboard.loyaltyLoading": "Cargando lealtad. Haz un pedido para empezar a ganar puntos.",
+  "dashboard.loyaltyProgram": "Programa de lealtad NOVSMM",
+  "dashboard.pointsTo": "puntos para",
+  "dashboard.maxRewards": "Nivel máximo alcanzado: estás ganando las mejores recompensas.",
+  "dashboard.recentAchievements": "Logros recientes",
+  "dashboard.placeOrderAchievement": "Haz un pedido para desbloquear tu primer logro.",
+  "dashboard.viewAchievements": "Ver todos los logros",
+  "dashboard.search": "Buscar pedidos y servicios…",
+  "dashboard.searchShort": "Buscar…",
+  "dashboard.allSystemsOperational": "Todos los sistemas operativos",
+  "dashboard.ordersToday": "Pedidos de hoy",
+  "dashboard.activeServices": "Servicios activos",
+  "dashboard.conversion": "Conversión",
+  "dashboard.revenueLastDays": "Ingresos · últimos 32 días",
+  "dashboard.liveOrders": "Pedidos en vivo",
+  "dashboard.streaming": "transmitiendo",
+  "dashboard.justNow": "ahora mismo",
   "common.loading": "Cargando…",
   "common.save": "Guardar",
   "common.cancel": "Cancelar",
@@ -962,6 +3214,7 @@ const es: Partial<Translations> = {
   "common.search": "Buscar",
   "common.actions": "Acciones",
   "common.status": "Estado",
+  "common.close": "Cerrar",
 };
 
 const pt: Partial<Translations> = {
@@ -1273,6 +3526,168 @@ const pt: Partial<Translations> = {
   "auth.email": "E-mail",
   "auth.password": "Senha",
   "auth.forgotPassword": "Esqueceu a senha?",
+  "auth.backHome": "Voltar ao início",
+  "auth.welcomeBack": "Bem-vindo de volta",
+  "auth.workspace": "Entre no seu espaço de trabalho NOVSMM",
+  "auth.orEmail": "ou continue com e-mail",
+  "auth.emailOrUsername": "E-mail ou usuário",
+  "auth.rememberMe": "Lembrar de mim",
+  "auth.signingIn": "Entrando…",
+  "auth.verifyAndSignIn": "Verificar e entrar",
+  "auth.noAccount": "Ainda não tem uma conta?",
+  "auth.createOne": "Crie uma",
+  "auth.twoFactorRequired": "Autenticação de dois fatores necessária",
+  "auth.twoFactorInstructions": "Digite o código de 6 dígitos do seu aplicativo autenticador.",
+  "auth.twoFactorCode": "Código 2FA",
+  "auth.layeredSecurity": "Controles de segurança em camadas",
+  "auth.encryption": "Criptografia de 256 bits",
+  "auth.liveMonitoring": "Monitoramento ao vivo",
+  "auth.forgotPasswordTitle": "Redefina sua senha",
+  "auth.forgotPasswordDescription": "Digite o e-mail da sua conta e enviaremos um link seguro para redefinir sua senha.",
+  "auth.resetLinkSent": "Link de redefinição enviado",
+  "auth.resetLinkNotice": "Se esse e-mail existir, um link de redefinição foi enviado.",
+  "auth.checkInbox": "Verifique sua caixa de entrada",
+  "auth.sendingLink": "Enviando link…",
+  "auth.sendResetLink": "Enviar link de redefinição",
+  "auth.backToLogin": "Voltar ao login",
+  "auth.close": "Fechar",
+  "auth.loginTimedOut": "O login demorou demais. Verifique sua conexão e tente novamente.",
+  "auth.invalidTwoFactor": "Código 2FA inválido. Tente novamente.",
+  "auth.invalidCredentials": "E-mail ou senha inválidos. Tente novamente.",
+  "auth.loginFailed": "Falha no login. Verifique sua conexão e tente novamente.",
+  "auth.requestFailed": "Falha na solicitação",
+  "auth.tryAgain": "Tente novamente em instantes.",
+  "auth.redirecting": "Redirecionando…",
+  "auth.continueWith": "Continuar com {provider}",
+  "auth.createWorkspace": "Crie seu espaço de trabalho",
+  "auth.createWorkspaceSubtitle": "Comece a automatizar em minutos. Sem cartão de crédito.",
+  "auth.orSignUpEmail": "ou cadastre-se com e-mail",
+  "auth.fullName": "Nome completo",
+  "auth.username": "Nome de usuário",
+  "auth.usernameHint": "3+ caracteres, letras/números/_",
+  "auth.validEmail": "Digite um e-mail válido",
+  "auth.createStrongPassword": "Crie uma senha forte",
+  "auth.confirmPassword": "Confirme a senha",
+  "auth.reenterPassword": "Digite a senha novamente",
+  "auth.passwordMismatch": "As senhas não coincidem",
+  "auth.country": "País",
+  "auth.currency": "Moeda",
+  "auth.language": "Idioma",
+  "auth.creatingAccount": "Criando conta…",
+  "auth.createAccount": "Criar conta",
+  "auth.agreeTerms": "Ao criar uma conta, você concorda com nossos",
+  "auth.terms": "Termos",
+  "auth.and": "e",
+  "auth.privacyPolicy": "Política de privacidade",
+  "auth.alreadyAccount": "Já tem uma conta?",
+  "auth.freeTrial": "Teste grátis de 14 dias",
+  "auth.noCreditCard": "Sem cartão de crédito",
+  "auth.cancelAnytime": "Cancele quando quiser",
+  "auth.passwordWeak": "Fraca",
+  "auth.passwordFair": "Regular",
+  "auth.passwordGood": "Boa",
+  "auth.passwordStrong": "Forte",
+  "auth.passwordTipLength": "Use pelo menos 8 caracteres",
+  "auth.passwordTipCase": "Misture maiúsculas e minúsculas",
+  "auth.passwordTipNumber": "Adicione um número",
+  "auth.passwordTipSymbol": "Adicione um símbolo",
+  "auth.accountCreated": "Conta criada! Entre com suas credenciais.",
+  "auth.registrationFailed": "Falha ao criar a conta. Tente novamente.",
+  "onboarding.step": "Etapa {current} de {total}",
+  "onboarding.back": "Voltar",
+  "onboarding.previous": "Anterior",
+  "onboarding.enterDashboard": "Entrar no painel",
+  "onboarding.continue": "Continuar",
+  "onboarding.skip": "Pular onboarding →",
+  "onboarding.welcome.title": "Bem-vindo à NOVSMM",
+  "onboarding.welcome.subtitle": "Conte como você usará a plataforma para personalizarmos seu espaço.",
+  "onboarding.role.reseller": "Revendedor",
+  "onboarding.role.resellerDesc": "Compre no atacado e revenda pelo seu preço.",
+  "onboarding.role.agency": "Agência",
+  "onboarding.role.agencyDesc": "Gerencie vários criadores e marcas.",
+  "onboarding.role.creator": "Criador",
+  "onboarding.role.creatorDesc": "Faça sua própria audiência crescer.",
+  "onboarding.role.enterprise": "Empresa",
+  "onboarding.role.enterpriseDesc": "Infraestrutura e controles dedicados.",
+  "onboarding.profile.title": "Configure seu perfil",
+  "onboarding.profile.subtitle": "Adicione alguns dados para que seus colaboradores reconheçam você.",
+  "onboarding.profile.displayName": "Nome de exibição",
+  "onboarding.profile.yourName": "Seu nome",
+  "onboarding.profile.verifiedEmail": "E-mail verificado",
+  "onboarding.currency.title": "Escolha sua moeda",
+  "onboarding.currency.subtitle": "Define sua carteira, preços e saques padrão. Pode mudar quando quiser.",
+  "onboarding.currency.usd": "Dólar americano",
+  "onboarding.currency.eur": "Euro",
+  "onboarding.currency.mxn": "Peso mexicano",
+  "onboarding.currency.brl": "Real brasileiro",
+  "onboarding.currency.gbp": "Libra esterlina",
+  "onboarding.currency.inr": "Rupia indiana",
+  "onboarding.language.title": "Escolha seu idioma",
+  "onboarding.language.subtitle": "Vamos traduzir seu painel, recibos e notificações.",
+  "onboarding.notifications.title": "Preferências de notificações",
+  "onboarding.notifications.subtitle": "Escolha o que aparece no seu feed em tempo real. Ajuste em Configurações.",
+  "onboarding.notifications.orders": "Atualizações de pedidos",
+  "onboarding.notifications.ordersDesc": "Início, progresso e conclusão",
+  "onboarding.notifications.sales": "Vendas e receita",
+  "onboarding.notifications.salesDesc": "Novas vendas e pagamentos",
+  "onboarding.notifications.tickets": "Tickets de suporte",
+  "onboarding.notifications.ticketsDesc": "Respostas e mudanças de status",
+  "onboarding.notifications.system": "Sistema e segurança",
+  "onboarding.notifications.systemDesc": "Manutenção e alertas",
+  "onboarding.tour.title": "Conheça o painel",
+  "onboarding.tour.subtitle": "Veja o que você encontrará. Repita o tour a qualquer momento em Configurações.",
+  "onboarding.tour.dashboard": "Painel",
+  "onboarding.tour.dashboardDesc": "Seu centro de operações ao vivo.",
+  "onboarding.tour.marketplace": "Marketplace",
+  "onboarding.tour.marketplaceDesc": "Compre, venda e defina suas margens.",
+  "onboarding.tour.notifications": "Notificações",
+  "onboarding.tour.notificationsDesc": "Em tempo real, com WebSocket.",
+  "onboarding.tour.security": "Segurança",
+  "onboarding.tour.securityDesc": "2FA, sessões e registros de auditoria.",
+  "dashboard.nav.dashboard": "Painel",
+  "dashboard.nav.analytics": "Análises",
+  "dashboard.nav.services": "Serviços",
+  "dashboard.nav.orders": "Pedidos",
+  "dashboard.nav.subscriptions": "Assinaturas",
+  "dashboard.nav.childPanels": "Painéis filhos",
+  "dashboard.nav.marketplace": "Marketplace",
+  "dashboard.nav.wallet": "Carteira",
+  "dashboard.nav.clients": "Clientes",
+  "dashboard.nav.tickets": "Tickets",
+  "dashboard.nav.notifications": "Notificações",
+  "dashboard.nav.profile": "Perfil",
+  "dashboard.nav.settings": "Configurações",
+  "dashboard.workspace": "Espaço de trabalho",
+  "dashboard.admin": "Admin",
+  "dashboard.adminPanel": "Painel admin",
+  "dashboard.availableBalance": "Saldo disponível",
+  "dashboard.live": "ao vivo",
+  "dashboard.returnToAdmin": "Voltar ao admin",
+  "dashboard.exit": "Sair",
+  "dashboard.impersonating": "Você está personificando",
+  "dashboard.asAdminAudited": "como admin. Todas as ações são auditadas.",
+  "dashboard.failedReturn": "Não foi possível voltar ao admin",
+  "dashboard.contactSupport": "Tente novamente ou contate o suporte.",
+  "dashboard.goHome": "Ir para o início da NOVSMM",
+  "dashboard.backHome": "Voltar ao início da NOVSMM — sua sessão continua ativa",
+  "dashboard.closeMenu": "Fechar menu",
+  "dashboard.openMenu": "Abrir menu",
+  "dashboard.openCommandPalette": "Abrir paleta de comandos",
+  "dashboard.operational": "Operacional",
+  "dashboard.degraded": "Degradado",
+  "dashboard.account": "Conta",
+  "dashboard.user": "Usuário",
+  "dashboard.viewProfile": "Ver perfil",
+  "dashboard.search": "Pesquisar pedidos e serviços…",
+  "dashboard.searchShort": "Pesquisar…",
+  "dashboard.allSystemsOperational": "Todos os sistemas operacionais",
+  "dashboard.ordersToday": "Pedidos de hoje",
+  "dashboard.activeServices": "Serviços ativos",
+  "dashboard.conversion": "Conversão",
+  "dashboard.revenueLastDays": "Receita · últimos 32 dias",
+  "dashboard.liveOrders": "Pedidos ao vivo",
+  "dashboard.streaming": "transmitindo",
+  "dashboard.justNow": "agora mesmo",
   "common.loading": "Carregando…",
   "common.save": "Salvar",
   "common.cancel": "Cancelar",
@@ -1591,6 +4006,168 @@ const fr: Partial<Translations> = {
   "auth.email": "E-mail",
   "auth.password": "Mot de passe",
   "auth.forgotPassword": "Mot de passe oublié ?",
+  "auth.backHome": "Retour à l’accueil",
+  "auth.welcomeBack": "Bon retour",
+  "auth.workspace": "Connectez-vous à votre espace NOVSMM",
+  "auth.orEmail": "ou continuer avec votre e-mail",
+  "auth.emailOrUsername": "E-mail ou nom d’utilisateur",
+  "auth.rememberMe": "Se souvenir de moi",
+  "auth.signingIn": "Connexion…",
+  "auth.verifyAndSignIn": "Vérifier et se connecter",
+  "auth.noAccount": "Vous n’avez pas de compte ?",
+  "auth.createOne": "Créez-en un",
+  "auth.twoFactorRequired": "Authentification à deux facteurs requise",
+  "auth.twoFactorInstructions": "Saisissez le code à 6 chiffres de votre application d’authentification.",
+  "auth.twoFactorCode": "Code 2FA",
+  "auth.layeredSecurity": "Contrôles de sécurité en couches",
+  "auth.encryption": "Chiffrement 256 bits",
+  "auth.liveMonitoring": "Surveillance en direct",
+  "auth.forgotPasswordTitle": "Réinitialiser votre mot de passe",
+  "auth.forgotPasswordDescription": "Saisissez l’e-mail de votre compte et nous vous enverrons un lien sécurisé pour réinitialiser votre mot de passe.",
+  "auth.resetLinkSent": "Lien de réinitialisation envoyé",
+  "auth.resetLinkNotice": "Si cette adresse existe, un lien de réinitialisation a été envoyé.",
+  "auth.checkInbox": "Consultez votre boîte de réception",
+  "auth.sendingLink": "Envoi du lien…",
+  "auth.sendResetLink": "Envoyer le lien de réinitialisation",
+  "auth.backToLogin": "Retour à la connexion",
+  "auth.close": "Fermer",
+  "auth.loginTimedOut": "La connexion a expiré. Vérifiez votre connexion et réessayez.",
+  "auth.invalidTwoFactor": "Code 2FA invalide. Veuillez réessayer.",
+  "auth.invalidCredentials": "E-mail ou mot de passe invalide. Veuillez réessayer.",
+  "auth.loginFailed": "Échec de la connexion. Vérifiez votre connexion et réessayez.",
+  "auth.requestFailed": "Échec de la demande",
+  "auth.tryAgain": "Veuillez réessayer dans un instant.",
+  "auth.redirecting": "Redirection…",
+  "auth.continueWith": "Continuer avec {provider}",
+  "auth.createWorkspace": "Créez votre espace",
+  "auth.createWorkspaceSubtitle": "Commencez à automatiser en quelques minutes. Aucune carte bancaire requise.",
+  "auth.orSignUpEmail": "ou s’inscrire avec un e-mail",
+  "auth.fullName": "Nom complet",
+  "auth.username": "Nom d’utilisateur",
+  "auth.usernameHint": "3+ caractères, lettres/chiffres/_",
+  "auth.validEmail": "Saisissez une adresse e-mail valide",
+  "auth.createStrongPassword": "Créez un mot de passe robuste",
+  "auth.confirmPassword": "Confirmer le mot de passe",
+  "auth.reenterPassword": "Saisissez à nouveau le mot de passe",
+  "auth.passwordMismatch": "Les mots de passe ne correspondent pas",
+  "auth.country": "Pays",
+  "auth.currency": "Devise",
+  "auth.language": "Langue",
+  "auth.creatingAccount": "Création du compte…",
+  "auth.createAccount": "Créer un compte",
+  "auth.agreeTerms": "En créant un compte, vous acceptez nos",
+  "auth.terms": "Conditions",
+  "auth.and": "et",
+  "auth.privacyPolicy": "Politique de confidentialité",
+  "auth.alreadyAccount": "Vous avez déjà un compte ?",
+  "auth.freeTrial": "Essai gratuit de 14 jours",
+  "auth.noCreditCard": "Aucune carte bancaire",
+  "auth.cancelAnytime": "Annulez à tout moment",
+  "auth.passwordWeak": "Faible",
+  "auth.passwordFair": "Moyen",
+  "auth.passwordGood": "Bon",
+  "auth.passwordStrong": "Fort",
+  "auth.passwordTipLength": "Utilisez au moins 8 caractères",
+  "auth.passwordTipCase": "Mélangez majuscules et minuscules",
+  "auth.passwordTipNumber": "Ajoutez un chiffre",
+  "auth.passwordTipSymbol": "Ajoutez un symbole",
+  "auth.accountCreated": "Compte créé ! Connectez-vous avec vos identifiants.",
+  "auth.registrationFailed": "Échec de l’inscription. Veuillez réessayer.",
+  "onboarding.step": "Étape {current} sur {total}",
+  "onboarding.back": "Retour",
+  "onboarding.previous": "Précédent",
+  "onboarding.enterDashboard": "Accéder au tableau de bord",
+  "onboarding.continue": "Continuer",
+  "onboarding.skip": "Ignorer l’onboarding →",
+  "onboarding.welcome.title": "Bienvenue sur NOVSMM",
+  "onboarding.welcome.subtitle": "Dites-nous comment vous utiliserez la plateforme pour adapter votre espace.",
+  "onboarding.role.reseller": "Revendeur",
+  "onboarding.role.resellerDesc": "Achetez en gros et revendez à votre prix.",
+  "onboarding.role.agency": "Agence",
+  "onboarding.role.agencyDesc": "Gérez plusieurs créateurs et marques.",
+  "onboarding.role.creator": "Créateur",
+  "onboarding.role.creatorDesc": "Développez votre propre audience.",
+  "onboarding.role.enterprise": "Entreprise",
+  "onboarding.role.enterpriseDesc": "Infrastructure et contrôles dédiés.",
+  "onboarding.profile.title": "Configurez votre profil",
+  "onboarding.profile.subtitle": "Ajoutez quelques informations pour que vos collaborateurs vous reconnaissent.",
+  "onboarding.profile.displayName": "Nom affiché",
+  "onboarding.profile.yourName": "Votre nom",
+  "onboarding.profile.verifiedEmail": "E-mail vérifié",
+  "onboarding.currency.title": "Choisissez votre devise",
+  "onboarding.currency.subtitle": "Définit votre portefeuille, vos prix et vos retraits par défaut. Modifiable à tout moment.",
+  "onboarding.currency.usd": "Dollar américain",
+  "onboarding.currency.eur": "Euro",
+  "onboarding.currency.mxn": "Peso mexicain",
+  "onboarding.currency.brl": "Réal brésilien",
+  "onboarding.currency.gbp": "Livre sterling",
+  "onboarding.currency.inr": "Roupie indienne",
+  "onboarding.language.title": "Choisissez votre langue",
+  "onboarding.language.subtitle": "Nous traduirons votre tableau de bord, vos reçus et vos notifications.",
+  "onboarding.notifications.title": "Préférences de notifications",
+  "onboarding.notifications.subtitle": "Choisissez ce qui apparaît dans votre flux en temps réel. Modifiez-le dans Paramètres.",
+  "onboarding.notifications.orders": "Mises à jour des commandes",
+  "onboarding.notifications.ordersDesc": "Début, progression et fin",
+  "onboarding.notifications.sales": "Ventes et revenus",
+  "onboarding.notifications.salesDesc": "Nouvelles ventes et paiements",
+  "onboarding.notifications.tickets": "Tickets de support",
+  "onboarding.notifications.ticketsDesc": "Réponses et changements de statut",
+  "onboarding.notifications.system": "Système et sécurité",
+  "onboarding.notifications.systemDesc": "Maintenance et alertes",
+  "onboarding.tour.title": "Découvrez le tableau de bord",
+  "onboarding.tour.subtitle": "Voici ce que vous trouverez. Vous pourrez revoir ce parcours depuis Paramètres.",
+  "onboarding.tour.dashboard": "Tableau de bord",
+  "onboarding.tour.dashboardDesc": "Votre centre d’opérations en direct.",
+  "onboarding.tour.marketplace": "Marketplace",
+  "onboarding.tour.marketplaceDesc": "Achetez, vendez et définissez vos marges.",
+  "onboarding.tour.notifications": "Notifications",
+  "onboarding.tour.notificationsDesc": "En temps réel, avec WebSocket.",
+  "onboarding.tour.security": "Sécurité",
+  "onboarding.tour.securityDesc": "2FA, sessions et journaux d’audit.",
+  "dashboard.nav.dashboard": "Tableau de bord",
+  "dashboard.nav.analytics": "Analytique",
+  "dashboard.nav.services": "Services",
+  "dashboard.nav.orders": "Commandes",
+  "dashboard.nav.subscriptions": "Abonnements",
+  "dashboard.nav.childPanels": "Panneaux enfants",
+  "dashboard.nav.marketplace": "Marketplace",
+  "dashboard.nav.wallet": "Portefeuille",
+  "dashboard.nav.clients": "Clients",
+  "dashboard.nav.tickets": "Tickets",
+  "dashboard.nav.notifications": "Notifications",
+  "dashboard.nav.profile": "Profil",
+  "dashboard.nav.settings": "Paramètres",
+  "dashboard.workspace": "Espace de travail",
+  "dashboard.admin": "Admin",
+  "dashboard.adminPanel": "Panneau d’administration",
+  "dashboard.availableBalance": "Solde disponible",
+  "dashboard.live": "en direct",
+  "dashboard.returnToAdmin": "Retour à l’admin",
+  "dashboard.exit": "Quitter",
+  "dashboard.impersonating": "Vous usurpez l’identité de",
+  "dashboard.asAdminAudited": "en tant qu’admin. Toutes les actions sont auditées.",
+  "dashboard.failedReturn": "Impossible de revenir à l’admin",
+  "dashboard.contactSupport": "Réessayez ou contactez le support.",
+  "dashboard.goHome": "Aller à l’accueil NOVSMM",
+  "dashboard.backHome": "Retour à l’accueil NOVSMM — votre session reste active",
+  "dashboard.closeMenu": "Fermer le menu",
+  "dashboard.openMenu": "Ouvrir le menu",
+  "dashboard.openCommandPalette": "Ouvrir la palette de commandes",
+  "dashboard.operational": "Opérationnel",
+  "dashboard.degraded": "Dégradé",
+  "dashboard.account": "Compte",
+  "dashboard.user": "Utilisateur",
+  "dashboard.viewProfile": "Voir le profil",
+  "dashboard.search": "Rechercher des commandes et services…",
+  "dashboard.searchShort": "Rechercher…",
+  "dashboard.allSystemsOperational": "Tous les systèmes opérationnels",
+  "dashboard.ordersToday": "Commandes aujourd’hui",
+  "dashboard.activeServices": "Services actifs",
+  "dashboard.conversion": "Conversion",
+  "dashboard.revenueLastDays": "Revenus · 32 derniers jours",
+  "dashboard.liveOrders": "Commandes en direct",
+  "dashboard.streaming": "diffusion",
+  "dashboard.justNow": "à l’instant",
   "common.loading": "Chargement…",
   "common.save": "Enregistrer",
   "common.cancel": "Annuler",

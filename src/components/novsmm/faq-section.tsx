@@ -402,9 +402,9 @@ const FAQS: FAQ[] = [
             and a 24/7 SOC that investigates flagged activity.
           </li>
           <li>
-            <strong>Compliance:</strong> SOC 2 Type II, PCI DSS Level 1, GDPR,
-            and CCPA. Annual third-party penetration testing and continuous bug
-            bounty program.
+            <strong>Compliance:</strong> NOVSMM implements security and privacy
+            controls appropriate to the service. Specific certifications or
+            attestations are not claimed here.
           </li>
           <li>
             <strong>Operational:</strong> audit logs for every privileged

@@ -111,10 +111,10 @@ export async function GET() {
     // HuntSMM sync status. The frontend reads { label, val, ok } — shape
     // preserved, only content changed.
     health: [
-      { label: "API gateway", val: "99.99%", ok: true },
-      { label: "Order processor", val: "99.98%", ok: true },
-      { label: "Payment gateway", val: "100%", ok: true },
-      { label: "WebSocket relay", val: "99.95%", ok: true },
+      { label: "API gateway", val: "online", ok: true },
+      { label: "Order processor", val: "online", ok: true },
+      { label: "Payment gateway", val: "configured", ok: true },
+      { label: "WebSocket relay", val: "configured", ok: true },
       {
         label: "HuntSMM sync",
         val: "healthy",

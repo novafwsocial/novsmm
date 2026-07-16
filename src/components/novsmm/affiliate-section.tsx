@@ -1,10 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import {
-  Users,
-  DollarSign,
   Percent,
   ArrowRight,
   Link2,
@@ -19,11 +15,6 @@ import { Counter } from "./counter";
 import { Magnetic } from "./magnetic";
 import { useApp } from "./app-store";
 import { useLanguage } from "./language-provider";
-
-type StatusStats = {
-  totalUsers: number;
-  totalRevenue: number;
-};
 
 // i18n (U-C-008): STEPS holds icon + chip + translation keys. Strings are
 // looked up at render time via t().
@@ -54,37 +45,9 @@ const PAYOUT_METHODS = [
   { label: "USDT (TRC-20)", noteKey: "landing.affiliates.payout.usdt.note" },
 ];
 
-// MOB-002 FIX: non-zero floors for consistency with stats.tsx DEFAULTS.
-// These are secondary — the real protection is the Math.max() on lines 81-82
-// (affiliatesCount = max(50000, ...), totalPaidOut = max(2.4M, ...)).
-// But having non-zero defaults here means the brief moment before the API
-// responds also shows reasonable numbers, not zeros.
-const DEFAULT_STATS: StatusStats = {
-  totalUsers: 18400,
-  totalRevenue: 4_100_000,
-};
-
 export function AffiliateSection() {
   const { setView, setDashboardTab, authed } = useApp();
   const { t } = useLanguage();
-  const [stats, setStats] = useState<StatusStats>(DEFAULT_STATS);
-
-  // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
-  // a single /api/status request via useCachedFetch.
-  const statusData = useCachedFetch<any>("/api/status");
-  useEffect(() => {
-    if (statusData?.stats) {
-      setStats({
-        totalUsers: statusData.stats.totalUsers ?? DEFAULT_STATS.totalUsers,
-        totalRevenue: statusData.stats.totalRevenue ?? DEFAULT_STATS.totalRevenue,
-      });
-    }
-  }, [statusData]);
-
-  // Estimated total commission paid out — assume ~10% of all-time revenue routed
-  // back to affiliates as commission, capped to a believable number.
-  const totalPaidOut = Math.max(2_400_000, Math.round(stats.totalRevenue * 0.05));
-  const affiliatesCount = Math.max(50_000, Math.round(stats.totalUsers * 0.27));
 
   const handleCta = () => {
     if (authed) {
@@ -120,34 +83,8 @@ export function AffiliateSection() {
         {/* Stats row */}
         <RevealStagger
           stagger={0.08}
-          className="mt-12 grid grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4"
+          className="mt-12 grid grid-cols-1 gap-3 sm:gap-4"
         >
-          <RevealItem blur>
-            <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-background p-6 text-center sm:p-8">
-              <Users className="h-5 w-5 text-primary" />
-              <div className="mt-3 text-3xl font-semibold tabular-nums sm:text-4xl">
-                {/* MOB-002 FIX: from=affiliatesCount so SSR shows the value, not 0 */}
-                <Counter to={affiliatesCount} from={affiliatesCount} duration={2.4} />
-                <span className="text-primary">+</span>
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {t("landing.affiliates.stats.affiliates")}
-              </div>
-            </div>
-          </RevealItem>
-          <RevealItem blur>
-            <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-background p-6 text-center sm:p-8">
-              <DollarSign className="h-5 w-5 text-emerald-500" />
-              <div className="mt-3 text-3xl font-semibold tabular-nums sm:text-4xl">
-                {/* MOB-002 FIX: from=totalPaidOut so SSR shows the value, not 0 */}
-                $<Counter to={totalPaidOut} from={totalPaidOut} duration={2.6} />
-                <span className="text-emerald-500">+</span>
-              </div>
-              <div className="mt-1 text-sm text-muted-foreground">
-                {t("landing.affiliates.stats.paidOut")}
-              </div>
-            </div>
-          </RevealItem>
           <RevealItem blur>
             <div className="flex h-full flex-col items-center justify-center rounded-2xl border border-border/60 bg-background p-6 text-center sm:p-8">
               <Percent className="h-5 w-5 text-primary" />

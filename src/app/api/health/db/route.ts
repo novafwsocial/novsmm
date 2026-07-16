@@ -1,6 +1,6 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
-import { isRedisAvailable, getRedis } from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { apiOk, apiError } from "@/lib/api-utils";
 
 /**
@@ -59,12 +59,12 @@ export async function GET(req: NextRequest) {
 
   // ── Redis check (optional — degraded but not unhealthy if down) ──
   try {
-    if (isRedisAvailable()) {
-      const redis = await getRedis();
-      if (redis) {
-        const pong = await redis.ping();
-        checks.redis.connected = pong === "PONG";
-      }
+    // getRedis() initializes the lazy client. Checking isRedisAvailable()
+    // first would leave this endpoint reporting false after every restart.
+    const redis = await getRedis();
+    if (redis) {
+      const pong = await redis.ping();
+      checks.redis.connected = pong === "PONG";
     }
   } catch {
     // Redis is optional — don't mark as unhealthy, just degraded

@@ -80,6 +80,7 @@ export default function OpenGraphImage() {
             src="https://novsmm.shop/logo-new.png"
             width={56}
             height={56}
+            alt="NOVSMM"
             style={{ borderRadius: 0 }}
           />
           <div
@@ -145,7 +146,7 @@ export default function OpenGraphImage() {
             zIndex: 1,
           }}
         >
-          {["99.99% uptime SLA", "SOC 2 controls", "242+ services", "4 gateways"].map(
+          {["Live monitoring", "Layered security", "Live services", "4 gateways"].map(
             (chip) => (
               <div
                 key={chip}

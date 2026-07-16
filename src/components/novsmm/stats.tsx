@@ -10,9 +10,7 @@ import {
   ShoppingCart,
   Users,
   DollarSign,
-  Building2,
   TrendingUp,
-  Activity,
   Server,
   Gauge,
 } from "lucide-react";
@@ -30,79 +28,46 @@ type StatsPayload = {
   ordersPerMin: number;
 };
 
-// F-005 FIX (MOB-002): When /api/status fails OR returns very low numbers
-// (new platform, early stage), the Stats section would show all zeros or
-// tiny numbers — making the platform look broken/dead and killing conversion.
-//
-// We use marketing-floor constants: the displayed number is always
-// Math.max(DEFAULTS.x, realValue). This means:
-//   - When real numbers are BELOW the floor (early stage / API down): show floor
-//   - When real numbers EXCEED the floor (growth): show real numbers
-//
-// CRITICAL: the previous code used `??` (nullish coalescing) which ONLY falls
-// back when the value is null/undefined. When the API returned `0` (real zero),
-// `0 ?? DEFAULTS` returned `0` — NOT the default. This caused the landing page
-// to show "0 Active users", "$0.0M Revenue", "0 orders/min" even though DEFAULTS
-// were defined. The Math.max pattern fixes this — `Math.max(18400, 6)` = 18400.
-const DEFAULTS: StatsPayload = {
-  totalUsers: 18400,
-  orders24h: 2400,
-  activeServices: 6300,
-  totalOrders: 2_400_000,
-  totalRevenue: 4_100_000,
-  ordersPerMin: 1200,
+const EMPTY_STATS: StatsPayload = {
+  totalUsers: 0,
+  orders24h: 0,
+  activeServices: 0,
+  totalOrders: 0,
+  totalRevenue: 0,
+  ordersPerMin: 0,
 };
 
 function useStatusStats(): StatsPayload {
   // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
   // a single /api/status request via useCachedFetch.
   const statusData = useCachedFetch<any>("/api/status");
-  const [stats, setStats] = useState<StatsPayload>(DEFAULTS);
+  const [stats, setStats] = useState<StatsPayload>(EMPTY_STATS);
   useEffect(() => {
     if (statusData?.stats) {
       const s = statusData.stats;
       setStats({
-        // MOB-002 FIX: Math.max ensures the floor is always shown when real
-        // numbers are below it. Real numbers override once they exceed the floor.
-        totalUsers: Math.max(DEFAULTS.totalUsers, Number(s.totalUsers) || 0),
-        orders24h: Math.max(DEFAULTS.orders24h, Number(s.orders24h) || 0),
-        activeServices: Math.max(DEFAULTS.activeServices, Number(s.activeServices) || 0),
-        totalOrders: Math.max(DEFAULTS.totalOrders, Number(s.totalOrders) || 0),
-        totalRevenue: Math.max(DEFAULTS.totalRevenue, Number(s.totalRevenue) || 0),
-        ordersPerMin: Math.max(DEFAULTS.ordersPerMin, Number(s.ordersPerMin) || 0),
+        totalUsers: Number(s.totalUsers) || 0,
+        orders24h: Number(s.orders24h) || 0,
+        activeServices: Number(s.activeServices) || 0,
+        totalOrders: Number(s.totalOrders) || 0,
+        totalRevenue: Number(s.totalRevenue) || 0,
+        ordersPerMin: Number(s.ordersPerMin) || 0,
       });
     }
   }, [statusData]);
   return stats;
 }
 
-// Daily sales series — representative shape based on the live orders24h from
-// /api/status. We don't have a real per-day time-series endpoint yet, so we
-// derive a believable 14-day shape from the current throughput. Computed with
-// useMemo to avoid setState-in-effect cascading renders.
-function useDailySeries(ordersPerMin: number) {
-  return useMemo(() => {
-    if (ordersPerMin <= 0) {
-      return Array.from({ length: 14 }, () => ({ d: 0, v: 0 }));
-    }
-    const baseline = Math.max(
-      100,
-      Math.round((ordersPerMin * 1440 * 2.4) / 1000) * 1000,
-    );
-    return Array.from({ length: 14 }, (_, i) => ({
-      d: i,
-      v: Math.round(
-        baseline * (0.7 + Math.sin(i / 1.6) * 0.08 + i * 0.018) +
-          (i === 13 ? baseline * 0.18 : 0),
-      ),
-    }));
-  }, [ordersPerMin]);
+// A 14-day series requires a real history endpoint. Until that exists, return
+// no chart data instead of deriving a synthetic trend from one live counter.
+function useDailySeries() {
+  return useMemo((): { d: number; v: number }[] => [], []);
 }
 
 export function Stats() {
   const { t } = useLanguage();
   const stats = useStatusStats();
-  const dailySales = useDailySeries(stats.ordersPerMin);
+  const dailySales = useDailySeries();
 
   // MOB-002 FIX: set `from` = `to` for all stat counters so SSR HTML and
   // pre-scroll state show the correct value (not 0). The count-up animation
@@ -155,13 +120,6 @@ export function Stats() {
           ),
         };
 
-  // Enterprise clients is a marketing metric — derive from user count
-  // (top ~0.17% of users are enterprise-tier by NOVSMM's plan mix).
-  const enterpriseClients = Math.max(
-    312,
-    Math.round(stats.totalUsers * 0.0017),
-  );
-
   const bigStats = [
     {
       icon: ShoppingCart,
@@ -186,18 +144,14 @@ export function Stats() {
       value: totalRevenueDisplay.node,
       sub: t("landing.stats.revenue.sub"),
     },
-    {
-      icon: Building2,
-      label: t("landing.stats.enterprise.label"),
-      value: <Counter to={enterpriseClients} from={enterpriseClients} duration={2} />,
-      sub: t("landing.stats.enterprise.sub"),
-    },
   ];
 
-  const lastDay = dailySales[dailySales.length - 1]?.v ?? 84320;
-  const prevDay = dailySales[dailySales.length - 2]?.v ?? lastDay;
+  const lastDay = dailySales[dailySales.length - 1]?.v ?? null;
+  const prevDay = dailySales[dailySales.length - 2]?.v ?? null;
   const wowChange =
-    prevDay > 0 ? ((lastDay - prevDay) / prevDay) * 100 : 0;
+    lastDay !== null && prevDay !== null && prevDay > 0
+      ? ((lastDay - prevDay) / prevDay) * 100
+      : null;
 
   return (
     <section id="stats" className="relative py-4 sm:py-32">
@@ -220,7 +174,7 @@ export function Stats() {
         {/* Big stat grid */}
         <RevealStagger
           stagger={0.07}
-          className="mt-14 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4"
+          className="mt-14 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3"
         >
           {bigStats.map((s) => (
             <RevealItem key={s.label} blur>
@@ -252,27 +206,27 @@ export function Stats() {
                     {t("landing.stats.chart.label")}
                   </div>
                   <div className="mt-1 text-2xl font-semibold tabular-nums">
-                    {/* MOB-002 FIX: from={lastDay} so SSR shows the value, not 0 */}
-                    $<Counter to={lastDay} from={lastDay} duration={2.4} />
+                    {lastDay === null ? "N/D" : <>$<Counter to={lastDay} from={lastDay} duration={2.4} /></>}
                   </div>
                 </div>
                 <div
                   className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium ${
-                    wowChange >= 0
+                    wowChange !== null && wowChange >= 0
                       ? "bg-emerald-500/10 text-emerald-700"
                       : "bg-rose-500/10 text-rose-700"
                   }`}
                 >
-                  <TrendingUp className="h-3.5 w-3.5" />
-                  {wowChange >= 0 ? "+" : ""}
-                  {wowChange.toFixed(1)}% {t("landing.stats.chart.dod")}
+                  {wowChange === null ? "Historial no disponible" : <><TrendingUp className="h-3.5 w-3.5" />{wowChange >= 0 ? "+" : ""}{wowChange.toFixed(1)}% {t("landing.stats.chart.dod")}</>}
                 </div>
               </div>
               <div className="mt-5 h-[200px] w-full">
-                {/* PERF FIX (P-C-001): pure SVG bar chart replacing recharts.
-                    Same visual: 14 bars, last bar in primary blue, rest in
-                    muted gray, rounded top corners, hover tooltip. */}
-                <MiniBarChart data={dailySales} />
+                {dailySales.length > 0 ? (
+                  <MiniBarChart data={dailySales} />
+                ) : (
+                  <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-border/60 text-sm text-muted-foreground">
+                    Historial diario no disponible todavía
+                  </div>
+                )}
               </div>
             </div>
           </Reveal>
@@ -295,48 +249,15 @@ export function Stats() {
 
               <div className="mt-4 flex items-end gap-4">
                 <div>
-                  <div className="text-4xl font-semibold tabular-nums">
-                    {/* MOB-002 FIX: start from 99.90 (not 0) so the counter never
-                        flashes "0.00% uptime" during the 2.4s animation. The
-                        99.90 → 99.99 animation is subtle but still feels alive. */}
-                    <Counter to={99.99} from={99.9} decimals={2} duration={1.5} />%
-                  </div>
+                  <div className="text-3xl font-semibold tabular-nums">En vivo</div>
                   <div className="text-xs text-muted-foreground">
-                    {t("landing.stats.status.uptimeLabel")}
+                    Sin historial SLA configurado
                   </div>
                 </div>
                 <Gauge className="ml-auto h-7 w-7 text-primary" />
               </div>
 
-              {/* uptime bars */}
-              <div className="mt-4 flex items-end gap-[3px]">
-                {Array.from({ length: 60 }).map((_, i) => {
-                  const barHeight = 10 + Math.random() * 22;
-                  return (
-                    <div
-                      key={i}
-                      className={`flex-1 rounded-sm fm-fade-up ${
-                        i === 47 ? "bg-amber-400" : "bg-emerald-400/70"
-                      }`}
-                      style={{
-                        height: `${barHeight}px`,
-                        animationDuration: "0.5s",
-                        animationDelay: `${i * 0.008}s`,
-                      }}
-                    />
-                  );
-                })}
-              </div>
-              <div className="mt-1.5 flex justify-between text-[11px] text-muted-foreground">
-                <span>{t("landing.stats.status.60daysAgo")}</span>
-                <span>{t("landing.stats.status.today")}</span>
-              </div>
-
-              <div className="mt-5 grid grid-cols-2 gap-3 border-t border-border/60 pt-4">
-                <Mini icon={<Activity className="h-3.5 w-3.5" />} label={t("landing.stats.status.avgStart")}>
-                  {/* MOB-002 FIX: from=1.4 so SSR shows 1.4s, not 0.0s */}
-                  <Counter to={1.4} from={1.4} decimals={1} duration={2} />s
-                </Mini>
+              <div className="mt-5 grid grid-cols-1 gap-3 border-t border-border/60 pt-4">
                 <Mini icon={<Server className="h-3.5 w-3.5" />} label={t("landing.stats.status.throughput")}>
                   {/* MOB-002 FIX: from=ordersPerMin so SSR shows the value, not 0 */}
                   <Counter to={stats.ordersPerMin} from={stats.ordersPerMin} duration={2.2} />
@@ -491,5 +412,3 @@ function MiniBarChart({ data }: { data: { d: number; v: number }[] }) {
     </div>
   );
 }
-
-

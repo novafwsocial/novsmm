@@ -27,6 +27,7 @@ COPY --chown=nextjs:nodejs index.ts ./
 # Set environment
 ENV NODE_ENV=production
 ENV NOTIFICATIONS_SERVICE_PORT=3003
+ENV NOTIFICATIONS_SERVICE_HOST=0.0.0.0
 
 # Create app directory with correct ownership
 RUN chown -R nextjs:nodejs /app

@@ -23,6 +23,7 @@ import { api } from "@/lib/api-client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Reveal } from "./reveal";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 type NotifType = "order" | "sale" | "marketplace" | "ticket" | "recharge" | "withdrawal" | "referral" | "system";
 
@@ -38,6 +39,7 @@ const TYPE_META: Record<NotifType, { icon: any; cls: string }> = {
 };
 
 export function DashboardNotifications() {
+  const { t } = useLanguage();
   const { data, isLoading } = useNotifications();
   const { data: session } = useSession();
   const [connected, setConnected] = useState(false);
@@ -126,11 +128,11 @@ export function DashboardNotifications() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Real-time feed
+              {t("notifications.eyebrow", "Real-time feed")}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Notifications</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("notifications.title", "Notifications")}</h1>
             <p className="text-sm text-muted-foreground">
-              Live, WebSocket-delivered from the database. No refresh required.
+              {t("notifications.subtitle", "Live, WebSocket-delivered from the database. No refresh required.")}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -148,14 +150,16 @@ export function DashboardNotifications() {
                 )}
                 <span className={cn("relative inline-flex h-1.5 w-1.5 rounded-full", connected ? "bg-emerald-500" : "bg-amber-500")} />
               </span>
-              {connected ? "Live · connected" : "Connecting…"}
+              {connected
+                ? t("notifications.liveConnected", "Live · connected")
+                : t("notifications.connecting", "Connecting…")}
               <Wifi className="h-3 w-3" />
             </div>
             <button
               onClick={markAllRead}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
             >
-              <Trash2 className="h-3 w-3" /> Mark all read
+              <Trash2 className="h-3 w-3" /> {t("notifications.markAllRead", "Mark all read")}
             </button>
           </div>
         </div>
@@ -163,18 +167,21 @@ export function DashboardNotifications() {
 
       <Reveal>
         <div className="flex items-center gap-1 overflow-x-auto nov-scroll">
-          {(["all", "order", "sale", "marketplace", "ticket", "recharge", "withdrawal", "referral", "system"] as const).map((t) => (
+          {(["all", "order", "sale", "marketplace", "ticket", "recharge", "withdrawal", "referral", "system"] as const).map((kind) => (
             <button
-              key={t}
-              onClick={() => setFilter(t)}
+              key={kind}
+              onClick={() => setFilter(kind)}
               className={cn(
                 "shrink-0 rounded-full px-3 py-1.5 text-xs font-medium capitalize transition-colors",
-                filter === t
+                filter === kind
                   ? "bg-primary text-primary-foreground"
                   : "border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
-              {t}
+              {t(
+                `notifications.filter.${kind}` as any,
+                kind,
+              )}
             </button>
           ))}
         </div>
@@ -212,7 +219,7 @@ export function DashboardNotifications() {
                           {n.title}
                         </div>
                         <span className="shrink-0 text-[11px] text-muted-foreground">
-                          {timeAgo(n.createdAt)}
+                          {timeAgo(n.createdAt, t)}
                         </span>
                       </div>
                       <p className="mt-0.5 text-xs text-muted-foreground">{n.message}</p>
@@ -236,7 +243,7 @@ export function DashboardNotifications() {
             </AnimatePresence>
             {visible.length === 0 && (
               <div className="rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
-                No notifications of this type yet.
+                {t("notifications.empty", "No notifications of this type yet.")}
               </div>
             )}
           </div>
@@ -246,13 +253,13 @@ export function DashboardNotifications() {
   );
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, translate: (key: any, fallback?: string) => string): string {
   const d = new Date(iso);
   const s = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (s < 60) return "just now";
+  if (s < 60) return translate("notifications.justNow", "just now");
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return translate("notifications.minutesAgo", "{count}m ago").replace("{count}", String(m));
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return translate("notifications.hoursAgo", "{count}h ago").replace("{count}", String(h));
+  return translate("notifications.daysAgo", "{count}d ago").replace("{count}", String(Math.floor(h / 24)));
 }

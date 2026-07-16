@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { requireAdmin } from "@/lib/api-utils";
 
 /**
  * GET /api/auth/debug-oauth — diagnostic endpoint for OAuth configuration.
@@ -18,6 +19,13 @@ import { db } from "@/lib/db";
  *   }
  */
 export async function GET() {
+  // OAuth diagnostics expose configuration metadata and are never public in
+  // production. Admin authentication is required before querying settings.
+  if (process.env.NODE_ENV === "production") {
+    const { error } = await requireAdmin();
+    if (error) return error;
+  }
+
   const envVars: Record<string, boolean> = {};
   const providers = ["google", "facebook", "github", "twitter"] as const;
   const envVarMap: Record<string, [string, string]> = {

@@ -1,10 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { requireAdmin, apiError, apiOk, audit } from "@/lib/api-utils";
-import {
-  DEFAULT_TEMPLATES,
-  seedEmailTemplates,
-} from "@/lib/email-templates";
+import { seedEmailTemplates } from "@/lib/email-templates";
 
 /**
  * GET /api/admin/email-templates — list all email templates.
@@ -109,4 +106,3 @@ export async function PATCH(req: NextRequest) {
 }
 
 // Re-export so the admin UI can read the default template list for reference
-export { DEFAULT_TEMPLATES };

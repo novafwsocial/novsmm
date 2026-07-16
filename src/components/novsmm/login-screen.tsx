@@ -10,6 +10,7 @@ import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { api } from "@/lib/api-client";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "./language-provider";
 
 /**
  * BROAD-FIX-BATCH-1: fetch the list of OAuth providers that the admin has
@@ -45,6 +46,7 @@ function useConfiguredSocialProviders() {
 
 function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
   const { toast } = useToast();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
@@ -59,13 +61,13 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
       await api.post("/api/auth/forgot-password", { email });
       setSent(true);
       toast({
-        title: "Reset link sent",
-        description: "If that email exists, a reset link has been sent.",
+        title: t("auth.resetLinkSent"),
+        description: t("auth.resetLinkNotice"),
       });
     } catch (err: any) {
       toast({
-        title: "Request failed",
-        description: err?.message ?? "Please try again in a moment.",
+        title: t("auth.requestFailed"),
+        description: err?.message ?? t("auth.tryAgain"),
         variant: "destructive",
       });
     } finally {
@@ -77,7 +79,7 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Forgot password"
+      aria-label={t("auth.forgotPassword")}
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -88,7 +90,7 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
         <button
           onClick={onClose}
           className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("auth.close")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -98,27 +100,27 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
             <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600">
               <CheckCircle2 className="h-6 w-6" />
             </div>
-            <h2 className="mt-4 text-lg font-semibold">Check your inbox</h2>
+            <h2 className="mt-4 text-lg font-semibold">{t("auth.checkInbox")}</h2>
             <p className="mt-1.5 text-sm text-muted-foreground text-pretty">
-              If that email exists, a reset link has been sent.
+              {t("auth.resetLinkNotice")}
             </p>
             <button
               onClick={onClose}
               className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
             >
               <ArrowLeft className="h-4 w-4" />
-              Back to login
+              {t("auth.backToLogin")}
             </button>
           </div>
         ) : (
           <>
-            <h2 className="text-lg font-semibold">Reset your password</h2>
+            <h2 className="text-lg font-semibold">{t("auth.forgotPasswordTitle")}</h2>
             <p className="mt-1.5 text-sm text-muted-foreground text-pretty">
-              Enter your account email and we&apos;ll send you a secure link to reset your password.
+              {t("auth.forgotPasswordDescription")}
             </p>
             <form onSubmit={handleSubmit} className="mt-5 flex flex-col gap-4">
               <Field
-                label="Email"
+                label={t("auth.email")}
                 icon={<Mail className="h-4 w-4" />}
                 type="email"
                 autoComplete="email"
@@ -135,11 +137,11 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Sending link…
+                    {t("auth.sendingLink")}
                   </>
                 ) : (
                   <>
-                    Send reset link
+                    {t("auth.sendResetLink")}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -149,7 +151,7 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
               onClick={onClose}
               className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground"
             >
-              Back to login
+              {t("auth.backToLogin")}
             </button>
           </>
         )}
@@ -160,6 +162,7 @@ function ForgotPasswordModal({ onClose }: { onClose: () => void }) {
 
 export function LoginScreen() {
   const { setView } = useApp();
+  const { t } = useLanguage();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [totp, setTotp] = useState("");
@@ -185,7 +188,7 @@ export function LoginScreen() {
     // state so the user can try again (instead of being stuck forever)
     const safetyTimeout = setTimeout(() => {
       setLoading(false);
-      setError("Login timed out. Please check your connection and try again.");
+      setError(t("auth.loginTimedOut"));
     }, 15_000);
 
     try {
@@ -214,9 +217,9 @@ export function LoginScreen() {
         // The server error is the same in both cases — the frontend decides
         // which UX message to show based on the current step.
         if (needs2FA) {
-          setError("Invalid 2FA code. Please try again.");
+          setError(t("auth.invalidTwoFactor"));
         } else {
-          setError("Invalid email or password. Please try again.");
+          setError(t("auth.invalidCredentials"));
         }
         setLoading(false);
         return;
@@ -228,7 +231,7 @@ export function LoginScreen() {
       window.location.href = "/?authed=1";
     } catch (err: any) {
       clearTimeout(safetyTimeout);
-      setError("Login failed. Please check your connection and try again.");
+      setError(t("auth.loginFailed"));
       setLoading(false);
     }
   };
@@ -269,17 +272,17 @@ export function LoginScreen() {
           className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to home
+          {t("auth.backHome")}
         </button>
 
         <div className="auth-card-inner overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-8">
           <div className="flex flex-col items-center text-center">
             <Logo />
             <h1 className="mt-6 text-2xl font-semibold tracking-tight text-balance">
-              Welcome back
+              {t("auth.welcomeBack")}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground text-pretty">
-              Sign in to your NOVSMM workspace
+              {t("auth.workspace")}
             </p>
           </div>
 
@@ -302,7 +305,7 @@ export function LoginScreen() {
             <div className="my-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                or continue with email
+                {t("auth.orEmail")}
               </span>
               <div className="h-px flex-1 bg-border" />
             </div>
@@ -323,7 +326,7 @@ export function LoginScreen() {
           <form onSubmit={handleLogin} className="flex flex-col gap-4">
             <div className="auth-input-3d">
               <Field
-                label="Email or username"
+                label={t("auth.emailOrUsername")}
                 icon={<Mail className="h-4 w-4" />}
                 type="email"
                 inputMode="email"
@@ -336,7 +339,7 @@ export function LoginScreen() {
             </div>
             <div className="auth-input-3d">
               <Field
-                label="Password"
+                label={t("auth.password")}
                 icon={<Lock className="h-4 w-4" />}
                 type="password"
                 autoComplete="current-password"
@@ -355,13 +358,13 @@ export function LoginScreen() {
               >
                 <div className="mb-2 flex items-center gap-2 text-sm font-medium text-foreground">
                   <Shield className="h-4 w-4 text-primary" />
-                  Two-factor authentication required
+                  {t("auth.twoFactorRequired")}
                 </div>
                 <p className="mb-3 text-xs text-muted-foreground">
-                  Enter the 6-digit code from your authenticator app.
+                  {t("auth.twoFactorInstructions")}
                 </p>
                 <Field
-                  label="2FA code"
+                  label={t("auth.twoFactorCode")}
                   icon={<Shield className="h-4 w-4" />}
                   type="text"
                   inputMode="numeric"
@@ -402,7 +405,7 @@ export function LoginScreen() {
                     </motion.svg>
                   )}
                 </span>
-                Remember me
+                {t("auth.rememberMe")}
               </button>
               <a
                 href="#"
@@ -412,7 +415,7 @@ export function LoginScreen() {
                 }}
                 className="text-sm font-medium text-primary transition-opacity hover:opacity-80"
               >
-                Forgot password?
+                {t("auth.forgotPassword")}
               </a>
             </div>
 
@@ -425,16 +428,16 @@ export function LoginScreen() {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Signing in…
+                    {t("auth.signingIn")}
                   </>
                 ) : needs2FA ? (
                   <>
-                    Verify &amp; sign in
+                    {t("auth.verifyAndSignIn")}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 ) : (
                   <>
-                    Sign in
+                    {t("auth.signIn")}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -443,12 +446,12 @@ export function LoginScreen() {
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Don&apos;t have an account?{" "}
+            {t("auth.noAccount")} {" "}
             <button
               onClick={() => setView("register")}
               className="font-medium text-foreground underline-offset-4 hover:underline"
             >
-              Create one
+              {t("auth.createOne")}
             </button>
           </p>
         </div>
@@ -456,12 +459,12 @@ export function LoginScreen() {
         <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-primary" />
-            SOC 2-aligned controls
+            {t("auth.layeredSecurity")}
           </span>
           <span>·</span>
-          <span>256-bit encryption</span>
+          <span>{t("auth.encryption")}</span>
           <span>·</span>
-          <span>99.9% uptime</span>
+          <span>{t("auth.liveMonitoring")}</span>
         </div>
       </motion.div>
 

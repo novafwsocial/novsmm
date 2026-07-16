@@ -9,6 +9,7 @@ import {
 } from "react";
 import { Check, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
@@ -137,7 +138,8 @@ export function Field({
  * Password strength meter — animated, color-coded, with recommendations.
  */
 export function PasswordStrength({ value }: { value: string }) {
-  const { score, label, color, tips } = scorePassword(value);
+  const { t } = useLanguage();
+  const { score, label, color, tips } = scorePassword(value, t);
 
   return (
     <AnimatePresence mode="wait">
@@ -197,7 +199,7 @@ export function PasswordStrength({ value }: { value: string }) {
   );
 }
 
-function scorePassword(pw: string): {
+function scorePassword(pw: string, t: (key: string, fallback?: string) => string): {
   score: number;
   label: string;
   color: string;
@@ -207,21 +209,21 @@ function scorePassword(pw: string): {
   const tips: string[] = [];
   let s = 0;
   if (pw.length >= 8) s++;
-  else tips.push("Use at least 8 characters");
+  else tips.push(t("auth.passwordTipLength"));
   if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) s++;
-  else tips.push("Mix uppercase and lowercase");
+  else tips.push(t("auth.passwordTipCase"));
   if (/\d/.test(pw)) s++;
-  else tips.push("Add a number");
+  else tips.push(t("auth.passwordTipNumber"));
   if (/[^A-Za-z0-9]/.test(pw)) s++;
-  else tips.push("Add a symbol");
+  else tips.push(t("auth.passwordTipSymbol"));
   if (pw.length >= 12 && s === 4) s = 4;
 
   const map = [
     { label: "", color: "rgb(220 38 38)" },
-    { label: "Weak", color: "rgb(220 38 38)" },
-    { label: "Fair", color: "rgb(245 158 11)" },
-    { label: "Good", color: "rgb(59 130 246)" },
-    { label: "Strong", color: "rgb(16 185 129)" },
+    { label: t("auth.passwordWeak"), color: "rgb(220 38 38)" },
+    { label: t("auth.passwordFair"), color: "rgb(245 158 11)" },
+    { label: t("auth.passwordGood"), color: "rgb(59 130 246)" },
+    { label: t("auth.passwordStrong"), color: "rgb(16 185 129)" },
   ];
   return { score: s, ...map[s], tips };
 }
@@ -252,6 +254,7 @@ export function SocialButton({
   loading?: boolean;
 }) {
   const meta = PROVIDER_META[provider];
+  const { t } = useLanguage();
   return (
     <motion.button
       type="button"
@@ -263,7 +266,11 @@ export function SocialButton({
       className="flex h-11 w-full items-center justify-center gap-2.5 rounded-xl border border-border bg-background text-sm font-medium text-foreground transition-colors hover:bg-muted/50 disabled:opacity-60"
     >
       {meta.glyph}
-      <span>{loading ? "Redirecting…" : `Continue with ${meta.label}`}</span>
+      <span>
+        {loading
+          ? t("auth.redirecting")
+          : t("auth.continueWith").replace("{provider}", meta.label)}
+      </span>
     </motion.button>
   );
 }

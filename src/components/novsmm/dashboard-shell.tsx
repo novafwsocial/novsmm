@@ -45,22 +45,24 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
-const NAV: { id: DashboardTab; label: string; icon: any }[] = [
-  { id: "home", label: "Dashboard", icon: LayoutGrid },
-  { id: "analytics", label: "Analytics", icon: BarChart3 },
-  { id: "marketplace", label: "Services", icon: Store },
-  { id: "orders", label: "Orders", icon: ShoppingCart },
-  { id: "subscriptions", label: "Subscriptions", icon: CalendarClock },
-  { id: "child-panels", label: "Child Panels", icon: Globe },
-  { id: "wallet", label: "Wallet", icon: Wallet },
-  { id: "tickets", label: "Tickets", icon: Ticket },
-  { id: "notifications", label: "Notifications", icon: Bell },
-  { id: "profile", label: "Profile", icon: Settings },
+const NAV: { id: DashboardTab; labelKey: string; icon: any }[] = [
+  { id: "home", labelKey: "dashboard.nav.dashboard", icon: LayoutGrid },
+  { id: "analytics", labelKey: "dashboard.nav.analytics", icon: BarChart3 },
+  { id: "marketplace", labelKey: "dashboard.nav.services", icon: Store },
+  { id: "orders", labelKey: "dashboard.nav.orders", icon: ShoppingCart },
+  { id: "subscriptions", labelKey: "dashboard.nav.subscriptions", icon: CalendarClock },
+  { id: "child-panels", labelKey: "dashboard.nav.childPanels", icon: Globe },
+  { id: "wallet", labelKey: "dashboard.nav.wallet", icon: Wallet },
+  { id: "tickets", labelKey: "dashboard.nav.tickets", icon: Ticket },
+  { id: "notifications", labelKey: "dashboard.nav.notifications", icon: Bell },
+  { id: "profile", labelKey: "dashboard.nav.profile", icon: Settings },
 ];
 
 export function DashboardShell({ children }: { children: ReactNode }) {
   const { dashboardTab, setDashboardTab, signOut: storeSignOut, setView, setBrowsingLanding } = useApp();
+  const { t } = useLanguage();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [paletteOpen, setPaletteOpen] = useState(false);
   // Bump this every time the palette transitions from closed → open so the
@@ -130,7 +132,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       const res = await fetch("/api/admin/impersonate/stop", { method: "POST" });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
-        throw new Error(data?.error ?? "Failed to return to admin");
+        throw new Error(data?.error ?? t("dashboard.failedReturn", "Failed to return to admin"));
       }
       // Reload to pick up the new admin session
       window.location.reload();
@@ -138,8 +140,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
       setReturningToAdmin(false);
       console.error("[impersonate-stop] failed:", e);
       toast({
-        title: "Failed to return to admin",
-        description: e?.message ?? "Please try again or contact support.",
+        title: t("dashboard.failedReturn", "Failed to return to admin"),
+        description: e?.message ?? t("dashboard.contactSupport", "Please try again or contact support."),
         variant: "destructive",
       });
     }
@@ -162,9 +164,9 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <div className="flex min-w-0 items-center gap-2 text-xs font-medium sm:text-sm">
             <AlertTriangle className="h-4 w-4 shrink-0" />
             <span className="truncate">
-              You are impersonating{" "}
+              {t("dashboard.impersonating", "You are impersonating")} {" "}
               <strong className="font-semibold">{user?.name ?? "user"}</strong>
-              {" "}as admin. All actions are audited.
+              {" "}{t("dashboard.asAdminAudited", "as admin. All actions are audited.")}
             </span>
           </div>
           <button
@@ -177,8 +179,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             ) : (
               <ArrowLeft className="h-3 w-3" />
             )}
-            <span className="hidden sm:inline">Return to admin</span>
-            <span className="sm:hidden">Exit</span>
+            <span className="hidden sm:inline">{t("dashboard.returnToAdmin", "Return to admin")}</span>
+            <span className="sm:hidden">{t("dashboard.exit", "Exit")}</span>
           </button>
         </div>
       )}
@@ -197,8 +199,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               setView("landing");
             }}
             className="cursor-pointer"
-            aria-label="Go to NOVSMM home"
-            title="Back to NOVSMM home — your session stays active"
+            aria-label={t("dashboard.goHome", "Go to NOVSMM home")}
+            title={t("dashboard.backHome", "Back to NOVSMM home — your session stays active")}
           >
             <Logo />
           </a>
@@ -206,7 +208,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
 
         <nav className="flex-1 overflow-y-auto px-3 py-3 nov-scroll">
           <div className="px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-            Workspace
+            {t("dashboard.workspace", "Workspace")}
           </div>
           {NAV.map((n) => {
             const badge =
@@ -222,7 +224,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 key={n.id}
                 active={dashboardTab === n.id}
                 icon={n.icon}
-                label={n.label}
+                label={t(n.labelKey, n.labelKey)}
                 badge={badge}
                 onClick={() => setDashboardTab(n.id)}
               />
@@ -232,12 +234,12 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           {isAdmin && (
             <>
               <div className="mt-5 px-2 pb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
-                Admin
+                {t("dashboard.admin", "Admin")}
               </div>
               <NavButton
                 active={dashboardTab === "admin"}
                 icon={ShieldCheck}
-                label="Admin Panel"
+                label={t("dashboard.adminPanel", "Admin Panel")}
                 onClick={() => setDashboardTab("admin")}
               />
             </>
@@ -247,8 +249,8 @@ export function DashboardShell({ children }: { children: ReactNode }) {
         {/* wallet mini */}
         <div className="m-3 rounded-2xl border border-border/60 bg-background p-4">
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>Available balance</span>
-            <span className="text-emerald-600">live</span>
+            <span>{t("dashboard.availableBalance", "Available balance")}</span>
+            <span className="text-emerald-600">{t("dashboard.live", "live")}</span>
           </div>
           <div className="mt-1 text-xl font-semibold tabular-nums">
             $<Counter to={balance} decimals={2} duration={1.5} />
@@ -257,7 +259,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             onClick={() => setDashboardTab("wallet")}
             className="btn-press mt-3 flex w-full items-center justify-center gap-1 rounded-lg bg-primary py-2 text-[12px] font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
           >
-            <Plus className="h-3.5 w-3.5" /> Top up
+            <Plus className="h-3.5 w-3.5" /> {t("wallet.topUp", "Top up")}
           </button>
         </div>
 
@@ -303,15 +305,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                     setMobileOpen(false);
                   }}
                   className="cursor-pointer"
-                  aria-label="Go to NOVSMM home"
-                  title="Back to NOVSMM home — your session stays active"
+                  aria-label={t("dashboard.goHome", "Go to NOVSMM home")}
+                  title={t("dashboard.backHome", "Back to NOVSMM home — your session stays active")}
                 >
                   <Logo />
                 </a>
                 <button
                   onClick={() => setMobileOpen(false)}
                   className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-                  aria-label="Close menu"
+                  aria-label={t("dashboard.closeMenu", "Close menu")}
                 >
                   <X className="h-5 w-5" />
                 </button>
@@ -331,7 +333,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                       key={n.id}
                       active={dashboardTab === n.id}
                       icon={n.icon}
-                      label={n.label}
+                      label={t(n.labelKey, n.labelKey)}
                       badge={badge}
                       onClick={() => {
                         setDashboardTab(n.id);
@@ -344,7 +346,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                   <NavButton
                     active={dashboardTab === "admin"}
                     icon={ShieldCheck}
-                    label="Admin Panel"
+                    label={t("dashboard.adminPanel", "Admin Panel")}
                     onClick={() => {
                       setDashboardTab("admin");
                       setMobileOpen(false);
@@ -385,7 +387,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
           <button
             onClick={() => setMobileOpen(true)}
             className="flex h-11 w-11 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 lg:hidden"
-            aria-label="Open menu"
+            aria-label={t("dashboard.openMenu", "Open menu")}
           >
             <Menu className="h-5 w-5" />
           </button>
@@ -395,11 +397,11 @@ export function DashboardShell({ children }: { children: ReactNode }) {
             type="button"
             onClick={openPalette}
             className="flex flex-1 items-center gap-2 rounded-full border border-border bg-muted/40 px-3.5 py-2 text-sm text-muted-foreground transition-colors hover:border-primary/40 hover:bg-background"
-            aria-label="Open command palette"
+            aria-label={t("dashboard.openCommandPalette", "Open command palette")}
           >
             <Search className="h-3.5 w-3.5" />
             <span className="w-full text-left text-foreground/80">
-              Search orders, services, clients…
+              {t("dashboard.search", "Search orders, services, clients…")}
             </span>
             <kbd className="hidden rounded border border-border bg-background px-1.5 text-[11px] sm:inline">
               ⌘K
@@ -429,13 +431,15 @@ export function DashboardShell({ children }: { children: ReactNode }) {
                 )}
               />
             </span>
-            {statusState === "operational" ? "Operational" : "Degraded"}
+            {statusState === "operational"
+              ? t("dashboard.operational", "Operational")
+              : t("dashboard.degraded", "Degraded")}
           </div>
 
           <button
             onClick={() => setDashboardTab("notifications")}
             className="relative flex h-11 w-11 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-            aria-label="Notifications"
+            aria-label={t("dashboard.nav.notifications", "Notifications")}
           >
             <Bell className="h-4 w-4" />
             {unreadCount > 0 && (
@@ -454,7 +458,7 @@ export function DashboardShell({ children }: { children: ReactNode }) {
               .slice(0, 2)
               .toUpperCase();
             return (
-              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 text-xs font-semibold text-primary-foreground flex items-center justify-center" aria-label={`Account: ${user?.name ?? user?.email ?? "User"}`}>
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-primary/60 text-xs font-semibold text-primary-foreground flex items-center justify-center" aria-label={`${t("dashboard.account", "Account")}: ${user?.name ?? user?.email ?? t("dashboard.user", "User")}`}>
                 {initials}
               </div>
             );
@@ -552,6 +556,7 @@ function UserPill({
   onNavigate: (tab: DashboardTab) => void;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useLanguage();
   return (
     <div className="relative m-3">
       <button
@@ -582,7 +587,7 @@ function UserPill({
           >
             <MenuItem
               icon={Settings}
-              label="Settings"
+              label={t("profile.title", "Settings")}
               onClick={() => {
                 setOpen(false);
                 onNavigate("profile");
@@ -590,14 +595,14 @@ function UserPill({
             />
             <MenuItem
               icon={ArrowUpRight}
-              label="View profile"
+              label={t("dashboard.viewProfile", "View profile")}
               onClick={() => {
                 setOpen(false);
                 onNavigate("profile");
               }}
             />
             <div className="my-1 h-px bg-border" />
-            <MenuItem icon={LogOut} label="Sign out" danger onClick={onSignOut} />
+            <MenuItem icon={LogOut} label={t("auth.signOut", "Sign out")} danger onClick={onSignOut} />
           </motion.div>
         )}
       </AnimatePresence>

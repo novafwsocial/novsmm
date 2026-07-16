@@ -178,13 +178,16 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "worker-start.js",
     "notifications-start.js",
     "scripts/**/*.js",
+    "**/*.cjs",
   ],
   rules: {
     "@typescript-eslint/no-require-imports": "off",
+    "import/no-anonymous-default-export": "off",
   },
 }, {
   ignores: [
     "node_modules/**",
+    ".vitest-tmp/**",
     ".next/**",
     "out/**",
     "build/**",

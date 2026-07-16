@@ -28,10 +28,12 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { useToast } from "@/hooks/use-toast";
 import { Reveal } from "./reveal";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 type MobilePane = "list" | "conversation";
 
 export function DashboardTickets() {
+  const { t } = useLanguage();
   const { data, isLoading } = useTickets();
   const { data: sessionData } = useSession();
   const tickets = data?.tickets ?? [];
@@ -65,15 +67,15 @@ export function DashboardTickets() {
         setAttachedFile(data);
       } else {
         toast({
-          title: "Upload failed",
-          description: data.error ?? "Please try again.",
+          title: t("tickets.uploadFailed", "Upload failed"),
+          description: data.error ?? t("tickets.tryAgain", "Please try again."),
           variant: "destructive",
         });
       }
     } catch {
       toast({
-        title: "Upload failed",
-        description: "Please try again or contact support.",
+        title: t("tickets.uploadFailed", "Upload failed"),
+        description: t("tickets.tryAgainSupport", "Please try again or contact support."),
         variant: "destructive",
       });
     }
@@ -139,18 +141,18 @@ export function DashboardTickets() {
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-                Support
+                {t("tickets.eyebrow", "Support")}
               </div>
-              <h1 className="text-2xl font-semibold tracking-tight">Tickets</h1>
+              <h1 className="text-2xl font-semibold tracking-tight">{t("tickets.title", "Tickets")}</h1>
               <p className="text-sm text-muted-foreground">
-                {tickets.length} tickets · {tickets.filter((t: any) => t.status === "open").length} open
+                {tickets.length} {t("tickets.count", "tickets")} · {tickets.filter((t: any) => t.status === "open").length} {t("tickets.open", "open")}
               </p>
             </div>
             <button
               onClick={() => setShowCreate(true)}
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
             >
-              <Plus className="h-3.5 w-3.5" /> New
+              <Plus className="h-3.5 w-3.5" /> {t("tickets.new", "New")}
             </button>
           </div>
         </Reveal>
@@ -166,7 +168,7 @@ export function DashboardTickets() {
                 : "text-muted-foreground"
             )}
           >
-            <Inbox className="h-3.5 w-3.5" /> Tickets
+            <Inbox className="h-3.5 w-3.5" /> {t("tickets.title", "Tickets")}
             {tickets.length > 0 && (
               <span className="rounded-full bg-muted px-1.5 text-[11px] tabular-nums text-foreground">
                 {tickets.length}
@@ -183,7 +185,7 @@ export function DashboardTickets() {
                 : "text-muted-foreground"
             )}
           >
-            <MessageSquare className="h-3.5 w-3.5" /> Conversation
+            <MessageSquare className="h-3.5 w-3.5" /> {t("tickets.conversation", "Conversation")}
           </button>
         </div>
 
@@ -205,7 +207,7 @@ export function DashboardTickets() {
                   <div className="max-h-[60vh] overflow-y-auto nov-scroll">
                     {filtered.length === 0 ? (
                       <div className="py-10 text-center text-sm text-muted-foreground">
-                        No tickets match &ldquo;{search}&rdquo;
+                        {t("tickets.noMatch", "No tickets match")} &ldquo;{search}&rdquo;
                       </div>
                     ) : (
                       filtered.map((t: any) => (
@@ -269,18 +271,18 @@ export function DashboardTickets() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Support
+              {t("tickets.eyebrow", "Support")}
             </div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Tickets</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{t("tickets.title", "Tickets")}</h1>
             <p className="text-sm text-muted-foreground">
-              {tickets.length} tickets · {tickets.filter((t: any) => t.status === "open").length} open
+              {tickets.length} {t("tickets.count", "tickets")} · {tickets.filter((t: any) => t.status === "open").length} {t("tickets.open", "open")}
             </p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
           >
-            <Plus className="h-3.5 w-3.5" /> New ticket
+            <Plus className="h-3.5 w-3.5" /> {t("tickets.new", "New ticket")}
           </button>
         </div>
       </Reveal>
@@ -300,7 +302,7 @@ export function DashboardTickets() {
               <div className="flex-1 overflow-y-auto nov-scroll">
                 {filtered.length === 0 ? (
                   <div className="py-10 text-center text-sm text-muted-foreground">
-                    No tickets match &ldquo;{search}&rdquo;
+                    {t("tickets.noMatch", "No tickets match")} &ldquo;{search}&rdquo;
                   </div>
                 ) : (
                   filtered.map((t: any) => (
@@ -346,10 +348,11 @@ export function DashboardTickets() {
 // ── Pieces ─────────────────────────────────────────────────────────────
 
 function EmptyTickets() {
+  const { t } = useLanguage();
   return (
     <div className="rounded-2xl border border-dashed border-border p-12 text-center">
       <p className="text-sm text-muted-foreground">
-        No tickets yet. Create one to get help from our support team.
+        {t("tickets.empty", "No tickets yet. Create one to get help from our support team.")}
       </p>
     </div>
   );
@@ -362,19 +365,20 @@ function SearchInput({
   value: string;
   onChange: (v: string) => void;
 }) {
+  const { t: translate } = useLanguage();
   return (
     <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm transition-colors focus-within:border-primary/40 focus-within:bg-background">
       <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        placeholder="Search tickets…"
+        placeholder={translate("tickets.searchPlaceholder", "Search tickets…")}
         className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
       />
       {value && (
         <button
           onClick={() => onChange("")}
-          aria-label="Clear search"
+          aria-label={translate("tickets.clearSearch", "Clear search")}
           className="flex h-5 w-5 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
         >
           <X className="h-3 w-3" />
@@ -393,6 +397,7 @@ function TicketRow({
   active: boolean;
   onClick: () => void;
 }) {
+  const { t: translate } = useLanguage();
   return (
     <button
       onClick={onClick}
@@ -407,11 +412,11 @@ function TicketRow({
       </div>
       <div className="truncate text-sm font-medium text-foreground">{t.subject}</div>
       <div className="truncate text-[11px] text-muted-foreground">
-        {t.messages?.[t.messages.length - 1]?.text ?? "No messages"}
+        {t.messages?.[t.messages.length - 1]?.text ?? translate("tickets.noMessages", "No messages")}
       </div>
       <div className="flex items-center justify-between text-[11px] text-muted-foreground">
         <span className="inline-flex items-center gap-1">
-          <Clock className="h-2.5 w-2.5" /> {timeAgo(t.updatedAt)}
+          <Clock className="h-2.5 w-2.5" /> {timeAgo(t.updatedAt, translate)}
         </span>
         <StatusPill status={t.status} />
       </div>
@@ -428,13 +433,14 @@ function ConversationHeader({
   onBack?: () => void;
   showBack?: boolean;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="flex items-center justify-between border-b border-border/60 p-4">
       <div className="flex min-w-0 items-center gap-3">
         {showBack && (
           <button
             onClick={onBack}
-            aria-label="Back to ticket list"
+            aria-label={t("tickets.backToList", "Back to ticket list")}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground md:hidden"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -448,7 +454,9 @@ function ConversationHeader({
             #{active.publicId} · {active.subject}
           </div>
           <div className="truncate text-[11px] text-muted-foreground">
-            {active.status === "open" ? "Waiting for support reply" : "Support will respond shortly"}
+            {active.status === "open"
+              ? t("tickets.waitingReply", "Waiting for support reply")
+              : t("tickets.respondShortly", "Support will respond shortly")}
           </div>
         </div>
       </div>
@@ -459,6 +467,7 @@ function ConversationHeader({
 
 const ConversationBody = forwardRef<HTMLDivElement, { active: any }>(
   function ConversationBody({ active }, ref) {
+    const { t } = useLanguage();
     return (
       <div
         ref={ref}
@@ -485,7 +494,7 @@ const ConversationBody = forwardRef<HTMLDivElement, { active: any }>(
               {m.text}
             </div>
             <div className="flex items-center gap-1 px-1 text-[11px] text-muted-foreground">
-              {timeAgo(m.createdAt)}
+              {timeAgo(m.createdAt, t)}
               {m.sender === "user" && <CheckCheck className="h-3 w-3 text-primary" />}
             </div>
           </motion.div>
@@ -518,6 +527,7 @@ function ConversationComposer({
   pending: boolean;
   canUseCannedReplies?: boolean;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="border-t border-border/60 p-3">
       {/* Attached file preview */}
@@ -533,7 +543,7 @@ function ConversationComposer({
       {uploading && (
         <div className="mb-2 flex items-center gap-2 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" />
-          Uploading…
+          {t("tickets.uploading", "Uploading…")}
         </div>
       )}
       <input ref={fileInputRef} type="file" className="hidden" accept="image/*,.pdf,.txt,.zip" onChange={handleFileUpload} />
@@ -554,7 +564,7 @@ function ConversationComposer({
             }
           }}
           rows={1}
-          placeholder="Type your message…"
+          placeholder={t("tickets.messagePlaceholder", "Type your message…")}
           className="max-h-32 flex-1 resize-none bg-transparent px-2 py-2 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
         />
         {canUseCannedReplies && (
@@ -584,7 +594,7 @@ function ConversationComposer({
         </motion.button>
       </div>
       <div className="mt-1.5 px-1 text-[11px] text-muted-foreground">
-        Press Enter to send · Shift+Enter for newline
+        {t("tickets.enterHint", "Press Enter to send")} · {t("tickets.shiftEnterHint", "Shift+Enter for newline")}
       </div>
     </div>
   );
@@ -600,6 +610,7 @@ function CannedRepliesButton({
 }: {
   onInsert: (body: string, id?: string) => void;
 }) {
+  const { t } = useLanguage();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -642,7 +653,8 @@ function CannedRepliesButton({
       <button
         type="button"
         onClick={handleOpen}
-        title="Canned replies"
+        title={t("tickets.cannedReplies", "Canned replies")}
+        aria-label={t("tickets.cannedReplies", "Canned replies")}
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-lg transition-colors",
           open
@@ -666,11 +678,11 @@ function CannedRepliesButton({
             className="absolute bottom-full right-0 z-50 mb-2 w-80 max-h-72 overflow-y-auto rounded-2xl border border-border bg-background p-1.5 nov-ring-lg nov-scroll"
           >
             <div className="px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-              Canned replies
+              {t("tickets.cannedReplies", "Canned replies")}
             </div>
             {items.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-                {loading ? "Loading…" : "No canned replies yet."}
+                {loading ? t("common.loading", "Loading…") : t("tickets.noCannedReplies", "No canned replies yet.")}
               </div>
             ) : (
               items.map((item) => (
@@ -705,6 +717,7 @@ function CannedRepliesButton({
 }
 
 function CreateTicketModal({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const createTicket = useCreateTicket();
   const [subject, setSubject] = useState("");
   const [message, setMessage] = useState("");
@@ -717,46 +730,46 @@ function CreateTicketModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Create ticket" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={t("tickets.createDialog", "Create ticket")} className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 10 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         onClick={(e) => e.stopPropagation()}
         className="relative w-full max-w-md max-h-[90vh] overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg"
       >
-        <button onClick={onClose} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
+        <button onClick={onClose} aria-label={t("common.close", "Close")} className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted">
           <X className="h-4 w-4" />
         </button>
-        <div className="text-base font-semibold">Create new ticket</div>
+        <div className="text-base font-semibold">{t("tickets.createTitle", "Create new ticket")}</div>
         <div className="mt-4 flex flex-col gap-3">
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Subject</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("tickets.subject", "Subject")}</span>
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="Brief description of your issue"
+              placeholder={t("tickets.subjectPlaceholder", "Brief description of your issue")}
               className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Priority</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("tickets.priority", "Priority")}</span>
             <select
               value={priority}
               onChange={(e) => setPriority(e.target.value)}
               className="h-11 w-full rounded-xl border border-border bg-background px-3.5 text-base focus:outline-none"
             >
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
+              <option value="low">{t("tickets.priorityLow", "Low")}</option>
+              <option value="medium">{t("tickets.priorityMedium", "Medium")}</option>
+              <option value="high">{t("tickets.priorityHigh", "High")}</option>
             </select>
           </label>
           <label className="block">
-            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Message</span>
+            <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("tickets.message", "Message")}</span>
             <textarea
               value={message}
               onChange={(e) => setMessage(e.target.value)}
               rows={4}
-              placeholder="Describe your issue in detail…"
+              placeholder={t("tickets.messageCreatePlaceholder", "Describe your issue in detail…")}
               className="w-full resize-none rounded-xl border border-border bg-background px-3.5 py-2.5 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </label>
@@ -769,10 +782,10 @@ function CreateTicketModal({ onClose }: { onClose: () => void }) {
           {createTicket.isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Creating…
+              {t("tickets.creating", "Creating…")}
             </>
           ) : (
-            "Create ticket"
+            t("tickets.create", "Create ticket")
           )}
         </button>
       </motion.div>
@@ -781,6 +794,7 @@ function CreateTicketModal({ onClose }: { onClose: () => void }) {
 }
 
 function PriorityPill({ priority }: { priority: string }) {
+  const { t } = useLanguage();
   const cls =
     priority === "high"
       ? "bg-red-500/10 text-red-700"
@@ -790,12 +804,13 @@ function PriorityPill({ priority }: { priority: string }) {
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", cls)}>
       <span className={cn("h-1.5 w-1.5 rounded-full", priority === "high" ? "bg-red-500" : priority === "medium" ? "bg-amber-500" : "bg-muted-foreground")} />
-      {priority}
+      {t(`tickets.priority.${priority}` as any, priority)}
     </span>
   );
 }
 
 function StatusPill({ status }: { status: string }) {
+  const { t } = useLanguage();
   const cls =
     status === "open"
       ? "bg-primary/10 text-primary"
@@ -806,18 +821,18 @@ function StatusPill({ status }: { status: string }) {
       : "bg-muted text-muted-foreground";
   return (
     <span className={cn("inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium capitalize", cls)}>
-      {status}
+      {t(`tickets.status.${status}` as any, status)}
     </span>
   );
 }
 
-function timeAgo(date: string | Date): string {
+function timeAgo(date: string | Date, translate: (key: any, fallback?: string) => string): string {
   const d = new Date(date);
   const s = Math.floor((Date.now() - d.getTime()) / 1000);
-  if (s < 60) return "just now";
+  if (s < 60) return translate("notifications.justNow", "just now");
   const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m ago`;
+  if (m < 60) return translate("notifications.minutesAgo", "{count}m ago").replace("{count}", String(m));
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}h ago`;
-  return `${Math.floor(h / 24)}d ago`;
+  if (h < 24) return translate("notifications.hoursAgo", "{count}h ago").replace("{count}", String(h));
+  return translate("notifications.daysAgo", "{count}d ago").replace("{count}", String(Math.floor(h / 24)));
 }

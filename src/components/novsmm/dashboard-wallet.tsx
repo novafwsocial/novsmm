@@ -26,8 +26,10 @@ import {
 } from "@/hooks/use-api";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "./language-provider";
 
 export function DashboardWallet() {
+  const { t } = useLanguage();
   const { data, isLoading } = useWallet();
   const [showTopup, setShowTopup] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
@@ -48,13 +50,13 @@ export function DashboardWallet() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Wallet
+              {t("wallet.eyebrow", "Wallet")}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Balance & activity
+              {t("wallet.balanceActivity", "Balance & activity")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Real-time balance, top up, withdraw, and export statements.
+              {t("wallet.subtitle", "Real-time balance, top up, withdraw, and export statements.")}
             </p>
           </div>
           <div className="flex gap-2">
@@ -62,19 +64,19 @@ export function DashboardWallet() {
               onClick={() => window.open("/api/export/transactions?format=csv", "_blank")}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
-              <Download className="h-3.5 w-3.5" /> Export
+              <Download className="h-3.5 w-3.5" /> {t("wallet.export", "Export")}
             </button>
             <button
               onClick={() => setShowTopup(true)}
               className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
             >
-              <Plus className="h-3.5 w-3.5" /> Top up
+              <Plus className="h-3.5 w-3.5" /> {t("wallet.topUp", "Top up")}
             </button>
             <button
               onClick={() => setShowWithdraw(true)}
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
-              <ArrowUpRight className="h-3.5 w-3.5" /> Withdraw
+              <ArrowUpRight className="h-3.5 w-3.5" /> {t("wallet.withdraw", "Withdraw")}
             </button>
           </div>
         </div>
@@ -84,20 +86,20 @@ export function DashboardWallet() {
         <RevealItem>
           <div className="h-full rounded-2xl border border-border/60 bg-gradient-to-br from-foreground to-foreground/90 p-5 text-background">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] uppercase tracking-wider opacity-70">Available</span>
+              <span className="text-[11px] uppercase tracking-wider opacity-70">{t("wallet.available", "Available")}</span>
               <Wallet className="h-4 w-4 opacity-70" />
             </div>
             <div className="mt-3 text-3xl font-semibold tabular-nums">
               {formatPrice(balance, currency)}
             </div>
-            <div className="mt-1 text-xs opacity-70">{currency} · live</div>
+            <div className="mt-1 text-xs opacity-70">{currency} · {t("wallet.live", "live")}</div>
           </div>
         </RevealItem>
         <RevealItem>
-          <BalanceCard label="Held" value={heldBalance} currency={currency} icon={<Clock className="h-4 w-4" />} sub="Pending order completion" tone="amber" />
+          <BalanceCard label={t("wallet.held", "Held")} value={heldBalance} currency={currency} icon={<Clock className="h-4 w-4" />} sub={t("wallet.pendingCompletion", "Pending order completion")} tone="amber" />
         </RevealItem>
         <RevealItem>
-          <BalanceCard label="Lifetime earnings" value={lifetimeEarnings} currency={currency} icon={<TrendingUp className="h-4 w-4" />} sub="All-time revenue" tone="emerald" />
+          <BalanceCard label={t("wallet.lifetimeEarnings", "Lifetime earnings")} value={lifetimeEarnings} currency={currency} icon={<TrendingUp className="h-4 w-4" />} sub={t("wallet.allTimeRevenue", "All-time revenue")} tone="emerald" />
         </RevealItem>
       </RevealStagger>
 
@@ -107,13 +109,13 @@ export function DashboardWallet() {
             <div className="flex items-center justify-between">
               <div>
                 <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                  Cash flow · 30 days
+                  {t("wallet.cashFlow30", "Cash flow · 30 days")}
                 </div>
-                <div className="text-base font-semibold">Live from transactions</div>
+                <div className="text-base font-semibold">{t("wallet.liveFromTransactions", "Live from transactions")}</div>
               </div>
               <div className="flex items-center gap-3 text-[11px]">
                 <span className="inline-flex items-center gap-1.5 text-muted-foreground">
-                  <span className="h-2 w-2 rounded-full bg-primary" /> Revenue
+                  <span className="h-2 w-2 rounded-full bg-primary" /> {t("wallet.revenue", "Revenue")}
                 </span>
               </div>
             </div>
@@ -134,31 +136,31 @@ export function DashboardWallet() {
           <div className="flex items-center justify-between border-b border-border/60 px-5 py-4">
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Transaction history
+                {t("wallet.transactionHistory", "Transaction history")}
               </div>
-              <div className="text-base font-semibold">{transactions.length} transactions</div>
+              <div className="text-base font-semibold">{transactions.length} {t("wallet.transactions", "transactions")}</div>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-medium text-emerald-700">
-              <ShieldCheck className="h-3 w-3" /> Encrypted
+              <ShieldCheck className="h-3 w-3" /> {t("wallet.encrypted", "Encrypted")}
             </span>
           </div>
           <div className="overflow-x-auto nov-scroll">
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Txn</th>
-                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Description</th>
-                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Type</th>
-                  <th scope="col" className="px-5 py-2.5 text-right font-medium">Amount</th>
-                  <th scope="col" className="px-5 py-2.5 text-left font-medium">Status</th>
-                  <th scope="col" className="px-5 py-2.5 text-right font-medium">Time</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">{t("wallet.txn", "Txn")}</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">{t("wallet.description", "Description")}</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">{t("wallet.type", "Type")}</th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">{t("wallet.amount", "Amount")}</th>
+                  <th scope="col" className="px-5 py-2.5 text-left font-medium">{t("wallet.status", "Status")}</th>
+                  <th scope="col" className="px-5 py-2.5 text-right font-medium">{t("wallet.time", "Time")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
                 {transactions.length === 0 && (
                   <tr>
                     <td colSpan={6} className="py-12 text-center text-sm text-muted-foreground">
-                      No transactions yet.
+                      {t("wallet.noTransactions", "No transactions yet.")}
                     </td>
                   </tr>
                 )}
@@ -227,18 +229,19 @@ function BalanceCard({ label, value, currency, icon, sub, tone }: { label: strin
 }
 
 function PaymentMethodsList() {
+  const { t } = useLanguage();
   const { data } = usePaymentMethods();
   const methods = data?.methods ?? [];
   return (
     <div className="h-full rounded-2xl border border-border/60 bg-background p-5 sm:p-6">
       <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-        Top-up methods
+        {t("wallet.topUpMethods", "Top-up methods")}
       </div>
-      <div className="text-base font-semibold">{methods.length} rails available</div>
+      <div className="text-base font-semibold">{methods.length} {t("wallet.railsAvailable", "rails available")}</div>
       <div className="mt-3 flex flex-col gap-1.5">
         {methods.length === 0 && (
           <div className="py-12 text-center text-sm text-muted-foreground">
-            No payment methods configured yet.
+            {t("wallet.noPaymentMethods", "No payment methods configured yet.")}
           </div>
         )}
         {methods.map((m: any) => (
@@ -267,16 +270,18 @@ const TYPE_META: Record<string, { label: string; cls: string; icon: any }> = {
 };
 
 function TypePill({ type }: { type: string }) {
+  const { t } = useLanguage();
   const m = TYPE_META[type] ?? TYPE_META.sale;
   return (
     <span className={cn("inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-medium", m.cls)}>
       <m.icon className="h-3 w-3" />
-      {m.label}
+      {t(`wallet.type.${type}` as any, m.label)}
     </span>
   );
 }
 
 function TopupModal({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const { data: pmData } = usePaymentMethods();
   const topup = useTopup();
   const { toast } = useToast();
@@ -292,8 +297,8 @@ function TopupModal({ onClose }: { onClose: () => void }) {
       // ── NowPayments ──
       if (result?.provider === "nowpayments" && result?.checkoutUrl) {
         toast({
-          title: "Redirecting to NowPayments…",
-          description: "Complete your crypto payment on NowPayments. Your balance will update after confirmation.",
+          title: t("wallet.redirectingNowPayments", "Redirecting to NowPayments…"),
+          description: t("wallet.completeCryptoPayment", "Complete your crypto payment on NowPayments. Your balance will update after confirmation."),
         });
         window.location.href = result.checkoutUrl;
         return;
@@ -303,8 +308,8 @@ function TopupModal({ onClose }: { onClose: () => void }) {
       // our team. Balance is credited manually by an admin after payment.
       if (result?.provider === "manual" && result?.whatsappUrl) {
         toast({
-          title: "Contact us on WhatsApp",
-          description: "We'll credit your balance manually after confirming your payment.",
+          title: t("wallet.contactWhatsApp", "Contact us on WhatsApp"),
+          description: t("wallet.manualCredit", "We'll credit your balance manually after confirming your payment."),
         });
         window.open(result.whatsappUrl, "_blank");
         onClose();
@@ -313,8 +318,8 @@ function TopupModal({ onClose }: { onClose: () => void }) {
       // ── PayPal / Mercado Pago / NowPayments ──
       if (result?.checkoutUrl) {
         toast({
-          title: `Redirecting to ${method}…`,
-          description: "Complete your payment. Your balance will update after payment.",
+          title: `${t("wallet.redirecting", "Redirecting to")} ${method}…`,
+          description: t("wallet.completePayment", "Complete your payment. Your balance will update after payment."),
         });
         window.location.href = result.checkoutUrl;
         return;
@@ -322,19 +327,19 @@ function TopupModal({ onClose }: { onClose: () => void }) {
       // ── Sandbox (no real credentials configured) ──
       if (result?.provider === "sandbox") {
         toast({
-          title: "Top-up successful (sandbox)",
-          description: `$${amount.toFixed(2)} credited to your wallet via ${method}. Configure real credentials in Admin → Payments for live payments.`,
+          title: t("wallet.sandboxSuccess", "Top-up successful (sandbox)"),
+          description: `${t("wallet.sandboxCredited", "{amount} credited to your wallet via {method}. Configure real credentials in Admin → Payments for live payments.") .replace("{amount}", `$${amount.toFixed(2)}`).replace("{method}", method)}`,
         });
         onClose();
         return;
       }
       // Fallback
-      toast({ title: "Top-up processed", description: result?.message ?? "Done." });
+      toast({ title: t("wallet.topUpProcessed", "Top-up processed"), description: result?.message ?? t("wallet.done", "Done.") });
       onClose();
     } catch (e: any) {
       toast({
-        title: "Top-up failed",
-        description: e?.message ?? "Please try again or contact support.",
+        title: t("wallet.topUpFailed", "Top-up failed"),
+        description: e?.message ?? t("wallet.tryAgainSupport", "Please try again or contact support."),
         variant: "destructive",
       });
       // Don't close modal — let user retry
@@ -342,19 +347,19 @@ function TopupModal({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Top up wallet" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={t("wallet.topUpDialog", "Top up wallet")} className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
         className="fm-scale-in relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
+        <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label={t("common.close", "Close")}>
           <X className="h-5 w-5" />
         </button>
-        <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Top up wallet</div>
-        <h2 className="mt-1 text-xl font-semibold">Add funds</h2>
+        <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{t("wallet.topUpWallet", "Top up wallet")}</div>
+        <h2 className="mt-1 text-xl font-semibold">{t("wallet.addFunds", "Add funds")}</h2>
 
         <div className="mt-5">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Amount (USD)</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("wallet.amountUsd", "Amount (USD)")}</label>
           <div className="relative">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">$</span>
             <input
@@ -383,7 +388,7 @@ function TopupModal({ onClose }: { onClose: () => void }) {
         </div>
 
         <div className="mt-4">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Payment method</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("wallet.paymentMethod", "Payment method")}</label>
           <div className="grid grid-cols-2 gap-2">
             {methods.map((m: any) => (
               <button
@@ -409,14 +414,14 @@ function TopupModal({ onClose }: { onClose: () => void }) {
           {topup.isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Processing payment…
+              {t("wallet.processingPayment", "Processing payment…")}
             </>
           ) : (
-            <>Top up ${amount.toFixed(2)}</>
+            <>{t("wallet.topUpAmount", "Top up")} ${amount.toFixed(2)}</>
           )}
         </button>
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          Sandbox mode · no real charge · processes in ~2s
+          {t("wallet.sandboxNotice", "Sandbox mode · no real charge · processes in ~2s")}
         </p>
       </div>
     </div>
@@ -424,6 +429,7 @@ function TopupModal({ onClose }: { onClose: () => void }) {
 }
 
 function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; balance: number; currency: string }) {
+  const { t } = useLanguage();
   const withdraw = useWithdraw();
   const { data: pmData } = usePaymentMethods();
   const { toast } = useToast();
@@ -437,34 +443,34 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
     try {
       await withdraw.mutateAsync({ amount, method, destination });
       toast({
-        title: "Withdrawal requested",
-        description: `$${amount.toFixed(2)} withdrawal via ${method} is pending admin approval.`,
+        title: t("wallet.withdrawalRequested", "Withdrawal requested"),
+        description: t("wallet.withdrawalPending", "{amount} withdrawal via {method} is pending admin approval.").replace("{amount}", `$${amount.toFixed(2)}`).replace("{method}", method),
       });
       onClose();
     } catch (e: any) {
       toast({
-        title: "Withdrawal failed",
-        description: e?.message ?? "Please try again or contact support.",
+        title: t("wallet.withdrawalFailed", "Withdrawal failed"),
+        description: e?.message ?? t("wallet.tryAgainSupport", "Please try again or contact support."),
         variant: "destructive",
       });
     }
   };
 
   return (
-    <div role="dialog" aria-modal="true" aria-label="Withdraw funds" className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
+    <div role="dialog" aria-modal="true" aria-label={t("wallet.withdrawDialog", "Withdraw funds")} className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm" onClick={onClose}>
       <div
         className="fm-scale-in relative max-h-[90vh] w-full max-w-md overflow-y-auto rounded-3xl border border-border/60 bg-background p-6 nov-ring-lg nov-scroll"
         onClick={(e) => e.stopPropagation()}
       >
-        <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label="Close">
+        <button onClick={onClose} className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm hover:bg-muted hover:text-foreground" aria-label={t("common.close", "Close")}>
           <X className="h-5 w-5" />
         </button>
-        <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">Withdraw funds</div>
-        <h2 className="mt-1 text-xl font-semibold">Withdraw from wallet</h2>
-        <p className="mt-1 text-xs text-muted-foreground">Available: {formatPrice(balance, currency)} · Pending admin approval</p>
+        <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">{t("wallet.withdrawFunds", "Withdraw funds")}</div>
+        <h2 className="mt-1 text-xl font-semibold">{t("wallet.withdrawFromWallet", "Withdraw from wallet")}</h2>
+        <p className="mt-1 text-xs text-muted-foreground">{t("wallet.availablePending", "Available: {balance} · Pending admin approval").replace("{balance}", formatPrice(balance, currency))}</p>
 
         <div className="mt-5">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Amount (USD)</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("wallet.amountUsd", "Amount (USD)")}</label>
           <div className="relative">
             <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lg font-semibold text-muted-foreground">$</span>
             <input
@@ -476,11 +482,11 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
               className="h-12 w-full rounded-xl border border-border bg-background pl-8 pr-4 text-lg font-semibold text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             />
           </div>
-          {!sufficient && <p className="mt-1 text-xs text-red-600">Insufficient balance</p>}
+          {!sufficient && <p className="mt-1 text-xs text-red-600">{t("wallet.insufficientBalance", "Insufficient balance")}</p>}
         </div>
 
         <div className="mt-4">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Method</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("wallet.method", "Method")}</label>
           <select
             value={method}
             onChange={(e) => setMethod(e.target.value)}
@@ -513,11 +519,11 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
         </div>
 
         <div className="mt-4">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Destination (account / address / email)</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("wallet.destination", "Destination (account / address / email)")}</label>
           <input
             value={destination}
             onChange={(e) => setDestination(e.target.value)}
-            placeholder="e.g. IBAN, USDT wallet address, PayPal email"
+            placeholder={t("wallet.destinationPlaceholder", "e.g. IBAN, USDT wallet address, PayPal email")}
             className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
@@ -530,14 +536,14 @@ function WithdrawModal({ onClose, balance, currency }: { onClose: () => void; ba
           {withdraw.isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Processing…
+              {t("wallet.processing", "Processing…")}
             </>
           ) : (
-            <>Withdraw {formatPrice(amount, currency)}</>
+            <>{t("wallet.withdraw", "Withdraw")} {formatPrice(amount, currency)}</>
           )}
         </button>
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          Withdrawals are reviewed by admin before processing · 1% fee applies
+          {t("wallet.withdrawNotice", "Withdrawals are reviewed by admin before processing · 1% fee applies")}
         </p>
       </div>
     </div>

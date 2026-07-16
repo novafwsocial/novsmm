@@ -42,7 +42,7 @@ const HANDLERS: Record<QueueName, (data: any) => Promise<any>> = {
   },
   "loyalty.reconcile": async (data) => {
     const { reconcileAchievements } = await import(
-      "../app/api/me/loyalty/route"
+      "../lib/services/loyalty.service"
     );
     await reconcileAchievements(data.userId);
     return { reconciled: true };

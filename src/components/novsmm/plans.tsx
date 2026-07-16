@@ -275,12 +275,11 @@ function PlanCard({ plan, yearly }: { plan: Plan; yearly: boolean }) {
         <div className="rounded-xl bg-muted/40 px-3 py-2 text-[11px] text-muted-foreground">
           {isEnterprise ? (
             <span className="font-medium text-foreground">
-              Trusted by <Counter to={312} duration={2} />+ enterprise teams.
+              Enterprise plan · configurable limits and support.
             </span>
           ) : plan.highlight ? (
             <span>
-              <span className="font-medium text-foreground">68%</span> of
-              resellers choose Growth.
+              Flexible plan for growing resellers.
             </span>
           ) : (
             <span>

@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { isRedisAvailable, getRedis } from "@/lib/redis";
+import { getRedis } from "@/lib/redis";
 import { apiOk, apiError } from "@/lib/api-utils";
 
 /**
@@ -41,18 +41,19 @@ export async function GET() {
 
   // ── Redis check (NON-CRITICAL — degraded, not unhealthy) ──
   try {
-    if (isRedisAvailable()) {
-      const redis = await getRedis();
-      if (redis) {
-        const redisStart = Date.now();
-        const pong = await redis.ping();
-        checks.redis = { healthy: pong === "PONG", latencyMs: Date.now() - redisStart };
-      } else {
-        checks.redis = { healthy: false, error: "redis_not_connected" };
-      }
+    // Calling getRedis() also initializes the lazy client. Checking only
+    // isRedisAvailable() first would report a false negative after startup.
+    const redis = await getRedis();
+    if (redis) {
+      const redisStart = Date.now();
+      const pong = await redis.ping();
+      checks.redis = { healthy: pong === "PONG", latencyMs: Date.now() - redisStart };
     } else {
       // Redis not configured — this is fine (sandbox/dev mode)
-      checks.redis = { healthy: true, error: "not_configured" };
+      checks.redis = {
+        healthy: !process.env.REDIS_URL,
+        error: process.env.REDIS_URL ? "redis_not_connected" : "not_configured",
+      };
     }
   } catch (e: any) {
     console.warn("[health/ready] redis check failed:", e?.message ?? e);

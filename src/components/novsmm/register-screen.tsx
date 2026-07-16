@@ -20,6 +20,7 @@ import { Magnetic } from "./magnetic";
 import { LegalPages, type LegalPageType } from "./legal-pages";
 import { cn } from "@/lib/utils";
 import { api } from "@/lib/api-client";
+import { useLanguage } from "./language-provider";
 
 const COUNTRIES = [
   "Mexico", "United States", "Brazil", "Argentina", "Spain", "Colombia",
@@ -75,6 +76,7 @@ function useConfiguredSocialProviders() {
 
 export function RegisterScreen() {
   const { setView, setOnboardingStep } = useApp();
+  const { t } = useLanguage();
   const [legalPageOpen, setLegalPageOpen] = useState<LegalPageType | null>(null);
   const [form, setForm] = useState({
     name: "",
@@ -146,11 +148,11 @@ export function RegisterScreen() {
         window.location.href = "/?authed=1";
       } else {
         // Login failed after registration — show error + go to login screen
-        setError("Account created! Please sign in with your credentials.");
+        setError(t("auth.accountCreated"));
         setTimeout(() => setView("login"), 1500);
       }
     } catch (e: any) {
-      setError(e.message || "Registration failed. Please try again.");
+      setError(e.message || t("auth.registrationFailed"));
     } finally {
       setLoading(false);
     }
@@ -177,17 +179,17 @@ export function RegisterScreen() {
           className="mb-6 inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
         >
           <ArrowLeft className="h-3.5 w-3.5" />
-          Back to home
+          {t("auth.backHome")}
         </button>
 
         <div className="auth-card-inner overflow-hidden rounded-3xl border border-border/60 bg-background/80 p-7 backdrop-blur-xl nov-ring-lg sm:p-8">
           <div className="flex flex-col items-center text-center">
             <Logo />
             <h1 className="mt-6 text-2xl font-semibold tracking-tight text-balance">
-              Create your workspace
+              {t("auth.createWorkspace")}
             </h1>
             <p className="mt-1.5 text-sm text-muted-foreground text-pretty">
-              Start automating in minutes. No credit card required.
+              {t("auth.createWorkspaceSubtitle")}
             </p>
           </div>
 
@@ -211,7 +213,7 @@ export function RegisterScreen() {
             <div className="mb-6 flex items-center gap-3">
               <div className="h-px flex-1 bg-border" />
               <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-                or sign up with email
+                {t("auth.orSignUpEmail")}
               </span>
               <div className="h-px flex-1 bg-border" />
             </div>
@@ -228,7 +230,7 @@ export function RegisterScreen() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <div className="auth-input-3d">
                 <Field
-                  label="Full name"
+                  label={t("auth.fullName")}
                   icon={<User className="h-4 w-4" />}
                   autoComplete="name"
                   placeholder="Daniela Ríos"
@@ -239,7 +241,7 @@ export function RegisterScreen() {
               </div>
               <div className="auth-input-3d">
                 <Field
-                  label="Username"
+                  label={t("auth.username")}
                   icon={<span className="text-sm font-medium">@</span>}
                   autoComplete="username"
                   placeholder="daniela"
@@ -248,7 +250,7 @@ export function RegisterScreen() {
                   valid={usernameValid}
                   error={
                     form.username.length > 0 && !usernameValid
-                      ? "3+ chars, letters/numbers/_"
+                      ? t("auth.usernameHint")
                       : undefined
                   }
                 />
@@ -257,7 +259,7 @@ export function RegisterScreen() {
 
             <div className="auth-input-3d">
               <Field
-                label="Email"
+                label={t("auth.email")}
                 icon={<Mail className="h-4 w-4" />}
                 type="email"
                 inputMode="email"
@@ -268,7 +270,7 @@ export function RegisterScreen() {
                 valid={emailValid}
                 error={
                   form.email.length > 0 && !emailValid
-                    ? "Enter a valid email address"
+                    ? t("auth.validEmail")
                     : undefined
                 }
               />
@@ -276,11 +278,11 @@ export function RegisterScreen() {
 
             <div className="auth-input-3d">
               <Field
-                label="Password"
+                label={t("auth.password")}
                 icon={<Lock className="h-4 w-4" />}
                 type="password"
                 autoComplete="new-password"
-                placeholder="Create a strong password"
+                placeholder={t("auth.createStrongPassword")}
                 value={form.password}
                 onChange={update("password")}
                 valid={pwValid && form.password.length > 0}
@@ -290,17 +292,17 @@ export function RegisterScreen() {
 
             <div className="auth-input-3d">
               <Field
-                label="Confirm password"
+                label={t("auth.confirmPassword")}
                 icon={<Lock className="h-4 w-4" />}
                 type="password"
                 autoComplete="new-password"
-                placeholder="Re-enter password"
+                placeholder={t("auth.reenterPassword")}
                 value={form.confirm}
                 onChange={update("confirm")}
                 valid={confirmValid}
                 error={
                   form.confirm.length > 0 && !confirmValid
-                    ? "Passwords don't match"
+                    ? t("auth.passwordMismatch")
                     : undefined
                 }
               />
@@ -308,20 +310,20 @@ export function RegisterScreen() {
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <SelectField
-                label="Country"
+                label={t("auth.country")}
                 icon={<Globe className="h-3.5 w-3.5" />}
                 value={form.country}
                 onChange={update("country")}
                 options={COUNTRIES}
               />
               <SelectField
-                label="Currency"
+                label={t("auth.currency")}
                 value={form.currency}
                 onChange={update("currency")}
                 options={CURRENCIES}
               />
               <SelectField
-                label="Language"
+                label={t("auth.language")}
                 value={form.language}
                 onChange={update("language")}
                 options={LANGUAGES.map((l) => l.code)}
@@ -343,11 +345,11 @@ export function RegisterScreen() {
                 {loading ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Creating account…
+                    {t("auth.creatingAccount")}
                   </>
                 ) : (
                   <>
-                    Create account
+                    {t("auth.createAccount")}
                     <ArrowRight className="h-4 w-4" />
                   </>
                 )}
@@ -355,33 +357,33 @@ export function RegisterScreen() {
             </Magnetic>
 
             <p className="text-center text-[11px] leading-relaxed text-muted-foreground">
-              By creating an account you agree to our{" "}
+              {t("auth.agreeTerms")} {" "}
               <button
                 type="button"
                 onClick={() => setLegalPageOpen("terms")}
                 className="underline transition-colors hover:text-foreground"
               >
-                Terms
+                {t("auth.terms")}
               </button>{" "}
-              and{" "}
+              {t("auth.and")} {" "}
               <button
                 type="button"
                 onClick={() => setLegalPageOpen("privacy")}
                 className="underline transition-colors hover:text-foreground"
               >
-                Privacy Policy
+                {t("auth.privacyPolicy")}
               </button>
               .
             </p>
           </form>
 
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            Already have an account?{" "}
+            {t("auth.alreadyAccount")} {" "}
             <button
               onClick={() => setView("login")}
               className="font-medium text-foreground underline-offset-4 hover:underline"
             >
-              Sign in
+              {t("auth.signIn")}
             </button>
           </p>
         </div>
@@ -389,14 +391,14 @@ export function RegisterScreen() {
         <div className="mt-6 flex items-center justify-center gap-4 text-[11px] text-muted-foreground">
           <span className="inline-flex items-center gap-1.5">
             <Check className="h-3 w-3 text-emerald-500" />
-            Free 14-day trial
+            {t("auth.freeTrial")}
           </span>
           <span>·</span>
-          <span>No credit card</span>
+          <span>{t("auth.noCreditCard")}</span>
           <span>·</span>
           <span className="inline-flex items-center gap-1.5">
             <Sparkles className="h-3 w-3 text-primary" />
-            Cancel anytime
+            {t("auth.cancelAnytime")}
           </span>
         </div>
       </div>

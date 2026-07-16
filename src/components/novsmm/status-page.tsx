@@ -7,7 +7,7 @@ import { X, Activity, RefreshCw, AlertCircle, CheckCircle2 } from "lucide-react"
 type StatusService = {
   name: string;
   status: string;
-  uptime30d: number;
+  uptime30d: number | null;
   latency?: string;
 };
 
@@ -23,7 +23,7 @@ type Incident = {
 
 type HistoryResponse = {
   overall: string;
-  uptime30d: number;
+  uptime30d: number | null;
   services: StatusService[];
   incidents: Incident[];
   history: StatusHistoryItem[];
@@ -31,6 +31,7 @@ type HistoryResponse = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
+  unknown: "bg-slate-400",
   operational: "bg-emerald-400",
   degraded: "bg-amber-400",
   partial: "bg-orange-400",
@@ -38,6 +39,7 @@ const STATUS_COLORS: Record<string, string> = {
 };
 
 const STATUS_BADGE: Record<string, string> = {
+  unknown: "border-slate-500/30 bg-slate-500/10 text-slate-700 dark:text-slate-300",
   operational:
     "border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
   degraded: "border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300",
@@ -102,8 +104,8 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const overall = data?.overall ?? "operational";
-  const uptime = data?.uptime30d ?? 99.97;
+  const overall = data?.overall ?? "unknown";
+  const uptime = data?.uptime30d ?? null;
   const services = data?.services ?? [];
   const incidents = data?.incidents ?? [];
   const history = data?.history ?? [];
@@ -151,7 +153,7 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
                 System status
               </div>
               <h2 className="mt-1 text-2xl font-semibold tracking-tight sm:text-3xl">
-                All systems operational
+                {overall === "operational" ? "All systems operational" : "Current status"}
               </h2>
             </div>
             <span
@@ -174,7 +176,7 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
                 30-day uptime
               </div>
               <div className="mt-1 text-3xl font-semibold tabular-nums">
-                {loading ? "—" : `${uptime.toFixed(2)}%`}
+                {loading ? "—" : uptime === null ? "N/D" : `${uptime.toFixed(2)}%`}
               </div>
             </div>
             <div className="rounded-2xl border border-border/60 bg-muted/20 p-5">
@@ -233,7 +235,7 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
                       <div className="flex items-center gap-4">
                         <div className="text-right">
                           <div className="text-sm font-semibold tabular-nums">
-                            {s.uptime30d.toFixed(2)}%
+                            {s.uptime30d === null ? "N/D" : `${s.uptime30d.toFixed(2)}%`}
                           </div>
                           <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                             30d uptime
@@ -288,8 +290,8 @@ export function StatusPage({ onClose }: { onClose: () => void }) {
             </div>
             {incidents.length === 0 ? (
               <div className="mt-3 flex items-center gap-3 rounded-2xl border border-border/60 bg-muted/20 p-5 text-sm text-muted-foreground">
-                <CheckCircle2 className="h-5 w-5 text-emerald-500" />
-                No incidents in the last 30 days.
+                <AlertCircle className="h-5 w-5 text-amber-500" />
+                No historical incident data is configured.
               </div>
             ) : (
               <ul className="mt-3 flex flex-col gap-2">

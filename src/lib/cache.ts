@@ -1,4 +1,4 @@
-import { getRedis, isRedisAvailable } from "./redis";
+import { getRedis } from "./redis";
 
 /**
  * Cache layer with Redis primary + in-memory fallback.
@@ -57,9 +57,10 @@ function memoryInvalidate(pattern: string): void {
  * Returns null if not found or expired.
  */
 export async function cacheGet<T>(key: string): Promise<T | null> {
-  // Try Redis first
-  if (isRedisAvailable()) {
-    const value = await getRedis().then((r) => r?.get(key));
+  // Initialize Redis lazily before falling back to the per-process cache.
+  const redis = await getRedis();
+  if (redis) {
+    const value = await redis.get(key);
     if (value !== null && value !== undefined) {
       try {
         return JSON.parse(value) as T;
@@ -93,16 +94,14 @@ export async function cacheSet<T>(
 ): Promise<void> {
   const serialized = typeof value === "string" ? value : JSON.stringify(value);
 
-  if (isRedisAvailable()) {
-    const redis = await getRedis();
-    if (redis) {
-      if (ttlSeconds) {
-        await redis.set(key, serialized, "EX", ttlSeconds);
-      } else {
-        await redis.set(key, serialized);
-      }
-      return;
+  const redis = await getRedis();
+  if (redis) {
+    if (ttlSeconds) {
+      await redis.set(key, serialized, "EX", ttlSeconds);
+    } else {
+      await redis.set(key, serialized);
     }
+    return;
   }
 
   memorySet(key, serialized, ttlSeconds);
@@ -112,12 +111,10 @@ export async function cacheSet<T>(
  * Delete a single cache key.
  */
 export async function cacheDel(key: string): Promise<void> {
-  if (isRedisAvailable()) {
-    const redis = await getRedis();
-    if (redis) {
-      await redis.del(key);
-      return;
-    }
+  const redis = await getRedis();
+  if (redis) {
+    await redis.del(key);
+    return;
   }
   memoryDel(key);
 }
@@ -127,26 +124,24 @@ export async function cacheDel(key: string): Promise<void> {
  * Example: cacheInvalidate("user:*") clears all user cache entries.
  */
 export async function cacheInvalidate(pattern: string): Promise<void> {
-  if (isRedisAvailable()) {
-    const redis = await getRedis();
-    if (redis) {
-      // SCAN is non-blocking (unlike KEYS), safe for production
-      let cursor = "0";
-      do {
-        const [nextCursor, keys] = await redis.scan(
-          cursor,
-          "MATCH",
-          pattern,
-          "COUNT",
-          100
-        );
-        cursor = nextCursor;
-        if (keys.length > 0) {
-          await redis.del(...keys);
-        }
-      } while (cursor !== "0");
-      return;
-    }
+  const redis = await getRedis();
+  if (redis) {
+    // SCAN is non-blocking (unlike KEYS), safe for production
+    let cursor = "0";
+    do {
+      const [nextCursor, keys] = await redis.scan(
+        cursor,
+        "MATCH",
+        pattern,
+        "COUNT",
+        100
+      );
+      cursor = nextCursor;
+      if (keys.length > 0) {
+        await redis.del(...keys);
+      }
+    } while (cursor !== "0");
+    return;
   }
   memoryInvalidate(pattern);
 }

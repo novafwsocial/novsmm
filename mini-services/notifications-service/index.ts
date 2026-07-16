@@ -38,6 +38,9 @@ import crypto from 'crypto'
 // ---------------------------------------------------------------------------
 
 const PORT = parseInt(process.env.NOTIFICATIONS_SERVICE_PORT || '3003', 10)
+// Keep the mini-service private by default. Container deployments can opt in
+// to the container network interface with NOTIFICATIONS_SERVICE_HOST=0.0.0.0.
+const HOST = process.env.NOTIFICATIONS_SERVICE_HOST || '127.0.0.1'
 const AUTH_SECRET = process.env.NOTIFICATIONS_SERVICE_SECRET || ''
 const REDIS_URL = process.env.REDIS_URL || ''
 
@@ -390,8 +393,8 @@ async function handleBroadcast(
 // Boot
 // ---------------------------------------------------------------------------
 
-httpServer.listen(PORT, () => {
-  console.log(`[notifications] server running on port ${PORT}`)
+httpServer.listen(PORT, HOST, () => {
+  console.log(`[notifications] server running on ${HOST}:${PORT}`)
   console.log(`[notifications] JWT auth: enabled`)
   console.log(`[notifications] /broadcast auth: ${AUTH_SECRET ? 'enabled' : 'DISABLED (set NOTIFICATIONS_SERVICE_SECRET!)'}`)
   console.log(`[notifications] /healthz: available`)

@@ -161,11 +161,16 @@ export async function refundTransaction(
   const refundAmount = Math.abs(original.amount);
 
   const result = await db.$transaction(async (tx) => {
-    // Mark original as refunded
-    await tx.transaction.update({
-      where: { id: originalTxnId },
+    // The status transition is the idempotency gate. PostgreSQL locks the row
+    // for the update; concurrent calls wait, then the loser sees count=0 and
+    // exits before touching the balance or creating a refund transaction.
+    const marked = await tx.transaction.updateMany({
+      where: { id: originalTxnId, status: { not: "refunded" } },
       data: { status: "refunded" },
     });
+    if (marked.count === 0) {
+      throw new Error("Already refunded");
+    }
 
     // If original was a credit (positive amount), debit it back
     // If original was a debit (negative amount), credit it back

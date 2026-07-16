@@ -37,6 +37,7 @@ import { PlatformLogo } from "./platform-logo";
 import { cn } from "@/lib/utils";
 import { formatPrice } from "@/lib/currency-utils";
 import { useToast } from "@/hooks/use-toast";
+import { useLanguage } from "./language-provider";
 
 type Range = "7d" | "30d" | "90d";
 const RANGE_LABEL: Record<Range, string> = {
@@ -51,6 +52,7 @@ const RANGE_RANGE_LABEL: Record<Range, string> = {
 };
 
 export function DashboardHome() {
+  const { t } = useLanguage();
   const [range, setRange] = useState<Range>("30d");
   // PERF FIX (P-H-002): use the shared useDashboard hook (with range)
   // instead of a local useQuery. This shares the queryKey with the
@@ -80,13 +82,13 @@ export function DashboardHome() {
       <Reveal>
         <div className="flex flex-col gap-1">
           <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-            Workspace overview
+            {t("dashboard.overview", "Workspace overview")}
           </div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-            Welcome back, {user?.name?.split(" ")[0] ?? "there"} 👋
+            {t("dashboard.welcomeName", "Welcome back, {name} 👋").replace("{name}", user?.name?.split(" ")[0] ?? t("dashboard.there", "there"))}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Here&apos;s what&apos;s happening across your workspace today.
+            {t("dashboard.todaySummary", "Here's what's happening across your workspace today.")}
           </p>
         </div>
       </Reveal>
@@ -96,9 +98,9 @@ export function DashboardHome() {
         <RevealItem>
           <StatCard
             icon={<Wallet className="h-4 w-4" />}
-            label="Available balance"
+            label={t("dashboard.balance", "Available balance")}
             value={<>$<Counter to={stats.balance} decimals={2} duration={1.5} /></>}
-            delta="live"
+            delta={t("dashboard.live", "live")}
             up
             tint="primary"
           />
@@ -106,27 +108,27 @@ export function DashboardHome() {
         <RevealItem>
           <StatCard
             icon={<ShoppingCart className="h-4 w-4" />}
-            label="Active orders"
+            label={t("dashboard.activeOrders", "Active orders")}
             value={<Counter to={stats.activeOrders} duration={1.5} />}
-            delta="in progress"
+            delta={t("dashboard.inProgress", "in progress")}
             tint="amber"
           />
         </RevealItem>
         <RevealItem>
           <StatCard
             icon={<CheckCircle2 className="h-4 w-4" />}
-            label="Completed (all)"
+            label={t("dashboard.completedAll", "Completed (all)")}
             value={<Counter to={stats.completedOrders} duration={2} />}
-            delta="total"
+            delta={t("dashboard.total", "total")}
             tint="emerald"
           />
         </RevealItem>
         <RevealItem>
           <StatCard
             icon={<TrendingUp className="h-4 w-4" />}
-            label="Revenue today"
+            label={t("dashboard.revenue", "Revenue today")}
             value={<>$<Counter to={stats.revenueToday} decimals={2} duration={1.5} /></>}
-            delta="live"
+            delta={t("dashboard.live", "live")}
             up
             tint="violet"
           />
@@ -141,7 +143,7 @@ export function DashboardHome() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                    Revenue · {RANGE_RANGE_LABEL[range]}
+                    {t("dashboard.revenue", "Revenue")} · {t(`dashboard.${range}`, RANGE_RANGE_LABEL[range])}
                   </div>
                   <div className="mt-1 text-3xl font-semibold tabular-nums">
                     $<Counter to={rangeRevenue} duration={1.5} />
@@ -176,7 +178,7 @@ export function DashboardHome() {
             <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-foreground to-foreground/90 p-5 text-background">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] uppercase tracking-wider opacity-70">
-                  NOVSMM Wallet
+                  {t("dashboard.wallet", "NOVSMM Wallet")}
                 </span>
                 <Wallet className="h-4 w-4 opacity-70" />
               </div>
@@ -184,20 +186,20 @@ export function DashboardHome() {
                 $<Counter to={stats.balance} decimals={2} duration={1.5} />
               </div>
               <div className="mt-1 text-xs opacity-70">
-                Held: <span className="tabular-nums">${stats.heldBalance.toFixed(2)}</span>
+                {t("wallet.held", "Held")}: <span className="tabular-nums">${stats.heldBalance.toFixed(2)}</span>
               </div>
               <div className="mt-4 flex gap-2">
                 <button
                   onClick={() => setDashboardTab("wallet")}
                   className="flex flex-1 items-center justify-center gap-1 rounded-lg bg-primary py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
                 >
-                  <Plus className="h-3.5 w-3.5" /> Top up
+                  <Plus className="h-3.5 w-3.5" /> {t("wallet.topUp", "Top up")}
                 </button>
                 <button
                   onClick={() => setDashboardTab("wallet")}
                   className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-background/20 py-2 text-xs font-medium transition-colors hover:bg-background/10"
                 >
-                  Withdraw
+                  {t("wallet.withdraw", "Withdraw")}
                 </button>
               </div>
             </div>
@@ -206,13 +208,13 @@ export function DashboardHome() {
           <Reveal blur delay={0.12}>
             <div className="rounded-2xl border border-border/60 bg-background p-5">
               <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Quick stats
+                {t("dashboard.quickStats", "Quick stats")}
               </div>
               <div className="mt-3 flex flex-col gap-3">
-                <QuickStat icon={<Zap className="h-3.5 w-3.5" />} label="Lifetime earnings">
+                <QuickStat icon={<Zap className="h-3.5 w-3.5" />} label={t("dashboard.lifetimeEarnings", "Lifetime earnings")}>
                   $<Counter to={stats.lifetimeEarnings} decimals={2} duration={2} />
                 </QuickStat>
-                <QuickStat icon={<Activity className="h-3.5 w-3.5" />} label="Open tickets">
+                <QuickStat icon={<Activity className="h-3.5 w-3.5" />} label={t("dashboard.openTickets", "Open tickets")}>
                   {stats.openTickets}
                 </QuickStat>
               </div>
@@ -241,21 +243,21 @@ export function DashboardHome() {
           <div className="flex items-center justify-between">
             <div>
               <div className="text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                Recent orders
+                {t("dashboard.recentOrders", "Recent orders")}
               </div>
-              <div className="mt-1 text-base font-semibold">Live activity</div>
+              <div className="mt-1 text-base font-semibold">{t("dashboard.liveActivity", "Live activity")}</div>
             </div>
             <button
               onClick={() => setDashboardTab("orders")}
               className="text-xs font-medium text-primary hover:underline"
             >
-              View all →
+              {t("dashboard.viewAll", "View all")} →
             </button>
           </div>
           <div className="mt-4 flex flex-col gap-1">
             {recentOrders.length === 0 ? (
               <div className="py-8 text-center text-sm text-muted-foreground">
-                No orders yet. Browse the marketplace to place your first order.
+                {t("dashboard.noOrders", "No orders yet. Browse the marketplace to place your first order.")}
               </div>
             ) : (
               recentOrders.map((o: any, i: number) => (
@@ -292,9 +294,9 @@ export function DashboardHome() {
           <div className="rounded-2xl border border-border/60 bg-background p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                <Star className="h-3.5 w-3.5 text-amber-400" fill="currentColor" /> Favorite services
+                <Star className="h-3.5 w-3.5 text-amber-400" fill="currentColor" /> {t("dashboard.favoriteServices", "Favorite services")}
               </div>
-              <button onClick={() => setDashboardTab("marketplace")} className="text-xs font-medium text-primary hover:underline">Browse →</button>
+              <button onClick={() => setDashboardTab("marketplace")} className="text-xs font-medium text-primary hover:underline">{t("dashboard.browse", "Browse")} →</button>
             </div>
             <div className="mt-3 flex flex-col gap-2">
               {favorites.length > 0 ? favorites.map((f: any) => (
@@ -306,7 +308,7 @@ export function DashboardHome() {
                   </div>
                 </div>
               )) : (
-                <div className="py-6 text-center text-sm text-muted-foreground">No favorites yet. Star a service to pin it here.</div>
+                <div className="py-6 text-center text-sm text-muted-foreground">{t("dashboard.noFavorites", "No favorites yet. Star a service to pin it here.")}</div>
               )}
             </div>
           </div>
@@ -317,9 +319,9 @@ export function DashboardHome() {
           <div className="rounded-2xl border border-border/60 bg-background p-5">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-                <Ticket className="h-3.5 w-3.5" /> Recent tickets
+                <Ticket className="h-3.5 w-3.5" /> {t("dashboard.recentTickets", "Recent tickets")}
               </div>
-              <button onClick={() => setDashboardTab("tickets")} className="text-xs font-medium text-primary hover:underline">View all →</button>
+              <button onClick={() => setDashboardTab("tickets")} className="text-xs font-medium text-primary hover:underline">{t("dashboard.viewAll", "View all")} →</button>
             </div>
             <div className="mt-3 flex flex-col gap-2">
               {tickets.length > 0 ? tickets.map((t: any) => (
@@ -331,7 +333,7 @@ export function DashboardHome() {
                   </div>
                 </div>
               )) : (
-                <div className="py-6 text-center text-sm text-muted-foreground">No tickets yet.</div>
+                <div className="py-6 text-center text-sm text-muted-foreground">{t("dashboard.noTickets", "No tickets yet.")}</div>
               )}
             </div>
           </div>
@@ -428,6 +430,7 @@ function ReferralPromoCard({
 }) {
   const { data, isLoading } = useReferrals();
   const { toast } = useToast();
+  const { t } = useLanguage();
 
   if (isLoading) {
     return (
@@ -451,11 +454,11 @@ function ReferralPromoCard({
   const copyLink = async () => {
     try {
       await navigator.clipboard.writeText(link);
-      toast({ title: "Referral link copied!", description: link });
+      toast({ title: t("dashboard.referralCopied", "Referral link copied!"), description: link });
     } catch {
       toast({
-        title: "Couldn't copy",
-        description: "Your browser blocked clipboard access.",
+        title: t("dashboard.couldNotCopy", "Couldn't copy"),
+        description: t("dashboard.clipboardBlocked", "Your browser blocked clipboard access."),
         variant: "destructive",
       });
     }
@@ -486,9 +489,9 @@ function ReferralPromoCard({
               </span>
               <div>
                 <div className="text-[11px] uppercase tracking-wider opacity-60">
-                  Refer &amp; earn
+                  {t("dashboard.referEarn", "Refer & earn")}
                 </div>
-                <div className="text-base font-semibold">NOVSMM Referral Program</div>
+                <div className="text-base font-semibold">{t("dashboard.referralProgram", "NOVSMM Referral Program")}</div>
               </div>
             </div>
 
@@ -505,10 +508,10 @@ function ReferralPromoCard({
                 {current?.emoji} {current?.label ?? "Bronze"}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-background/10 px-3 py-1 text-xs font-medium">
-                {(commissionRate * 100).toFixed(0)}% commission
+                {(commissionRate * 100).toFixed(0)}% {t("dashboard.commission", "commission")}
               </span>
               <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-3 py-1 text-xs font-medium text-emerald-300">
-                {formatPrice(earnings, currency)} earned
+                {formatPrice(earnings, currency)} {t("dashboard.earned", "earned")}
               </span>
             </div>
 
@@ -517,9 +520,9 @@ function ReferralPromoCard({
               <div className="max-w-md">
                 <div className="flex items-center justify-between text-[11px] opacity-80">
                   <span>
-                    {totalReferrals}/{next.minReferrals} referrals to {next.emoji} {next.label}
+                    {totalReferrals}/{next.minReferrals} {t("dashboard.referralsTo", "referrals to")} {next.emoji} {next.label}
                   </span>
-                  <span>{remaining} to go</span>
+                  <span>{remaining} {t("dashboard.toGo", "to go")}</span>
                 </div>
                 <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-background/15">
                   <div
@@ -530,7 +533,7 @@ function ReferralPromoCard({
               </div>
             ) : (
               <div className="text-[11px] opacity-70">
-                Maximum tier reached — you&apos;re earning top commission.
+                {t("dashboard.maxTier", "Maximum tier reached — you're earning top commission.")}
               </div>
             )}
           </div>
@@ -544,7 +547,7 @@ function ReferralPromoCard({
               <button
                 onClick={copyLink}
                 className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary text-primary-foreground transition-colors hover:bg-primary/90"
-                title="Copy referral link"
+                title={t("dashboard.copyReferral", "Copy referral link")}
               >
                 <Copy className="h-4 w-4" />
               </button>
@@ -573,7 +576,7 @@ function ReferralPromoCard({
               onClick={onOpenProfile}
               className="text-[11px] font-medium opacity-70 transition-opacity hover:opacity-100"
             >
-              View full referral dashboard →
+              {t("dashboard.viewReferralDashboard", "View full referral dashboard")} →
             </button>
           </div>
         </div>
@@ -588,6 +591,7 @@ function ReferralPromoCard({
 // Achievements section.
 function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
   const { data, isLoading } = useLoyalty();
+  const { t } = useLanguage();
 
   if (isLoading) {
     return (
@@ -606,10 +610,10 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
       <Reveal blur>
         <div className="rounded-2xl border border-border/60 bg-background p-5">
           <div className="flex items-center gap-2 text-xs font-medium uppercase tracking-[0.14em] text-muted-foreground">
-            <Trophy className="h-3.5 w-3.5" /> Loyalty rewards
+            <Trophy className="h-3.5 w-3.5" /> {t("dashboard.loyaltyRewards", "Loyalty rewards")}
           </div>
           <div className="mt-3 py-4 text-center text-sm text-muted-foreground">
-            Loyalty data is loading. Place an order to start earning points.
+            {t("dashboard.loyaltyLoading", "Loyalty data is loading. Place an order to start earning points.")}
           </div>
         </div>
       </Reveal>
@@ -646,10 +650,10 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
               </span>
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Loyalty rewards
+                  {t("dashboard.loyaltyRewards", "Loyalty rewards")}
                 </div>
                 <div className="text-base font-semibold text-foreground">
-                  NOVSMM Loyalty Program
+                  {t("dashboard.loyaltyProgram", "NOVSMM Loyalty Program")}
                 </div>
               </div>
             </div>
@@ -675,7 +679,7 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
               <div className="max-w-md">
                 <div className="flex items-center justify-between text-[11px] text-muted-foreground">
                   <span>
-                    {tier.pointsToNext.toLocaleString()} pts to{" "}
+                    {tier.pointsToNext.toLocaleString()} {t("dashboard.pointsTo", "pts to")} {" "}
                     <span className="font-medium text-foreground">
                       {next.emoji} {next.label}
                     </span>
@@ -694,7 +698,7 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
               </div>
             ) : (
               <div className="text-[11px] text-muted-foreground">
-                Maximum tier reached — you&apos;re earning top rewards.
+                {t("dashboard.maxRewards", "Maximum tier reached — you're earning top rewards.")}
               </div>
             )}
           </div>
@@ -703,7 +707,7 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
           <div className="flex flex-col gap-3 lg:w-[300px]">
             <div className="flex items-center justify-between">
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Recent achievements
+                {t("dashboard.recentAchievements", "Recent achievements")}
               </span>
               <span className="text-[11px] font-medium text-muted-foreground tabular-nums">
                 {achievements.unlockedCount}/{achievements.total}
@@ -731,14 +735,14 @@ function LoyaltyRewardsCard({ onOpenProfile }: { onOpenProfile: () => void }) {
               </div>
             ) : (
               <div className="rounded-lg border border-dashed border-border/60 bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground">
-                Place an order to unlock your first achievement.
+                {t("dashboard.placeOrderAchievement", "Place an order to unlock your first achievement.")}
               </div>
             )}
             <button
               onClick={onOpenProfile}
               className="inline-flex items-center gap-1 self-start rounded-lg px-2 py-1 text-xs font-medium text-primary hover:underline"
             >
-              View all achievements <ChevronRight className="h-3.5 w-3.5" />
+              {t("dashboard.viewAchievements", "View all achievements")} <ChevronRight className="h-3.5 w-3.5" />
             </button>
           </div>
         </div>

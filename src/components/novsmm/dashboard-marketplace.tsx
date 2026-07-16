@@ -62,6 +62,7 @@ import { useApp } from "./app-store";
 import { useToast } from "@/hooks/use-toast";
 import { PlatformLogo, getPlatformEmoji } from "./platform-logo";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 const PLATFORM_FILTERS = [
   "All", "Instagram", "TikTok", "YouTube", "Facebook",
@@ -299,6 +300,7 @@ function parseDeliveryMinutes(t?: string): number {
 }
 
 export function DashboardMarketplace() {
+  const { t } = useLanguage();
   const [tab, setTab] = useState<"buy" | "sell" | "history">("buy");
   const [selectedService, setSelectedService] = useState<any | null>(null);
   const [showMassOrder, setShowMassOrder] = useState(false);
@@ -314,13 +316,13 @@ export function DashboardMarketplace() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Marketplace
+              {t("marketplace.title", "Marketplace")}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Buy · Sell · History
+              {t("marketplace.buySellHistory", "Buy · Sell · History")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Browse 6,382 services, place orders, and repeat past purchases.
+              {t("marketplace.subtitle", "Browse services, place orders, and repeat past purchases.")}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -329,7 +331,7 @@ export function DashboardMarketplace() {
               className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
             >
               <Layers className="h-3.5 w-3.5" />
-              Mass order
+              {t("marketplace.massOrder", "Mass order")}
             </button>
             <WalletDisplay />
           </div>
@@ -341,12 +343,12 @@ export function DashboardMarketplace() {
         <div
           className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background p-1"
           role="tablist"
-          aria-label="Marketplace sections"
+          aria-label={t("marketplace.sections", "Marketplace sections")}
         >
           {[
-            { id: "buy", label: "Services", icon: Store },
-            { id: "sell", label: "Sell", icon: Tag },
-            { id: "history", label: "Purchase history", icon: History },
+            { id: "buy", label: t("marketplace.buy", "Services"), icon: Store },
+            { id: "sell", label: t("marketplace.sell", "Sell"), icon: Tag },
+            { id: "history", label: t("marketplace.history", "Purchase history"), icon: History },
           ].map((t) => (
             <button
               key={t.id}
@@ -395,6 +397,7 @@ export function DashboardMarketplace() {
 function WalletDisplay() {
   const { data } = useWallet();
   const { data: sessionData } = useSession();
+  const { t } = useLanguage();
   const balance = data?.balance ?? 0;
   const currency = (sessionData?.user as any)?.currency ?? "USD";
   return (
@@ -402,7 +405,7 @@ function WalletDisplay() {
       <Wallet className="h-4 w-4 text-primary" />
       <div>
         <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-          Balance · {currency}
+          {t("wallet.available", "Balance")} · {currency}
         </div>
         <div className="text-sm font-semibold tabular-nums">
           {formatPrice(balance, currency)}
@@ -416,6 +419,7 @@ function WalletDisplay() {
 const PAGE_SIZE = 24;
 
 function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
+  const { t } = useLanguage();
   const [platformFilter, setPlatformFilter] = useState("All");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [search, setSearch] = useState("");
@@ -724,14 +728,14 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search services — Instagram, TikTok, followers, views…"
-              aria-label="Search services"
+              placeholder={t("marketplace.searchPlaceholder", "Search services — Instagram, TikTok, followers, views…")}
+              aria-label={t("marketplace.search", "Search services")}
               className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             />
             {search && (
               <button
                 onClick={() => setSearch("")}
-                aria-label="Clear search"
+                aria-label={t("marketplace.clearSearch", "Clear search")}
                 className="text-muted-foreground hover:text-foreground"
               >
                 <X className="h-4 w-4" />
@@ -747,12 +751,12 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
-              aria-label="Sort services"
+              aria-label={t("marketplace.sortServices", "Sort services")}
               className="h-[46px] w-full appearance-none rounded-xl border border-border bg-background py-2.5 pl-9 pr-9 text-sm font-medium text-foreground transition-colors focus:border-primary/40 focus:outline-none sm:w-[200px]"
             >
               {SORT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
-                  {o.label}
+                  {t(`marketplace.sort.${o.value}`, o.label)}
                 </option>
               ))}
             </select>
@@ -766,13 +770,13 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
           <div
             className="flex shrink-0 items-center gap-1 rounded-xl border border-border bg-background p-1"
             role="group"
-            aria-label="View mode"
+            aria-label={t("marketplace.viewMode", "View mode")}
           >
             <button
               type="button"
               onClick={() => setViewMode("grid")}
               aria-pressed={viewMode === "grid"}
-              aria-label="Grid view"
+              aria-label={t("marketplace.gridView", "Grid view")}
               className={cn(
                 "flex h-[34px] w-[34px] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 viewMode === "grid"
@@ -786,7 +790,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               type="button"
               onClick={() => setViewMode("list")}
               aria-pressed={viewMode === "list"}
-              aria-label="List view"
+              aria-label={t("marketplace.listView", "List view")}
               className={cn(
                 "flex h-[34px] w-[34px] items-center justify-center rounded-lg transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary",
                 viewMode === "list"
@@ -822,7 +826,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                     <PlatformLogo platform={p} size={16} />
                   </span>
                 )}
-                {p}
+                {p === "All" ? t("marketplace.all", "All") : p}
                 {count != null && (
                   <span
                     className={cn(
@@ -840,7 +844,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
           <button
             onClick={() => setShowFavoritesOnly((v) => !v)}
             aria-pressed={showFavoritesOnly}
-            aria-label="Show only favorited services"
+            aria-label={t("marketplace.favoritesOnly", "Show only favorited services")}
             className={cn(
               "min-h-[44px] shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
               showFavoritesOnly
@@ -854,7 +858,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                 showFavoritesOnly && "fill-current",
               )}
             />
-            Favorites
+            {t("marketplace.favorites", "Favorites")}
             {favorites.size > 0 && (
               <span
                 className={cn(
@@ -884,7 +888,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                   : "border border-border/70 text-muted-foreground hover:bg-muted hover:text-foreground",
               )}
             >
-              {CATEGORY_LABELS[c] ?? c}
+              {c === "All" ? t("marketplace.all", "All") : CATEGORY_LABELS[c] ?? c}
             </button>
           ))}
         </div>
@@ -904,8 +908,8 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               step="0.01"
               value={minPriceInput}
               onChange={(e) => setMinPriceInput(e.target.value)}
-              placeholder="Min"
-              aria-label="Minimum price"
+              placeholder={t("marketplace.min", "Min")}
+              aria-label={t("marketplace.minimumPrice", "Minimum price")}
               className="w-16 bg-transparent text-xs font-medium tabular-nums text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             />
             <span className="text-xs text-muted-foreground">—</span>
@@ -916,8 +920,8 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               step="0.01"
               value={maxPriceInput}
               onChange={(e) => setMaxPriceInput(e.target.value)}
-              placeholder="Max"
-              aria-label="Maximum price"
+              placeholder={t("marketplace.max", "Max")}
+              aria-label={t("marketplace.maximumPrice", "Maximum price")}
               className="w-16 bg-transparent text-xs font-medium tabular-nums text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             />
           </div>
@@ -927,7 +931,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
             className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:nov-shadow-blue btn-press"
           >
             <Filter className="h-3.5 w-3.5" />
-            Apply
+            {t("marketplace.apply", "Apply")}
           </button>
           {isPriceFilterActive && (
             <button
@@ -936,7 +940,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors btn-press"
             >
               <X className="h-3.5 w-3.5" />
-              Price:&nbsp;
+              {t("marketplace.price", "Price")} :&nbsp;
               {appliedMinPrice != null
                 ? `$${appliedMinPrice.toFixed(2)}`
                 : "$0"}
@@ -952,7 +956,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
       {/* Results count */}
       {data?.pagination && (
         <div className="text-xs text-muted-foreground">
-          Showing {allServices.length} of {data.pagination.total.toLocaleString()} services
+          {t("marketplace.showing", "Showing")} {allServices.length} {t("marketplace.of", "of")} {data.pagination.total.toLocaleString()} {t("marketplace.services", "services")}
         </div>
       )}
 
@@ -970,10 +974,10 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
             <SearchX className="h-7 w-7 text-muted-foreground" />
           </div>
           <h3 className="mt-3 text-base font-semibold text-foreground">
-            No services found
+            {t("marketplace.noServices", "No services found")}
           </h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Try adjusting your search or filters
+            {t("marketplace.adjustFilters", "Try adjusting your search or filters")}
           </p>
           {hasActiveFilters && (
             <button
@@ -981,7 +985,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
               className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-border px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted btn-press"
             >
               <X className="h-3.5 w-3.5" />
-              Clear filters
+              {t("marketplace.clearFilters", "Clear filters")}
             </button>
           )}
         </div>
@@ -993,11 +997,11 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th className="px-4 py-3 text-left font-medium">Service</th>
-                  <th className="px-4 py-3 text-right font-medium">Price/1k</th>
-                  <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">Min/Max</th>
-                  <th className="hidden px-4 py-3 text-left font-medium md:table-cell">Delivery</th>
-                  <th className="px-4 py-3 text-right font-medium">Action</th>
+                  <th className="px-4 py-3 text-left font-medium">{t("marketplace.service", "Service")}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t("marketplace.pricePer1k", "Price/1k")}</th>
+                  <th className="hidden px-4 py-3 text-right font-medium sm:table-cell">{t("marketplace.minMax", "Min/Max")}</th>
+                  <th className="hidden px-4 py-3 text-left font-medium md:table-cell">{t("marketplace.delivery", "Delivery")}</th>
+                  <th className="px-4 py-3 text-right font-medium">{t("marketplace.action", "Action")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -1030,10 +1034,10 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                 onClick={() => setPage((p) => p + 1)}
                 className="rounded-full border border-border px-6 py-2 text-sm font-medium text-foreground hover:bg-muted btn-press"
               >
-                Load more
+                {t("marketplace.loadMore", "Load more")}
               </button>
             ) : (
-              <span className="text-xs text-muted-foreground">— End of catalog —</span>
+              <span className="text-xs text-muted-foreground">— {t("marketplace.endCatalog", "End of catalog")} —</span>
             )}
           </div>
         </div>
@@ -1071,7 +1075,7 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                   onClick={() => setExpandedPlatforms(p => ({ ...p, [platform]: limit + LOAD_MORE_INCREMENT }))}
                   className="mx-auto mt-2 rounded-full border border-border px-5 py-2 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors btn-press"
                 >
-                  Show {Math.min(LOAD_MORE_INCREMENT, hiddenCount)} more in {platform} ({hiddenCount} hidden)
+                  {t("marketplace.showMore", "Show")} {Math.min(LOAD_MORE_INCREMENT, hiddenCount)} {t("marketplace.moreIn", "more in")} {platform} ({hiddenCount} {t("marketplace.hidden", "hidden")})
                 </button>
               )}
             </div>
@@ -1087,10 +1091,10 @@ function BuyTab({ onSelectService }: { onSelectService: (s: any) => void }) {
                 onClick={() => setPage((p) => p + 1)}
                 className="rounded-full border border-border px-6 py-2 text-sm font-medium text-foreground hover:bg-muted btn-press"
               >
-                Load more
+                {t("marketplace.loadMore", "Load more")}
               </button>
             ) : allServices.length > 0 ? (
-              <span className="text-xs text-muted-foreground">— End of catalog —</span>
+              <span className="text-xs text-muted-foreground">— {t("marketplace.endCatalog", "End of catalog")} —</span>
             ) : null}
           </div>
         </>
@@ -1141,6 +1145,7 @@ function ServiceCard({
   onToggleCompare: () => void;
   rating: ReviewEntry | null;
 }) {
+  const { t } = useLanguage();
   const quality = QUALITY_BADGES[service.quality] ?? QUALITY_BADGES.standard;
   // SERVICE-AVAILABILITY: check if service is unavailable or new
   const isUnavailable = service.availabilityTag === "unavailable" || service.status === "paused";
@@ -1158,7 +1163,7 @@ function ServiceCard({
       onKeyDown={isUnavailable ? undefined : handleKeyDown}
       tabIndex={isUnavailable ? -1 : 0}
       role={isUnavailable ? undefined : "button"}
-      aria-label={`${service.name} — ${service.platform}.${isUnavailable ? " No disponible." : " Press Enter to view details and place an order."}`}
+      aria-label={`${service.name} — ${service.platform}.${isUnavailable ? ` ${t("marketplace.unavailable", "Unavailable")}.` : ` ${t("marketplace.pressEnterOrder", "Press Enter to view details and place an order.")}`}`}
       className={cn(
         "group relative flex h-full flex-col overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-all stat-card-3d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
         isUnavailable
@@ -1169,12 +1174,12 @@ function ServiceCard({
       {/* SERVICE-AVAILABILITY: availability tags */}
       {isUnavailable && (
         <div className="absolute left-0 right-0 top-0 z-20 bg-rose-500 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-white">
-          No disponible
+          {t("marketplace.unavailable", "Unavailable")}
         </div>
       )}
       {isNew && !isUnavailable && (
         <div className="absolute left-0 right-0 top-0 z-20 bg-emerald-500 py-1 text-center text-[10px] font-bold uppercase tracking-wider text-white">
-          Nuevo
+          {t("marketplace.new", "New")}
         </div>
       )}
       {/* Favorite star — absolute top-right corner */}
@@ -1183,7 +1188,7 @@ function ServiceCard({
           e.stopPropagation();
           onToggleFavorite();
         }}
-        aria-label={isFavorite ? `Remove ${service.name} from favorites` : `Add ${service.name} to favorites`}
+        aria-label={isFavorite ? `${t("marketplace.remove", "Remove")} ${service.name} ${t("marketplace.fromFavorites", "from favorites")}` : `${t("marketplace.add", "Add")} ${service.name} ${t("marketplace.toFavorites", "to favorites")}`}
         aria-pressed={isFavorite}
         className="absolute right-3 top-3 z-10 flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-amber-400/15 hover:text-amber-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400 focus-visible:ring-offset-1 btn-press"
       >
@@ -1239,7 +1244,7 @@ function ServiceCard({
               onToggleCompare();
             }}
             aria-pressed={isInComparison}
-            aria-label={isInComparison ? `Remove ${service.name} from comparison` : `Add ${service.name} to comparison`}
+              aria-label={isInComparison ? `${t("marketplace.remove", "Remove")} ${service.name} ${t("marketplace.fromComparison", "from comparison")}` : `${t("marketplace.add", "Add")} ${service.name} ${t("marketplace.toComparison", "to comparison")}`}
             className={cn(
               "inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary btn-press",
               isInComparison
@@ -1251,7 +1256,7 @@ function ServiceCard({
           </button>
           <div>
             <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-              Per 1000 · {currency}
+              {t("marketplace.perThousand", "Per 1000")} · {currency}
             </div>
             <div className="text-lg font-semibold tabular-nums text-foreground">
               {formatPrice(service.price, currency)}
@@ -1271,19 +1276,19 @@ function ServiceCard({
           <div className="flex items-center gap-1.5">
             <button
               onClick={(e) => { e.stopPropagation(); onClick(); }}
-              aria-label={`View details for ${service.name}`}
+              aria-label={`${t("marketplace.viewDetails", "View details for")} ${service.name}`}
               className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted btn-press"
             >
-              Details
+              {t("marketplace.details", "Details")}
               <ChevronRight className="h-3.5 w-3.5" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onClick(); }}
-              aria-label={`Order ${service.name} now`}
+              aria-label={`${t("marketplace.order", "Order")} ${service.name} ${t("marketplace.now", "now")}`}
               className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue btn-press"
             >
               <ShoppingCart className="h-3.5 w-3.5" />
-              Order
+              {t("marketplace.order", "Order")}
             </button>
           </div>
         </div>
@@ -1315,6 +1320,7 @@ function ServiceListRow({
   onToggleCompare: () => void;
   rating: ReviewEntry | null;
 }) {
+  const { t } = useLanguage();
   return (
     <tr
       className="table-row-hover cursor-pointer transition-colors"
@@ -1328,7 +1334,7 @@ function ServiceListRow({
               onToggleFavorite();
             }}
             aria-pressed={isFavorite}
-            aria-label={isFavorite ? `Remove ${service.name} from favorites` : `Add ${service.name} to favorites`}
+            aria-label={isFavorite ? `${t("marketplace.remove", "Remove")} ${service.name} ${t("marketplace.fromFavorites", "from favorites")}` : `${t("marketplace.add", "Add")} ${service.name} ${t("marketplace.toFavorites", "to favorites")}`}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-amber-400/15 hover:text-amber-500 btn-press"
           >
             <Star
@@ -1372,7 +1378,7 @@ function ServiceListRow({
               onToggleCompare();
             }}
             aria-pressed={isInComparison}
-            aria-label={isInComparison ? `Remove ${service.name} from comparison` : `Add ${service.name} to comparison`}
+            aria-label={isInComparison ? `${t("marketplace.remove", "Remove")} ${service.name} ${t("marketplace.fromComparison", "from comparison")}` : `${t("marketplace.add", "Add")} ${service.name} ${t("marketplace.toComparison", "to comparison")}`}
             className={cn(
               "inline-flex h-7 w-7 items-center justify-center rounded-full border transition-colors btn-press",
               isInComparison
@@ -1384,11 +1390,11 @@ function ServiceListRow({
           </button>
           <button
             onClick={(e) => { e.stopPropagation(); onClick(); }}
-            aria-label={`Order ${service.name} now`}
+            aria-label={`${t("marketplace.order", "Order")} ${service.name} ${t("marketplace.now", "now")}`}
             className="inline-flex items-center gap-1 rounded-full bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue btn-press"
           >
             <ShoppingCart className="h-3.5 w-3.5" />
-            Order
+            {t("marketplace.order", "Order")}
           </button>
         </div>
       </td>
@@ -1444,6 +1450,7 @@ function TrendingSection({
   currency: string;
   onSelect: (s: any) => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="rounded-2xl border border-border/60 bg-gradient-to-br from-amber-50/60 via-background to-background p-4">
       <div className="mb-3 flex items-center gap-2">
@@ -1451,9 +1458,9 @@ function TrendingSection({
           <Flame className="h-4 w-4" />
         </span>
         <div>
-          <div className="text-sm font-semibold text-foreground">Trending services</div>
+          <div className="text-sm font-semibold text-foreground">{t("marketplace.trending", "Trending services")}</div>
           <div className="text-[11px] text-muted-foreground">
-            Most established services on NOVSMM — chosen by catalog age.
+            {t("marketplace.trendingSubtitle", "Most established services on NOVSMM — chosen by catalog age.")}
           </div>
         </div>
       </div>
@@ -1463,7 +1470,7 @@ function TrendingSection({
             key={s.id}
             type="button"
             onClick={() => onSelect(s)}
-            aria-label={`Order ${s.name} — ${formatPrice(s.price, currency)} per 1000`}
+            aria-label={`${t("marketplace.order", "Order")} ${s.name} — ${formatPrice(s.price, currency)} ${t("marketplace.perThousand", "per 1000")}`}
             className="group flex w-[200px] shrink-0 flex-col gap-2 rounded-xl border border-border/60 bg-background p-3 text-left transition-all hover:-translate-y-0.5 hover:nov-ring-md stat-card-3d focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary btn-press"
           >
             <div className="flex items-center gap-2">
@@ -1480,7 +1487,7 @@ function TrendingSection({
             <div className="flex items-center justify-between gap-2">
               <div>
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Per 1000
+                  {t("marketplace.perThousand", "Per 1000")}
                 </div>
                 <div className="text-sm font-semibold tabular-nums text-foreground">
                   {formatPrice(s.price, currency)}
@@ -1488,7 +1495,7 @@ function TrendingSection({
               </div>
               <span className="inline-flex items-center gap-1 rounded-full bg-primary px-2.5 py-1 text-[11px] font-medium text-primary-foreground transition-shadow group-hover:nov-shadow-blue">
                 <ShoppingCart className="h-3 w-3" />
-                Order
+                {t("marketplace.order", "Order")}
               </span>
             </div>
           </button>
@@ -1511,12 +1518,13 @@ function CompareBar({
   onOpen: () => void;
   onClear: () => void;
 }) {
+  const { t } = useLanguage();
   return (
     <div
       className="fixed inset-x-0 bottom-0 z-[60] border-t border-border bg-background/95 px-4 py-3 backdrop-blur-md"
       style={{ paddingBottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
       role="region"
-      aria-label="Comparison tray"
+      aria-label={t("marketplace.comparisonTray", "Comparison tray")}
     >
       <div className="mx-auto flex max-w-2xl items-center justify-between gap-3">
         <div className="flex items-center gap-2 text-sm font-medium text-foreground">
@@ -1524,9 +1532,9 @@ function CompareBar({
             <GitCompare className="h-4 w-4" />
           </span>
           <span>
-            Compare ({count})
+            {t("marketplace.compare", "Compare")} ({count})
             <span className="ml-1 text-xs font-normal text-muted-foreground">
-              {count >= MAX_COMPARISON ? "· max reached" : "· pick another to add"}
+              {count >= MAX_COMPARISON ? `· ${t("marketplace.maxReached", "max reached")}` : `· ${t("marketplace.pickAnother", "pick another to add")}`}
             </span>
           </span>
         </div>
@@ -1535,17 +1543,17 @@ function CompareBar({
             type="button"
             onClick={onClear}
             className="inline-flex items-center gap-1 rounded-full border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors btn-press"
-            aria-label="Clear comparison list"
+            aria-label={t("marketplace.clearComparison", "Clear comparison list")}
           >
             <X className="h-3.5 w-3.5" />
-            Clear
+            {t("marketplace.clear", "Clear")}
           </button>
           <button
             type="button"
             onClick={onOpen}
             className="inline-flex items-center gap-1 rounded-full bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue btn-press"
           >
-            Compare now
+            {t("marketplace.compareNow", "Compare now")}
             <ArrowRight className="h-3.5 w-3.5" />
           </button>
         </div>
@@ -1570,9 +1578,10 @@ function CompareModal({
   onClose: () => void;
   onRemove: (id: string) => void;
 }) {
+  const { t } = useLanguage();
   const rows: { label: string; render: (s: any) => React.ReactNode }[] = [
     {
-      label: "Price / 1000",
+      label: t("marketplace.pricePerThousand", "Price / 1000"),
       render: (s) => (
         <span className="font-semibold tabular-nums text-foreground">
           {formatPrice(s.price, currency)}
@@ -1580,11 +1589,11 @@ function CompareModal({
       ),
     },
     {
-      label: "Delivery time",
+      label: t("marketplace.deliveryTime", "Delivery time"),
       render: (s) => <span className="text-foreground">{s.deliveryTime}</span>,
     },
     {
-      label: "Min / Max qty",
+      label: t("marketplace.minMaxQty", "Min / Max qty"),
       render: (s) => (
         <span className="tabular-nums text-foreground">
           {s.minQty.toLocaleString()} – {s.maxQty.toLocaleString()}
@@ -1592,7 +1601,7 @@ function CompareModal({
       ),
     },
     {
-      label: "Quality",
+      label: t("marketplace.quality", "Quality"),
       render: (s) => {
         const q = QUALITY_BADGES[s.quality] ?? QUALITY_BADGES.standard;
         return (
@@ -1608,7 +1617,7 @@ function CompareModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Compare services"
+      aria-label={t("marketplace.compareServices", "Compare services")}
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1619,7 +1628,7 @@ function CompareModal({
         <button
           onClick={onClose}
           className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close comparison"
+          aria-label={t("marketplace.closeComparison", "Close comparison")}
         >
           <X className="h-5 w-5" />
         </button>
@@ -1629,9 +1638,9 @@ function CompareModal({
             <GitCompare className="h-6 w-6" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">Compare services</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("marketplace.compareServices", "Compare services")}</h2>
             <p className="text-xs text-muted-foreground">
-              Side-by-side view of {services.length} services. Click ✕ to remove.
+              {t("marketplace.sideBySide", "Side-by-side view of")} {services.length} {t("marketplace.services", "services")}. {t("marketplace.clickRemove", "Click ✕ to remove.")}
             </p>
           </div>
         </div>
@@ -1641,7 +1650,7 @@ function CompareModal({
             <thead>
               <tr>
                 <th className="w-32 px-3 py-2 text-left text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Attribute
+                  {t("marketplace.attribute", "Attribute")}
                 </th>
                 {services.map((s) => (
                   <th key={s.id} className="px-3 py-2 text-left align-top">
@@ -1658,7 +1667,7 @@ function CompareModal({
                       <button
                         type="button"
                         onClick={() => onRemove(s.id)}
-                        aria-label={`Remove ${s.name} from comparison`}
+                        aria-label={`${t("marketplace.remove", "Remove")} ${s.name} ${t("marketplace.fromComparison", "from comparison")}`}
                         className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-muted-foreground hover:bg-red-500/10 hover:text-red-600 btn-press"
                       >
                         <X className="h-3.5 w-3.5" />
@@ -1686,7 +1695,7 @@ function CompareModal({
         </div>
 
         <p className="mt-4 text-center text-[11px] text-muted-foreground">
-          Tip: pick up to {MAX_COMPARISON} services for an at-a-glance comparison.
+          {t("marketplace.compareTip", "Tip: pick up to")} {MAX_COMPARISON} {t("marketplace.servicesForComparison", "services for an at-a-glance comparison.")}
         </p>
       </div>
     </div>
@@ -1706,6 +1715,7 @@ function ServiceDetailModal({
   const { data: sessionData } = useSession();
   const { setDashboardTab } = useApp();
   const { toast } = useToast();
+  const { t } = useLanguage();
   // MARKETPLACE-13-IMPROVEMENTS #9 — star ratings in the detail modal.
   // We instantiate the hook locally so the modal can both READ the current
   // rating and WRITE a new rating without needing to lift state up. The
@@ -1741,8 +1751,8 @@ function ServiceDetailModal({
     rateService(service.id, rating);
     setHoverRating(0);
     toast({
-      title: "Thanks for rating!",
-      description: `You rated ${service.name} ${rating} star${rating > 1 ? "s" : ""}.`,
+      title: t("marketplace.ratingThanks", "Thanks for rating!"),
+      description: `${t("marketplace.youRated", "You rated")} ${service.name} ${rating} ${t("marketplace.stars", "stars")}.`,
     });
   };
 
@@ -1757,8 +1767,8 @@ function ServiceDetailModal({
         dripDelay: dripFeed ? dripDelay : undefined,
       });
       toast({
-        title: "Order placed",
-        description: "Your order is now processing",
+        title: t("marketplace.orderPlaced", "Order placed"),
+        description: t("marketplace.orderProcessing", "Your order is now processing"),
       });
       onClose();
     } catch {
@@ -1770,7 +1780,7 @@ function ServiceDetailModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Service details"
+      aria-label={t("marketplace.serviceDetails", "Service details")}
       className="fixed inset-0 z-[70] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -1781,7 +1791,7 @@ function ServiceDetailModal({
         <button
           onClick={onClose}
           className="sticky top-0 z-10 ml-auto flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground backdrop-blur-sm transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("common.close", "Close")}
         >
           <X className="h-5 w-5" />
         </button>
@@ -1809,10 +1819,10 @@ function ServiceDetailModal({
 
         {/* Specs grid */}
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <Spec icon={<Clock className="h-4 w-4" />} label="Delivery time" value={service.deliveryTime} />
-          <Spec icon={<TrendingUp className="h-4 w-4" />} label="Speed" value={service.rate} />
-          <Spec icon={<Zap className="h-4 w-4" />} label="Min quantity" value={service.minQty.toLocaleString()} />
-          <Spec icon={<Star className="h-4 w-4" />} label="Max quantity" value={service.maxQty.toLocaleString()} />
+          <Spec icon={<Clock className="h-4 w-4" />} label={t("marketplace.deliveryTime", "Delivery time")} value={service.deliveryTime} />
+          <Spec icon={<TrendingUp className="h-4 w-4" />} label={t("marketplace.speed", "Speed")} value={service.rate} />
+          <Spec icon={<Zap className="h-4 w-4" />} label={t("marketplace.minQuantity", "Min quantity")} value={service.minQty.toLocaleString()} />
+          <Spec icon={<Star className="h-4 w-4" />} label={t("marketplace.maxQuantity", "Max quantity")} value={service.maxQty.toLocaleString()} />
         </div>
 
         {/* MARKETPLACE-13-IMPROVEMENTS #9 — Reviews / ratings block.
@@ -1822,7 +1832,7 @@ function ServiceDetailModal({
           <div className="flex items-center justify-between gap-3">
             <div>
               <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                Your rating
+                {t("marketplace.yourRating", "Your rating")}
               </div>
               {currentRating ? (
                 <div className="mt-1 flex items-center gap-2">
@@ -1843,22 +1853,22 @@ function ServiceDetailModal({
                     {currentRating.rating.toFixed(1)}
                   </span>
                   <span className="text-xs text-muted-foreground tabular-nums">
-                    ({currentRating.count} review{currentRating.count > 1 ? "s" : ""})
+                    ({currentRating.count} {t("marketplace.reviews", "reviews")})
                   </span>
                 </div>
               ) : (
                 <div className="mt-1 text-xs text-muted-foreground">
-                  No ratings yet — be the first to review.
+                  {t("marketplace.noRatings", "No ratings yet — be the first to review.")}
                 </div>
               )}
             </div>
           </div>
           <div className="mt-3 border-t border-border/60 pt-3">
-            <div className="text-xs font-medium text-muted-foreground">Rate this service</div>
+            <div className="text-xs font-medium text-muted-foreground">{t("marketplace.rateService", "Rate this service")}</div>
             <div
               className="mt-1.5 flex items-center gap-1"
               role="radiogroup"
-              aria-label="Rate this service from 1 to 5 stars"
+              aria-label={t("marketplace.rateStars", "Rate this service from 1 to 5 stars")}
             >
               {Array.from({ length: 5 }).map((_, i) => {
                 const value = i + 1;
@@ -1890,8 +1900,8 @@ function ServiceDetailModal({
               })}
               <span className="ml-2 text-xs text-muted-foreground">
                 {hoverRating
-                  ? `Click to submit ${hoverRating} star${hoverRating > 1 ? "s" : ""}`
-                  : "Hover and click to rate"}
+                  ? `${t("marketplace.clickSubmit", "Click to submit")} ${hoverRating} ${t("marketplace.stars", "stars")}`
+                  : t("marketplace.hoverRate", "Hover and click to rate")}
               </span>
             </div>
           </div>
@@ -1900,11 +1910,11 @@ function ServiceDetailModal({
         {/* Price breakdown */}
         <div className="mt-4 rounded-xl border border-border/60 p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Price per 1000</span>
+            <span className="text-muted-foreground">{t("marketplace.pricePerThousand", "Price per 1000")}</span>
             <span className="font-semibold tabular-nums">{formatPrice(service.price, currency)}</span>
           </div>
           <div className="mt-1 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Your balance</span>
+            <span className="text-muted-foreground">{t("marketplace.yourBalance", "Your balance")}</span>
             <span className={cn("font-semibold tabular-nums", sufficient ? "text-emerald-600" : "text-red-600")}>
               {formatPrice(balance, currency)}
             </span>
@@ -1914,7 +1924,7 @@ function ServiceDetailModal({
         {/* Order form */}
         <div className="mt-4">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Quantity ({service.minQty.toLocaleString()} - {service.maxQty.toLocaleString()})
+            {t("marketplace.quantity", "Quantity")} ({service.minQty.toLocaleString()} - {service.maxQty.toLocaleString()})
           </label>
           <div className="flex items-center gap-2">
             <input
@@ -1946,13 +1956,13 @@ function ServiceDetailModal({
 
         <div className="mt-4">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Link (optional — for services that need a target URL)
+            {t("marketplace.linkOptional", "Link (optional — for services that need a target URL)")}
           </label>
           <input
             type="url"
             value={link}
             onChange={(e) => setLink(e.target.value)}
-            placeholder="https://instagram.com/yourpost"
+            placeholder={t("marketplace.linkPlaceholder", "https://instagram.com/yourpost")}
             className="h-11 w-full rounded-xl border border-border bg-background px-4 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
           />
         </div>
@@ -1965,9 +1975,9 @@ function ServiceDetailModal({
                 <Droplets className="h-4 w-4" />
               </span>
               <div>
-                <div className="text-sm font-semibold text-foreground">Drip-feed delivery</div>
+                <div className="text-sm font-semibold text-foreground">{t("marketplace.dripFeed", "Drip-feed delivery")}</div>
                 <div className="text-[11px] text-muted-foreground">
-                  Split your order into smaller chunks delivered over time for a natural growth pattern.
+                  {t("marketplace.dripFeedDescription", "Split your order into smaller chunks delivered over time for a natural growth pattern.")}
                 </div>
               </div>
             </div>
@@ -1993,7 +2003,7 @@ function ServiceDetailModal({
           {dripFeed && (
             <div className="tab-content-enter mt-3 grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Days (chunks)</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("marketplace.daysChunks", "Days (chunks)")}</span>
                 <input
                   type="number"
                   min={1}
@@ -2006,7 +2016,7 @@ function ServiceDetailModal({
                 />
               </label>
               <label className="block">
-                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">Delay (minutes)</span>
+                <span className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("marketplace.delayMinutes", "Delay (minutes)")}</span>
                 <input
                   type="number"
                   min={0}
@@ -2019,7 +2029,7 @@ function ServiceDetailModal({
                 />
               </label>
               <div className="col-span-2 rounded-lg bg-primary/5 px-3 py-2 text-xs">
-                <span className="text-muted-foreground">Preview: </span>
+                <span className="text-muted-foreground">{t("marketplace.preview", "Preview")}: </span>
                 <span className="font-semibold text-foreground">
                   {perChunk.toLocaleString()}/day for {safeDays} day{safeDays > 1 ? "s" : ""}
                   {remainder > 0 ? ` + ${remainder} extra on final day` : ""}
@@ -2035,7 +2045,7 @@ function ServiceDetailModal({
         {/* Total + submit */}
         <div className="mt-5 flex items-center justify-between rounded-xl bg-muted/40 px-4 py-3">
           <div>
-            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total cost</div>
+            <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("marketplace.totalCost", "Total cost")}</div>
             <div className="text-2xl font-semibold tabular-nums text-foreground">{totalPriceLocal}</div>
           </div>
           <div className="text-right text-[11px] text-muted-foreground">
@@ -2061,13 +2071,13 @@ function ServiceDetailModal({
           {createOrder.isPending ? (
             <>
               <Loader2 className="h-4 w-4 animate-spin" />
-              Placing order…
+              {t("marketplace.placingOrder", "Placing order…")}
             </>
           ) : !sufficient ? (
-            "Insufficient balance — top up your wallet"
+            t("marketplace.insufficientBalance", "Insufficient balance — top up your wallet")
           ) : (
             <>
-              {dripFeed ? "Place drip-feed order" : "Place order"} · {totalPriceLocal}
+              {dripFeed ? t("marketplace.placeDripOrder", "Place drip-feed order") : t("marketplace.placeOrder", "Place order")} · {totalPriceLocal}
               <ArrowRight className="h-4 w-4" />
             </>
           )}

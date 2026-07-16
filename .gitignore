@@ -55,8 +55,13 @@ server.log
 /skills/tool-results/
 upload/
 
+# Internal agent context and audit captures must never be committed.
+/agent-ctx/
+/audit/
+
 # Sandbox artifacts
 /tool-results/
 /db/custom.db
 /db/*.db
 /db/*.db-journal
+/.vitest-tmp/

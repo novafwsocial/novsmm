@@ -30,6 +30,7 @@ import { Counter } from "./counter";
 import { PlatformLogo } from "./platform-logo";
 import { formatPrice } from "@/lib/currency-utils";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 /**
  * SMM Subscriptions dashboard tab.
@@ -59,6 +60,7 @@ const STATUS_STYLES: Record<string, { label: string; cls: string; dot: string }>
 };
 
 export function DashboardSubscriptions() {
+  const { t } = useLanguage();
   const { data, isLoading } = useSmmSubscriptions();
   const [showCreate, setShowCreate] = useState(false);
 
@@ -79,20 +81,20 @@ export function DashboardSubscriptions() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Subscriptions
+              {t("subscriptions.eyebrow", "Subscriptions")}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              SMM Subscriptions
+              {t("subscriptions.title", "SMM Subscriptions")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Auto-deliver likes/followers to every new post.
+              {t("subscriptions.subtitle", "Auto-deliver likes/followers to every new post.")}
             </p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
           >
-            <Plus className="h-3.5 w-3.5" /> Create subscription
+            <Plus className="h-3.5 w-3.5" /> {t("subscriptions.create", "Create subscription")}
           </button>
         </div>
       </Reveal>
@@ -100,21 +102,21 @@ export function DashboardSubscriptions() {
       {/* Top stats */}
       <RevealStagger stagger={0.06} className="grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-4">
         <RevealItem>
-          <StatCard label="Active" value={stats.active} icon={<Sparkles className="h-4 w-4" />} />
+          <StatCard label={t("subscriptions.active", "Active")} value={stats.active} icon={<Sparkles className="h-4 w-4" />} />
         </RevealItem>
         <RevealItem>
           <StatCard
-            label="Posts delivered"
+            label={t("subscriptions.postsDelivered", "Posts delivered")}
             value={stats.postsProcessed}
             sub={`/ ${stats.totalPosts}`}
             icon={<Hash className="h-4 w-4" />}
           />
         </RevealItem>
         <RevealItem>
-          <StatCard label="Total subscriptions" value={subscriptions.length} icon={<CalendarClock className="h-4 w-4" />} />
+          <StatCard label={t("subscriptions.totalSubscriptions", "Total subscriptions")} value={subscriptions.length} icon={<CalendarClock className="h-4 w-4" />} />
         </RevealItem>
         <RevealItem>
-          <StatCard label="Total spent" value={`$${stats.totalSpent.toFixed(2)}`} icon={<TrendingUp className="h-4 w-4" />} />
+        <StatCard label={t("subscriptions.totalSpent", "Total spent")} value={`$${stats.totalSpent.toFixed(2)}`} icon={<TrendingUp className="h-4 w-4" />} />
         </RevealItem>
       </RevealStagger>
 
@@ -173,21 +175,21 @@ function StatCard({
 
 // ─────────── Empty state ───────────
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background px-6 py-16 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
         <CalendarClock className="h-7 w-7" />
       </div>
-      <h3 className="mt-4 text-lg font-semibold text-foreground">No subscriptions yet</h3>
+      <h3 className="mt-4 text-lg font-semibold text-foreground">{t("subscriptions.emptyTitle", "No subscriptions yet")}</h3>
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
-        Create one to auto-deliver to every new post. Pick a service, target @username,
-        and per-post quantity range — we&apos;ll handle the rest.
+        {t("subscriptions.emptyDescription", "Create one to auto-deliver to every new post. Pick a service, target @username, and per-post quantity range — we&apos;ll handle the rest.")}
       </p>
       <button
         onClick={onCreate}
         className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
       >
-        <Plus className="h-4 w-4" /> Create subscription
+        <Plus className="h-4 w-4" /> {t("subscriptions.create", "Create subscription")}
       </button>
     </div>
   );
@@ -195,6 +197,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 // ─────────── Subscription card ───────────
 function SubscriptionCard({ subscription: s, index }: { subscription: any; index: number }) {
+  const { t } = useLanguage();
   const updateMutation = useUpdateSmmSubscription();
   const status = STATUS_STYLES[s.status] ?? STATUS_STYLES.active;
   const progressPct = s.posts > 0 ? Math.round((s.postsProcessed / s.posts) * 100) : 0;
@@ -232,30 +235,30 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
           )}
         >
           <span className={cn("h-1.5 w-1.5 rounded-full", status.dot)} />
-          {status.label}
+          {t(`subscriptions.status.${s.status}` as any, status.label)}
         </span>
       </div>
 
       {/* Target + range */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Target</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("subscriptions.target", "Target")}</div>
           <div className="mt-0.5 truncate font-medium text-foreground">@{s.username}</div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Per-post qty</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("subscriptions.perPostQty", "Per-post qty")}</div>
           <div className="mt-0.5 font-medium text-foreground">
             {s.minQuantity.toLocaleString()}–{s.maxQuantity.toLocaleString()}
           </div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Expiry</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("subscriptions.expiry", "Expiry")}</div>
           <div className={cn("mt-0.5 font-medium", expired ? "text-red-600" : "text-foreground")}>
             {new Date(s.expiry).toLocaleDateString()}
           </div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Total spent</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("subscriptions.totalSpent", "Total spent")}</div>
           <div className="mt-0.5 font-semibold tabular-nums text-emerald-600">${s.totalSpent.toFixed(2)}</div>
         </div>
       </div>
@@ -263,7 +266,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
       {/* Progress */}
       <div>
         <div className="mb-1.5 flex items-center justify-between text-[11px] text-muted-foreground">
-          <span className="uppercase tracking-wider">Posts covered</span>
+          <span className="uppercase tracking-wider">{t("subscriptions.postsCovered", "Posts covered")}</span>
           <span className="tabular-nums">
             {s.postsProcessed} / {s.posts} · {progressPct}%
           </span>
@@ -286,8 +289,8 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
         <span className="inline-flex items-center gap-1">
           <Clock className="h-3 w-3" />
           {s.lastCheckedAt
-            ? `Last check ${new Date(s.lastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
-            : "Pending first check"}
+            ? `${t("subscriptions.lastCheck", "Last check")} ${new Date(s.lastCheckedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`
+            : t("subscriptions.pendingFirstCheck", "Pending first check")}
         </span>
         {s.lastPostUrl && (
           <a
@@ -297,7 +300,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
             className="inline-flex items-center gap-1 text-primary hover:underline"
             onClick={(e) => e.stopPropagation()}
           >
-            <ExternalLink className="h-3 w-3" /> Last post
+            <ExternalLink className="h-3 w-3" /> {t("subscriptions.lastPost", "Last post")}
           </a>
         )}
       </div>
@@ -310,7 +313,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
             disabled={updateMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
           >
-            <Pause className="h-3 w-3" /> Pause
+            <Pause className="h-3 w-3" /> {t("subscriptions.pause", "Pause")}
           </button>
         )}
         {canResume && (
@@ -319,7 +322,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
             disabled={updateMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
           >
-            <Play className="h-3 w-3" /> Resume
+            <Play className="h-3 w-3" /> {t("subscriptions.resume", "Resume")}
           </button>
         )}
         {canCancel && (
@@ -328,22 +331,22 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
             disabled={updateMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-50"
           >
-            <Ban className="h-3 w-3" /> Cancel
+            <Ban className="h-3 w-3" /> {t("subscriptions.cancel", "Cancel")}
           </button>
         )}
         {s.status === "completed" && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-blue-500/10 px-3 py-1.5 text-xs font-medium text-blue-700">
-            <CheckCircle2 className="h-3 w-3" /> All posts delivered
+            <CheckCircle2 className="h-3 w-3" /> {t("subscriptions.allPostsDelivered", "All posts delivered")}
           </span>
         )}
         {s.status === "expired" && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            <Clock className="h-3 w-3" /> Expired before completion
+            <Clock className="h-3 w-3" /> {t("subscriptions.expiredBeforeCompletion", "Expired before completion")}
           </span>
         )}
         {s.status === "cancelled" && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            <Ban className="h-3 w-3" /> Cancelled
+            <Ban className="h-3 w-3" /> {t("subscriptions.cancelled", "Cancelled")}
           </span>
         )}
       </div>
@@ -353,6 +356,7 @@ function SubscriptionCard({ subscription: s, index }: { subscription: any; index
 
 // ─────────── Create subscription modal ───────────
 function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
+  const { t } = useLanguage();
   const { data: servicesData, isLoading: servicesLoading } = useAllServices();
   const { data: walletData } = useWallet();
   const { data: sessionData } = useSession();
@@ -425,7 +429,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Create subscription"
+      aria-label={t("subscriptions.createDialog", "Create subscription")}
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -438,7 +442,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         <button
           onClick={onClose}
           className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("common.close", "Close")}
         >
           <X className="h-5 w-5" />
         </button>
@@ -449,9 +453,11 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
             <CalendarClock className="h-6 w-6" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">New SMM subscription</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("subscriptions.newTitle", "New SMM subscription")}</h2>
             <p className="text-xs text-muted-foreground">
-              Auto-deliver to every new post for {expiryDays} days (or until {posts} posts covered).
+              {t("subscriptions.newSubtitle", "Auto-deliver to every new post for {days} days (or until {posts} posts covered).")
+                .replace("{days}", String(expiryDays))
+                .replace("{posts}", String(posts))}
             </p>
           </div>
         </div>
@@ -459,11 +465,11 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         {/* Service select */}
         <div className="mt-5">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Service
+            {t("subscriptions.service", "Service")}
           </label>
           {servicesLoading ? (
             <div className="flex h-11 items-center gap-2 rounded-xl border border-border bg-background px-4 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" /> Loading services…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("subscriptions.loadingServices", "Loading services…")}
             </div>
           ) : (
             <select
@@ -471,7 +477,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
               onChange={(e) => handleServiceChange(e.target.value)}
               className="h-11 w-full rounded-xl border border-border bg-background px-3 text-base text-foreground focus:outline-none focus:shadow-[0_0_0_4px_rgba(0,82,255,0.12)]"
             >
-              <option value="">Select a service…</option>
+              <option value="">{t("subscriptions.selectService", "Select a service…")}</option>
               {services.map((s: any) => (
                 <option key={s.id} value={s.id}>
                   {s.platform} · {s.name} ({formatPrice(s.price, currency)}/1k)
@@ -481,8 +487,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
           )}
           {selectedService && (
             <div className="mt-1.5 text-[11px] text-muted-foreground">
-              Min {selectedService.minQty.toLocaleString()} · Max {selectedService.maxQty.toLocaleString()} ·{" "}
-              {formatPrice(selectedService.price, currency)} per 1000 units
+              {t("subscriptions.min", "Min")} {selectedService.minQty.toLocaleString()} · {t("subscriptions.max", "Max")} {selectedService.maxQty.toLocaleString()} · {formatPrice(selectedService.price, currency)} {t("subscriptions.per1000", "per 1000 units")}
             </div>
           )}
         </div>
@@ -491,7 +496,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Username <span className="text-red-500">*</span>
+              {t("subscriptions.username", "Username")} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -503,7 +508,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Profile link (optional)
+              {t("subscriptions.profileLink", "Profile link (optional)")}
             </label>
             <input
               type="url"
@@ -519,7 +524,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         <div className="mt-4 grid grid-cols-2 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Min qty / post
+              {t("subscriptions.minQtyPost", "Min qty / post")}
             </label>
             <input
               type="number"
@@ -532,7 +537,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Max qty / post
+              {t("subscriptions.maxQtyPost", "Max qty / post")}
             </label>
             <input
               type="number"
@@ -549,7 +554,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         <div className="mt-4 grid grid-cols-3 gap-3">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Posts (1-365)
+              {t("subscriptions.postsRange", "Posts (1-365)")}
             </label>
             <input
               type="number"
@@ -562,7 +567,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Delay (min)
+              {t("subscriptions.delayMin", "Delay (min)")}
             </label>
             <input
               type="number"
@@ -575,7 +580,7 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Expiry (days)
+              {t("subscriptions.expiryDays", "Expiry (days)")}
             </label>
             <input
               type="number"
@@ -591,26 +596,26 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         {/* Cost estimate */}
         <div className="mt-4 rounded-xl border border-border/60 p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Per-post cost (max)</span>
+            <span className="text-muted-foreground">{t("subscriptions.perPostCost", "Per-post cost (max)")}</span>
             <span className="font-semibold tabular-nums">
               {formatPrice(selectedService ? (selectedService.price * maxQuantity) / 1000 : 0, currency)}
             </span>
           </div>
           <div className="mt-1 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">× {posts} posts</span>
+            <span className="text-muted-foreground">× {posts} {t("subscriptions.posts", "posts")}</span>
             <span className="font-semibold tabular-nums">
               {formatPrice(estimatedCost, currency)}
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-sm">
-            <span className="text-muted-foreground">Your balance</span>
+            <span className="text-muted-foreground">{t("subscriptions.yourBalance", "Your balance")}</span>
             <span className={cn("font-semibold tabular-nums", sufficient ? "text-emerald-600" : "text-red-600")}>
               {formatPrice(balance, currency)}
             </span>
           </div>
           {!sufficient && estimatedCost > 0 && (
             <div className="mt-2 rounded-lg bg-red-500/5 px-3 py-2 text-[11px] text-red-600">
-              Insufficient balance. Top up your wallet to cover the estimated cost.
+              {t("subscriptions.insufficientBalance", "Insufficient balance. Top up your wallet to cover the estimated cost.")}
             </div>
           )}
         </div>
@@ -626,11 +631,11 @@ function CreateSubscriptionModal({ onClose }: { onClose: () => void }) {
         >
           {createMutation.isPending ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" /> Creating…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("subscriptions.creating", "Creating…")}
             </>
           ) : (
             <>
-              <CalendarClock className="h-4 w-4" /> Create subscription
+              <CalendarClock className="h-4 w-4" /> {t("subscriptions.create", "Create subscription")}
             </>
           )}
         </button>

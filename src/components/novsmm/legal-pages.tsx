@@ -48,20 +48,20 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
           <h2 className="text-xl font-semibold text-foreground">By the numbers</h2>
           <div className="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-              <div className="text-2xl font-bold text-foreground">6,382</div>
-              <div className="text-xs text-muted-foreground">Active services</div>
+              <div className="text-2xl font-bold text-foreground">Live</div>
+              <div className="text-xs text-muted-foreground">Service catalog</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
               <div className="text-2xl font-bold text-foreground">16+</div>
               <div className="text-xs text-muted-foreground">Social platforms</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-              <div className="text-2xl font-bold text-foreground">5</div>
+              <div className="text-2xl font-bold text-foreground">4</div>
               <div className="text-xs text-muted-foreground">Payment gateways</div>
             </div>
             <div className="rounded-xl border border-border/60 bg-muted/20 p-4">
-              <div className="text-2xl font-bold text-foreground">99.99%</div>
-              <div className="text-xs text-muted-foreground">Uptime SLA</div>
+              <div className="text-2xl font-bold text-foreground">Live</div>
+              <div className="text-xs text-muted-foreground">Current status</div>
             </div>
           </div>
         </section>
@@ -332,7 +332,7 @@ const PAGES: Record<LegalPageType, { title: string; subtitle: string; content: R
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Everything in Agency, plus:</li>
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> White-label licensing + custom branding</li>
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Dedicated account manager</li>
-                <li className="flex items-start gap-2"><span className="text-primary">✓</span> Custom SLA (99.99% uptime target)</li>
+                <li className="flex items-start gap-2"><span className="text-primary">✓</span> Service-level terms defined per contract</li>
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Unlimited API requests</li>
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Live chat support · 2h SLA</li>
                 <li className="flex items-start gap-2"><span className="text-primary">✓</span> Audit logs + CSV export</li>

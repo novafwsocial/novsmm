@@ -4,12 +4,17 @@
  * Switches the Prisma schema to SQLite for testing (no PostgreSQL needed),
  * pushes the schema to a temp DB, and provides cleanup helpers.
  */
-import { execSync } from "child_process";
-import { rmSync, readFileSync, writeFileSync } from "fs";
+import { execFileSync } from "child_process";
+import { mkdirSync, rmSync, readFileSync, writeFileSync } from "fs";
+import { createRequire } from "module";
+import { resolve } from "path";
 
 // Use a temp SQLite DB for tests
-const TEST_DB_PATH = "/tmp/novsmm-test.db";
+const TEST_DIR = resolve(process.cwd(), ".vitest-tmp");
+const TEST_DB_PATH = `${TEST_DIR}/novsmm-test.db`;
 const TEST_DATABASE_URL = `file:${TEST_DB_PATH}`;
+const TEST_SCHEMA_PATH = `${TEST_DIR}/schema.prisma`;
+const TEST_CLIENT_PATH = `${TEST_DIR}/client`;
 
 // Set env vars BEFORE any imports that use them
 (process.env as any).DATABASE_URL = TEST_DATABASE_URL;
@@ -20,37 +25,43 @@ const TEST_DATABASE_URL = `file:${TEST_DB_PATH}`;
 
 // Delete old test DB
 try {
+  rmSync(TEST_DIR, { recursive: true, force: true });
+  mkdirSync(TEST_DIR, { recursive: true });
   rmSync(TEST_DB_PATH, { force: true });
 } catch {}
 
-// Temporarily switch schema to SQLite for testing
-const SCHEMA_PATH = "prisma/schema.prisma";
-const originalSchema = readFileSync(SCHEMA_PATH, "utf8");
+// Build a private SQLite schema/client. The production schema and generated
+// @prisma/client are never modified by the test suite.
+const productionSchemaPath = resolve(process.cwd(), "prisma/schema.prisma");
+const originalSchema = readFileSync(productionSchemaPath, "utf8");
 const testSchema = originalSchema.replace(
   'provider = "postgresql"',
-  'provider = "sqlite"'
+  'provider = "sqlite"',
+).replace(
+  'generator client {\n  provider = "prisma-client-js"\n}',
+  `generator client {\n  provider = "prisma-client-js"\n  output = "${TEST_CLIENT_PATH}"\n}`,
 );
-writeFileSync(SCHEMA_PATH, testSchema);
+writeFileSync(TEST_SCHEMA_PATH, testSchema);
 
-try {
-  // Push schema to SQLite
-  execSync("npx prisma db push --force-reset --accept-data-loss --skip-generate", {
-    stdio: "pipe",
-    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
-  });
+const prismaEnv = { ...process.env, DATABASE_URL: TEST_DATABASE_URL };
+const prismaBin = resolve(process.cwd(), "node_modules/.bin/prisma");
+execFileSync(prismaBin, [
+  "db",
+  "push",
+  "--schema",
+  TEST_SCHEMA_PATH,
+  "--force-reset",
+  "--accept-data-loss",
+  "--skip-generate",
+], { stdio: "pipe", env: prismaEnv });
+execFileSync(prismaBin, ["generate", "--schema", TEST_SCHEMA_PATH], {
+  stdio: "pipe",
+  env: prismaEnv,
+});
 
-  // Generate Prisma client for SQLite
-  execSync("npx prisma generate", {
-    stdio: "pipe",
-    env: { ...process.env, DATABASE_URL: TEST_DATABASE_URL },
-  });
-} finally {
-  // Restore the original schema (postgresql)
-  writeFileSync(SCHEMA_PATH, originalSchema);
-}
-
-// Re-import the db module after env setup
-import { db } from "@/lib/db";
+const require = createRequire(import.meta.url);
+const { PrismaClient } = require(`${TEST_CLIENT_PATH}/index.js`);
+export const db = new PrismaClient({ log: ["error"] });
 
 /**
  * Create a test user with a known password.
@@ -91,5 +102,3 @@ export async function cleanupTestData() {
   await db.setting.deleteMany({});
   await db.user.deleteMany({});
 }
-
-export { db };

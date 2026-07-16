@@ -33,6 +33,7 @@ import { Reveal, RevealStagger, RevealItem } from "./reveal";
 import { Counter } from "./counter";
 import { formatPrice } from "@/lib/currency-utils";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 /**
  * Child Panels dashboard tab.
@@ -85,6 +86,7 @@ const STATUS_STYLES: Record<
 };
 
 export function DashboardChildPanels() {
+  const { t } = useLanguage();
   const { data, isLoading } = useChildPanels();
   const [showCreate, setShowCreate] = useState(false);
   // The just-created API key — shown in a highlighted banner above the list.
@@ -120,20 +122,20 @@ export function DashboardChildPanels() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Reseller
+              {t("childPanels.eyebrow", "Reseller")}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              Child Panels
+              {t("childPanels.title", "Child Panels")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              White-label sub-panels for your reseller business.
+              {t("childPanels.subtitle", "White-label sub-panels for your reseller business.")}
             </p>
           </div>
           <button
             onClick={() => setShowCreate(true)}
             className="inline-flex items-center gap-1.5 rounded-full bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
           >
-            <Plus className="h-3.5 w-3.5" /> Purchase child panel
+            <Plus className="h-3.5 w-3.5" /> {t("childPanels.purchase", "Purchase child panel")}
           </button>
         </div>
       </Reveal>
@@ -141,18 +143,18 @@ export function DashboardChildPanels() {
       {/* Top stats */}
       <RevealStagger stagger={0.06} className="grid grid-cols-1 gap-3 sm:gap-4 sm:grid-cols-3">
         <RevealItem>
-          <StatCard label="Active panels" value={stats.active} icon={<Globe className="h-4 w-4" />} />
+          <StatCard label={t("childPanels.activePanels", "Active panels")} value={stats.active} icon={<Globe className="h-4 w-4" />} />
         </RevealItem>
         <RevealItem>
           <StatCard
-            label="Monthly fees"
+            label={t("childPanels.monthlyFees", "Monthly fees")}
             value={`$${stats.totalMonthly.toFixed(2)}`}
             icon={<DollarSign className="h-4 w-4" />}
           />
         </RevealItem>
         <RevealItem>
           <StatCard
-            label="Markup earned (est.)"
+            label={t("childPanels.markupEarned", "Markup earned (est.)")}
             value={`$${stats.markupEarned.toFixed(2)}`}
             icon={<TrendingUp className="h-4 w-4" />}
           />
@@ -213,6 +215,7 @@ function StatCard({
   value: number | string;
   icon: React.ReactNode;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="h-full rounded-2xl border border-border/60 bg-background p-4">
       <div className="flex items-center justify-between">
@@ -228,22 +231,21 @@ function StatCard({
 
 // ─────────── Empty state ───────────
 function EmptyState({ onCreate }: { onCreate: () => void }) {
+  const { t } = useLanguage();
   return (
     <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-border/60 bg-background px-6 py-16 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
         <Globe className="h-7 w-7" />
       </div>
-      <h3 className="mt-4 text-lg font-semibold text-foreground">No child panels yet</h3>
+      <h3 className="mt-4 text-lg font-semibold text-foreground">{t("childPanels.emptyTitle", "No child panels yet")}</h3>
       <p className="mt-1 max-w-md text-sm text-muted-foreground">
-        Purchase one to start your white-label reseller business. You&apos;ll get a
-        subdomain + API key auto-provisioned — your customers see your brand,
-        we do the fulfilment.
+        {t("childPanels.emptyDescription", "Purchase one to start your white-label reseller business. You'll get a subdomain + API key auto-provisioned — your customers see your brand, we do the fulfilment.")}
       </p>
       <button
         onClick={onCreate}
         className="mt-5 inline-flex items-center gap-1.5 rounded-full bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
       >
-        <Plus className="h-4 w-4" /> Purchase child panel
+        <Plus className="h-4 w-4" /> {t("childPanels.purchase", "Purchase child panel")}
       </button>
     </div>
   );
@@ -251,6 +253,7 @@ function EmptyState({ onCreate }: { onCreate: () => void }) {
 
 // ─────────── Child panel card ───────────
 function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
+  const { t } = useLanguage();
   const updateMutation = useUpdateChildPanel();
   const cancelMutation = useCancelChildPanel();
   const [editing, setEditing] = useState(false);
@@ -268,7 +271,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
   };
 
   const handleCancel = () => {
-    if (confirm(`Cancel ${p.name}? The subdomain will be released.`)) {
+    if (confirm(t("childPanels.confirmCancel", "Cancel {name}? The subdomain will be released.").replace("{name}", p.name))) {
       cancelMutation.mutate(p.id);
     }
   };
@@ -298,14 +301,14 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
           )}
         >
           <span className={cn("h-1.5 w-1.5 rounded-full", status.dot)} />
-          {status.label}
+          {t(`childPanels.status.${p.status}` as any, status.label)}
         </span>
       </div>
 
       {/* Subdomain + plan + markup + paidUntil */}
       <div className="grid grid-cols-2 gap-2 text-xs">
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Subdomain</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("childPanels.subdomain", "Subdomain")}</div>
           <a
             href={`https://${p.subdomain}.novsmm.shop`}
             target="_blank"
@@ -317,30 +320,30 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
           </a>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Plan</div>
-          <div className="mt-0.5 font-medium text-foreground">{planMeta.label}</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("childPanels.plan", "Plan")}</div>
+          <div className="mt-0.5 font-medium text-foreground">{t(`childPanels.plan.${p.plan}` as any, planMeta.label)}</div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Markup</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("childPanels.markup", "Markup")}</div>
           <div className="mt-0.5 font-semibold tabular-nums text-emerald-600">
             {p.markupPercent}%
           </div>
         </div>
         <div className="rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Monthly fee</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("childPanels.monthlyFee", "Monthly fee")}</div>
           <div className="mt-0.5 font-medium tabular-nums text-foreground">
             ${p.monthlyFee.toFixed(2)}/mo
           </div>
         </div>
         <div className="col-span-2 rounded-lg bg-muted/40 px-3 py-2">
-          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Paid until</div>
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">{t("childPanels.paidUntil", "Paid until")}</div>
           <div className={cn("mt-0.5 font-medium", expired ? "text-red-600" : "text-foreground")}>
             {paidUntilDate.toLocaleDateString(undefined, {
               year: "numeric",
               month: "short",
               day: "numeric",
             })}
-            {expired && " · expired"}
+            {expired && ` · ${t("childPanels.expired", "expired")}`}
           </div>
         </div>
       </div>
@@ -351,7 +354,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
           onClick={() => setEditing(true)}
           className="inline-flex items-center gap-1 rounded-lg bg-muted/60 px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-muted"
         >
-          <Pencil className="h-3 w-3" /> Edit
+          <Pencil className="h-3 w-3" /> {t("childPanels.edit", "Edit")}
         </button>
         {canSuspend && (
           <button
@@ -359,7 +362,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
             disabled={updateMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-amber-500/10 px-3 py-1.5 text-xs font-medium text-amber-700 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
           >
-            <Pause className="h-3 w-3" /> Suspend
+            <Pause className="h-3 w-3" /> {t("childPanels.suspend", "Suspend")}
           </button>
         )}
         {canResume && (
@@ -368,7 +371,7 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
             disabled={updateMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
           >
-            <Play className="h-3 w-3" /> Resume
+            <Play className="h-3 w-3" /> {t("childPanels.resume", "Resume")}
           </button>
         )}
         {canCancel && (
@@ -377,12 +380,12 @@ function ChildPanelCard({ panel: p, index }: { panel: any; index: number }) {
             disabled={cancelMutation.isPending}
             className="inline-flex items-center gap-1 rounded-lg bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-700 transition-colors hover:bg-red-500/20 disabled:opacity-50"
           >
-            <Ban className="h-3 w-3" /> Cancel
+            <Ban className="h-3 w-3" /> {t("childPanels.cancel", "Cancel")}
           </button>
         )}
         {p.status === "cancelled" && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-muted px-3 py-1.5 text-xs font-medium text-muted-foreground">
-            <Ban className="h-3 w-3" /> Cancelled
+            <Ban className="h-3 w-3" /> {t("childPanels.cancelled", "Cancelled")}
           </span>
         )}
       </div>
@@ -410,6 +413,7 @@ function CreatedKeyBanner({
   apiKey: string;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -436,13 +440,12 @@ function CreatedKeyBanner({
         <div className="flex-1">
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-foreground">
-              Child panel {panel.publicId} provisioned
+              {t("childPanels.provisioned", "Child panel {id} provisioned").replace("{id}", panel.publicId)}
             </h3>
             <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Save this API key now — it won&apos;t be shown again. Your panel is
-            live at{" "}
+            {t("childPanels.saveApiKey", "Save this API key now — it won't be shown again. Your panel is live at")}{" "}
             <a
               href={`https://${panel.subdomain}.novsmm.shop`}
               target="_blank"
@@ -468,11 +471,11 @@ function CreatedKeyBanner({
             >
               {copied ? (
                 <>
-                  <CheckCircle2 className="h-3.5 w-3.5" /> Copied
+                  <CheckCircle2 className="h-3.5 w-3.5" /> {t("childPanels.copied", "Copied")}
                 </>
               ) : (
                 <>
-                  <Copy className="h-3.5 w-3.5" /> Copy
+                  <Copy className="h-3.5 w-3.5" /> {t("childPanels.copy", "Copy")}
                 </>
               )}
             </button>
@@ -481,7 +484,7 @@ function CreatedKeyBanner({
         <button
           onClick={onClose}
           className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Dismiss"
+          aria-label={t("childPanels.dismiss", "Dismiss")}
         >
           <X className="h-4 w-4" />
         </button>
@@ -498,6 +501,7 @@ function CreateChildPanelModal({
   onClose: () => void;
   onCreated: (panel: any, apiKey: string) => void;
 }) {
+  const { t } = useLanguage();
   const { data: walletData } = useWallet();
   const { data: sessionData } = useSession();
   const user = (sessionData?.user as any) ?? {};
@@ -549,7 +553,7 @@ function CreateChildPanelModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Create child panel"
+      aria-label={t("childPanels.createDialog", "Create child panel")}
       className="fixed inset-0 z-[80] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -562,7 +566,7 @@ function CreateChildPanelModal({
         <button
           onClick={onClose}
           className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("common.close", "Close")}
         >
           <X className="h-5 w-5" />
         </button>
@@ -573,9 +577,9 @@ function CreateChildPanelModal({
             <Globe className="h-6 w-6" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-foreground">New child panel</h2>
+            <h2 className="text-lg font-semibold text-foreground">{t("childPanels.newTitle", "New child panel")}</h2>
             <p className="text-xs text-muted-foreground">
-              Auto-provisioned subdomain + API key · billed upfront for {monthlyDays} days.
+              {t("childPanels.newSubtitle", "Auto-provisioned subdomain + API key · billed upfront for {days} days.").replace("{days}", String(monthlyDays))}
             </p>
           </div>
         </div>
@@ -584,7 +588,7 @@ function CreateChildPanelModal({
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Panel name <span className="text-red-500">*</span>
+              {t("childPanels.panelName", "Panel name")} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -597,7 +601,7 @@ function CreateChildPanelModal({
           </div>
           <div>
             <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-              Subdomain <span className="text-red-500">*</span>
+              {t("childPanels.subdomain", "Subdomain")} <span className="text-red-500">*</span>
             </label>
             <div className="flex h-11 items-center rounded-xl border border-border bg-background pl-4 pr-2 text-sm">
               <input
@@ -616,7 +620,7 @@ function CreateChildPanelModal({
 
         {/* Plan select */}
         <div className="mt-4">
-          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">Plan</label>
+          <label className="mb-1.5 block text-xs font-medium text-muted-foreground">{t("childPanels.plan", "Plan")}</label>
           <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
             {(Object.keys(PLANS) as ("reseller" | "agency" | "enterprise")[]).map((k) => (
               <button
@@ -630,14 +634,14 @@ function CreateChildPanelModal({
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-semibold text-foreground">{PLANS[k].label}</span>
+                  <span className="text-sm font-semibold text-foreground">{t(`childPanels.plan.${k}` as any, PLANS[k].label)}</span>
                   {plan === k && <CheckCircle2 className="h-4 w-4 text-primary" />}
                 </div>
                 <div className="mt-0.5 text-[11px] font-medium tabular-nums text-emerald-600">
                   ${PLANS[k].monthly}/mo
                 </div>
                 <div className="mt-1 text-[11px] leading-snug text-muted-foreground">
-                  {PLANS[k].tagline}
+                  {t(`childPanels.tagline.${k}` as any, PLANS[k].tagline)}
                 </div>
               </button>
             ))}
@@ -647,7 +651,7 @@ function CreateChildPanelModal({
         {/* Markup slider */}
         <div className="mt-4">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Markup over parent prices: <span className="font-semibold text-foreground">{markupPercent}%</span>
+            {t("childPanels.markupOver", "Markup over parent prices:")} <span className="font-semibold text-foreground">{markupPercent}%</span>
           </label>
           <input
             type="range"
@@ -658,16 +662,16 @@ function CreateChildPanelModal({
             className="h-2 w-full appearance-none rounded-full bg-muted accent-primary"
           />
           <div className="mt-1 flex justify-between text-[11px] text-muted-foreground">
-            <span>0% (at cost)</span>
+            <span>{t("childPanels.atCost", "0% (at cost)")}</span>
             <span>50%</span>
-            <span>100% (2× cost)</span>
+            <span>{t("childPanels.doubleCost", "100% (2× cost)")}</span>
           </div>
         </div>
 
         {/* Duration */}
         <div className="mt-4">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Duration (days, 1-365)
+            {t("childPanels.duration", "Duration (days, 1-365)")}
           </label>
           <div className="flex flex-wrap gap-2">
             {[30, 90, 365].map((d) => (
@@ -681,7 +685,7 @@ function CreateChildPanelModal({
                     : "bg-muted/60 text-foreground hover:bg-muted"
                 )}
               >
-                {d === 30 ? "30 days" : d === 90 ? "90 days" : "1 year (365d)"}
+                {d === 30 ? t("childPanels.30Days", "30 days") : d === 90 ? t("childPanels.90Days", "90 days") : t("childPanels.year365", "1 year (365d)")}
               </button>
             ))}
             <input
@@ -700,19 +704,19 @@ function CreateChildPanelModal({
         {/* Cost estimate */}
         <div className="mt-4 rounded-xl border border-border/60 p-4">
           <div className="flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">Monthly fee ({PLANS[plan].label})</span>
+            <span className="text-muted-foreground">{t("childPanels.monthlyFeeFor", "Monthly fee ({plan})").replace("{plan}", t(`childPanels.plan.${plan}` as any, PLANS[plan].label))}</span>
             <span className="font-semibold tabular-nums">
               {formatPrice(monthlyFee, currency)}/mo
             </span>
           </div>
           <div className="mt-1 flex items-center justify-between text-sm">
-            <span className="text-muted-foreground">× {monthlyDays} days</span>
+            <span className="text-muted-foreground">× {monthlyDays} {t("childPanels.days", "days")}</span>
             <span className="font-semibold tabular-nums">
               {formatPrice(totalCost, currency)}
             </span>
           </div>
           <div className="mt-2 flex items-center justify-between border-t border-border/60 pt-2 text-sm">
-            <span className="text-muted-foreground">Your balance</span>
+            <span className="text-muted-foreground">{t("childPanels.yourBalance", "Your balance")}</span>
             <span
               className={cn(
                 "font-semibold tabular-nums",
@@ -724,7 +728,7 @@ function CreateChildPanelModal({
           </div>
           {!sufficient && (
             <div className="mt-2 rounded-lg bg-red-500/10 px-3 py-2 text-[11px] text-red-700">
-              Insufficient balance — top up your wallet first.
+              {t("childPanels.insufficientBalance", "Insufficient balance — top up your wallet first.")}
             </div>
           )}
         </div>
@@ -737,11 +741,11 @@ function CreateChildPanelModal({
         >
           {createMutation.isPending ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" /> Provisioning…
+              <Loader2 className="h-4 w-4 animate-spin" /> {t("childPanels.provisioning", "Provisioning…")}
             </>
           ) : (
             <>
-              <Sparkles className="h-4 w-4" /> Purchase &amp; provision
+              <Sparkles className="h-4 w-4" /> {t("childPanels.purchaseProvision", "Purchase & provision")}
             </>
           )}
         </button>
@@ -749,7 +753,7 @@ function CreateChildPanelModal({
           onClick={onClose}
           className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground"
         >
-          Cancel
+          {t("common.cancel", "Cancel")}
         </button>
       </motion.div>
     </div>
@@ -764,6 +768,7 @@ function EditChildPanelModal({
   panel: any;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const updateMutation = useUpdateChildPanel();
   const [name, setName] = useState(panel.name);
   // BROAD-FIX-BATCH-1: aligned the fallback default with the Create modal
@@ -790,7 +795,7 @@ function EditChildPanelModal({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Edit child panel"
+      aria-label={t("childPanels.editDialog", "Edit child panel")}
       className="fixed inset-0 z-[85] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
       onClick={onClose}
     >
@@ -803,7 +808,7 @@ function EditChildPanelModal({
         <button
           onClick={onClose}
           className="absolute right-3 top-3 z-10 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-          aria-label="Close"
+          aria-label={t("common.close", "Close")}
         >
           <X className="h-5 w-5" />
         </button>
@@ -813,7 +818,7 @@ function EditChildPanelModal({
             <Pencil className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-base font-semibold text-foreground">Edit {panel.publicId}</h2>
+            <h2 className="text-base font-semibold text-foreground">{t("childPanels.editTitle", "Edit {id}").replace("{id}", panel.publicId)}</h2>
             <p className="text-xs text-muted-foreground">
               {panel.subdomain}.novsmm.shop
             </p>
@@ -822,7 +827,7 @@ function EditChildPanelModal({
 
         <div className="mt-4">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Panel name
+            {t("childPanels.panelName", "Panel name")}
           </label>
           <input
             type="text"
@@ -835,7 +840,7 @@ function EditChildPanelModal({
 
         <div className="mt-4">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Markup: <span className="font-semibold text-foreground">{markupPercent}%</span>
+            {t("childPanels.markupLabel", "Markup:")} <span className="font-semibold text-foreground">{markupPercent}%</span>
           </label>
           <input
             type="range"
@@ -852,13 +857,13 @@ function EditChildPanelModal({
           disabled={updateMutation.isPending || !valid}
           className="mt-5 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground disabled:opacity-60"
         >
-          {updateMutation.isPending ? "Saving…" : "Save changes"}
+          {updateMutation.isPending ? t("childPanels.saving", "Saving…") : t("childPanels.saveChanges", "Save changes")}
         </button>
         <button
           onClick={onClose}
           className="mt-2 w-full text-xs text-muted-foreground hover:text-foreground"
         >
-          Cancel
+          {t("common.cancel", "Cancel")}
         </button>
       </motion.div>
     </div>

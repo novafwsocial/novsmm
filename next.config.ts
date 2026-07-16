@@ -1,19 +1,6 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // TEMPORARY FIX: type errors are temporarily ignored at build time to
-  // unblock production deploy. Several API routes reference Prisma models
-  // that don't exist in the schema (Invoice, PushSubscription, ServiceReview,
-  // TeamInvite, Subscription, SubAccountPermissions). These routes need to
-  // be either fixed (models added to schema) or removed. Until then, we
-  // ignore build errors so the site can deploy.
-  // TODO: fix the TypeScript errors and re-enable strict checking.
-  typescript: {
-    ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
   reactStrictMode: true,
   poweredByHeader: false,
   // PERF: Image optimization — AVIF (best compression) + WebP fallback.
@@ -74,4 +61,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-

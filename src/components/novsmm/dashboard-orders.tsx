@@ -16,13 +16,15 @@ import {
   Droplets,
 } from "lucide-react";
 import { useOrders, useRepeatOrder, useCancelOrder, useCreateTicket, useRefillOrder } from "@/hooks/use-api";
-import { type OrderStatus } from "./dashboard-data";
 import { StatusPill } from "./status-pill";
 import { Reveal } from "./reveal";
 import { formatPrice } from "@/lib/currency-utils";
 import { useApp } from "./app-store";
 import { PlatformLogo } from "./platform-logo";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
+
+type OrderStatus = "processing" | "in_progress" | "completed" | "partial" | "pending";
 
 const FILTERS: { id: OrderStatus | "all"; label: string }[] = [
   { id: "all", label: "All" },
@@ -37,6 +39,7 @@ const FILTERS: { id: OrderStatus | "all"; label: string }[] = [
 const CANCEL_WINDOW_MS = 60_000;
 
 export function DashboardOrders() {
+  const { t } = useLanguage();
   const [filter, setFilter] = useState<OrderStatus | "all">("all");
   const [query, setQuery] = useState("");
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
@@ -55,20 +58,20 @@ export function DashboardOrders() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <div className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">
-              Orders
+              {t("orders.title", "Orders")}
             </div>
             <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-              All orders
+              {t("orders.allOrders", "All orders")}
             </h1>
             <p className="text-sm text-muted-foreground">
-              {filtered.length} shown · click any row for full details.
+              {filtered.length} {t("orders.shown", "shown")} · {t("orders.clickRow", "click any row for full details.")}
             </p>
           </div>
           <button
             onClick={() => window.open("/api/export/orders?format=csv", "_blank")}
             className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-4 py-2 text-xs font-medium text-foreground transition-colors hover:bg-muted"
           >
-            <Download className="h-3.5 w-3.5" /> Export CSV
+            <Download className="h-3.5 w-3.5" /> {t("orders.export", "Export CSV")}
           </button>
         </div>
       </Reveal>
@@ -81,7 +84,8 @@ export function DashboardOrders() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by ID, platform, service…"
+              placeholder={t("orders.searchPlaceholder", "Search by ID, platform, service…")}
+              aria-label={t("orders.search", "Search orders")}
               className="w-full bg-transparent text-foreground placeholder:text-muted-foreground/70 focus:outline-none"
             />
           </div>
@@ -105,7 +109,7 @@ export function DashboardOrders() {
                     transition={{ type: "spring", stiffness: 400, damping: 30 }}
                   />
                 )}
-                <span className="relative">{f.label}</span>
+                <span className="relative">{t(`orders.filter.${f.id}`, f.label)}</span>
               </button>
             ))}
           </div>
@@ -119,20 +123,20 @@ export function DashboardOrders() {
             <table className="w-full text-sm">
               <thead className="bg-muted/30 text-[11px] uppercase tracking-wider text-muted-foreground">
                 <tr>
-                  <th scope="col" className="px-4 py-3 text-left font-medium">Order</th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium">Service</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Qty</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Cost</th>
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Price</th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium">Status</th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium">Progress</th>
-                  <th scope="col" className="px-4 py-3 text-left font-medium">Fulfilled by</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">{t("orders.order", "Order")}</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">{t("orders.service", "Service")}</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">{t("orders.qty", "Qty")}</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">{t("orders.cost", "Cost")}</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">{t("orders.price", "Price")}</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">{t("orders.status", "Status")}</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">{t("orders.progress", "Progress")}</th>
+                  <th scope="col" className="px-4 py-3 text-left font-medium">{t("orders.fulfilledBy", "Fulfilled by")}</th>
                   {/* WHITE-LABEL: ETA column removed — the eta field in the DB
                       can contain provider names like 'Processing on HuntSMM'
                       for legacy orders. Rather than risk leaking the upstream
                       provider, the ETA info is removed entirely from the UI.
                       Users still see real-time progress in the PROGRESS column. */}
-                  <th scope="col" className="px-4 py-3 text-right font-medium">Actions</th>
+                  <th scope="col" className="px-4 py-3 text-right font-medium">{t("orders.actions", "Actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border/60">
@@ -202,7 +206,7 @@ export function DashboardOrders() {
                         <button
                           onClick={() => repeatOrder.mutate({ orderId: o.id })}
                           disabled={repeatOrder.isPending}
-                          title="Repeat order"
+                          title={t("orders.repeat", "Repeat order")}
                           className="inline-flex items-center gap-1 rounded-lg bg-primary/10 px-2.5 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/20 disabled:opacity-50"
                         >
                           <Repeat2 className="h-3 w-3" />
@@ -211,7 +215,7 @@ export function DashboardOrders() {
                           <button
                             onClick={() => refillOrder.mutate({ orderId: o.id })}
                             disabled={refillOrder.isPending}
-                            title="Request refill"
+                            title={t("orders.requestRefill", "Request refill")}
                             className="inline-flex items-center gap-1 rounded-lg bg-emerald-500/10 px-2.5 py-1.5 text-xs font-medium text-emerald-700 transition-colors hover:bg-emerald-500/20 disabled:opacity-50"
                           >
                             <RotateCcw className="h-3 w-3" />
@@ -224,7 +228,7 @@ export function DashboardOrders() {
                 {filtered.length === 0 && (
                   <tr>
                     <td colSpan={10} className="px-4 py-12 text-center text-sm text-muted-foreground">
-                      No orders match your filters.
+                      {t("orders.noMatch", "No orders match your filters.")}
                     </td>
                   </tr>
                 )}
@@ -261,6 +265,7 @@ function OrderDetailDrawer({
   const cancelOrder = useCancelOrder();
   const createTicket = useCreateTicket();
   const refillOrder = useRefillOrder();
+  const { t } = useLanguage();
   const [refillSubmitting, setRefillSubmitting] = useState(false);
 
   // Cancel eligibility: status must be pending/processing and within 60s
@@ -293,8 +298,8 @@ function OrderDetailDrawer({
     } catch {
       // Fallback: open a manual support ticket so the user isn't stuck.
       await createTicket.mutateAsync({
-        subject: `Refill request — Order #${order.publicId}`,
-        message: `Please process a refill for order #${order.publicId} (${order.platform} · ${order.serviceName}, qty ${order.quantity}). Link: ${order.link ?? "—"}`,
+        subject: `${t("orders.refillRequest", "Refill request")} — ${t("orders.order", "Order")} #${order.publicId}`,
+        message: `${t("orders.processRefill", "Please process a refill for order")} #${order.publicId} (${order.platform} · ${order.serviceName}, ${t("orders.qty", "qty")} ${order.quantity}). ${t("orders.link", "Link")}: ${order.link ?? "—"}`,
         priority: "medium",
       });
       onClose();
@@ -305,10 +310,10 @@ function OrderDetailDrawer({
 
   // Status timeline (visual)
   const timelineSteps = [
-    { id: "pending", label: "Pending", at: order.createdAt },
-    { id: "processing", label: "Processing", at: order.status !== "pending" ? order.updatedAt : null },
-    { id: "in_progress", label: "In progress", at: ["in_progress", "partial", "completed"].includes(order.status) ? order.updatedAt : null },
-    { id: "completed", label: "Completed", at: order.status === "completed" ? order.completedAt ?? order.updatedAt : null },
+    { id: "pending", label: t("orders.filter.pending", "Pending"), at: order.createdAt },
+    { id: "processing", label: t("orders.filter.processing", "Processing"), at: order.status !== "pending" ? order.updatedAt : null },
+    { id: "in_progress", label: t("orders.filter.in_progress", "In progress"), at: ["in_progress", "partial", "completed"].includes(order.status) ? order.updatedAt : null },
+    { id: "completed", label: t("orders.filter.completed", "Completed"), at: order.status === "completed" ? order.completedAt ?? order.updatedAt : null },
   ];
   const cancelled = order.status === "cancelled";
 
@@ -322,7 +327,7 @@ function OrderDetailDrawer({
         onClick={onClose}
         role="dialog"
         aria-modal="true"
-        aria-label="Order details"
+        aria-label={t("orders.details", "Order details")}
         className="fixed inset-0 z-[80] bg-foreground/40 backdrop-blur-sm"
       />
       {/* Drawer */}
@@ -347,7 +352,7 @@ function OrderDetailDrawer({
           <button
             onClick={onClose}
             className="flex h-9 w-9 items-center justify-center rounded-full bg-background/80 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-            aria-label="Close"
+            aria-label={t("common.close", "Close")}
           >
             <X className="h-5 w-5" />
           </button>
@@ -358,22 +363,22 @@ function OrderDetailDrawer({
           <div className="flex flex-wrap items-center gap-2">
             <StatusPill status={order.status} />
             <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-              {order.priority} priority
+              {order.priority} {t("orders.priority", "priority")}
             </span>
             {dripConfig && (
               <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2 py-0.5 text-[11px] font-medium text-primary">
-                <Droplets className="h-3 w-3" /> Drip-feed
+                <Droplets className="h-3 w-3" /> {t("orders.dripFeed", "Drip-feed")}
               </span>
             )}
           </div>
 
           {/* Timeline */}
           <div className="rounded-2xl border border-border/60 p-4">
-            <div className="mb-3 text-[11px] uppercase tracking-wider text-muted-foreground">Timeline</div>
+            <div className="mb-3 text-[11px] uppercase tracking-wider text-muted-foreground">{t("orders.timeline", "Timeline")}</div>
             {cancelled ? (
               <div className="flex items-center gap-2 text-sm text-red-600">
                 <AlertCircle className="h-4 w-4" />
-                <span>Order was cancelled — refund issued</span>
+                <span>{t("orders.cancelledRefund", "Order was cancelled — refund issued")}</span>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
@@ -410,26 +415,26 @@ function OrderDetailDrawer({
           {dripConfig && (
             <div className="rounded-2xl border border-primary/30 bg-primary/5 p-4">
               <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-foreground">
-                <Droplets className="h-4 w-4 text-primary" /> Drip-feed configuration
+                <Droplets className="h-4 w-4 text-primary" /> {t("orders.dripConfig", "Drip-feed configuration")}
               </div>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <ConfigItem label="Total quantity" value={Number(dripConfig.totalQuantity ?? order.quantity).toLocaleString()} />
-                <ConfigItem label="Chunks" value={String(dripConfig.chunks ?? "—")} />
-                <ConfigItem label="Per chunk" value={Number(dripConfig.perChunk ?? 0).toLocaleString()} />
-                <ConfigItem label="Delay" value={`${dripConfig.delayMinutes ?? 0}m`} />
-                <ConfigItem label="Start date" value={dripConfig.startDate ? new Date(dripConfig.startDate).toLocaleString() : "—"} full />
+                <ConfigItem label={t("orders.totalQuantity", "Total quantity")} value={Number(dripConfig.totalQuantity ?? order.quantity).toLocaleString()} />
+                <ConfigItem label={t("orders.chunks", "Chunks")} value={String(dripConfig.chunks ?? "—")} />
+                <ConfigItem label={t("orders.perChunk", "Per chunk")} value={Number(dripConfig.perChunk ?? 0).toLocaleString()} />
+                <ConfigItem label={t("orders.delay", "Delay")} value={`${dripConfig.delayMinutes ?? 0}m`} />
+                <ConfigItem label={t("orders.startDate", "Start date")} value={dripConfig.startDate ? new Date(dripConfig.startDate).toLocaleString() : "—"} full />
               </div>
             </div>
           )}
 
           {/* Service + link */}
-          <DetailCard title="Service & target">
-            <DetailRow label="Order ID" value={`#${order.publicId}`} />
-            <DetailRow label="Platform" value={order.platform} />
-            <DetailRow label="Service" value={order.serviceName} />
+          <DetailCard title={t("orders.serviceTarget", "Service & target")}>
+            <DetailRow label={t("orders.orderId", "Order ID")} value={`#${order.publicId}`} />
+            <DetailRow label={t("orders.platform", "Platform")} value={order.platform} />
+            <DetailRow label={t("orders.service", "Service")} value={order.serviceName} />
             {/* WHITE-LABEL: show "NOVSMM" instead of the real upstream provider.
                 The actual providerName is kept in the DB for admin/audit. */}
-            <DetailRow label="Fulfilled by" value="NOVSMM" />
+            <DetailRow label={t("orders.fulfilledBy", "Fulfilled by")} value="NOVSMM" />
             {order.link ? (
               <div className="mt-2 flex items-center justify-between gap-2 rounded-lg bg-muted/40 px-3 py-2 text-xs">
                 <span className="truncate font-mono text-muted-foreground">{order.link}</span>
@@ -440,28 +445,28 @@ function OrderDetailDrawer({
                   className="inline-flex shrink-0 items-center gap-1 text-primary hover:underline"
                   onClick={(e) => e.stopPropagation()}
                 >
-                  Open <ExternalLink className="h-3 w-3" />
+                  {t("orders.open", "Open")} <ExternalLink className="h-3 w-3" />
                 </a>
               </div>
             ) : (
-              <DetailRow label="Link" value="—" />
+              <DetailRow label={t("orders.link", "Link")} value="—" />
             )}
           </DetailCard>
 
           {/* Quantity & price */}
-          <DetailCard title="Quantity & pricing">
-            <DetailRow label="Quantity" value={order.quantity.toLocaleString()} />
-            <DetailRow label="Unit price" value={`${formatPrice(order.unitPrice, currency)} / 1k`} />
-            <DetailRow label="Unit cost" value={`${formatPrice(order.unitCost, currency)} / 1k`} />
-            <DetailRow label="Total price" value={formatPrice(order.totalPrice, currency)} accent="emerald" />
+          <DetailCard title={t("orders.quantityPricing", "Quantity & pricing")}>
+            <DetailRow label={t("orders.quantity", "Quantity")} value={order.quantity.toLocaleString()} />
+            <DetailRow label={t("orders.unitPrice", "Unit price")} value={`${formatPrice(order.unitPrice, currency)} / 1k`} />
+            <DetailRow label={t("orders.unitCost", "Unit cost")} value={`${formatPrice(order.unitCost, currency)} / 1k`} />
+            <DetailRow label={t("orders.totalPrice", "Total price")} value={formatPrice(order.totalPrice, currency)} accent="emerald" />
           </DetailCard>
 
           {/* Dates */}
-          <DetailCard title="Dates">
-            <DetailRow label="Created" value={new Date(order.createdAt).toLocaleString()} />
-            <DetailRow label="Updated" value={new Date(order.updatedAt).toLocaleString()} />
+          <DetailCard title={t("orders.dates", "Dates")}>
+            <DetailRow label={t("orders.created", "Created")} value={new Date(order.createdAt).toLocaleString()} />
+            <DetailRow label={t("orders.updated", "Updated")} value={new Date(order.updatedAt).toLocaleString()} />
             {order.completedAt && (
-              <DetailRow label="Completed" value={new Date(order.completedAt).toLocaleString()} />
+              <DetailRow label={t("orders.completedAt", "Completed")} value={new Date(order.completedAt).toLocaleString()} />
             )}
             {/* WHITE-LABEL: ETA row removed — the eta field can contain
                 provider names for legacy orders. Progress is still visible
@@ -481,7 +486,7 @@ function OrderDetailDrawer({
                 ) : (
                   <RotateCcw className="h-4 w-4" />
                 )}
-                Request refill
+                {t("orders.requestRefill", "Request refill")}
               </button>
             )}
 
@@ -496,16 +501,16 @@ function OrderDetailDrawer({
                 ) : (
                   <X className="h-4 w-4" />
                 )}
-                Cancel order · {secondsLeftToCancel}s left
+                {t("orders.cancelOrder", "Cancel order")} · {secondsLeftToCancel}s {t("orders.left", "left")}
               </button>
             ) : (
               <div className="flex items-center justify-center gap-1.5 rounded-xl bg-muted/40 py-2.5 text-xs text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
                 {order.status === "cancelled"
-                  ? "Order cancelled"
+                  ? t("orders.orderCancelled", "Order cancelled")
                   : order.status === "completed"
-                    ? "Order completed — no cancellation possible"
-                    : "Cancel window expired (60s after placement)"}
+                    ? t("orders.completedNoCancel", "Order completed — no cancellation possible")
+                    : t("orders.cancelExpired", "Cancel window expired (60s after placement)")}
               </div>
             )}
           </div>

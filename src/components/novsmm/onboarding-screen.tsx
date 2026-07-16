@@ -20,6 +20,7 @@ import { useSession } from "@/hooks/use-api";
 import { Logo } from "./logo";
 import { Magnetic } from "./magnetic";
 import { cn } from "@/lib/utils";
+import { useLanguage } from "./language-provider";
 
 const STEPS = [
   { key: "welcome", title: "Welcome to NOVSMM", icon: PartyPopper },
@@ -43,11 +44,11 @@ const LANGUAGES = [
   { code: "es", name: "Español", flag: "🇲🇽" },
   { code: "pt", name: "Português", flag: "🇧🇷" },
   { code: "fr", name: "Français", flag: "🇫🇷" },
-  { code: "de", name: "Deutsch", flag: "🇩🇪" },
 ];
 
 export function OnboardingScreen() {
   const { setView, signIn } = useApp();
+  const { t } = useLanguage();
   const { data: sessionData } = useSession();
   const user = (sessionData?.user as any) ?? {};
   const userName = user?.name ?? user?.email ?? "";
@@ -118,7 +119,9 @@ export function OnboardingScreen() {
           <div className="mb-3 flex items-center justify-between">
             <Logo />
             <span className="text-xs font-medium text-muted-foreground tabular-nums">
-              Step {step + 1} of {STEPS.length}
+              {t("onboarding.step")
+                .replace("{current}", String(step + 1))
+                .replace("{total}", String(STEPS.length))}
             </span>
           </div>
           <div className="flex gap-1.5">
@@ -184,14 +187,16 @@ export function OnboardingScreen() {
               className="inline-flex items-center gap-1.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              {step === 0 ? "Back" : "Previous"}
+              {step === 0 ? t("onboarding.back") : t("onboarding.previous")}
             </button>
             <Magnetic as="div" strength={0.15}>
               <button
                 onClick={next}
                 className="inline-flex items-center gap-2 rounded-full bg-primary px-6 py-2.5 text-sm font-medium text-primary-foreground transition-shadow hover:nov-shadow-blue"
               >
-                {step === STEPS.length - 1 ? "Enter dashboard" : "Continue"}
+                {step === STEPS.length - 1
+                  ? t("onboarding.enterDashboard")
+                  : t("onboarding.continue")}
                 <ArrowRight className="h-4 w-4" />
               </button>
             </Magnetic>
@@ -202,7 +207,7 @@ export function OnboardingScreen() {
           onClick={() => signIn()}
           className="mt-5 block w-full text-center text-xs text-muted-foreground transition-colors hover:text-foreground"
         >
-          Skip onboarding →
+          {t("onboarding.skip")}
         </button>
       </motion.div>
     </motion.div>
@@ -244,18 +249,19 @@ function StepHeader({
 }
 
 function WelcomeStep({ setData }: StepProps) {
+  const { t } = useLanguage();
   const roles = [
-    { id: "Reseller", desc: "Buy wholesale, resell at your price." },
-    { id: "Agency", desc: "Manage multiple creators & brands." },
-    { id: "Creator", desc: "Grow your own audience." },
-    { id: "Enterprise", desc: "Dedicated infra & SLAs." },
+    { id: "Reseller", label: t("onboarding.role.reseller"), desc: t("onboarding.role.resellerDesc") },
+    { id: "Agency", label: t("onboarding.role.agency"), desc: t("onboarding.role.agencyDesc") },
+    { id: "Creator", label: t("onboarding.role.creator"), desc: t("onboarding.role.creatorDesc") },
+    { id: "Enterprise", label: t("onboarding.role.enterprise"), desc: t("onboarding.role.enterpriseDesc") },
   ];
   return (
     <div>
       <StepHeader
         icon={PartyPopper}
-        title="Welcome to NOVSMM"
-        subtitle="Tell us how you'll use the platform so we can tailor your workspace."
+        title={t("onboarding.welcome.title")}
+        subtitle={t("onboarding.welcome.subtitle")}
       />
       <div className="mt-7 grid grid-cols-2 gap-3">
         {roles.map((r, i) => {
@@ -283,7 +289,7 @@ function RoleCard({
   active,
   onSelect,
 }: {
-  role: { id: string; desc: string };
+  role: { id: string; label: string; desc: string };
   index: number;
   active: boolean;
   onSelect: (id: string) => void;
@@ -308,7 +314,7 @@ function RoleCard({
       )}
     >
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-foreground">{role.id}</span>
+        <span className="text-sm font-semibold text-foreground">{role.label}</span>
         <span
           className={cn(
             "flex h-4 w-4 items-center justify-center rounded-full border transition-colors",
@@ -329,12 +335,13 @@ function ProfileStep({
   userName,
   userEmail,
 }: StepProps & { initials: string; userName: string; userEmail: string }) {
+  const { t } = useLanguage();
   return (
     <div>
       <StepHeader
         icon={User}
-        title="Set up your profile"
-        subtitle="Add a few details so collaborators can recognize you."
+        title={t("onboarding.profile.title")}
+        subtitle={t("onboarding.profile.subtitle")}
       />
       <div className="mt-7 flex flex-col items-center gap-5">
         <motion.div
@@ -348,11 +355,11 @@ function ProfileStep({
         </motion.div>
         <div className="w-full max-w-sm">
           <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
-            Display name
+            {t("onboarding.profile.displayName")}
           </label>
           <input
             defaultValue={userName || ""}
-            placeholder="Your name"
+            placeholder={t("onboarding.profile.yourName")}
             onChange={(e) =>
               setData((d: any) => ({ ...d, name: e.target.value }))
             }
@@ -361,7 +368,7 @@ function ProfileStep({
         </div>
         <div className="flex items-center gap-2 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-700">
           <ShieldCheck className="h-3.5 w-3.5" />
-          Verified email · {userEmail || "—"}
+          {t("onboarding.profile.verifiedEmail")} · {userEmail || "—"}
         </div>
       </div>
     </div>
@@ -369,12 +376,21 @@ function ProfileStep({
 }
 
 function CurrencyStep({ data, setData, options }: StepProps & { options: any[] }) {
+  const { t } = useLanguage();
+  const currencyNames: Record<string, string> = {
+    USD: t("onboarding.currency.usd"),
+    EUR: t("onboarding.currency.eur"),
+    MXN: t("onboarding.currency.mxn"),
+    BRL: t("onboarding.currency.brl"),
+    GBP: t("onboarding.currency.gbp"),
+    INR: t("onboarding.currency.inr"),
+  };
   return (
     <div>
       <StepHeader
         icon={Globe}
-        title="Choose your currency"
-        subtitle="This sets your default wallet, pricing, and payouts. Changeable anytime."
+        title={t("onboarding.currency.title")}
+        subtitle={t("onboarding.currency.subtitle")}
       />
       <div className="mt-7 grid grid-cols-2 gap-3 sm:grid-cols-3">
         {options.map((c, i) => (
@@ -397,7 +413,7 @@ function CurrencyStep({ data, setData, options }: StepProps & { options: any[] }
               {c.symbol}
             </span>
             <span className="text-sm font-medium text-foreground">{c.code}</span>
-            <span className="text-[11px] text-muted-foreground">{c.name}</span>
+            <span className="text-[11px] text-muted-foreground">{currencyNames[c.code] ?? c.name}</span>
           </motion.button>
         ))}
       </div>
@@ -406,12 +422,13 @@ function CurrencyStep({ data, setData, options }: StepProps & { options: any[] }
 }
 
 function LanguageStep({ data, setData, options }: StepProps & { options: any[] }) {
+  const { t } = useLanguage();
   return (
     <div>
       <StepHeader
         icon={Languages}
-        title="Pick your language"
-        subtitle="We'll localize your dashboard, receipts, and notifications."
+        title={t("onboarding.language.title")}
+        subtitle={t("onboarding.language.subtitle")}
       />
       <div className="mt-7 flex flex-col gap-2">
         {options.map((l, i) => (
@@ -453,18 +470,19 @@ function LanguageStep({ data, setData, options }: StepProps & { options: any[] }
 }
 
 function NotificationsStep({ data, setData }: StepProps) {
+  const { t } = useLanguage();
   const items = [
-    { key: "orders", label: "Order updates", desc: "Start, progress, completion" },
-    { key: "sales", label: "Sales & revenue", desc: "New sales, payouts" },
-    { key: "tickets", label: "Support tickets", desc: "Replies, status changes" },
-    { key: "system", label: "System & security", desc: "Maintenance, alerts" },
+    { key: "orders", label: t("onboarding.notifications.orders"), desc: t("onboarding.notifications.ordersDesc") },
+    { key: "sales", label: t("onboarding.notifications.sales"), desc: t("onboarding.notifications.salesDesc") },
+    { key: "tickets", label: t("onboarding.notifications.tickets"), desc: t("onboarding.notifications.ticketsDesc") },
+    { key: "system", label: t("onboarding.notifications.system"), desc: t("onboarding.notifications.systemDesc") },
   ];
   return (
     <div>
       <StepHeader
         icon={Bell}
-        title="Notification preferences"
-        subtitle="Choose what lands in your real-time feed. Adjust anytime in Settings."
+        title={t("onboarding.notifications.title")}
+        subtitle={t("onboarding.notifications.subtitle")}
       />
       <div className="mt-7 flex flex-col gap-2">
         {items.map((it, i) => {
@@ -512,18 +530,19 @@ function NotificationsStep({ data, setData }: StepProps) {
 }
 
 function TourStep() {
+  const { t } = useLanguage();
   const tour = [
-    { icon: Compass, title: "Dashboard", desc: "Your live ops cockpit." },
-    { icon: Globe, title: "Marketplace", desc: "Buy, sell, set your margins." },
-    { icon: Bell, title: "Notifications", desc: "Real-time, WebSocket-powered." },
-    { icon: ShieldCheck, title: "Security", desc: "2FA, sessions, audit logs." },
+    { icon: Compass, title: t("onboarding.tour.dashboard"), desc: t("onboarding.tour.dashboardDesc") },
+    { icon: Globe, title: t("onboarding.tour.marketplace"), desc: t("onboarding.tour.marketplaceDesc") },
+    { icon: Bell, title: t("onboarding.tour.notifications"), desc: t("onboarding.tour.notificationsDesc") },
+    { icon: ShieldCheck, title: t("onboarding.tour.security"), desc: t("onboarding.tour.securityDesc") },
   ];
   return (
     <div>
       <StepHeader
         icon={Compass}
-        title="Take the tour"
-        subtitle="Here's what you'll find inside. You can replay this tour anytime from Settings."
+        title={t("onboarding.tour.title")}
+        subtitle={t("onboarding.tour.subtitle")}
       />
       <div className="mt-7 grid grid-cols-2 gap-3">
         {tour.map((t, i) => (

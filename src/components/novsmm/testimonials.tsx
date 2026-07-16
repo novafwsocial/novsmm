@@ -92,7 +92,7 @@ const ROW_B: Testimonial[] = [
       "Their security posture is the real deal — audit logs, role-based access, DDoS shielding. Our enterprise clients finally stopped asking.",
     name: "Elena Petrova",
     role: "CISO, Verge Media",
-    result: "SOC 2-aligned",
+    result: "Security controls",
     rating: 5,
     initials: "EP",
     emoji: "🌟",

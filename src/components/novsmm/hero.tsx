@@ -5,10 +5,6 @@ import { useLanguage } from "./language-provider";
 import {
   ArrowRight,
   Play,
-  TrendingUp,
-  Wallet,
-  Activity,
-  Zap,
   CheckCircle2,
 } from "lucide-react";
 import { Magnetic } from "./magnetic";
@@ -26,21 +22,16 @@ export function Hero() {
   const { t } = useLanguage();
   const sectionRef = useRef<HTMLElement>(null);
 
-  // Live orders/min — fetched from /api/status (public). Falls back to 1200
-  // if the request fails so the eyebrow never renders empty.
+  // Live orders/min — fetched from /api/status (public). Keep zero when the
+  // platform is idle or telemetry is unavailable; never invent throughput.
   // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
   // a single /api/status request via useCachedFetch.
   //
-  // MOB-002 FIX: the previous truthy check `if (statusData?.stats?.ordersPerMin)`
-  // let small truthy values through (e.g. `1` → showed "1 orders/min" instead
-  // of the 1200 floor). Now we use Math.max(1200, realValue) so the displayed
-  // number is always at least the marketing floor, and grows with real data
-  // once it exceeds the floor.
   const statusData = useCachedFetch<any>("/api/status");
-  const [ordersPerMin, setOrdersPerMin] = useState(1200);
+  const [ordersPerMin, setOrdersPerMin] = useState(0);
   useEffect(() => {
     if (statusData?.stats?.ordersPerMin != null) {
-      setOrdersPerMin(Math.max(1200, Number(statusData.stats.ordersPerMin) || 0));
+      setOrdersPerMin(Number(statusData.stats.ordersPerMin) || 0);
     }
   }, [statusData]);
 
@@ -123,8 +114,6 @@ export function Hero() {
         >
           {[
             t("landing.hero.noCardRequired"),
-            t("landing.hero.uptimeSLA"),
-            t("landing.hero.soc2"),
           ].map((t) => (
             <span key={t} className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
@@ -138,40 +127,9 @@ export function Hero() {
           className="relative mx-auto mt-6 sm:mt-16 max-w-6xl"
           style={{ animation: "heroFadeUpBlur 1.1s 0.42s cubic-bezier(0.16, 1, 0.3, 1) both" }}
         >
-          {/* Floating stat chips — depth layers (hidden on mobile, perf) */}
-          <FloatingChip
-            className="absolute -left-2 top-16 hidden sm:flex"
-            delay={0.7}
-            icon={<Wallet className="h-3.5 w-3.5 text-primary" />}
-            label="Balance"
-            value={
-              <>
-                $<Counter to={8420.5} decimals={2} duration={2.4} />
-              </>
-            }
-          />
-          <FloatingChip
-            className="absolute -right-2 top-24 hidden sm:flex"
-            delay={0.9}
-            icon={<TrendingUp className="h-3.5 w-3.5 text-emerald-500" />}
-            label="Today"
-            value={<Counter to={312} suffix="+%" duration={0} />}
-          />
-          <FloatingChip
-            className="absolute -left-4 bottom-10 hidden lg:flex"
-            delay={1.1}
-            icon={<Zap className="h-3.5 w-3.5 text-primary" />}
-            label="Avg. start"
-            value={<><Counter to={1.4} decimals={1} duration={2} />s</>}
-          />
-          <FloatingChip
-            className="absolute -right-6 bottom-24 hidden lg:flex"
-            delay={1.3}
-            icon={<Activity className="h-3.5 w-3.5 text-emerald-500" />}
-            label="Active services"
-            value={<Counter to={242} duration={2.2} />}
-          />
-
+          <div className="absolute right-3 top-3 z-10 rounded-full border border-border/60 bg-background/90 px-3 py-1 text-[11px] font-medium text-muted-foreground shadow-sm">
+            Demo preview · datos ilustrativos
+          </div>
           <Tilt3D className="relative overflow-hidden rounded-[20px] nov-ring-lg nov-grain bg-background" maxTilt={6}>
             <HeroDashboard />
           </Tilt3D>
@@ -184,40 +142,5 @@ export function Hero() {
         </div>
       </div>
     </section>
-  );
-}
-
-function FloatingChip({
-  className,
-  icon,
-  label,
-  value,
-  delay = 0,
-}: {
-  className?: string;
-  icon: React.ReactNode;
-  label: string;
-  value: React.ReactNode;
-  delay?: number;
-}) {
-  return (
-    <div
-      className={`z-20 items-center gap-2.5 rounded-2xl border border-border/60 bg-background/90 px-3.5 py-2.5 nov-ring backdrop-blur-xl ${className ?? ""}`}
-      style={{
-        animation: `chipIn 0.7s ${delay}s cubic-bezier(0.16, 1, 0.3, 1) both, float-3d 6s ease-in-out infinite ${delay + 1}s`,
-      }}
-    >
-      <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-muted">
-        {icon}
-      </span>
-      <span className="flex flex-col">
-        <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-          {label}
-        </span>
-        <span className="text-sm font-semibold text-foreground tabular-nums">
-          {value}
-        </span>
-      </span>
-    </div>
   );
 }

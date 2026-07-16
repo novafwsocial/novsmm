@@ -67,6 +67,21 @@ export async function POST(req: NextRequest) {
     return apiError("Invalid signature format — missing ts or v1", 401);
   }
 
+  // Reject replayed signatures outside Mercado Pago's short delivery window.
+  // `ts` is Unix seconds; keeping the check before HMAC work also avoids
+  // spending resources on stale webhook attempts.
+  const tsSeconds = Number(ts);
+  const signatureAgeMs = Number.isFinite(tsSeconds)
+    ? Math.abs(Date.now() - tsSeconds * 1000)
+    : Number.POSITIVE_INFINITY;
+  if (!Number.isFinite(tsSeconds) || signatureAgeMs > 5 * 60 * 1000) {
+    return apiError("Webhook signature expired", 401);
+  }
+
+  if (!/^[a-fA-F0-9]{64}$/.test(v1)) {
+    return apiError("Invalid signature format", 401);
+  }
+
   // MP signs: {data.id}{ts} where data.id is from the webhook body
   const dataId = event.data?.id ? String(event.data.id) : "";
   const manifest = `${dataId}${ts}`;

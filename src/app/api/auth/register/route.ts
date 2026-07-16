@@ -11,8 +11,14 @@ import { sanitizeText } from "@/lib/sanitize";
  * Creates a new user account with bcrypt-hashed password.
  */
 export async function POST(req: NextRequest) {
+  let body: unknown;
   try {
-    const body = await req.json();
+    body = await req.json();
+  } catch {
+    return apiError("Invalid JSON body", 422);
+  }
+
+  try {
     const parsed = registerSchema.safeParse(body);
     if (!parsed.success) {
       return apiError(
