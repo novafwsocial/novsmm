@@ -83,11 +83,11 @@ export function Navbar() {
               type="button"
               aria-label="Close navigation menu"
               onClick={() => setOpen(false)}
-              className="fixed inset-0 z-[80] bg-foreground/30 backdrop-blur-[4px] lg:hidden"
+              className="fixed inset-0 z-[90] bg-foreground/35 backdrop-blur-md lg:hidden"
             />
             <div
               id="mobile-navigation-menu"
-              className="fixed inset-x-3 top-[4.75rem] z-[90] max-h-[calc(100dvh-5.25rem)] overflow-y-auto overscroll-contain rounded-[1.75rem] border border-border/70 bg-background/98 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.18)] ring-1 ring-border/40 backdrop-blur-xl lg:hidden"
+              className="fixed inset-x-3 top-[4.5rem] z-[100] flex max-h-[calc(100dvh-5.25rem)] min-h-[calc(100dvh-5.25rem)] flex-col overflow-y-auto overscroll-contain rounded-[1.75rem] border border-border/70 bg-background p-3 shadow-[0_28px_90px_rgba(0,0,0,0.22)] ring-1 ring-border/40 lg:hidden"
               style={{
                 animation: "mobileMenuIn 0.25s cubic-bezier(0.16, 1, 0.3, 1)",
               }}
