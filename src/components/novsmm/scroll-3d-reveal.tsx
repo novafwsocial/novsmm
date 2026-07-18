@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import { motion, useInView } from "framer-motion";
 
 type Scroll3DRevealProps = {
   children: ReactNode;
@@ -10,45 +11,40 @@ type Scroll3DRevealProps = {
 
 /**
  * 3D scroll reveal — cards rotate in from perspective on scroll.
- * Uses IntersectionObserver (no JS scroll tracking = zero perf cost).
- * Falls back to immediate show if IntersectionObserver not available.
- *
- * On mobile: uses simpler 2D translateY (no 3D perspective) for performance.
+ * Re-implemented using Framer Motion with spring physics.
  */
 export function Scroll3DReveal({ children, className = "", delay = 0 }: Scroll3DRevealProps) {
   const ref = useRef<HTMLDivElement>(null);
-  const [inView, setInView] = useState(false);
+  const isInView = useInView(ref, { once: true, margin: "-5% 0px -5% 0px", amount: 0.1 });
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-
-    if (!("IntersectionObserver" in window)) {
-      setInView(true);
-      return;
-    }
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setInView(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: "-5% 0px -5% 0px", threshold: 0.1 }
-    );
-
-    observer.observe(el);
-    return () => observer.disconnect();
+    const update = () => setIsMobile(window.innerWidth < 768);
+    update();
+    window.addEventListener("resize", update);
+    return () => window.removeEventListener("resize", update);
   }, []);
 
+  if (isMobile) {
+    return <div className={className}>{children}</div>;
+  }
+
   return (
-    <div
+    <motion.div
       ref={ref}
-      className={`reveal-3d ${inView ? "in-view" : ""} ${className}`}
-      style={delay ? { transitionDelay: `${delay}s` } : undefined}
+      className={className}
+      initial={{ opacity: 0, y: 60, rotateX: 15 }}
+      animate={isInView ? { opacity: 1, y: 0, rotateX: 0 } : { opacity: 0, y: 60, rotateX: 15 }}
+      transition={{ 
+        type: "spring", 
+        stiffness: 80, 
+        damping: 20, 
+        delay,
+        mass: 0.8
+      }}
+      style={{ perspective: 800, transformOrigin: "center bottom" }}
     >
       {children}
-    </div>
+    </motion.div>
   );
 }

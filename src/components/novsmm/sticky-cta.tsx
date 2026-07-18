@@ -38,35 +38,6 @@ export function StickyCTA() {
 
   return (
     <>
-      {/* Mobile: bottom bar (full-width gradient fade) */}
-      <div
-        className={`sticky-cta lg:hidden ${visible ? "visible" : ""}`}
-        style={{
-          background:
-            "linear-gradient(to top, var(--background), var(--background) 80%, transparent)",
-          padding: "12px 16px max(12px, env(safe-area-inset-bottom, 0px))",
-          borderTop: "1px solid var(--border)",
-        }}
-      >
-        <div className="mx-auto flex max-w-md items-center gap-3">
-          <div className="flex-1">
-            <div className="text-sm font-semibold text-foreground">
-              {t("landing.stickyCta.title")}
-            </div>
-            <div className="text-xs text-muted-foreground">
-              {t("landing.stickyCta.subtitle")}
-            </div>
-          </div>
-          <button
-            onClick={() => setView("register")}
-            className="relative flex items-center gap-2 overflow-hidden rounded-full bg-primary px-6 py-3 text-sm font-medium text-primary-foreground shimmer-cta btn-press"
-          >
-            {t("landing.stickyCta.getStarted")}
-            <ArrowRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
       {/* Desktop: floating pill button (bottom-right, subtle) */}
       <div
         className={`hidden lg:flex fixed bottom-6 right-6 z-40 items-center gap-2 transition-all duration-500 ${

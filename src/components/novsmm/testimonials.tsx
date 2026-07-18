@@ -92,7 +92,7 @@ const ROW_B: Testimonial[] = [
       "Their security posture is the real deal — audit logs, role-based access, DDoS shielding. Our enterprise clients finally stopped asking.",
     name: "Elena Petrova",
     role: "CISO, Verge Media",
-    result: "Security controls",
+    result: "SOC 2-aligned",
     rating: 5,
     initials: "EP",
     emoji: "🌟",
@@ -114,7 +114,7 @@ const ROW_B: Testimonial[] = [
 export function Testimonials() {
   const { t } = useLanguage();
   return (
-    <section id="testimonials" className="relative overflow-hidden py-4 sm:py-32">
+    <section id="testimonials" className="nov-anchor-section relative overflow-hidden py-4 sm:py-32">
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-border to-transparent"
@@ -132,8 +132,15 @@ export function Testimonials() {
         />
       </div>
 
-      {/* Edge fades */}
-      <div className="relative mt-14">
+      {/* Mobile: static stacked testimonials to avoid horizontal motion */}
+      <div className="mt-10 grid grid-cols-1 gap-4 px-5 sm:hidden">
+        {[...ROW_A.slice(0, 2), ...ROW_B.slice(0, 2)].map((item, index) => (
+          <Card key={`${item.name}-${index}`} t={item} mobile />
+        ))}
+      </div>
+
+      {/* Desktop: marquee rows */}
+      <div className="relative mt-14 hidden sm:block">
         <div
           aria-hidden
           className="pointer-events-none absolute inset-y-0 left-0 z-10 w-16 bg-gradient-to-r from-background to-transparent sm:w-32"
@@ -151,7 +158,7 @@ export function Testimonials() {
 
       {/* aggregate proof bar */}
       <Reveal>
-        <div className="mx-auto mt-14 grid max-w-5xl grid-cols-2 gap-4 rounded-2xl border border-border/60 bg-muted/30 px-6 py-5 sm:grid-cols-4">
+        <div className="mx-auto mt-14 grid max-w-5xl grid-cols-1 gap-4 rounded-2xl border border-border/60 bg-muted/30 px-4 py-5 sm:grid-cols-2 sm:px-6 lg:grid-cols-4">
           <Proof label={t("landing.testimonials.proof.avgRating")} value="4.9 / 5.0" stars />
           <Proof label={t("landing.testimonials.proof.nps")} value="+72" />
           <Proof label={t("landing.testimonials.proof.switchedFrom")} value="12 panels" />
@@ -189,9 +196,9 @@ function MarqueeRow({
   );
 }
 
-function Card({ t }: { t: Testimonial }) {
+function Card({ t, mobile = false }: { t: Testimonial; mobile?: boolean }) {
   return (
-    <div className="group relative w-[320px] shrink-0 overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-shadow hover:nov-ring-lg sm:w-[400px]">
+    <div className={`group relative overflow-hidden rounded-2xl border border-border/60 bg-background p-5 transition-shadow hover:nov-ring-lg ${mobile ? "w-full" : "w-[280px] shrink-0 sm:w-[400px]"}`}>
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1 text-amber-400">
           {Array.from({ length: t.rating }).map((_, i) => (

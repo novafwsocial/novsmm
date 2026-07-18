@@ -7,12 +7,11 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  /* Font variables defined directly (previously populated by next/font/google,
-     which failed in restricted-network build environments). */
-  --font-inter: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  /* Font variables defined directly for Codex Design System */
+  --font-open-sans: "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
-  --font-sans: var(--font-inter);
-  --font-display: var(--font-inter);
+  --font-sans: var(--font-open-sans);
+  --font-display: var(--font-open-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -49,74 +48,86 @@
 }
 
 :root {
-  /* NOVSMM design system — world-class SaaS */
-  --radius: 0.75rem;
+  /* CODEX design system — pure minimal blank-canvas */
+  --radius: 0px; /* Pill-shaped for interactives, exact radius applied directly on cards */
 
-  /* Pure white canvas, near-black ink */
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.18 0.004 285);
+  /* Pure white canvas, dark text */
+  --background: #FFFFFF;
+  --foreground: #111827;
 
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.18 0.004 285);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.004 285);
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
 
-  /* Electric blue — reserved for important actions only */
-  --primary: #0052ff;
-  --primary-foreground: #ffffff;
+  /* Primary is Black */
+  --primary: #000000;
+  --primary-foreground: #FFFFFF;
 
-  /* Soft grays */
-  --secondary: oklch(0.973 0.001 285);
-  --secondary-foreground: oklch(0.18 0.004 285);
-  --muted: oklch(0.975 0.001 285);
-  --muted-foreground: oklch(0.52 0.005 285);
-  --accent: oklch(0.968 0.001 285);
-  --accent-foreground: oklch(0.18 0.004 285);
+  /* Secondary is White */
+  --secondary: #FFFFFF;
+  --secondary-foreground: #000000;
+  
+  /* Very soft grays for muted areas */
+  --muted: #F9FAFB;
+  --muted-foreground: #6B7280;
+  --accent: #F3F4F6;
+  --accent-foreground: #111827;
 
-  /* Positive-state secondary color — emerald */
-  --positive: #10b981;
-  --positive-foreground: oklch(1 0 0);
+  /* State colors from DESIGN.md */
+  --positive: #16A34A;
+  --positive-foreground: #FFFFFF;
 
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.928 0.003 285);
-  --input: oklch(0.928 0.003 285);
-  --ring: #0052ff;
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+  
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
 
-  --chart-1: #0052ff;
-  --chart-2: #10b981;
-  --chart-3: oklch(0.55 0.02 285);
-  --chart-4: oklch(0.7 0.13 230);
-  --chart-5: oklch(0.62 0.18 320);
+  /* Black as the only divider */
+  --border: #000000;
+  --input: #000000;
+  --ring: #000000;
 
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.18 0.004 285);
-  --sidebar-primary: #0052ff;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: oklch(0.973 0.001 285);
-  --sidebar-accent-foreground: oklch(0.18 0.004 285);
-  --sidebar-border: oklch(0.928 0.003 285);
-  --sidebar-ring: #0052ff;
+  --chart-1: #000000;
+  --chart-2: #16A34A;
+  --chart-3: #D97706;
+  --chart-4: #DC2626;
+  --chart-5: #6B7280;
+
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F9FAFB;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #000000;
+  --sidebar-ring: #000000;
 }
 
 .dark {
-  --background: oklch(0.16 0.004 285);
-  --foreground: oklch(0.97 0.002 285);
-  --card: oklch(0.2 0.004 285);
-  --card-foreground: oklch(0.97 0.002 285);
-  --popover: oklch(0.2 0.004 285);
-  --popover-foreground: oklch(0.97 0.002 285);
-  --primary: #3b7bff;
-  --primary-foreground: #ffffff;
-  --secondary: oklch(0.26 0.004 285);
-  --secondary-foreground: oklch(0.97 0.002 285);
-  --muted: oklch(0.26 0.004 285);
-  --muted-foreground: oklch(0.7 0.005 285);
-  --accent: oklch(0.26 0.004 285);
-  --accent-foreground: oklch(0.97 0.002 285);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 12%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #3b7bff;
+  /* Codex is fundamentally a white-canvas design, 
+     but keeping a dark mode fallback with inverted colors */
+  --background: #000000;
+  --foreground: #FFFFFF;
+  --card: #000000;
+  --card-foreground: #FFFFFF;
+  --popover: #000000;
+  --popover-foreground: #FFFFFF;
+  --primary: #FFFFFF;
+  --primary-foreground: #000000;
+  --secondary: #000000;
+  --secondary-foreground: #FFFFFF;
+  --muted: #111827;
+  --muted-foreground: #9CA3AF;
+  --accent: #1F2937;
+  --accent-foreground: #FFFFFF;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --border: #FFFFFF;
+  --input: #FFFFFF;
+  --ring: #FFFFFF;
 }
 
 @layer base {
@@ -128,6 +139,7 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     position: relative;
+    scroll-padding-top: 6rem;
   }
   body {
     @apply bg-background text-foreground;
@@ -162,6 +174,9 @@
   .text-pretty {
     text-wrap: pretty;
   }
+  .nov-anchor-section {
+    scroll-margin-top: 5rem;
+  }
   /* Subtle grain/noise overlay for depth — barely visible */
   .nov-grain {
     position: relative;
@@ -186,34 +201,23 @@
     mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
   }
   .nov-text-gradient {
-    background: linear-gradient(180deg, oklch(0.18 0.004 285) 0%, oklch(0.4 0.004 285) 100%);
-    -webkit-background-clip: text;
-    background-clip: text;
-    -webkit-text-fill-color: transparent;
-    color: transparent;
+    color: var(--foreground); /* Removed gradient per Codex guidelines */
   }
   .nov-glass {
-    background: oklch(1 0 0 / 0.72);
-    backdrop-filter: blur(20px) saturate(180%);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    background: var(--background);
+    border: 1px solid var(--border);
   }
   .nov-ring {
-    box-shadow:
-      0 0 0 1px oklch(0.5 0.005 285 / 0.08),
-      0 1px 2px oklch(0.5 0.005 285 / 0.04),
-      0 8px 24px -8px oklch(0.5 0.005 285 / 0.08);
+    border: 1px solid var(--border);
+    box-shadow: none; /* No shadows in Codex */
   }
   .nov-ring-lg {
-    box-shadow:
-      0 0 0 1px oklch(0.5 0.005 285 / 0.07),
-      0 2px 4px oklch(0.5 0.005 285 / 0.03),
-      0 12px 32px -12px oklch(0.5 0.005 285 / 0.12),
-      0 24px 64px -24px oklch(0.5 0.005 285 / 0.08);
+    border: 1px solid var(--border);
+    box-shadow: none;
   }
   .nov-shadow-blue {
-    box-shadow:
-      0 1px 2px rgba(0, 82, 255, 0.2),
-      0 8px 24px -6px rgba(0, 82, 255, 0.35);
+    border: 1px solid var(--border);
+    box-shadow: none;
   }
 }
 
@@ -486,6 +490,12 @@ img, video, canvas, svg {
 /* MOBILE: Disable entry animations for instant content display.
    Only keep navbar/menu animations (they're fast and don't block content). */
 @media (max-width: 768px) {
+  html {
+    scroll-padding-top: 4.25rem;
+  }
+  .nov-anchor-section {
+    scroll-margin-top: 4.25rem;
+  }
   [style*="heroFadeUp"],
   [style*="heroFadeBlur"],
   [style*="heroFadeUpBlur"],
@@ -563,10 +573,10 @@ img, video, canvas, svg {
 }
 .float-3d { animation: float-3d 6s ease-in-out infinite; transform-style: preserve-3d; }
 
-/* 3D glow pulse */
+/* 3D glow pulse - shadows removed per Codex */
 @keyframes glow-3d-pulse {
-  0%, 100% { box-shadow: 0 0 20px rgba(0, 82, 255, 0.15), 0 0 40px rgba(0, 82, 255, 0.08); }
-  50% { box-shadow: 0 0 30px rgba(0, 82, 255, 0.25), 0 0 60px rgba(0, 82, 255, 0.12); }
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
 }
 .glow-3d { animation: glow-3d-pulse 4s ease-in-out infinite; }
 
@@ -589,11 +599,10 @@ img, video, canvas, svg {
 }
 .flip-card-back { transform: rotateY(180deg); }
 
-/* Scroll progress glow (enhanced version of scroll progress bar) */
+/* Scroll progress glow - shadows removed per Codex */
 @keyframes scroll-glow {
-  0% { box-shadow: 0 0 5px rgba(0, 82, 255, 0.3); }
-  50% { box-shadow: 0 0 15px rgba(0, 82, 255, 0.6); }
-  100% { box-shadow: 0 0 5px rgba(0, 82, 255, 0.3); }
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
 }
 
 /* Sticky CTA bar (mobile conversion) */
@@ -662,14 +671,13 @@ img, video, canvas, svg {
 
 /* ─── DASHBOARD 3D & MOTION (subtle, functional) ─── */
 
-/* Stat card hover lift — subtle 3D perspective on hover */
+/* Stat card hover lift — subtle 3D perspective on hover (shadows removed per Codex) */
 .stat-card-3d {
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   transform-style: preserve-3d;
 }
 .stat-card-3d:hover {
   transform: translateY(-4px) perspective(600px) rotateX(2deg);
-  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.12), 0 4px 12px -4px rgba(0, 82, 255, 0.08);
 }
 
 /* Table row hover — smooth highlight */
@@ -683,11 +691,16 @@ img, video, canvas, svg {
 
 /* Tab transition — smooth content swap */
 .tab-content-enter {
-  animation: tabFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+  /* Do not retain the animation's identity transform after completion.
+     Even translateY(0) creates a containing block for fixed descendants. */
+  animation: tabFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 @keyframes tabFadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  /* Use `none` instead of translateY(0). An identity transform still creates
+     a containing block, which breaks position:fixed navbar/CTA descendants
+     on mobile after the transition completes. */
+  to { opacity: 1; transform: none; }
 }
 
 /* Dashboard scroll reveal — subtle (no 3D rotate, just fade + slide) */
