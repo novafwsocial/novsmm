@@ -1,6 +1,6 @@
 "use client";
 
-import { Reveal } from "./reveal";
+import { Reveal } from "@/components/novsmm/reveal";
 import { cn } from "@/lib/utils";
 
 export function SectionHeading({
