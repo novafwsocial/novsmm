@@ -37,24 +37,11 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Signature verification (fail-closed) ──
-  // In production, MP_WEBHOOK_SECRET must be set. Without it, anyone could POST
-  // fake payment notifications and get free wallet top-ups.
-  if (!webhookSecret) {
-    // Log the unverified event for audit, but DO NOT process it
-    await db.webhookLog.create({
-      data: {
-        provider: "mercadopago",
-        eventType: event.type ?? event.action ?? "unknown",
-        payload: body.slice(0, 10000),
-        signature,
-        status: "rejected",
-        error: "MP_WEBHOOK_SECRET not configured — webhook rejected (fail-closed)",
-      },
-    });
-    return apiError("Webhook secret not configured", 401);
-  }
+  // QA-002 FIX: Check webhook secret and signature format BEFORE any DB
+  // access. Previously, the code tried db.webhookLog.create() when the
+  // secret was missing, causing a 500 if the DB was unreachable.
 
-  // Parse ts and v1 from x-signature header
+  // Parse ts and v1 from x-signature header FIRST (no DB needed)
   const sigParts = signature.split(",").reduce((acc, part) => {
     const [k, v] = part.split("=");
     if (k && v) acc[k.trim()] = v.trim();
@@ -63,6 +50,12 @@ export async function POST(req: NextRequest) {
   const ts = sigParts["ts"];
   const v1 = sigParts["v1"];
 
+  // Check 1: webhook secret must be configured
+  if (!webhookSecret) {
+    return apiError("Webhook secret not configured", 401);
+  }
+
+  // Check 2: signature must have ts and v1 components
   if (!ts || !v1) {
     return apiError("Invalid signature format — missing ts or v1", 401);
   }

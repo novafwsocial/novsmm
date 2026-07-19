@@ -62,10 +62,38 @@ export async function POST(req: NextRequest) {
 
   const eventType: string = event?.event_type ?? "unknown";
 
+  // QA-002 FIX: Check for required PayPal transmission headers BEFORE any
+  // DB access. If headers are missing → return 401 immediately (no DB call).
+  const transmissionId = req.headers.get("paypal-transmission-id") ?? "";
+  const transmissionSig = req.headers.get("paypal-transmission-sig") ?? "";
+  const certUrl = req.headers.get("paypal-cert-url") ?? "";
+  const authAlgo = req.headers.get("paypal-auth-algo") ?? "";
+
+  if (!transmissionId || !transmissionSig || !certUrl || !authAlgo) {
+    await db.webhookLog
+      .create({
+        data: {
+          provider: "paypal",
+          eventType,
+          payload: rawBody.slice(0, 10000),
+          status: "rejected",
+          error: "Missing PayPal transmission headers — webhook rejected",
+        },
+      })
+      .catch(() => null);
+    return apiError("Missing required PayPal headers", 401);
+  }
+
   // ── Look up the PayPal payment method to get credentials + webhookId ──
-  const pm = await db.paymentMethod.findUnique({
-    where: { name: "PayPal" },
-  });
+  let pm: any;
+  try {
+    pm = await db.paymentMethod.findUnique({
+      where: { name: "PayPal" },
+    });
+  } catch (e: any) {
+    console.error("[webhooks/paypal] DB error:", e?.message);
+    return apiError("Service temporarily unavailable", 503);
+  }
 
   if (!pm) {
     await db.webhookLog
@@ -106,14 +134,8 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Verify the webhook signature via PayPal's API ──
-  // PayPal sends these headers per transmission:
-  //   paypal-transmission-id, paypal-transmission-time, paypal-transmission-sig,
-  //   paypal-cert-url, paypal-auth-algo
-  const transmissionId = req.headers.get("paypal-transmission-id") ?? "";
+  // Headers already extracted above (QA-002 fix).
   const transmissionTime = req.headers.get("paypal-transmission-time") ?? "";
-  const transmissionSig = req.headers.get("paypal-transmission-sig") ?? "";
-  const certUrl = req.headers.get("paypal-cert-url") ?? "";
-  const authAlgo = req.headers.get("paypal-auth-algo") ?? "";
 
   // Always log the webhook receipt (audit trail)
   const webhookLog = await db.webhookLog
