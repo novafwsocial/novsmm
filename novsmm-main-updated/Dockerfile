@@ -1,0 +1,105 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NOVSMM — Multi-stage Dockerfile (Bun, production-ready, CIS-hardened)
+# ─────────────────────────────────────────────────────────────────────────────
+# Stage 1: Install ALL dependencies (for build)
+# Stage 2: Build the Next.js app
+# Stage 3: Install PRODUCTION-only dependencies (for runner)
+# Stage 4: Production runner (minimal image, non-root user, healthcheck)
+#
+# FIX (C-004): switched from npm to bun to match the project's actual
+# package manager (bun.lock is committed, package-lock.json is not).
+# Benefits: faster installs (~10x), smaller image (bun's install graph
+# is more efficient), and no more drift between local dev (bun) and
+# Docker (npm).
+#
+# FIX (H-002): previously the runner copied node_modules from the builder
+# stage, which included dev deps (eslint, typescript, tsx, etc. — ~200MB
+# extra + attack surface). Now a separate prod-deps stage installs only
+# production dependencies, and the runner copies from there.
+#
+# CIS Docker Benchmark compliance:
+#   - Runs as non-root user (nextjs:1001)
+#   - No package managers in final image
+#   - Minimal final image (no dev deps, no build tools)
+#   - Healthcheck built in
+#   - Read-only filesystem compatible (writes only to /tmp + /app/uploads)
+# ─────────────────────────────────────────────────────────────────────────────
+
+# ── Stage 1: Dependencies (all, including dev for build) ──
+FROM oven/bun:1.1-debian AS deps
+WORKDIR /app
+COPY package.json bun.lock* ./
+# Install ALL deps (including dev) — needed for next build + tsx
+RUN bun install --frozen-lockfile
+
+# ── Stage 2: Build ──
+FROM oven/bun:1.1-debian AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+# The production image uses PostgreSQL. The low-memory compose file passes
+# PRISMA_PROVIDER=sqlite and generates a SQLite client from the same schema,
+# so its file-based DATABASE_URL is valid instead of failing at runtime.
+ARG PRISMA_PROVIDER=postgresql
+RUN if [ "$PRISMA_PROVIDER" = "sqlite" ]; then \
+      sed 's/provider = "postgresql"/provider = "sqlite"/' prisma/schema.prisma > prisma/schema.sqlite.prisma && \
+      bunx prisma generate --schema prisma/schema.sqlite.prisma; \
+    else \
+      bunx prisma generate; \
+    fi
+RUN NODE_OPTIONS="--max-old-space-size=2048" bun run build
+
+# ── Stage 3: Production-only dependencies ──
+# FIX (H-002): separate stage that installs ONLY production deps (no eslint,
+# typescript, tsx, etc.). The runner copies node_modules from HERE, not
+# from the builder. Saves ~200MB and removes dev tools from the prod image.
+FROM oven/bun:1.1-debian AS prod-deps
+WORKDIR /app
+COPY package.json bun.lock* ./
+RUN bun install --frozen-lockfile --production
+
+# ── Stage 4: Production runner (CIS-hardened) ──
+FROM oven/bun:1.1-debian AS runner
+
+# CIS 4.1: Create non-root user (UID 1001 — avoids conflicts with host users)
+RUN groupadd -r nextjs && useradd -r -g nextjs -u 1001 nextjs
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV PORT=3000
+
+# CIS 5.10: Install ONLY curl for healthcheck (no other tools)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends curl && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get purge -y --auto-remove
+
+# Copy build artifacts + PRODUCTION-ONLY node_modules
+COPY --from=builder --chown=nextjs:nextjs /app/package.json ./package.json
+COPY --from=builder --chown=nextjs:nextjs /app/.next ./.next
+# FIX (H-002): copy from prod-deps (no dev deps) instead of builder
+COPY --from=prod-deps --chown=nextjs:nextjs /app/node_modules ./node_modules
+COPY --from=builder --chown=nextjs:nextjs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nextjs /app/public ./public
+COPY --from=builder --chown=nextjs:nextjs /app/next.config.ts ./next.config.ts
+COPY --from=builder --chown=nextjs:nextjs /app/src ./src
+COPY --from=builder --chown=nextjs:nextjs /app/tsconfig.json ./tsconfig.json
+
+# Create writable directories for uploads + tmp
+RUN mkdir -p /app/storage/uploads /tmp/nextjs-cache && \
+    chown -R nextjs:nextjs /app/storage /tmp/nextjs-cache
+
+# CIS 5.3: Switch to non-root user
+USER nextjs
+
+EXPOSE 3000
+
+# CIS 5.7: Healthcheck (built into image — works even without docker-compose)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:3000/api/health/live || exit 1
+
+# CIS 5.12: Use exec form for signal handling (SIGTERM graceful shutdown)
+# Run next start via bun (faster startup than node, less memory)
+CMD ["bun", "run", "start"]

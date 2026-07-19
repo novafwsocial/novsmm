@@ -1,0 +1,53 @@
+# NOVSMM Gateway — Caddyfile (DEPRECATED — use nginx.conf instead)
+#
+# FIX (M-009): This file is NOT used by docker-compose.yml (which uses nginx).
+# It's kept as an ALTERNATIVE reverse proxy config for deployments that
+# prefer Caddy over nginx (e.g., auto-TLS via Let's Encrypt without certbot).
+#
+# To use Caddy instead of nginx:
+#   1. Remove the nginx service from docker-compose.yml
+#   2. Add a caddy service that mounts this file:
+#      caddy:
+#        image: caddy:2-alpine
+#        ports: ["80:80", "443:443"]
+#        volumes: ["./Caddyfile:/etc/caddy/Caddyfile:ro"]
+#   3. Change the :81 listener below to your domain: novsmm.shop {
+#
+# SECURITY: The previous version used a wildcard ?XTransformPort=<port> query
+# parameter that allowed anyone to reverse-proxy to ANY localhost port (SSRF).
+# This version uses explicit path-based routing only — no wildcard port forwarding.
+#
+# In production, replace the :81 listener with your real domain + TLS config:
+#   novsmm.com {
+#     ... (same handlers)
+#   }
+#
+# Required env vars (set in Caddy's environment or via systemd):
+#   - none (Caddy reads no secrets; it just proxies)
+
+:81 {
+        # ── Notification service (Socket.IO) — explicit path, no wildcard ──
+        # Only /socket.io/ paths are forwarded to the notifications mini-service.
+        # This is the ONLY path that reaches port 3003.
+        @socketio path /socket.io/*
+        handle @socketio {
+                reverse_proxy localhost:3003 {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+
+        # ── Default: Next.js app on port 3000 ──
+        # All other requests (including /api/*) go to the Next.js app.
+        # The app's own middleware handles rate limiting, CSRF, and security headers.
+        handle {
+                reverse_proxy localhost:3000 {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+}

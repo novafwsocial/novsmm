@@ -1,0 +1,1104 @@
+@import "tailwindcss";
+
+/* tw-animate-css removed — duplicates tailwindcss-animate plugin (already loaded in tailwind.config.ts) */
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  /* Font variables defined directly for Codex Design System */
+  --font-open-sans: "Open Sans", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  --font-sans: var(--font-open-sans);
+  --font-display: var(--font-open-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  /* CODEX design system — pure minimal blank-canvas */
+  --radius: 0px; /* Pill-shaped for interactives, exact radius applied directly on cards */
+
+  /* Pure white canvas, dark text */
+  --background: #FFFFFF;
+  --foreground: #111827;
+
+  --card: #FFFFFF;
+  --card-foreground: #111827;
+  --popover: #FFFFFF;
+  --popover-foreground: #111827;
+
+  /* Primary is Black */
+  --primary: #000000;
+  --primary-foreground: #FFFFFF;
+
+  /* Secondary is White */
+  --secondary: #FFFFFF;
+  --secondary-foreground: #000000;
+  
+  /* Very soft grays for muted areas */
+  --muted: #F9FAFB;
+  --muted-foreground: #6B7280;
+  --accent: #F3F4F6;
+  --accent-foreground: #111827;
+
+  /* State colors from DESIGN.md */
+  --positive: #16A34A;
+  --positive-foreground: #FFFFFF;
+
+  --success: #16A34A;
+  --warning: #D97706;
+  --danger: #DC2626;
+  
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+
+  /* Black as the only divider */
+  --border: #000000;
+  --input: #000000;
+  --ring: #000000;
+
+  --chart-1: #000000;
+  --chart-2: #16A34A;
+  --chart-3: #D97706;
+  --chart-4: #DC2626;
+  --chart-5: #6B7280;
+
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #111827;
+  --sidebar-primary: #000000;
+  --sidebar-primary-foreground: #FFFFFF;
+  --sidebar-accent: #F9FAFB;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #000000;
+  --sidebar-ring: #000000;
+}
+
+.dark {
+  /* Codex is fundamentally a white-canvas design, 
+     but keeping a dark mode fallback with inverted colors */
+  --background: #000000;
+  --foreground: #FFFFFF;
+  --card: #000000;
+  --card-foreground: #FFFFFF;
+  --popover: #000000;
+  --popover-foreground: #FFFFFF;
+  --primary: #FFFFFF;
+  --primary-foreground: #000000;
+  --secondary: #000000;
+  --secondary-foreground: #FFFFFF;
+  --muted: #111827;
+  --muted-foreground: #9CA3AF;
+  --accent: #1F2937;
+  --accent-foreground: #FFFFFF;
+  --destructive: #DC2626;
+  --destructive-foreground: #FFFFFF;
+  --border: #FFFFFF;
+  --input: #FFFFFF;
+  --ring: #FFFFFF;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    position: relative;
+    scroll-padding-top: 6rem;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "cv11", "ss01";
+    font-variation-settings: "opsz" 32;
+  }
+  ::selection {
+    background: rgba(0, 82, 255, 0.18);
+    color: oklch(0.18 0.004 285);
+  }
+}
+
+/* ===== Lenis smooth scroll ===== */
+@supports (height: 100dvh) {
+  html.lenis,
+  html.lenis body {
+    height: auto;
+  }
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+
+/* ===== NOVSMM custom utilities ===== */
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .text-pretty {
+    text-wrap: pretty;
+  }
+  .nov-anchor-section {
+    scroll-margin-top: 5rem;
+  }
+  /* Subtle grain/noise overlay for depth — barely visible */
+  .nov-grain {
+    position: relative;
+  }
+  .nov-grain::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    opacity: 0.035;
+    mix-blend-mode: multiply;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  }
+  .nov-grid-bg {
+    background-image:
+      linear-gradient(to right, oklch(0.5 0.005 285 / 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, oklch(0.5 0.005 285 / 0.045) 1px, transparent 1px);
+    background-size: 56px 56px;
+  }
+  .nov-radial-fade {
+    -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
+    mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 75%);
+  }
+  .nov-text-gradient {
+    color: var(--foreground); /* Removed gradient per Codex guidelines */
+  }
+  .nov-glass {
+    background: var(--background);
+    border: 1px solid var(--border);
+  }
+  .nov-ring {
+    border: 1px solid var(--border);
+    box-shadow: none; /* No shadows in Codex */
+  }
+  .nov-ring-lg {
+    border: 1px solid var(--border);
+    box-shadow: none;
+  }
+  .nov-shadow-blue {
+    border: 1px solid var(--border);
+    box-shadow: none;
+  }
+}
+
+/* Premium thin scrollbar */
+.nov-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.nov-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.nov-scroll::-webkit-scrollbar-thumb {
+  background: oklch(0.5 0.005 285 / 0.18);
+  border-radius: 9999px;
+}
+.nov-scroll::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0.005 285 / 0.32);
+}
+
+/* Marquee animation for testimonials/logos
+   A11Y FIX (U-H-007): added pause-on-hover so users can read testimonials
+   without the marquee moving. Also added prefers-reduced-motion override
+   to stop the animation entirely for users who request reduced motion.
+   UX FIX (U-L-004): sped up from 40s/60s to 25s/35s. The previous
+   duration was too slow — testimonials barely appeared to move, making
+   the section feel static and broken. 25s is fast enough to show
+   movement but slow enough to read. */
+@keyframes nov-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+.nov-marquee {
+  animation: nov-marquee 25s linear infinite;
+}
+.nov-marquee-slow {
+  animation: nov-marquee 35s linear infinite;
+}
+/* Pause on hover — lets users read the content */
+.nov-marquee:hover,
+.nov-marquee-slow:hover {
+  animation-play-state: paused;
+}
+
+/* Respect prefers-reduced-motion: stop marquee entirely */
+@media (prefers-reduced-motion: reduce) {
+  .nov-marquee,
+  .nov-marquee-slow {
+    animation: none !important;
+  }
+}
+
+/* Shimmer for live indicators */
+@keyframes nov-pulse-ring {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  70% { box-shadow: 0 0 0 8px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+}
+.nov-pulse-dot {
+  animation: nov-pulse-ring 2s infinite;
+}
+
+/* Floating keyframes for coins */
+@keyframes nov-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-12px) rotate(3deg); }
+}
+
+/* ─────────────────────────────────────────────────────────────
+   MOBILE PERFORMANCE OPTIMIZATIONS
+   ─────────────────────────────────────────────────────────────
+   These rules reduce main-thread work on mobile devices:
+   - content-visibility: skip rendering off-screen sections
+   - contain: isolate layout/paint/style for components
+   - overscroll-behavior: prevent scroll chaining
+   - touch-action: prevent 300ms tap delay on touch targets
+   ───────────────────────────────────────────────────────────── */
+
+/* Skip rendering for below-the-fold sections (huge perf win on mobile)
+   PERF FIX (P-L-004): was `section { content-visibility: auto }` which
+   applied to ALL <section> elements — including the hero, which is
+   above-the-fold and should always render immediately. Now scoped to
+   sections with the .lazy-section class, applied only to below-the-fold
+   sections (Services, Marketplace, Payments, Stats, etc.). */
+@media (max-width: 768px) {
+  section.lazy-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 400px;
+  }
+}
+
+/* Prevent scroll chaining — when scrolling reaches end of a modal/dropdown,
+   the background doesn't start scrolling */
+body {
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch; /* iOS momentum scroll */
+}
+
+/* Eliminate 300ms tap delay on mobile */
+button, a, [role="button"], input, select, textarea {
+  touch-action: manipulation;
+}
+
+/* Contain layout/paint for dashboard cards — prevents reflow cascades */
+.card, [class*="rounded-xl"], [class*="rounded-2xl"] {
+  contain: layout style;
+}
+
+/* GPU-accelerate transforms on animated elements */
+.nov-marquee, .nov-marquee-slow, .nov-pulse-dot {
+  will-change: transform;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Mobile: hide custom scrollbars (they cause reflow) */
+@media (max-width: 768px) {
+  .nov-scroll::-webkit-scrollbar {
+    display: none;
+  }
+  .nov-scroll {
+    scrollbar-width: none; /* Firefox */
+    -ms-overflow-style: none; /* IE/Edge */
+  }
+}
+
+/* MOB-1b-009 FIX: Disable backdrop-filter on mobile to eliminate scroll jank.
+   backdrop-filter: blur() is extremely expensive on mobile GPUs — it forces
+   a repaint of the blurred area on EVERY scroll frame. On desktop, the GPU
+   can handle it; on mobile (especially mid-range), it causes 78ms/frame
+   jank (target: 16.67ms = 60fps).
+
+   This rule replaces backdrop-blur with a solid background on mobile. The
+   visual difference is minimal (the translucent effect is barely visible
+   on small screens) but the scroll performance improvement is significant.
+
+   Modals and overlays are EXEMPTED via :not([role="dialog"]) — they need
+   the blur for the dimming effect when open, and they don't scroll. */
+@media (max-width: 768px) {
+  *:not([role="dialog"]):not([aria-modal="true"]) {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+  }
+}
+
+/* MOB-1c-001 FIX: Prevent iOS zoom on input focus.
+   iOS Safari auto-zooms when an input has font-size < 16px. This affects
+   39+ inputs across admin-panel, dashboard-marketplace, dashboard-wallet,
+   etc. that use text-sm (14px) or text-xs (12px).
+
+   Instead of changing 39+ individual className strings, this global rule
+   forces ALL inputs to 16px on mobile. Desktop keeps the original sizes
+   (text-sm/text-xs) via the md: breakpoint override.
+
+   This is the recommended best practice from Apple's Safari Web Content
+   Guide and Google's Web Fundamentals. */
+@media (max-width: 768px) {
+  input,
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* MOB-1c-004 FIX: Ensure minimum touch target size on mobile (WCAG 2.5.5).
+   48 buttons across 17 files have h-5/h-6/h-7 (20-28px) — below the 44×44px
+   minimum. Instead of changing 48 individual className strings, this rule
+   extends the touch area via padding on mobile WITHOUT changing the visual
+   size of the button (the padding is transparent, so the button looks the
+   same but the tappable area is larger).
+
+   Table cell buttons (td button, th button) are EXEMPTED — tables have
+   their own row height and forcing 44px would break table layouts. */
+@media (max-width: 768px) {
+  button:not(td button):not(th button):not([role="dialog"] button),
+  a:not(td a):not(th a):not([role="dialog"] a) {
+    min-height: 44px;
+  }
+}
+
+/* DSK-1c-003 FIX: Focus indicators for inputs with focus:outline-none.
+   15+ inputs across the app use focus:outline-none to remove the default
+   browser outline, but many don't add an alternative focus ring. This
+   global rule adds a focus-visible ring to ALL inputs, selects, and
+   textareas — keyboard users get a visible indicator, mouse clicks don't.
+   Uses :focus-visible (modern best practice) so the ring only shows on
+   keyboard navigation, not on mouse clicks. */
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(0, 82, 255, 0.5);
+  outline-offset: 2px;
+}
+
+/* Optimize font rendering on mobile (prevents layout shift) + prevent horizontal scroll */
+html {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeSpeed; /* faster text, slight quality tradeoff */
+  overflow-x: hidden; /* safety net: prevent horizontal scroll from fixed-width elements */
+}
+
+/* Prevent layout shift from images without dimensions */
+img, video, canvas, svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* contain: strict for fixed-height scrollable lists (marketplace, orders) */
+.scroll-list {
+  contain: strict;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 600px;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   HERO ANIMATIONS (CSS-only, no framer-motion)
+   ─────────────────────────────────────────────────────────────
+   Replaced framer-motion with pure CSS keyframes for the hero.
+   GPU-composited (transform + opacity), zero JS overhead.
+
+   On mobile (max-width: 768px), entry animations are DISABLED —
+   content appears instantly for fastest perceived load.
+   ───────────────────────────────────────────────────────────── */
+
+@keyframes heroFadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes heroFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes heroFadeBlur {
+  from { opacity: 0; transform: translateY(24px); filter: blur(12px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0px); }
+}
+
+@keyframes heroFadeUpBlur {
+  from { opacity: 0; transform: translateY(60px); filter: blur(16px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0px); }
+}
+
+@keyframes navbarIn {
+  from { opacity: 0; transform: translateY(-20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes mobileMenuIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes chipIn {
+  from { opacity: 0; transform: scale(0.85) translateY(10px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* MOBILE: Disable entry animations for instant content display.
+   Only keep navbar/menu animations (they're fast and don't block content). */
+@media (max-width: 768px) {
+  html {
+    scroll-padding-top: 4.25rem;
+  }
+  .nov-anchor-section {
+    scroll-margin-top: 4.25rem;
+  }
+  [style*="heroFadeUp"],
+  [style*="heroFadeBlur"],
+  [style*="heroFadeUpBlur"],
+  [style*="chipIn"],
+  [style*="heroFade"] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  [style*="heroFade"],
+  [style*="navbarIn"],
+  [style*="mobileMenuIn"],
+  [style*="chipIn"] {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
+  }
+}
+
+/* ─── 3D & SCROLL ANIMATION SYSTEM ─── */
+
+/* 3D perspective utilities */
+.perspective-1000 { perspective: 1000px; }
+.perspective-2000 { perspective: 2000px; }
+.preserve-3d { transform-style: preserve-3d; }
+.backface-hidden { backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+
+/* 3D card tilt — triggered by JS mouse tracking (data-tilt attribute) */
+.tilt-card {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.tilt-card-inner {
+  transform: translateZ(40px);
+  transform-style: preserve-3d;
+}
+
+/* Scroll-driven parallax (CSS scroll-timeline — Chrome 115+, Safari 17.4+)
+   Fallback: IntersectionObserver adds .in-view class for older browsers */
+@supports (animation-timeline: scroll()) {
+  .parallax-layer {
+    animation: parallax-up linear both;
+    animation-timeline: scroll(root);
+  }
+  @keyframes parallax-up {
+    from { transform: translateZ(0) translateY(0); }
+    to { transform: translateZ(0) translateY(-100px); }
+  }
+}
+
+/* 3D scroll reveal — cards rotate in from perspective */
+.reveal-3d {
+  opacity: 0;
+  transform: perspective(800px) rotateX(15deg) translateY(60px);
+  transform-origin: center bottom;
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.reveal-3d.in-view {
+  opacity: 1;
+  transform: perspective(800px) rotateX(0deg) translateY(0);
+}
+
+/* Floating 3D animation */
+@keyframes float-3d {
+  0%, 100% { transform: translateY(0) rotateY(0deg) rotateX(0deg); }
+  25% { transform: translateY(-10px) rotateY(2deg) rotateX(1deg); }
+  50% { transform: translateY(-5px) rotateY(0deg) rotateX(-1deg); }
+  75% { transform: translateY(-15px) rotateY(-2deg) rotateX(1deg); }
+}
+.float-3d { animation: float-3d 6s ease-in-out infinite; transform-style: preserve-3d; }
+
+/* 3D glow pulse - shadows removed per Codex */
+@keyframes glow-3d-pulse {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+}
+.glow-3d { animation: glow-3d-pulse 4s ease-in-out infinite; }
+
+/* 3D flip card */
+.flip-card { perspective: 1000px; }
+.flip-card-inner {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.flip-card:hover .flip-card-inner { transform: rotateY(180deg); }
+.flip-card-front, .flip-card-back {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.flip-card-back { transform: rotateY(180deg); }
+
+/* Scroll progress glow - shadows removed per Codex */
+@keyframes scroll-glow {
+  0%, 100% { filter: brightness(1); }
+  50% { filter: brightness(1.2); }
+}
+
+/* Sticky CTA bar (mobile conversion) */
+.sticky-cta {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 40;
+  transform: translateY(100%);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.sticky-cta.visible { transform: translateY(0); }
+
+/* Social proof notification */
+@keyframes slide-in-up {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+@keyframes slide-out-down {
+  from { opacity: 1; transform: translateY(0) scale(1); }
+  to { opacity: 0; transform: translateY(20px) scale(0.95); }
+}
+.social-proof {
+  animation: slide-in-up 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.social-proof.exit {
+  animation: slide-out-down 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Shimmer effect for CTAs */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.shimmer-cta {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 3s ease-in-out infinite;
+}
+
+/* Disable 3D on mobile for performance */
+@media (max-width: 768px) {
+  .reveal-3d {
+    opacity: 0;
+    transform: translateY(30px); /* simpler on mobile */
+    transition: opacity 0.5s ease, transform 0.5s ease;
+  }
+  .reveal-3d.in-view {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  .float-3d { animation: none; }
+  .parallax-layer { animation: none !important; transform: none !important; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-3d, .float-3d, .glow-3d, .parallax-layer, .shimmer-cta, .social-proof {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* ─── DASHBOARD 3D & MOTION (subtle, functional) ─── */
+
+/* Stat card hover lift — subtle 3D perspective on hover (shadows removed per Codex) */
+.stat-card-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.stat-card-3d:hover {
+  transform: translateY(-4px) perspective(600px) rotateX(2deg);
+}
+
+/* Table row hover — smooth highlight */
+.table-row-hover {
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.table-row-hover:hover {
+  background-color: var(--muted);
+  transform: translateX(2px);
+}
+
+/* Tab transition — smooth content swap */
+.tab-content-enter {
+  /* Do not retain the animation's identity transform after completion.
+     Even translateY(0) creates a containing block for fixed descendants. */
+  animation: tabFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  /* Use `none` instead of translateY(0). An identity transform still creates
+     a containing block, which breaks position:fixed navbar/CTA descendants
+     on mobile after the transition completes. */
+  to { opacity: 1; transform: none; }
+}
+
+/* Dashboard scroll reveal — subtle (no 3D rotate, just fade + slide) */
+.dash-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.5s cubic-bezier(0.16, 1, 0.3, 1), transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.dash-reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Button press effect — tactile feedback */
+.btn-press {
+  transition: transform 0.1s ease;
+}
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+/* Badge pulse — for live/active indicators */
+@keyframes badge-pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+.badge-pulse {
+  animation: badge-pulse-subtle 2s ease-in-out infinite;
+}
+
+/* Loading skeleton shimmer — for data loading states */
+@keyframes skeleton-shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-shimmer {
+  background: linear-gradient(90deg, var(--muted) 25%, var(--muted-foreground) 50%, var(--muted) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.5s ease-in-out infinite;
+}
+
+/* Modal entrance — 3D scale + fade */
+.modal-3d-enter {
+  animation: modal3dIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes modal3dIn {
+  from { opacity: 0; transform: perspective(800px) rotateX(-5deg) scale(0.95) translateY(10px); }
+  to { opacity: 1; transform: perspective(800px) rotateX(0deg) scale(1) translateY(0); }
+}
+
+/* Chart container — subtle 3D depth */
+.chart-container {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.chart-container:hover {
+  transform: perspective(1000px) rotateX(1deg);
+}
+
+/* Disable on mobile for performance */
+@media (max-width: 768px) {
+  .stat-card-3d:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .table-row-hover:hover {
+    transform: none;
+  }
+  .chart-container:hover {
+    transform: none;
+  }
+  .dash-reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .stat-card-3d, .table-row-hover, .tab-content-enter, .dash-reveal,
+  .btn-press, .badge-pulse, .modal-3d-enter, .chart-container {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* ─── FOOTER 3D & MOTION ─── */
+
+/* Footer link hover — 3D lift + glow */
+.footer-link-3d {
+  position: relative;
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), color 0.3s ease;
+  transform-style: preserve-3d;
+}
+.footer-link-3d:hover {
+  transform: translateX(4px) translateZ(10px);
+  color: var(--primary);
+}
+.footer-link-3d::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%) translateX(-4px);
+  width: 2px;
+  height: 0;
+  background: var(--primary);
+  border-radius: 1px;
+  transition: height 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.footer-link-3d:hover::before {
+  height: 100%;
+}
+
+/* Footer column reveal — stagger fade-in on scroll */
+.footer-col-reveal {
+  opacity: 0;
+  transform: translateY(20px);
+  transition: opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1), transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.footer-col-reveal.in-view {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Footer status badge — pulse glow */
+@keyframes status-badge-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.3); }
+  50% { box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+}
+.status-badge-glow {
+  animation: status-badge-glow 3s ease-in-out infinite;
+}
+
+/* Footer logo — subtle 3D float */
+@keyframes footer-logo-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-3px) rotate(0.5deg); }
+}
+.footer-logo-float {
+  animation: footer-logo-float 5s ease-in-out infinite;
+}
+
+/* ─── AUTH SCREENS 3D ─── */
+
+/* Auth card — 3D entrance + tilt on hover */
+.auth-card-3d {
+  perspective: 1000px;
+}
+.auth-card-inner {
+  transform-style: preserve-3d;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: authCardIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes authCardIn {
+  from { opacity: 0; transform: perspective(800px) rotateX(10deg) translateY(40px) scale(0.95); }
+  to { opacity: 1; transform: perspective(800px) rotateX(0deg) translateY(0) scale(1); }
+}
+
+/* Auth input — 3D focus glow */
+.auth-input-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+}
+.auth-input-3d:focus-within {
+  transform: translateZ(10px);
+  box-shadow: 0 8px 24px -8px rgba(0, 82, 255, 0.15);
+}
+
+/* Social login button — 3D hover */
+.social-btn-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.social-btn-3d:hover {
+  transform: translateY(-2px) translateZ(5px);
+  box-shadow: 0 8px 20px -4px rgba(0, 0, 0, 0.1);
+}
+.social-btn-3d:active {
+  transform: translateY(0) translateZ(0);
+}
+
+/* ─── API DOCS PAGE 3D ─── */
+
+/* Endpoint card — 3D hover lift */
+.endpoint-card-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.endpoint-card-3d:hover {
+  transform: translateY(-2px) perspective(600px) rotateX(1deg);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Method badge — 3D pop */
+.method-badge-3d {
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.method-badge-3d:hover {
+  transform: scale(1.05) translateZ(5px);
+}
+
+/* Code block — 3D depth */
+.code-block-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  transform-style: preserve-3d;
+}
+.code-block-3d:hover {
+  transform: translateZ(5px);
+}
+
+/* ─── CHANGELOG PAGE 3D ─── */
+
+/* Timeline entry — 3D hover */
+.timeline-entry-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transform-style: preserve-3d;
+}
+.timeline-entry-3d:hover {
+  transform: translateX(4px) translateZ(5px);
+  box-shadow: 0 8px 24px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* Timeline dot — pulse */
+@keyframes timeline-dot-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
+  50% { transform: scale(1.1); box-shadow: 0 0 0 4px transparent; }
+}
+.timeline-dot-pulse {
+  animation: timeline-dot-pulse 3s ease-in-out infinite;
+}
+
+/* ─── 404 PAGE 3D ─── */
+
+/* 404 gradient text — 3D float */
+@keyframes error-404-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  50% { transform: translateY(-10px) rotate(-1deg); }
+}
+.error-404-float {
+  animation: error-404-float 4s ease-in-out infinite;
+}
+
+/* 404 resource cards — 3D hover */
+.resource-card-3d {
+  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease, border-color 0.3s ease;
+  transform-style: preserve-3d;
+}
+.resource-card-3d:hover {
+  transform: translateY(-4px) perspective(600px) rotateX(2deg);
+  box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.12);
+}
+
+/* ─── MOBILE: DISABLE ALL 3D ─── */
+@media (max-width: 768px) {
+  .footer-link-3d:hover { transform: none; }
+  .footer-link-3d:hover::before { height: 0; }
+  .auth-card-inner { animation: none; opacity: 1; transform: none; }
+  .auth-input-3d:focus-within { transform: none; }
+  .social-btn-3d:hover { transform: none; }
+  .endpoint-card-3d:hover { transform: none; }
+  .method-badge-3d:hover { transform: none; }
+  .code-block-3d:hover { transform: none; }
+  .timeline-entry-3d:hover { transform: none; }
+  .resource-card-3d:hover { transform: none; }
+  .footer-logo-float { animation: none; }
+}
+
+/* ─── REDUCED MOTION ─── */
+@media (prefers-reduced-motion: reduce) {
+  .footer-link-3d, .footer-col-reveal, .auth-card-inner, .auth-input-3d,
+  .social-btn-3d, .endpoint-card-3d, .method-badge-3d, .code-block-3d,
+  .timeline-entry-3d, .timeline-dot-pulse, .resource-card-3d,
+  .error-404-float, .footer-logo-float, .status-badge-glow {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}
+
+/* M-01: Touch targets minimum 44px on mobile */
+@media (max-width: 768px) {
+  button, a[role="button"], [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+}
+
+/* ─── ERROR BOUNDARY (P-C-002 fix) ─── */
+/* Replaces framer-motion fade+scale animation in error-boundary.tsx.
+   Kept minimal — this is an error state most users never see. */
+@keyframes errorBoundaryIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.error-boundary-enter {
+  animation: errorBoundaryIn 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .error-boundary-enter {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+}
+
+/* FIX: eliminate horizontal scroll on mobile */
+body {
+  overflow-x: hidden;
+  max-width: 100vw;
+}
+
+/* Ensure all sections respect viewport width */
+main, section, footer, header, nav {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+/* Prevent any element from exceeding viewport width on mobile */
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+/* DSK-1c-005 FIX: Disable hover effects on disabled buttons.
+   49 buttons across the app have hover: classes that still apply when
+   the button is disabled, misleading users into thinking they can click.
+   This global rule removes hover effects on [disabled] buttons. */
+button:disabled:hover,
+button[disabled]:hover,
+[role="button"][aria-disabled="true"]:hover {
+  background-color: inherit !important;
+  color: inherit !important;
+  transform: none !important;
+  box-shadow: inherit !important;
+  cursor: not-allowed !important;
+  opacity: 0.6 !important;
+}
+
+/* DSK-1c-006 FIX: Print styles for invoices, legal pages, and receipts.
+   Hides navigation, sidebars, and interactive elements when printing.
+   Ensures text is black on white, links show their URL, and page breaks
+   don't cut content awkwardly. */
+@media print {
+  /* Hide non-essential UI elements */
+  nav, footer, .no-print, [aria-label="Open WhatsApp chat"],
+  .sticky-cta, .whatsapp-widget, button:not(.print-button) {
+    display: none !important;
+  }
+
+  /* Force black text on white background */
+  body {
+    background: white !important;
+    color: black !important;
+    font-size: 12pt;
+  }
+
+  /* Show URLs after links */
+  a[href]::after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+  }
+
+  /* Don't show URL for internal anchor links */
+  a[href^="#"]::after,
+  a[href^="javascript"]::after {
+    content: "";
+  }
+
+  /* Avoid breaking inside these elements */
+  h1, h2, h3, table, .rounded-2xl {
+    page-break-inside: avoid;
+  }
+
+  /* Full-width content */
+  main, .max-w-7xl, .max-w-3xl {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+}
+
+/* DSK-1c-011 FIX: cursor: not-allowed on disabled buttons */
+button:disabled,
+button[disabled],
+[aria-disabled="true"] {
+  cursor: not-allowed !important;
+}

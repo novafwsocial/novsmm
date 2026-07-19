@@ -1,0 +1,121 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# NOVSMM — Docker Compose LOW MEMORY (2GB RAM VPS)
+# ═══════════════════════════════════════════════════════════════════════════
+# Optimized for VPS with only 2GB RAM (e.g., IONOS VPS S+).
+#
+# WHAT'S DIFFERENT vs docker-compose.yml:
+#   ✅ SQLite instead of PostgreSQL (saves ~800MB RAM)
+#   ✅ No Redis (app falls back to in-memory cache — saves ~200MB)
+#   ✅ No Prometheus/Grafana/AlertManager (saves ~600MB)
+#   ✅ No separate worker process (jobs run in-process — saves ~200MB)
+#   ✅ Node.js memory limited to 384MB
+#   ✅ Nginx with minimal config
+#
+# TOTAL RAM USAGE: ~800MB-1GB (leaves 1GB headroom for OS + spike traffic)
+#
+# TRADE-OFFS:
+#   - SQLite is slower than PostgreSQL under high concurrency (fine for small scale)
+#   - In-memory cache resets on restart (no persistent cache)
+#   - No real-time monitoring dashboards (can add later when upgrading VPS)
+#   - Background jobs run in-process (slight request latency on job execution)
+#
+# UPGRADE PATH: When you move to a 4GB+ VPS, switch to docker-compose.yml
+# (with PostgreSQL + Redis + monitoring) for full performance.
+#
+# USAGE:
+#   docker compose -f docker-compose.lowmem.yml up -d --build
+# ═══════════════════════════════════════════════════════════════════════════
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        PRISMA_PROVIDER: sqlite
+    container_name: novsmm-web
+    restart: unless-stopped
+    init: true
+    environment:
+      # ── Database: SQLite (file-based, no separate process) ──
+      DATABASE_URL: "file:/app/db/custom.db"
+      
+      # ── Auth (REQUIRED — set these in .env) ──
+      NEXTAUTH_SECRET: "${NEXTAUTH_SECRET:?Set NEXTAUTH_SECRET in .env}"
+      NEXTAUTH_URL: "${NEXTAUTH_URL:?Set NEXTAUTH_URL in .env}"
+      LICENSE_ENCRYPTION_KEY: "${LICENSE_ENCRYPTION_KEY:?Set LICENSE_ENCRYPTION_KEY in .env}"
+      
+      # ── Redis: NOT used (app falls back to in-memory) ──
+      # Do NOT set REDIS_URL — the app will use in-memory cache/rate-limiting
+      
+      # ── Node.js memory limit (prevent OOM) ──
+      NODE_OPTIONS: "--max-old-space-size=384"
+      
+      # ── Disable worker process (jobs run in-process) ──
+      # The app's enqueueJob() function falls back to setImmediate() when Redis
+      # is not available, so background jobs still run (just in-process).
+      
+      # ── Optional: payments (leave empty for sandbox mode) ──
+      STRIPE_SECRET_KEY: "${STRIPE_SECRET_KEY:-}"
+      STRIPE_WEBHOOK_SECRET: "${STRIPE_WEBHOOK_SECRET:-}"
+      MP_ACCESS_TOKEN: "${MP_ACCESS_TOKEN:-}"
+      NOWPAYMENTS_IPN_SECRET: "${NOWPAYMENTS_IPN_SECRET:-}"
+      
+      # ── Internal API token (for backup scripts) ──
+      INTERNAL_API_TOKEN: "${INTERNAL_API_TOKEN:-}"
+      BACKUP_ENCRYPTION_KEY: "${BACKUP_ENCRYPTION_KEY:-}"
+      
+      # ── SMTP (optional — empty = sandbox mode, emails logged to console) ──
+      SMTP_HOST: "${SMTP_HOST:-}"
+      SMTP_PORT: "${SMTP_PORT:-587}"
+      SMTP_USER: "${SMTP_USER:-}"
+      SMTP_PASS: "${SMTP_PASS:-}"
+      ALERT_EMAIL_TO: "${ALERT_EMAIL_TO:-}"
+    volumes:
+      # ── SQLite database (persistent) ──
+      - ./db:/app/db
+      # ── Backups directory ──
+      - ./backups:/backups
+      # ── Uploads (ticket attachments, etc.) ──
+      - ./uploads:/app/uploads
+    ports:
+      - "3000:3000"
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+        reservations:
+          memory: 256M
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:3000/api/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    networks:
+      - novsmm-network
+
+  # ── Nginx (reverse proxy + SSL) ──
+  # Minimal config — just proxy + static files. No rate limiting (save RAM).
+  nginx:
+    image: nginx:alpine
+    container_name: novsmm-nginx
+    restart: unless-stopped
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./certs:/etc/nginx/certs:ro
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      - web
+    deploy:
+      resources:
+        limits:
+          memory: 64M
+    networks:
+      - novsmm-network
+
+networks:
+  novsmm-network:
+    driver: bridge

@@ -1,0 +1,1138 @@
+﻿
+worklog.md:180:- NextAuth credentials provider: bcrypt password verification against DB, JWT strategy, session 
+callback exposes id/role/balance, audit logging on login/logout
+worklog.md:195:- Security: bcrypt password hashing, Zod validation on all inputs, role-based access control 
+(requireAuth/requireAdmin), audit logging on all privileged actions, NextAuth JWT with NEXTAUTH_SECRET
+worklog.md:255:- `src/lib/auth.ts` — NextAuth credentials provider with bcrypt (cost 12), JWT strategy, session 
+callback exposing id/role/username/balance/heldBalance/status, audit logging on login & logout.
+worklog.md:315:- Lines 603-637 `AdminSecurity`: 6 hardcoded "layers" (2FA 92% adoption, IP allowlists 48 rules, 
+anomaly 0.01% FP, bot 2.4M blocked, CSRF/XSS/SQLi 0 breaches, audit logs 8.2M events). Entirely decorative.
+worklog.md:358:- **DeviceSession** — userId, userAgent, ip, location, lastSeen, revoked. (The Session table is 
+NextAuth's JWT session table, not a device-management table.)
+worklog.md:359:- **IpAllowlist** — userId/role, cidr, note, created/updated.
+worklog.md:514:**Critical missing models:** ApiKey, WebhookLog, PaymentIntent, Refund, Coupon, Referral, 
+TwoFactorSecret, DeviceSession, IpAllowlist, Subscription, Invoice, Favorite, TicketAttachment, WithdrawalRequest, 
+CurrencyRate, ApiLog, Offer, Role, Permission.
+worklog.md:524:- License system (`src/lib/license.ts`): AES-256-GCM encryption for key storage, bcrypt hash for 
+validation, domain+IP allowlist anti-replication, `generateLicenseKey()` produces NOVSMM-XXXX-XXXX-XXXX-XXXX format, 
+`validateLicense()` checks against DB
+worklog.md:582:- NextAuth JWT upgraded: session now includes currency, language, country, lifetimeEarnings
+worklog.md:628:- P0-5: Installed stripe SDK, created src/lib/stripe.ts (createPaymentIntent, verifyStripeWebhook, 
+createRefund). Updated topup route to create real PaymentIntents when STRIPE_SECRET_KEY is set. Updated webhook to 
+verify signatures and handle succeeded/failed/refunded events. Sandbox fallback when not configured.
+worklog.md:718:- New API route: src/app/api/admin/payment-methods/test/route.ts (Stripe/PayPal/Mercado Pago live pings 
++ field-presence fallback).
+worklog.md:751:  * `resolveStripeWebhookSecret()` async helper → env var → Setting `stripe.webhookSecret` fallback.
+worklog.md:761:- C-2: Rewrote `src/app/api/webhooks/stripe/route.ts` with `resolveStripeWebhookSecret()` for env → 
+Setting fallback, and added 5 new idempotent handlers:
+worklog.md:802:  * `src/app/api/subscriptions/route.ts` — real Stripe Billing path with env-driven `PLAN_PRICES`, 
+sandbox fallback that also upgrades `User.plan`.
+worklog.md:803:  * `src/app/api/webhooks/stripe/route.ts` — full event fan-out (8 handlers, all idempotent), webhook 
+secret env → Setting fallback.
+worklog.md:983:Task: Fix "CSRF check failed — origin mismatch" when saving payment credentials
+worklog.md:987:- VLM analysis confirmed error: "CSRF check failed — origin mismatch"
+worklog.md:1008:- No more "origin mismatch" errors
+worklog.md:1011:Task ID: FIX-TOPUP-FALLBACK
+worklog.md:1041:- Top-up now works even with invalid Stripe credentials (sandbox fallback)
+worklog.md:1053:- Root cause: previous fix (FIX-TOPUP-FALLBACK) made Stripe errors fall through to sandbox mode, so 
+even with real Stripe credentials configured, the balance was credited immediately without going through Stripe
+worklog.md:1084:- No more sandbox fallback when Stripe credentials are configured
+worklog.md:1342:  - Clear error message on failure (no sandbox fallback)
+worklog.md:1453:  - NEXTAUTH_SECRET=novsmm-production-jwt-secret-32-bytes-...
+worklog.md:1598:  - Fallback to gradient pill with glyph if logo file missing
+worklog.md:1656:- SmoothScroll simplified to avoid hydration mismatches
+worklog.md:1875:- Created `src/lib/ai-insights.ts` (backend-only): `generateServiceRecommendations`, 
+`generateSpendingInsights` (both wrap z-ai-web-dev-sdk with try/catch + Spanish fallback strings), plus 
+`REFERRAL_TIERS` table + `resolveTier()` helper for the Bronze→Silver→Gold→Platinum commission ladder (5/7/10/12%).
+worklog.md:2084:- Read src/lib/crypto-utils.ts and src/lib/license.ts — found TWO DIFFERENT hardcoded fallback 
+encryption keys:
+worklog.md:2089:- Read src/lib/stripe.ts + src/lib/huntsmm.ts + src/lib/nowpayments.ts — NowPayments creds stored in 
+DB (PaymentMethod.config, AES-encrypted) — good. Stripe + HuntSMM use env vars only. Stripe webhook secret has env → 
+Setting-table fallback (good).
+worklog.md:2130:  - **P1**: Remove the `?XTransformPort=` hack — production should route by path (e.g. `/ws/ → :3003`) 
+or subdomain (e.g. `ws.novsmm.io`), not by client-controlled query param (security: any client can currently proxy to 
+any internal port by setting XTransformPort — a SSRF vector).
+worklog.md:2152:  - **Crypto**: `LICENSE_ENCRYPTION_KEY` (used by BOTH lib/license.ts AND lib/crypto-utils.ts with TWO 
+DIFFERENT hardcoded fallbacks — see Hardcoded secrets)
+worklog.md:2153:  - **Auth**: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `NEXTAUTH_URL` (referenced in comments only 
+— trustHost:true is used instead), `NEXTAUTH_SECRET` (WARNING: NextAuth needs this to sign JWTs — currently NOT SET → 
+JWTs are unsigned/insecure; dev.log shows `[next-auth][warn][NO_SECRET]` warnings)
+worklog.md:2164:  - **P0** `src/lib/license.ts:18` → `"novsmm-license-encryption-key-change-in-production-32b!"` — 
+DIFFERENT fallback key for the SAME env var. If env is unset, payment-method configs encrypted via crypto-utils.ts 
+cannot be decrypted by license.ts (or vice versa) → irreversible data corruption.
+worklog.md:2165:  - **P0** `NEXTAUTH_SECRET` not in .env → NextAuth JWTs are unsigned → any user can forge a session 
+token. dev.log confirms `[next-auth][warn][NO_SECRET]` warning on every request.
+worklog.md:2236:- `upload/` folder (~55 PNG/PDF files including the original master prompt PDFs) — these are 
+user-uploaded test files; should be moved to object storage, not committed to the repo.
+worklog.md:2256:  - **P0** Add a `NOTIFICATIONS_SERVICE_SECRET` env var. POST `/broadcast` must require it in an 
+`Authorization: Bearer ...` header. WebSocket clients must pass a short-lived signed JWT in the connection handshake.
+worklog.md:2316:  - **P1** `docs/contributing.md` — branch naming, PR template, commit message convention (worklog 
+Task IDs).
+worklog.md:2323:1. `NEXTAUTH_SECRET` not set → JWTs are unsigned → session forgery possible (dev.log confirms warning 
+on every request).
+worklog.md:2324:2. Two different hardcoded `LICENSE_ENCRYPTION_KEY` fallbacks in `crypto-utils.ts` and `license.ts` → 
+if env unset, payment credentials encrypted by one module can't be decrypted by the other → irreversible data 
+corruption.
+worklog.md:2336:14. Caddyfile `?XTransformPort=` routing is a SSRF vector — any client can proxy to any internal port.
+worklog.md:2373:- Read worklog.md last 300 lines (project context: NOVSMM SMM panel, Next.js 16 + NextAuth 4 + 
+Prisma/SQLite + Stripe/NowPayments/Mercado Pago webhooks, JWT sessions, in-memory rate limiter, sandbox/dev mode 
+active)
+worklog.md:2416:- ✅ JWT session strategy (stateless, no DB lookup per request) — appropriate for the SQLite backend
+worklog.md:2432:- 🔴 **P0 — No `NEXTAUTH_SECRET` set in `.env`**: only `DATABASE_URL` is in `.env`. NextAuth requires 
+NEXTAUTH_SECRET for JWT signing. Without it, NextAuth auto-generates an ephemeral secret in dev (sessions die on 
+restart) or throws in production. Any attacker who can predict or extract the auto-generated secret can forge JWTs. 
+**CRITICAL**: must set a strong `NEXTAUTH_SECRET` (32+ random bytes) before production.
+worklog.md:2440:- 🟢 **P2 — Session fixation**: JWT strategy rotates the token on re-auth (NextAuth default), so 
+classic session fixation is mitigated. But after password change (`/api/me/password`), existing JWTs are NOT 
+invalidated — a stolen token continues to work after the user changes their password. Recommend adding a 
+`passwordChangedAt` check in the JWT callback.
+worklog.md:2486:- 🟡 **P1 — `/api/admin/providers` PATCH passes unvalidated `data` to Prisma**: `db.provider.update({ 
+where: { id }, data })` — `data` is the raw body minus `id`, with no allowlist. An admin could write arbitrary fields 
+to the Provider record (e.g., overwriting `createdAt`, `apiKey` directly as plaintext bypassing encryption). 
+Admin-only mitigates impact, but defense-in-depth requires field allowlisting (like `admin/services` PATCH does).
+worklog.md:2507:- 🟡 `/api/admin/settings` PATCH — accepts arbitrary `{key: value}` object and upserts each. No key 
+allowlist — admin could write to keys like `2fa:${userId}` (overwriting another user's 2FA secret) or 
+`stripe.webhookSecret` (overriding the webhook secret). Admin-only, but a key allowlist is essential defense-in-depth.
+worklog.md:2549:- 🔴 **P0 — Hardcoded fallback encryption key**: `LICENSE_ENCRYPTION_KEY || 
+"novsmm-default-encryption-key-change!"` (crypto-utils.ts line 12). If the env var is missing (as it currently is in 
+`.env`), all "encrypted" payment credentials and license keys are encrypted with a key that is committed to the public 
+source code. Anyone with DB access can decrypt every payment credential. **CRITICAL**: remove the fallback, throw at 
+startup if env var is missing.
+worklog.md:2550:- 🔴 **P0 — Same hardcoded fallback in license.ts** (line 18): 
+`"novsmm-license-encryption-key-change-in-production-32b!"`. Same critical issue.
+worklog.md:2554:- 🔴 `"novsmm-default-encryption-key-change!"` (crypto-utils.ts:12) — fallback AES key
+worklog.md:2555:- 🔴 `"novsmm-license-encryption-key-change-in-production-32b!"` (license.ts:18) — fallback license 
+AES key
+worklog.md:2559:- ✅ No API keys, JWT secrets, or OAuth secrets hardcoded
+worklog.md:2564:- 🔴 **P0 — "Log mode" fallback processes events WITHOUT signature verification**: when 
+`STRIPE_WEBHOOK_SECRET` env var is missing AND no `stripe.webhookSecret` Setting exists (the current state in `.env`), 
+the handler does `event = JSON.parse(body)` and processes it as if verified. This means anyone can POST a fake 
+`checkout.session.completed` event with `mode: "payment"` + `source: "novsmm_wallet_topup"` + a known 
+`transactionPublicId` to credit any wallet with any amount. **CRITICAL**: in production, return 401 when no secret is 
+configured — never process unverified events.
+worklog.md:2592:- However, the initial top-up creation in `/api/wallet/topup` accepts `amount` from the client 
+(validated by `topupSchema` with `max(50000)`). The amount is stored in the Transaction row, and the webhook credits 
+that amount. So if an attacker can manipulate the client-side amount before the topup request, they could credit more 
+than they paid. Mitigation: for real Stripe Checkout, the `checkout.session.completed` webhook uses 
+`session.amount_total` from Stripe (the actual paid amount) only for logging — the credit uses `txn.amount`. This 
+means a user who initiates a $1 top-up but somehow pays $100 via Stripe would only be credited $1. The mismatch isn't 
+reconciled — recommend asserting `session.amount_total === txn.amount * 100` and flagging/refunding if not.
+worklog.md:2683:- 🔴 **P0 — Origin check is "presence-only", not "value-matching"**: as noted in §1, ANY `Origin` 
+header value passes — `Origin: https://evil.com` is accepted. This makes the CSRF defense trivially bypassable from 
+any attacker-controlled page (which always sends a valid Origin). **CRITICAL**: must verify `Origin` matches the 
+trusted host (or trusted-host allowlist). The comment "We skip strict host matching because we run behind a reverse 
+proxy" is a false premise — the trusted external host is known and can be matched.
+worklog.md:2697:3. **`NEXTAUTH_SECRET` is not set in `.env`** — JWT signing relies on NextAuth's auto-generated 
+ephemeral secret, which is either insecure (dev) or fatal (production). File: `.env`. Fix: generate `openssl rand 
+-base64 32` and set `NEXTAUTH_SECRET` in production env.
+worklog.md:2703:6. **Hardcoded fallback encryption keys** — `LICENSE_ENCRYPTION_KEY || 
+"novsmm-default-encryption-key-change!"` (crypto-utils.ts:12) and `LICENSE_ENCRYPTION_KEY || 
+"novsmm-license-encryption-key-change-in-production-32b!"` (license.ts:18). If the env var is missing (current state), 
+all "encrypted" payment credentials and license keys are encrypted with a public source-code key. Fix: throw at module 
+load if `LICENSE_ENCRYPTION_KEY` is missing; never fall back.
+worklog.md:2705:7. **Origin check is "presence-only"** — any `Origin` header value passes the CSRF check, including 
+`Origin: https://evil.com`. File: `src/middleware.ts` lines 114-126. Fix: verify Origin against a trusted-host 
+allowlist (read from env var `ALLOWED_ORIGINS` or derived from `getBaseUrl()`).
+worklog.md:2709:9. **`Caddyfile` SSRF vulnerability** — `:81?XTransformPort=<port>` reverse-proxies to 
+`localhost:<port>`, allowing external attackers to reach any internal service (DB, Redis, WS mini-service, admin 
+tools). File: `Caddyfile`. Fix: remove the `XTransformPort` handler entirely from production config; it's a 
+sandbox/dev convenience that must NOT ship to prod.
+worklog.md:2722:10. `/api/admin/providers` PATCH passes unvalidated `data` to Prisma — use field allowlist.
+worklog.md:2725:13. `/api/admin/settings` PATCH has no key allowlist — admin could overwrite `2fa:${userId}` or 
+`stripe.webhookSecret` for any user. Add a key allowlist.
+worklog.md:2740:28. Session not invalidated after password change — stolen JWT continues to work.
+worklog.md:2779:- Identified the two biggest performance anti-patterns: (a) `validateApiKey` and `validateLicense` 
+load ALL active records and run `bcrypt.compare` in a JS for-loop — bcrypt is intentionally ~100ms, so N=1000 keys = 
+100s per request; (b) the NextAuth `jwt` callback (src/lib/auth.ts:132-160) hits the DB on EVERY authenticated request 
+to refresh user fields, with no caching.
+worklog.md:2905:| 11 | `src/lib/auth.ts:132-160` (jwt callback) | DB hit on EVERY authenticated request to refresh 
+user fields — no caching | Cache for 30-60s in-memory with last-refreshed timestamp in the JWT; only re-fetch when 
+stale |
+worklog.md:3079:- **P1-1: NextAuth `jwt` callback hits DB on every authenticated request.** `src/lib/auth.ts:132-160` 
+— every `requireAuth()` call triggers a `db.user.findUnique` to refresh token fields. With 1000 req/s this is 1000 DB 
+queries/s just for auth. **Fix:** cache user fields in the JWT with a 30-60s TTL; only re-fetch when stale.
+worklog.md:3157:- Confirmed NextAuth jwt callback hits DB on every session resolution.
+worklog.md:3225:  - **NextAuth `jwt` callback hits `db.user.findUnique` on every session resolution.** Called on every 
+authenticated API request via `getServerSession`. Major DB hot spot.
+worklog.md:3229:  1. Session/JWT user data (`user:{id}` — 5s TTL; balance updates invalidate).
+worklog.md:3244:  - `platform-logo.tsx:108` — uses `<img>` to load Google favicon service. Could use `next/image` with 
+`remotePatterns` for `https://www.google.com/s2/favicons`. Uses onError to swap to emoji fallback.
+worklog.md:3316:- **Issues found:** The app is a regular SPA-like Next.js site with no offline capability. If PWA is 
+desired, would need: (a) manifest, (b) service worker (via workbox or next-pwa), (c) offline fallback page, (d) 
+install prompt. Currently zero PWA infrastructure.
+worklog.md:3345:4. **NextAuth `jwt` callback hits DB (`db.user.findUnique`) on every authenticated request.** With 7 
+dashboard queries every 30s per active user, this is the #1 DB hot spot.
+worklog.md:3434:| auth.ts | 205 | NextAuth config, brute-force map, JWT/session callbacks | OK; brute-force map is 
+in-memory → won't survive multi-instance |
+worklog.md:3647:5. Authenticate the WebSocket connection with the NextAuth JWT (passed as auth: { token } in io({ auth 
+})) — reject unauthenticated connections.
+worklog.md:3698:- V2 — api/wallet/topup/route.ts (587 lines) does: validation, payment-method dispatch (6 providers), 
+sandbox fallback, PayPal/MercadoPago HTTP clients, transaction recording, balance credit, notification, audit log. 
+Should be split into payments/stripe.ts, payments/paypal.ts, payments/mercadopago.ts, payments/nowpayments.ts, 
+payments/crypto.ts, payments/manual.ts, payments/sandbox.ts + a thin wallet/topup/route.ts dispatcher.
+worklog.md:3902:  1.  src/lib/auth.ts                                       — login + logout audit logs (kept `db` 
+import — jwt callback uses db.user.findUnique). NOTE: this introduces a circular import (auth.ts ↔ api-utils.ts) but 
+both modules reference each other only at runtime inside function bodies (authorize()/signOut event in auth.ts, 
+getAuthSession()/requireAuth() in api-utils.ts), so the cycle is safe under ESM/CJS lazy-binding semantics. Verified 
+by tsc.
+worklog.md:3964:- F1.2: Removed hardcoded fallback keys in crypto-utils.ts (now throws if LICENSE_ENCRYPTION_KEY 
+missing) + license.ts (now delegates to crypto-utils.encrypt/decrypt — single source of truth, eliminated the second 
+divergent hardcoded key)
+worklog.md:3970:- F1.8: Rewrote Caddyfile — removed SSRF vector (XTransformPort wildcard query-param routing); now 
+explicit path-based routing: /socket.io/* → port 3003, everything else → port 3000
+worklog.md:3985:  3. POST /api/orders with evil Origin → 403 "CSRF check failed — origin mismatch" (THE FIX!)
+worklog.md:4006:  * S9 (Caddyfile SSRF) — explicit path routing
+worklog.md:4036:     - LICENSES: ✅ backfillable. Decrypts the AES-encrypted licenseKey column (via decryptLicenseKey), 
+computes SHA-256, persists lookupHash. Skips rows where decryption returns empty (corrupted/key-mismatch). Reports 
+ok/skipped/failed counts.
+worklog.md:4120:- Notifications, audit logs, and simulateFulfillment() fire AFTER the transaction commits (same as 
+before — they don't need to be atomic with the debit and were never inside the original array-form $transaction either)
+worklog.md:4142:- Created `src/lib/orders.ts` (NEW file) exporting `async function simulateFulfillment(orderId, 
+userId): Promise<void>`. Imports: `db` from `@/lib/db`, `createNotification` from `@/lib/notify`, `placeHuntSMMOrder` 
++ `extractProviderServiceId` from `@/lib/huntsmm`, and `awardOrderPoints` + `reconcileAchievements` from 
+`@/app/api/me/loyalty/route` (cross-route import kept as-is per task spec — Phase 5 will fix it). Added a 
+comprehensive JSDoc explaining the 5 behaviors (fetch → HuntSMM attempt → fallback setTimeout simulation → completion 
+notification → loyalty award + achievement reconciliation).
+worklog.md:4191:- F2.8 (subagent): Fixed bcrypt-scan for API keys + licenses with SHA-256 lookupHash O(1) lookup + 
+legacy fallback + backfill script — lint clean
+worklog.md:4235:- Read worklog.md (Phase 2 context confirmed) + src/lib/queues.ts (enqueueJob + fallback handler 
+already wired to call simulateFulfillment via dynamic import) + src/lib/orders.ts (simulateFulfillment still uses 
+setTimeout chain) + src/workers/worker.ts (BullMQ worker already calls simulateFulfillment from the order.fulfill 
+queue).
+worklog.md:4237:- Grepped src/ for all `simulateFulfillment` references — confirmed exactly 5 call sites in API routes 
++ 2 dynamic imports (queues.ts fallback + worker.ts) + 1 export (orders.ts). All 5 call sites targeted for migration.
+worklog.md:4241:- Added a short comment at each call site explaining the dual-mode behavior (BullMQ worker when Redis 
+is available; in-process setImmediate fallback otherwise) so future maintainers understand why the call shape differs 
+from the old direct invocation.
+worklog.md:4254:- Falls back to in-process setImmediate when Redis is not available (sandbox/dev mode) — queues.ts 
+fallback handler dynamically imports simulateFulfillment and calls it with the same setTimeout chain, preserving exact 
+previous behavior.
+worklog.md:4267:- F3.3: Created src/lib/cache.ts — cacheGet/Set/Del/Invalidate + cacheGetOrSet with Redis primary + 
+in-memory fallback
+worklog.md:4268:- F3.4: Created src/lib/rate-limit.ts — Redis sliding-window rate limiter (sorted sets) with in-memory 
+fixed-window fallback
+worklog.md:4270:- F3.6: Cached user data in jwt callback — Redis with 30s TTL eliminates DB hit on every authenticated 
+request (was #1 DB hot spot)
+worklog.md:4273:- F3.9 (subagent): Migrated 5 order-creation call sites from direct simulateFulfillment() to 
+enqueueJob("order.fulfill") — jobs run via BullMQ in production, setImmediate fallback in sandbox
+worklog.md:4277:  * JWT auth on WS connection (verifyJwt using NEXTAUTH_SECRET + HS256)
+worklog.md:4305:  * GET /api/dashboard → 200 (with cached jwt data)
+worklog.md:4315:  * P4 (jwt callback DB hit) — Redis cache with 30s TTL
+worklog.md:4319:  * JWT user data cached
+worklog.md:4321:  * WS JWT auth on connection
+worklog.md:4459:- audit() helper updated — passes the metadata object directly with Prisma.DbNull fallback for the 
+absent case.
+worklog.md:4472:    queues.ts, workers/worker.ts (ioredis version mismatch — F3 known issue)
+worklog.md:4793:  * P4 (jwt DB hit) — already fixed in Phase 3 (Redis cache)
+worklog.md:4796:  * P7 (in-memory rate limiter) — already fixed in Phase 3 (Redis fallback)
+worklog.md:4981:  * O14 (Caddyfile SSRF) — already fixed in Phase 1 (Caddyfile locked down) + nginx.conf replaces Caddy
+worklog.md:5063:  * ADR-004: Nginx over Caddy (SSRF fix, A+ SSL, mature rate limiting)
+worklog.md:5065:  * ADR-006: Graceful degradation (in-memory fallbacks, zero-setup dev)
+worklog.md:5221:| P1 (high) | 9 | Routes use `console.error` instead of `logger`/Sentry, admin-panel 2831 lines no 
+code-splitting, no Prisma query listener, setTimeout chains in fallback mode |
+worklog.md:5224:Most of the *infrastructure* (logger, metrics, Sentry, health probes, Redis fallback, BullMQ queues) 
+is well-designed. The gap is **wiring**: the structured logger, metrics recorders, Sentry `captureException`, and 
+`withErrorHandler` HOC all exist but are bypassed by ~32 API routes that use raw `console.error` + `try/catch` + 
+`apiError`. The observability stack is therefore blind in production.
+worklog.md:5230:#### 1. `src/lib/auth.ts` — JWT callback
+worklog.md:5232:- **Description:** JWT callback runs on every authenticated request. Redis cache (30s TTL) prevents DB 
+hit on cache hit. **But**: on Redis outage, every request falls through to a DB `findUnique` (line 270) — and the 
+in-memory fallback cache is per-instance only, so multi-instance deployments will hammer Postgres.
+worklog.md:5234:- **Risk:** Redis outage amplifies DB load by ~7× (one JWT refresh per polling query × active users). 
+No early-break when both cache + DB fail.
+worklog.md:5236:- **Fix:** (1) Use a longer in-memory LRU fallback (5 min) when Redis is down, with a single-flight 
+promise per `userId` to coalesce concurrent refreshes. (2) Log cache misses at `warn` so SREs see the fallback.
+worklog.md:5240:- **Description:** 4 sequential `await new Promise(r => setTimeout(r, …))` steps, each followed by 
+`findUnique` + `update` (lines 110–136). When the BullMQ worker is running this is fine (concurrency 5). **In fallback 
+mode** (no Redis, sandbox/dev) `enqueueJob()` calls the handler via `setImmediate` in-process — these setTimeout 
+chains then **hold the request process** for up to 12s × N concurrent orders, blocking the event loop on every timer 
+wake.
+worklog.md:5241:- **Evidence:** `queues.ts` lines 104–114 (fallback `setImmediate`); `orders.ts` lines 110–111.
+worklog.md:5242:- **Risk:** In fallback mode, 10 concurrent orders → 10 simultaneous 12s timers → 40 DB round-trips → 
+request latency spikes for unrelated endpoints sharing the process.
+worklog.md:5243:- **Fix:** Always require Redis in production (worker exits cleanly without it). Add a feature flag 
+that **disables** in-process fallback in production (`NODE_ENV === 'production'`) and instead marks orders as 
+`pending` for the worker to pick up later.
+worklog.md:5322:- **Description:** `ClientOnly` wrapper correctly prevents hydration mismatch (lines 193–206). 
+`FloatingCoin` components not memoized but only 8 of them, so impact is negligible. Framer-motion bundle (~30KB gz) 
+loaded for one decorative section.
+worklog.md:5331:- **Fix:** Split each tab into its own file (`admin-tabs/users.tsx`, etc.), wrap each in 
+`React.lazy(() => import(...))`, render with `<Suspense fallback={<Loader/>}>`. Memoize tab header. Move recharts to 
+dynamic import (only the overview tab uses it).
+worklog.md:5360:- **Fix:** (1) Add a Next.js `instrumentation.ts` that registers `promClient.collectDefaultMetrics`. 
+(2) Add a global `db.$extends({ query: { $allOperations: … } })` Prisma extension that observes `dbQueryDuration`. (3) 
+Wrap `withErrorHandler` to call `recordHttpRequest` on every request (since `withErrorHandler` isn't used either, see 
+below). (4) Call `recordCacheOp` from `cache.ts`. (5) Call `recordQueueJob` from `worker.ts` and `queues.ts` fallback.
+worklog.md:5396:| **Redis down** | `cacheGet/Set/Del` fall back to per-instance in-memory Map (`cache.ts` lines 73–82, 
+108). Rate limiter falls back to in-memory (`rate-limit.ts` line 89). Worker process exits gracefully (`worker.ts` 
+lines 71–78); jobs run in-process via `setImmediate` (`queues.ts` lines 107–114). JWT cache TTL 30s becomes 
+per-instance (each instance hits DB on first request per user). | ⚠️ P1 | Multi-instance deployments see 7× DB load on 
+JWT callback. In-process fallback runs setTimeout chains in the request process — event-loop risk. |
+worklog.md:5397:| **PostgreSQL down** | Every authenticated request fails at `requireAuth` → `getServerSession` → JWT 
+callback DB fetch → 500. `/api/health/ready` returns 503 (correct). No circuit breaker — each request retries the DB 
+connection until Prisma pool timeout (default 10s). Webhooks fail to write `WebhookLog` → payment confirmations lost. 
+| ❌ P0 | Add circuit breaker (e.g. `opossum`) around DB; fail-fast 503 instead of 10s hang. Webhook routes must 
+persist raw payload to disk if DB is down, then replay. |
+worklog.md:5398:| **Worker process crashes** | BullMQ: jobs in `active` state remain locked until `stalledInterval` 
+(default 30s) expires, then re-processed by another worker. DLQ captures jobs that fail all 3 retries. In fallback 
+mode (no Redis): in-flight `setImmediate` jobs are **lost** — order stuck in `processing` forever. | ⚠️ P1 | Add a 
+cron that marks `processing` orders older than 5 min as `pending` for re-queue. Document that fallback mode is 
+**dev-only**. |
+worklog.md:5401:| **Unexpected restart** | In-memory cache lost (acceptable). BullMQ jobs re-queued after stalled lock 
+expires (30s). Drip-feed `pending` orders safe (cron-driven). Audit log writes in-flight at crash are lost (no 
+transaction). Session JWTs survive (stateless). | ✅ OK | Document the 30s stalled-job window. Add `gracefulShutdown` 
+to call `closeQueues()` + `closeRedis()` on SIGTERM (worker.ts has it; web process does not). |
+worklog.md:5402:| **Failed deployment** | Docker pull fail → old container keeps running (good). DB migration fail → 
+app crashes on first DB query (Prisma throws on schema mismatch). **Rolling deploy with multiple instances has no 
+readiness gate on DB migrations** — new code expecting a new column queries old DB → 500s on all new-pod traffic. | ⚠️ 
+P1 | Run `prisma migrate deploy` as an init container before the app starts. Add a readiness gate that checks 
+`Schema.version` matches expected. |
+worklog.md:5404:| **DNS fails** | External API calls (Stripe, HuntSMM, MP, NowPayments) fail at 
+`fetch()`/`https.request`. SMTP fails. OAuth (Google) fails. No DNS cache, no fallback IP. Each external call adds DNS 
+lookup latency. | ⚠️ P2 | Configure a local DNS cache (`dnsmasq` sidecar) with 60s TTL. Circuit-break each external 
+provider. |
+worklog.md:5407:| **OAuth fails** | Google OAuth is optional (registered only if env vars set, `auth.ts` line 209). On 
+Google outage, OAuth login fails → users see generic error. No fallback. JWT callback still hits DB on every request 
+(no OAuth-specific cache). | ⚠️ P2 | Add a "Sign in with email/password instead" CTA on OAuth failure. Cache Google 
+well-known JWKS. |
+worklog.md:5408:| **SMTP fails** | `createNotification({ sendEmail: true })` awaits `sendEmail()` → notification 
+creation **blocks** on SMTP. In worker mode, `email.send` queue retries 3× then DLQ (acceptable). In fallback mode, 
+SMTP timeout (default 60s) blocks the request. | ⚠️ P1 | Decouple: always write `Notification` row first (fast), 
+enqueue `email.send` job. If queue unavailable, log + skip — never block the request on email. |
+worklog.md:5432:2. **P1 (within 1 week):** Replace `console.error` with `logger` in 32 files; add 
+`optimizePackageImports` to next.config; add log rotation; add webhook replay job; document fallback-mode is dev-only.
+worklog.md:5458:**Overall verdict:** ⚠️ **CONDITIONAL APPROVAL — 2 P0 issues must be resolved before go-live.** The 
+security architecture is fundamentally sound (AES-256-GCM, bcrypt cost 12, fail-closed webhooks, HMAC signature 
+verification with timingSafeEqual, per-account brute-force lockout, CSRF Origin value-matching, atomic balance 
+transactions, masked API keys). The two P0s are (1) committed `.env` containing real-looking plaintext secrets, and 
+(2) a TOCTOU race in dynamic Google OAuth provider registration that can lead to a duplicate-provider crash / 
+inconsistent auth state.
+worklog.md:5501:### 2. `/home/z/my-project/src/lib/auth.ts` — NextAuth config, JWT, 2FA, brute-force, Google OAuth
+worklog.md:5506:- ✅ L15-16: Brute-force lockout — 5 attempts / 15 min, Redis-backed with in-memory fallback.
+worklog.md:5510:- ✅ L218-228: JWT session strategy with `trustHost: true` (correct for proxy deployments).
+worklog.md:5526:**⚠️ P2 — MEDIUM — JWT session has no explicit `maxAge` (defaults to 30d)** (L220)
+worklog.md:5527:- **Evidence:** `session: { strategy: "jwt" }` — no `maxAge` set.
+worklog.md:5528:- **Risk:** Stolen session JWT remains valid for 30 days. No sliding refresh, no server-side 
+revocation (JWT is stateless).
+worklog.md:5529:- **Fix:** Set `session: { strategy: "jwt", maxAge: 8 * 60 * 60 }` (8h) and implement refresh-token 
+rotation OR add a `token.version` checked against `user.tokenVersion` so admins can force-logout (bump version on 
+password change, suspension, role change).
+worklog.md:5580:- ✅ L15-24: `resolveEncryptionKey` is fail-closed — throws if `LICENSE_ENCRYPTION_KEY` is missing or < 
+16 chars. No hardcoded fallback.
+worklog.md:5622:- ✅ L135-149: Domain + IP allowlist + expiry checks.
+worklog.md:5625:**⚠️ P2 — LOW — Legacy license fallback scan could DoS the validate endpoint**
+worklog.md:5628:- **Fix:** Once all legacy licenses are backfilled (lookupHash populated), remove the fallback scan 
+entirely. Add a per-IP rate limit on `/api/public/validate-license`.
+worklog.md:5720:- ✅ L155-161: `audit()` captures IP from `x-client-ip` (set by middleware) with `x-forwarded-for` 
+fallback.
+worklog.md:5808:| `NEXTAUTH_SECRET` | 64 hex chars | **CRITICAL** — full JWT signing secret. Anyone with this can 
+forge any user's session. |
+worklog.md:5814:**Mitigation found:** `.gitignore` contains `.env*` (verified) — so this file would NOT be committed 
+to git in a real repo. The file is local to the sandbox dev environment. **This downgrades severity from P0 to P1 IF 
+git history is clean.**
+worklog.md:5827:- **Fix:** (a) Rotate ALL secrets in `.env` — they must be considered compromised. (b) Verify 
+`Dockerfile` does NOT `COPY .env*` (audit shows Dockerfile — check). (c) Use a secrets manager (Doppler, Vault, AWS 
+Secrets Manager) or Docker secrets for production. (d) Add a pre-commit hook that scans for high-entropy strings.
+worklog.md:5832:### 16. `/home/z/my-project/Caddyfile` — Gateway config (SSRF check)
+worklog.md:5838:- ✅ L33-39: Default route proxies to `localhost:3000` — fixed destination, no SSRF.
+worklog.md:5839:- ✅ Comment L1-5: Confirms the previous `?XTransformPort=<port>` SSRF vulnerability was removed.
+worklog.md:5893:- Password change does NOT invalidate other sessions (no `tokenVersion` check). ⚠️ P1 — if a password 
+is changed (e.g., after a breach), stolen JWTs from before the change remain valid for 30 days. Fix: add 
+`tokenVersion` to user table, increment on password change, check in `jwt()` callback.
+worklog.md:5930:2. **Verify Dockerfile does not `COPY .env*`** — and add a pre-commit hook (`git-secrets` or 
+`gitleaks`) to prevent future secret leaks.
+worklog.md:5942:7. **Add `tokenVersion` to User table** — increment on password change, check in JWT callback, to 
+invalidate stolen sessions after password reset.
+worklog.md:5976:- ✅ **Caddyfile SSRF fix** — explicit path routing, no wildcard port forwarding.
+worklog.md:6172:#### Finding MG-002 — `tryParseJSON` fallback can corrupt Json columns
+worklog.md:6179:- **How to fix:** For columns known to store opaque strings (like `PaymentMethod.config`), wrap the 
+raw value explicitly: `JSON.stringify(str)` to produce a valid JSON string literal. Don't rely on the fallback path. 
+Add a post-migration smoke test that reads back each `config` and verifies decryption still works.
+worklog.md:6254:- **Description:** Lines 111–123: `withRedis` catches ALL exceptions, sets `isAvailable = false`, and 
+returns `null`. Callers can't distinguish "Redis is genuinely down" (acceptable fallback) from "Redis is up but my 
+specific command failed" (a real bug). Worse: a transient network blip (1 dropped packet) marks Redis unavailable for 
+the rest of the process lifetime — `isAvailable` is set to `false` and only re-set on the next "ready" event, which 
+may not fire if the connection auto-reconnected.
+worklog.md:6301:- **Risk:** In sandbox/dev mode (no Redis), a Next.js dev server running for a week with 1000 unique 
+cache keys/hour × 1KB each = ~150MB of un-GC'd cache entries. Process OOMs or slows due to GC pressure. In production 
+with Redis, this is mitigated (Redis is the primary), but the fallback still leaks.
+worklog.md:6323:- **Description:** Lines 99–104: if `ttlSeconds` is undefined/0, `redis.set(key, serialized)` is 
+called with no EXPIRE. The entry lives in Redis forever (until manually deleted or `cacheInvalidate` matches). The 
+in-memory fallback (line 108) also sets `expiresAt: null` (line 39).
+worklog.md:6332:- **Description:** Lines 63–68 and 75–80: on JSON.parse failure, returns `value as unknown as T`. The 
+caller expects type T but gets a raw string. This is a silent type mismatch.
+worklog.md:6395:#### Finding RL-003 — In-memory fallback uses fixed-window, not sliding-window
+worklog.md:6684:| MG-002 | ⚠️ | P1 | Medio | migrate-sqlite-to-postgres.ts | tryParseJSON fallback can corrupt Json 
+columns |
+worklog.md:6697:| CA-003 | ⚠️ | P2 | Bajo | cache.ts | Silent type mismatch on JSON parse failure |
+worklog.md:6776:6. Redis has NO password configured and is exposed (localhost) — local users/SSRF can read cache, 
+sessions, queues.
+worklog.md:6787:#### Finding 1: Lockfile glob mismatch — frozen install will fail
+worklog.md:6882:- **Risk:** Cannot trace image to source commit; fails enterprise compliance.
+worklog.md:6905:- **Description:** Redis container (line 47-61) runs `redis-server --appendonly yes --maxmemory 256mb 
+--maxmemory-policy allkeys-lru` with NO `--requirepass`. Port 6379 is bound to `127.0.0.1:6379:6379` (line 54). Any 
+local process or SSRF-exploiting web app can connect to Redis unauthenticated and read/modify: session data, 
+rate-limit counters, BullMQ job queues (which contain order/payment payloads), cache. This is the classic Redis-unauth 
+exploit path.
+worklog.md:6907:- **Risk:** Local privilege escalation; SSRF → Redis → RCE (well-known attack pattern via Redis 
+`CONFIG SET dir /` + `dbfilename .ssh/authorized_keys`); cache poisoning; queue manipulation to grant free credits.
+worklog.md:7081:- **Description:** Line 53: `GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}`. If 
+`GRAFANA_PASSWORD` env var is not set (which is the default), Grafana boots with admin/admin. Grafana is exposed at 
+`127.0.0.1:3001` — any local user (or SSRF) can login, view all metrics (including internal IPs, query patterns, 
+errors), and modify dashboards.
+worklog.md:7149:- **Description:** The Dockerfile stage 2 has `COPY . .` (line 32). If anyone ever commits SSL 
+certificates, SSH keys, or `.pem` files to the repo, they will be baked into the Docker image and shipped to the 
+registry. There's no exclusion for `*.pem`, `*.key`, `*.crt`, `certs/`, `id_rsa`, etc.
+worklog.md:7150:- **Evidence:** `.dockerignore` has no entries for `*.pem`, `*.key`, `*.crt`, `certs/`, `id_rsa*`, 
+`*.ppk`. The repo currently has no `certs/` dir (verified), but the docker-compose.yml references `./certs` — 
+operators may commit certs by mistake.
+worklog.md:7401:- **Description:** No `default_server` catchall. If someone hits the VPS by IP (not domain), nginx 
+serves the first server block (the HTTPS one) with a "domain mismatch" TLS warning — but still serves the app. Used 
+for reconnaissance (mass-can scans find your app).
+worklog.md:7446:#### Finding 1: `prisma migrate deploy` runs AFTER `docker compose up -d` — schema/code mismatch window
+worklog.md:7609:- **Description:** Lines 80-81: `NEXTAUTH_SECRET: "ci-test-secret-32bytes-..."` and 
+`LICENSE_ENCRYPTION_KEY: "ci-test-encryption-key-32bytes!"`. These are committed to the repo. While they appear to be 
+test-only values, the format suggests they could be real-looking secrets. If they ever match a production secret 
+(copy-paste mistake), they're leaked.
+worklog.md:7665:- **How to fix:** Pin to SHA: `uses: appleboy/ssh-action@<commit-sha>` (most secure) or `@v1.0.3` 
+(specific tag).
+worklog.md:7689:6. **Compose F2**: Redis has no password + exposed — SSRF/RCE vector.
+worklog.md:7694:11. **CI F1**: Migration runs AFTER app starts — schema/code mismatch window.
+worklog.md:7704:healthchecks, lockfile mismatch) or critical security/operational failures (no
+worklog.md:7734:**P1-003 — `python3` dependency without fallback (lines 150, 228, 242)**
+worklog.md:7874:- Risk: Actual restore failure (e.g., corrupted dump, schema mismatch) is reported as "normal 
+warnings".
+worklog.md:7915:**P1-017 — `python3` dependency without fallback (line 59)**
+worklog.md:7978:**P1-024 — `python3` dependency without fallback (lines 88, 108)**
+worklog.md:8049:**P1-032 — `python3` dependency without fallback (lines 36, 135, 155, 217)**
+worklog.md:8416:**P1-068 — No email receiver as fallback**
+worklog.md:8575:| P1-003 | ⚠️ | P1 | Medio | deploy.sh | python3 dependency without fallback |
+worklog.md:8583:| P1-017 | ⚠️ | P1 | Medio | healthcheck.sh | python3 dependency without fallback |
+worklog.md:8586:| P1-024 | ⚠️ | P1 | Medio | monitor-setup.sh | python3 dependency without fallback |
+worklog.md:8590:| P1-032 | ⚠️ | P1 | Medio | validate-postgres-redis.sh | python3 dependency without fallback |
+worklog.md:8612:| P1-068 | ⚠️ | P1 | Medio | alertmanager.yml | No email fallback receiver |
+worklog.md:8714:- Leí el estado actual de los 4 archivos de monitoreo (prometheus.yml, alerts.yml, alertmanager.yml, 
+docker-compose.monitoring.yml) y verifiqué que los cambios principales ya estaban aplicados en el commit f5dc2d4.
+worklog.md:8724:- FIX MENOR — Agregué fallback `${REDIS_PASSWORD:-}` en redis-exporter para que no crashee si Redis no 
+tiene password (dev/test).
+worklog.md:8756:- P0-012 (pre-deploy-check.sh L60 — `df -g` no existe en Linux): `df -g` es un flag BSD/macOS 
+(gigabytes), NO disponible en GNU/Linux. El `2>/dev/null` ocultaba el error, y el fallback `df -h | tr -d 'G'` rompía 
+en discos TB-scale (dejaba sufijo 'T', causando fallo en comparación entera `[ "$DISK_GB" -ge 20 ]`). FIX: Reemplacé 
+con `df --output=avail -BG / | awk 'NR==2 {gsub(/G/,""); print}'` (GNU df, devuelve entero GB siempre). Agregué 
+fallback robusto para BSD/macOS que parsea sufijos G/T/M con `case`. Validé funcionalmente: `df --output=avail -BG /` 
+devuelve "8" (entero) en este Linux; `df -g /` devuelve vacío (confirma el bug).
+worklog.md:8769:- **P0-012: RESUELTO** — pre-deploy-check.sh usa `df --output=avail -BG` (GNU Linux) con fallback 
+BSD/macOS. Funciona en discos TB-scale.
+worklog.md:8775:  - `scripts/pre-deploy-check.sh` — df --output=avail -BG con fallback
+worklog.md:8824:  - P0-001 (warn undefined) — ya arreglado en commit anterior
+worklog.md:8828:  - P0-009 (DROP active conns) — ya arreglado en commit anterior (pg_terminate_backend)
+worklog.md:8855:- P1-068 (No email fallback): Agregué receiver `email-fallback` con email_configs 
+(SMTP_HOST/PORT/USER/PASS/FROM/TO via env vars). Agregué env vars SMTP_* + ALERT_EMAIL_TO a .env.example y al 
+environment del servicio alertmanager en docker-compose. Si SMTP_HOST es vacío, email es no-op (alerts van a Slack).
+worklog.md:8871:- P1-003/P1-017/P1-032 (python3 dependency): Agregué función `json_state()` a deploy.sh, 
+healthcheck.sh, validate-postgres-redis.sh que usa `jq -r '.State // "unknown"'` si jq está disponible, con fallback a 
+python3. Reemplaza el patrón `docker compose ps --format json | python3 -c "import json,sys;..."` (3 ocurrencias).
+worklog.md:8887:- **P1-068: RESUELTO** — Email fallback receiver + SMTP env vars
+worklog.md:8895:- **P1-003/017/032: RESUELTOS** — jq con fallback python3 (3 scripts)
+worklog.md:8899:  - `monitoring/alertmanager.yml` — escalation policy + email fallback + inhibit rules
+worklog.md:8923:- P1-024 (python3 dependency): Reemplacé 2 bloques python3 con jq + fallback python3: (1) parsing de 
+respuesta de Grafana datasource creation, (2) parsing de Prometheus targets list. Patrón: `if command -v jq; then jq 
+-r '...'; else python3 -c '...'; fi`.
+worklog.md:8930:- Bonus: Agregué jq + python3 fallback para parsing de health/ready, providers, y CSRF token 
+(consistente con los otros scripts).
+worklog.md:8938:- P1-070 (hardcoded TEST_PASSWORD='CHANGE_ME'): Reemplacé con `__ENV.TEST_PASSWORD || ''`. Si no se 
+setea, el login fallará (esperado en smoke test). Documenté cómo pasar credenciales vía env vars en el header del 
+archivo. Nota de seguridad: NUNCA hardcodear passwords reales (se commitea a git).
+worklog.md:8942:- P1-033 (assumes curl in notifications container): Reescribí la sección de notifications health check 
+con 3 fallbacks: (1) curl desde host si el puerto 3003 está publicado, (2) curl dentro del contenedor si existe, (3) 
+node fetch (siempre disponible en contenedores Node) como último recurso. Mismo patrón aplicado a las verificaciones 
+de web→PostgreSQL y web→Redis (que también asumían curl en el contenedor web). Agregué --max-time 5 a todos los curls.
+worklog.md:8955:- **P1-024: RESUELTO** — monitor-setup.sh usa jq con fallback python3 (2 bloques)
+worklog.md:8967:- **P1-033: RESUELTO** — validate-postgres-redis.sh host curl + container curl + node fetch fallback 
+(3 verificaciones)
+worklog.md:8971:  - `scripts/monitor-setup.sh` — verify compose file + configs, AM health check, jq fallback
+worklog.md:8972:  - `scripts/smoke-test.sh` — exit code, --max-time, mktemp, jq fallback (rewrite completo)
+worklog.md:8976:  - `scripts/validate-postgres-redis.sh` — host/container/node fetch fallback (3 checks) + jq helper
+worklog.md:9029:  - JWT_SESSION_ERROR pre-existente en log (no relacionado con este task — NextAuth + JWE decryption 
+issue del entorno dev)
+worklog.md:9131:- Estudié los patrones existentes: orders/route.ts (atomic balance debit con conditional updateMany), 
+v1/refill/route.ts (ticket-based refill), queues.ts (BullMQ + in-process fallback), worker.ts (BullMQ workers), 
+app-store.ts (DashboardTab union), dashboard-shell.tsx (NAV + COMMANDS), app-view.tsx (dynamic imports), 
+dashboard-orders.tsx (existing Repeat button), use-api.ts (mutation hooks).
+worklog.md:9204:  - In OrderDetailDrawer: replaced the `createTicket`-based handleRefill with `useRefillOrder` (with 
+`createTicket` as fallback if the endpoint errors unexpectedly). Made the "Request refill" button conditional on 
+`order.status === "completed"` (was previously always visible, which would have failed for non-completed orders since 
+the API requires completed status). Updated button styling to emerald to match the table button.
+worklog.md:9263:  priority (1=primary, 2+=fallback), providerServiceId, cost.
+worklog.md:9460:  session. Reads `realAdminId` from current session JWT, validates the admin
+worklog.md:9461:  still exists+active, audit-logs "impersonate_stop", then mints a fresh JWT
+worklog.md:9462:  via `next-auth/jwt` `encode()` with the same NEXTAUTH_SECRET and overwrites
+worklog.md:9510:- Modified `jwt` callback: when `token.realAdminId` is set, refresh the
+worklog.md:9623:6. NextAuth's `jwt` callback copies `realAdminId/realAdminEmail/realAdminName`
+worklog.md:9624:   into the token on first sign-in. On subsequent requests, the jwt callback
+worklog.md:9635:    still exists+active, audit-logs "impersonate_stop", mints a fresh JWT
+worklog.md:9636:    for the admin via `next-auth/jwt`'s `encode()` function with the same
+worklog.md:9717:  with `ordersPerMin` state initialised to `1200` (fallback) and updated
+worklog.md:9730:  `SAMPLE_OFFERS` as fallback. Added `isLive` flag: when no live offers,
+worklog.md:9793:Task: Sprint 6 — Security + Refactor: API key IP allowlisting, GDPR self-service account deletion, PWA 
+(manifest + service worker), admin-panel split (deferred).
+worklog.md:9796:- Investigé el estado actual: ApiKey model sin ipAllowlist (pero ya había sido añadido por sprint 
+anterior), admin-panel.tsx 3959 líneas, no PWA, no GDPR delete endpoint, DangerZone ya implementada por sprint 
+anterior.
+worklog.md:9797:- **API key IP allowlisting (P1)**: Verifiqué que el campo `ipAllowlist` ya existe en el schema Prisma 
+(añadido en sprint anterior). Verifiqué que la enforcement en `api-key-auth.ts` ya está implementada (líneas 95-105: 
+check IP contra allowlist, reject si no coincide). Verifiqué que `/api/admin/api-keys` POST acepta ipAllowlist y PATCH 
+con action="update_ip" la actualiza. Todo funcional desde sprint anterior — este sprint confirmó que está completo.
+worklog.md:9812:- **API key IP allowlisting: COMPLETO** — schema field + auth enforcement + admin API + admin UI (todo 
+verificado, implementado en sprints anteriores)
+worklog.md:9821:  - `prisma/schema.prisma` — ipAllowlist field en ApiKey
+worklog.md:9822:  - `src/lib/api-key-auth.ts` — IP allowlist enforcement
+worklog.md:9823:  - `src/app/api/admin/api-keys/route.ts` — ipAllowlist en POST + PATCH
+worklog.md:9851:  - `dashboard-profile.tsx` (line 758): converted `copyCode` to async + try/catch with destructive 
+toast fallback.
+worklog.md:9852:  - `admin-panel.tsx` (API key + License copy buttons): converted onClick handlers to async + 
+try/catch with silent fallback (user can still select+copy manually).
+worklog.md:9869:- **M-16: SW offline fallback** — `public/sw.js`: added `.catch(() => caches.match("/"))` to the 
+cache-first (static assets) handler so a missing asset offline doesn't leave the user with a blank page. Navigation 
+handler already had the fallback.
+worklog.md:9909:All fixes are minimal — each change is the smallest possible diff that addresses the audit finding. No 
+existing functionality was broken. Patterns from the codebase were reused (e.g. try/catch + toast fallback pattern 
+from `dashboard-home.tsx` for clipboard, LegalPages overlay pattern from `footer.tsx` for register-screen.tsx, 
+pagination pattern from `api/admin/users/route.ts` for orders GET).
+worklog.md:9938:   - Renamed the legacy fallback comment from "Legacy methods / Bank transfer / Crypto / unconfigured 
+methods → sandbox" to "Unconfigured methods (sandbox fallback)".
+worklog.md:9952:     - `PAYMENT.CAPTURE.COMPLETED` → `handleCaptureCompleted`: extracts `resource.custom_id` (= our 
+publicId, with fallbacks to supplementary_data + order_id), looks up the pending transaction by `publicId` first, then 
+`paypal:<orderId>` reference, then `paypal:<captureId>` reference. If found and still pending: credits the wallet 
+atomically (`db.$transaction` with `transaction.update` + `user.update` balance/lifetimeEarnings increment), sends a 
+success notification (sendEmail: true), writes an audit log.
+worklog.md:9953:     - `PAYMENT.CAPTURE.DENIED` → `handleCaptureDenied`: looks up the pending transaction by the same 
+fallbacks, marks it `failed`, sends a warning notification.
+worklog.md:9984:- **PayPal webhook is wired end-to-end**: topup creates a PayPal order with `custom_id = txn.publicId` 
+and persists `paypal:<orderId>` in the txn reference; the webhook verifies the signature via PayPal's 
+verify-webhook-signature API, looks up the pending txn by custom_id (with reference fallbacks), credits the wallet 
+atomically, sends a notification, and always returns 200 to stop retries.
+worklog.md:10019:- **Total stale items / mismatches found:** 19 distinct issues (see full report below).
+worklog.md:10030:7. **Stripe credentials modal is wrong** — `credentialFields` map in `admin-panel.tsx` (lines 
+1370-1387) defines PayPal, Mercado Pago, NowPayments, and a generic `{apiKey, apiSecret}` fallback. Stripe is NOT in 
+the map, so it falls through to the generic apiKey/apiSecret form. But Stripe actually uses **env vars** 
+(`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`) — there's no DB-driven Stripe config. The UI will let admins type 
+credentials that go nowhere.
+worklog.md:10050:1. **CRITICAL — Fix Providers seed mismatch with HuntSMM** (root cause of user complaint):
+worklog.md:10328:    check (now covered by the schema) and the `plan ?? "reseller"` fallback (the
+worklog.md:10332:    ignored — only `domain/ipAllowlist/maxUsers/maxOrders/expiresAt` + status actions
+worklog.md:10424:  fallback ("If the Setting schema doesn't have … fields, just render all keys with text
+worklog.md:10629:- MarkupPercent default mismatch (50 in Create, 20 in Edit) — noted in Area 1.
+worklog.md:10632:- Fix the Create vs Edit modal default markupPercent mismatch (see Area 1).
+worklog.md:10666:- Sandbox fallback for unconfigured methods (1.5s delay, 99.5% success) — clearly labelled in toast.
+worklog.md:10732:- `getTranslations(lang)` returns English fallback for missing keys. ✅
+worklog.md:10962:  fallbacks), `src/app/api/docs/route.ts` (8 curl examples), `src/app/api/
+worklog.md:10984:  `useTranslation`'s `.slice(0,2)` resolves to "pt" (was "po" → fallback
+worklog.md:11067:- P3 (EditChildPanelModal markup default): changed the fallback default
+worklog.md:11196:- src/lib/auth.ts (NextAuth config, JWT, 2FA enforcement, brute-force lockout,
+worklog.md:11205:- src/lib/outbound-webhook.ts (HMAC-signed outbound dispatcher, SSRF guard)
+worklog.md:11243:  flagged as SSRF)
+worklog.md:11258:1. A04-1: Wallet top-up sandbox fallback grants FREE wallet credit for any
+worklog.md:11267:3. (P1, but flagged in the Top-10 list): A10-1 outbound-webhook SSRF allows
+worklog.md:11281:- A07-1: JWT sessions not invalidated on password change/reset/account
+worklog.md:11283:- A10-1: Outbound-webhook SSRF (DNS rebinding + cloud-metadata IP not blocked
+worklog.md:11332:- 1 new CSS system appended to globals.css covering 3D perspective, tilt, parallax (scroll-timeline + 
+IntersectionObserver fallback), reveal-3d, float-3d, glow-3d, flip-card, sticky-cta, social-proof, shimmer-cta — with 
+mobile-disable (@media max-width:768px) and prefers-reduced-motion overrides.
+worklog.md:11363:    - 10× `rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground` (modal Save 
+buttons — Service, Provider, AddPayment, Role, API key, IP allowlist, License, Currency, Language, Promotion, Coupon, 
+Manual order)
+worklog.md:11400:  • Rewrote src/app/layout.tsx metadata: added metadataBase (resolved from NEXT_PUBLIC_SITE_URL → 
+NEXTAUTH_URL → localhost fallback), title.template "%s · NOVSMM", expanded keywords (14), authors/creator/publisher, 
+alternates.canonical, robots with googleBot directives (max-image-preview=large, max-snippet, max-video-preview), 
+explicit manifest ref, openGraph with url/locale/alternateLocale/images fallback, twitter card with site/creator, 
+icons (icon+apple+favicon), formatDetection (no telephone/email/address auto-linking), verification (Google Search 
+Console env-driven).
+worklog.md:11547:  · #7 Price filter: `minPriceInput`/`maxPriceInput`/`appliedMinPrice`/`appliedMaxPrice` state in 
+BuyTab. Apply button commits the typed values; Clear button resets. Filter applied inside the `grouped` useMemo 
+alongside favorites. Active filter renders as a removable chip.
+worklog.md:11644:- Did NOT commit or push (per instructions).
+worklog.md:11667:  envía la instrucción de reemplazar el fallback de Suspense
+worklog.md:11688:  - Sin esos scripts, el `<Suspense fallback=<Loading>>` nunca se
+worklog.md:11740:- Lección para el futuro: si se necesita allowlist estricto de scripts
+worklog.md:11770:- Ya hice `git push origin main` — commit 2d06722 (con el fix CSP)
+worklog.md:11776:2. `git pull origin main`  (trae commit 2d06722 con el fix CSP)
+worklog.md:11789:- El fix es correcto y está en GitHub (commit 2d06722).
+worklog.md:11822:      FIX YA APLICADO (commit 7fd927a): reemplazado next/font/google
+worklog.md:11846:5. CSP bloqueaba hidratación (YA FIXEADO, commit 2d06722):
+worklog.md:11877:- 2 fixes críticos YA en GitHub (commits 2d06722 + 7fd927a):
+worklog.md:11940:  repo → cualquier atacante puede forjar sesiones JWT arbitrarias
+worklog.md:12045:  fallback). NO hay nginx (Cloudflare → WSL2:3000 directo).
+worklog.md:12131:  `npm install --package-lock-only` una vez y commitearlo.
+worklog.md:12683:- **`pre-deploy-check.sh:60-75`** parsing de `df` con fallback
+worklog.md:12761:  cache intent). Los issues son de package-manager mismatch + non-
+worklog.md:12772:- Audité el middleware (`src/middleware.ts`) — CSP, CORS allowlist, CSRF Origin check, rate limiting, 
+security headers.
+worklog.md:12773:- Audité el core de auth (`src/lib/auth.ts`, 844 líneas) — Credentials provider, OAuth providers 
+dinámicos, brute-force lockout, 2FA inline, impersonation provider, JWT callback con invalidación por 
+`passwordChangedAt`.
+worklog.md:12780:- Audité `src/lib/api-key-auth.ts` — bypass de IP allowlist detectado.
+worklog.md:12781:- Audité `src/lib/outbound-webhook.ts` — SSRF protection robusta (DNS resolution, IPv4/IPv6 
+blocklist, redirect manual, size cap).
+worklog.md:12796:El sistema tiene **defense-in-depth sólida** en muchas áreas (race-safe atomic transactions, webhook 
+signature verification con fail-closed, SSRF protection comprehensiva, JWT session invalidation, brute-force lockout 
+dual email+IP). Pero hay **5 issues críticos** que deben fixarse antes de cualquier producción deploy:
+worklog.md:12798:1. **2FA completamente roto** — storage format mismatch entre setup/verify y auth.ts login. Todo 
+usuario que habilita 2FA queda locked out al próximo login.
+worklog.md:12799:2. **API key IP allowlist bypass vía `unknown`** — combinable con spoofing de `x-forwarded-for`.
+worklog.md:12806:### S-C-001 — API key IP allowlist bypass cuando IP es `"unknown"`
+worklog.md:12812:  if (apiKey.ipAllowlist) {
+worklog.md:12817:    const allowedIps = apiKey.ipAllowlist.split(",").map((ip: string) => ip.trim());
+worklog.md:12828:  1. Un admin crea una API key con `ipAllowlist: "203.0.113.5"` (la IP del servidor del reseller).
+worklog.md:12829:  2. La API key se filtra (commit accidental, log de error, etc.).
+worklog.md:12830:  3. El atacante envía requests directo al puerto 3000 del Node (si está expuesto), sin 
+`X-Forwarded-For` header → `clientIp = "unknown"` → allowlist omitido → requests aceptados desde cualquier IP.
+worklog.md:12831:  4. Incluso a través del proxy: si el proxy no strippea `X-Forwarded-For` inbound, el atacante puede 
+setear `X-Forwarded-For: 203.0.113.5` y pasar el allowlist (ver S-H-005).
+worklog.md:12839:  # 200 OK — balance devuelto. Allowlist bypasseado.
+worklog.md:12844:  if (apiKey.ipAllowlist) {
+worklog.md:12853:    const allowedIps = apiKey.ipAllowlist.split(",").map((ip: string) => ip.trim());
+worklog.md:12860:### S-C-002 — 2FA roto: storage format mismatch entre setup/verify y auth.ts login
+worklog.md:13096:  // 2. FALLBACK: si no matchea lookupHash, scan de TODAS las legacy licenses
+worklog.md:13118:  Mismo patrón en `src/lib/api-key-auth.ts:60-82` — el fallback bcrypt-scan para API keys legacy es 
+igualmente vulnerable, pero ese endpoint requiere un Bearer token con prefijo `nvsk_live_` (filtra la mayoría de 
+requests basura). El endpoint de license no tiene ese filtro.
+worklog.md:13133:  2. **Remover el fallback bcrypt-scan:** después del backfill, eliminar el bloque `if (!lic) { ... 
+findMany + for ... }` en `license.ts:103-125`. Las licenses sin `lookupHash` son legacy y no deben aceptarse.
+worklog.md:13135:  4. **Mismo fix para `api-key-auth.ts`:** eliminar el fallback bcrypt-scan después del backfill.
+worklog.md:13139:### S-H-001 — `/api/admin/settings` PATCH acepta cualquier key sin allowlist
+worklog.md:13159:  No hay allowlist de keys permitidas. Un admin (o atacante con sesión admin comprometida) puede 
+escribir setting keys arbitrarias, incluyendo:
+worklog.md:13162:  - `api.cors_allowlist` — `middleware.ts:218-233` lee este setting (cacheado 60s) para decidir qué 
+orígenes CORS permitir. Un admin podría añadir `https://evil.com` y habilitar exfiltración de datos via API v1 desde 
+un sitio malicioso.
+worklog.md:13172:    -d '{"api.cors_allowlist": "https://novsmm.shop,https://evil-attacker.com"}'
+worklog.md:13183:    "api.cors_allowlist",
+worklog.md:13239:  3. **Verificar PayPal SDK:** PayPal Smart Buttons usa iframes cross-origin — no requiere 
+`'unsafe-eval'` en el parent. Si un script inline de PayPal lo requiere, mover ese script a un origen allowlisted.
+worklog.md:13253:        return NextResponse.json({ error: "CSRF check failed — origin mismatch" }, { status: 403 });
+worklog.md:13309:            return NextResponse.json({ error: "CSRF check failed — origin mismatch" }, { status: 403 
+});
+worklog.md:13334:  2. **Bypass de API key IP allowlist** (combinado con S-C-001): setear `X-Forwarded-For: 
+203.0.113.5` (IP allowlisted) → `x-client-ip: 203.0.113.5` → pasa el allowlist check.
+worklog.md:13358:  2. **En middleware:** si hay conocido un proxy IP allowlist, sólo confiar en XFF si el peer IP está 
+en ese allowlist. En Edge runtime no se puede ver el peer IP directo, pero se puede requerir que XFF tenga al menos 2 
+entradas (CF + nginx) y tomar la **penúltima** (no la primera):
+worklog.md:13588:### S-M-007 — Webhooks de PayPal/NowPayments/MercadoPago sin IP allowlist
+worklog.md:13593:- **Fix:** Documentar y (opcionalmente) implementar IP allowlist para cada provider:
+worklog.md:13598:  if (!isInAllowlist(clientIp, ALLOWED_RANGES)) {
+worklog.md:13645:- **Descripción:** Sólo chequea `if (!secret)`, no `secret.length < 32`. Comparar con 
+`/api/admin/impersonate/stop/route.ts:55-58` que sí requiere ≥16 chars. Si NEXTAUTH_SECRET se setea con un valor débil 
+(e.g., `"secret"`), los JWTs del WS service se firman con baja entropía.
+worklog.md:13693:  El modelo `Order` en `prisma/schema.prisma:154-193` NO tiene campo `currency` (sólo `User` lo 
+tiene). `order.currency` siempre es `undefined` → fallback a `"USD"` siempre. No es un bug de seguridad, pero es 
+código muerto y refleja falta de type safety.
+worklog.md:13716:  Trae TODAS las settings (incluyendo `2fa:*`, `oauth:*` con credenciales OAuth encriptadas, 
+`api.cors_allowlist`, etc.) a memoria en cada request público. Filtra client-side a sólo 3 keys. No es un leak directo 
+(las 3 keys retornadas son públicas), pero:
+worklog.md:13738:- **SSRF protection comprehensivo** (`src/lib/outbound-webhook.ts:101-240`):
+worklog.md:13747:- **JWT session invalidation por `passwordChangedAt`:** el callback `jwt()` en `auth.ts:625-659` 
+re-consulta `passwordChangedAt` en cada request. Si el JWT fue emitido (`token.iat`) antes del último cambio de 
+password, retorna token vacío → forzar re-auth. Aplica en: password change, password reset, 2FA enable, 2FA disable, 
+GDPR self-delete. Cierra el "stolen session cookie persists after password rotation" hole.
+worklog.md:13749:- **Brute-force protection dual email+IP:** `auth.ts:143-159` lockea por ambos `email:<email>` y 
+`ip:<ip>` independientes. 5 intentos fallidos → 15 min lock. Redis-backed en prod (cross-instance), in-memory fallback 
+en dev. No revela cuál lock disparó (mismo error "Invalid credentials").
+worklog.md:13759:- **Impersonation flow bien diseñado:** admin debe re-auth con su propia password; target user debe 
+ser active y NO admin; audit log de impersonate_attempt (pre-flight) + impersonate (success) + impersonate_stop; 
+`realAdminId` preservado en JWT (signed, no forgable); `/api/admin/impersonate/stop` mints fresh JWT con 
+`NEXTAUTH_SECRET` (fail-closed si falta).
+worklog.md:13761:- **API key storage seguro:** bcrypt-hash + SHA-256 lookupHash para O(1) lookup sin sacrificar 
+security. 90-day expiry default. IP allowlist (cuando se fixee S-C-001). Auto-revoke on expiry. Per-key rate limit 
+(60/min).
+worklog.md:13763:- **CORS allowlist con Vary: Origin y deny por default:** middleware:218-308 — si 
+`API_CORS_ALLOWLIST` no está seteado, NINGÚN origin es permitido. Allowlist es exact-match (no wildcards). 
+`Access-Control-Allow-Credentials: false` (las API keys viajan en Authorization header, no cookies). Preflight 
+cacheado 24h.
+worklog.md:13797:2. **FIX S-C-001 + S-H-004 (IP allowlist bypass + XFF spoofing).** Cambiar `api-key-auth.ts:113` para 
+fail-closed cuando IP es `unknown`. Endurecer middleware para tomar la penúltima entry de XFF (no la primera) o 
+requerir XFF con 2+ entries detrás de CF+nginx. Verificar que el puerto 3000 NO está expuesto públicamente (firewall 
+check). **Impacto:** cierra el bypass de IP allowlist para API keys y el bypass de rate limiting para brute force en 
+login.
+worklog.md:13803:5. **FIX S-H-001 + S-C-005 (settings allowlist + license DoS).** En `/api/admin/settings` PATCH, 
+añadir allowlist explícito de keys permitidas (rechazar `2fa:*`, `oauth:*` siempre — esos van por endpoints 
+dedicados). En `validateLicense`, ejecutar el backfill script existente (`prisma/backfill-lookup-hashes.ts`) y luego 
+eliminar el fallback bcrypt-scan. Añadir rate limit específico de 5/min/IP para `/api/public/validate-license`. 
+**Impacto:** cierra el DoS selectivo de usuarios (vía `2fa:<userId>` overwrite) y el CPU DoS del endpoint público de 
+licencias.
+worklog.md:13809:- El reporte se centra en issues REALES verificables en el código. Cada issue cita archivos y líneas 
+concretas. No inventé vulnerabilidades — si algo está bien implementado (y hay mucho: race-safe transactions, webhook 
+verification, SSRF protection, IDOR checks), lo listé en "Fortalezas".
+worklog.md:13812:- **S-C-001 + S-H-004 (IP spoofing/allowlist bypass)** son la combinación más peligrosa para API key 
+customers: un reseller con `ipAllowlist` configurado confía que su key está atada a su IP, pero un atacante con acceso 
+directo al Node port la usa desde cualquier IP.
+worklog.md:13824:- Leí las últimas 400 líneas de worklog.md para contexto (auditoría de seguridad previa 
+S-C-001..S-L-006). Confirmé que el "loading loop" fue arreglado por CSP (commit 2d06722) y que el "0 of 6,390 
+services" fue arreglado con paginación client-side en admin-panel.tsx.
+worklog.md:13836:- Verifiqué theme-toggle.tsx: usa `useState(() => localStorage.getItem(...))` lazy initializer — 
+hydration mismatch potencial. Pero el componente no se usa en ningún sitio (grep confirma 0 callers).
+worklog.md:13921:## 🟠 Issues HIGH (LCP > 2.5s, 50+ queries, hydration mismatches)
+worklog.md:14070:### P-H-005 — Hydration mismatch potencial en `theme-toggle.tsx` (lazy useState con localStorage)
+worklog.md:14083:  El lazy initializer corre en SSR (returns `false` porque `window` no existe) y en client hydration 
+(returns `true` si localStorage tiene `dark`). React 19 detecta el mismatch y muestra warning + re-render. Aunque el 
+componente actualmente no se usa (grep confirma 0 callers en src/), el patrón es bug-prone si se reintroduce.
+worklog.md:14232:  Socket.io default backoff: 1s, 2s, 4s, 8s, 16s, 32s (cap 5s en default). 10 intentos ≈ 30s total. 
+Si el usuario pierde WiFi 1 minuto, no se reconecta nunca. Además, `transports: ["websocket", "polling"]` permite 
+fallback a polling — agrega overhead (long-poll HTTP cada 25s) cuando websocket falla.
+worklog.md:14236:    transports: ["websocket"], // sin polling — si WS cae, no fallback lento
+worklog.md:14426:- **Métrica estimada:** Hydration mismatch teórico solo en year-boundary (31-Dec 23:59:59 → 1-Jan 
+00:00:00). Prácticamente irreproducible.
+worklog.md:14460:### P-L-005 — WebSocket permite fallback a polling
+worklog.md:15389:- Searched for `user.name` patterns too (also nullable) — confirmed existing code already handles it 
+correctly via `?? "there"` or `?? ""` fallbacks in all places that pass it to non-nullable fields (notify.ts, provider 
+dashboard/orders, forgot-password email body).
+worklog.md:15473:These are mostly "type lies" — TypeScript types say `string` but the runtime value can be `null` for 
+OAuth-only users who haven't yet had their username generated by the signIn callback. They won't break the build, but 
+downstream consumers (frontend, audit logs, JWT) may receive `null` unexpectedly.
+worklog.md:15490:### R-2 — `src/lib/auth.ts:691, 703, 794, 866` (JWT token propagation of null)
+worklog.md:15495:**Why risky:** All four lines copy `string | null` into the JWT token / session without coercion. For 
+an OAuth user, between `PrismaAdapter.createUser` (which sets `username: null`) and the signIn callback's 
+`db.user.update({ data: { username } })` (which sets the generated username), the JWT may be minted with `username: 
+null`. The session callback then exposes `session.user.username = null` to the frontend.
+worklog.md:15496:**Mitigating factor:** The signIn callback in auth.ts (lines 619-696) runs BEFORE the JWT is first 
+minted — so in practice, by the time `token.username` is first set, `dbUser.username` has been updated. The risk 
+window is narrow but exists if the DB update fails silently.
+worklog.md:15497:**Suggested fix:** Decide on a canonical fallback for the brief null window. Either: (a) regenerate 
+the username synchronously before returning from signIn (current pattern — keep), or (b) coerce in the JWT callback: 
+`token.username = (user as any).username ?? ""`. Option (b) is safer because it makes the JWT shape match the type 
+declaration.
+worklog.md:15504:### R-4 — `src/app/api/admin/impersonate/stop/route.ts:64` (JWT encode with null username)
+worklog.md:15516:**Why risky:** `encode()` accepts a `JWT` (`Record<string, unknown>`), so `null` is allowed at 
+compile time. The encoded JWT will contain `username: null` if the admin has no username (unlikely but possible — an 
+admin created via OAuth before the signIn callback runs would have null username). The downstream session will then 
+have `session.user.username = null`.
+worklog.md:15517:**Mitigating factor:** Admins are typically created via registration (which requires username), so 
+this is theoretical. But the impersonation flow mints a fresh JWT, and if the admin's username is null at that moment, 
+the impersonation session breaks the type contract.
+worklog.md:15575:| src/lib/auth.ts | 691, 703, 794 | Runtime | `token.username = dbUser.username` — null leaks into 
+JWT | Coerce with `?? ""` |
+worklog.md:15578:| src/app/api/admin/impersonate/stop/route.ts | 64 | Runtime | `username: admin.username` in JWT 
+encode — null leaks | `username: admin.username ?? ""` |
+worklog.md:15593:- src/lib/notify.ts — uses `?? "there"` fallback correctly
+worklog.md:15612:4. **Decide on the type-lie policy (R-1, R-3, R-10):** Either (a) update `AuthUser.username`, 
+`AppSession.user.username`, and `AppState.user.username` to `string | null` and fix any frontend code that doesn't 
+handle null; OR (b) coerce `username` to `""` in the JWT callback so the runtime matches the type lie. Option (a) is 
+more honest; option (b) is less invasive.
+worklog.md:15613:5. **Verify the OAuth signIn callback (auth.ts:619-696)** always sets a non-null username before the 
+JWT is first minted. If there's any code path where the JWT can be minted with `username: null`, fix R-2 by coercing 
+in the jwt callback.
+worklog.md:15631:- Fixed R-2: `src/lib/auth.ts` jwt callback — coerce `token.username = (user as any).username ?? ""` 
+on initial mint AND `token.username = impersonated.username ?? ""` on impersonation refresh. This keeps 
+`AuthUser.username` / `AppSession.user.username` / `AppState.user.username` honest as `string` (not `string | null`) 
+and prevents null leaking to the frontend in the brief OAuth window before username is generated.
+worklog.md:15632:- Fixed R-4: `src/app/api/admin/impersonate/stop/route.ts` — `username: admin.username ?? ""` in the 
+new JWT token payload.
+worklog.md:15662:- Fix 1: Removed manual user creation from signIn callback. Now signIn only has a defensive fallback: 
+if a user already exists (from a prior partial attempt) but has no username, generate one. signIn no longer attaches 
+id/role/username to the user object — PrismaAdapter sets user.id, and the jwt callback refreshes the rest from DB.
+worklog.md:15663:- Fix 2: Added events.createUser handler. This fires AFTER PrismaAdapter creates the user (without 
+username). The handler generates a unique username from name/email, updates the DB, sends a welcome notification, and 
+writes an audit log. It's defensive (re-fetches to check if username already set) and error-tolerant (if it fails, 
+signIn's fallback will retry on next login).
+worklog.md:15664:- Fix 3: Fixed the jwt callback's DB refresh to include `username` in both the cache type and the 
+Prisma select. Previously the refresh fetched balance/role/status/etc but NOT username — so after the initial jwt 
+creation, the username was never refreshed from DB. Now token.username gets updated on every request, which means 
+events.createUser's username update is picked up by the very first jwt call (cache miss → DB fetch → has the new 
+username).
+worklog.md:15667:- Simulated the full OAuth flow end-to-end with a tsx script: (1) PrismaAdapter.createUser creates 
+user without username, (2) events.createUser generates username "googleoauthtest" and updates DB, (3) 
+PrismaAdapter.linkAccount creates the Account row, (4) jwt callback refreshes from DB and gets the username. Result: 
+JWT token has id+role+username+email — session would be authed. ✅
+worklog.md:15669:- Committed as a0a85d4 and pushed to origin/main.
+worklog.md:15674:- OAuth flow simulation passed: user created with username, account linked, JWT has all fields, 
+session would be authed.
+worklog.md:15693:- Committed as f19ca4e and pushed to origin/main.
+worklog.md:15707:- Analyzed screenshot: URL `/?callbackUrl=https://novsmm.shop/?authed=1` — this is NextAuth's signIn 
+page redirect with the callbackUrl preserved. The `?error=` param was likely present but stripped by the frontend's 
+error handler (added in commit f19ca4e), and the toast auto-dismissed before the screenshot.
+worklog.md:15709:  1. getConfiguredOAuthProviders(): logs which providers are configured, whether credentials came 
+from env or DB, and errors if decryption fails (indicates LICENSE_ENCRYPTION_KEY mismatch)
+worklog.md:15720:- Committed as d1c41e4 and pushed to origin/main.
+worklog.md:15728:  (c) Google redirect URI mismatch (debug endpoint shows the expected URI)
+worklog.md:15758:- Committed as d30e29f and pushed to origin/main.
+worklog.md:15785:- Committed as 60b8942 and pushed to origin/main.
+worklog.md:15812:- Robustness: completedRef guard prevents double onComplete (auto-advance vs click race); mounted 
+gate avoids SSR/client random mismatch for confetti; firstName derived safely with "there" fallback; email chip 
+truncates; no cn import (template strings only, per spec); no TODOs/placeholders.
+worklog.md:15832:- Confirmed the welcome screen was intentionally built as a DARK cinematic overlay (`bg-neutral-950`, 
+`text-white/*`, `border-white/10`, `bg-neutral-900/80`) per the prior WELCOME-SCREEN-COMPONENT worklog entry — this is 
+the root mismatch with the light, minimal landing aesthetic.
+worklog.md:15841:# NOVSMM Landing-Page Design DNA + Welcome-Screen Mismatch Report
+worklog.md:16118:Task: Master security audit — verify the 6 remaining findings NOT already covered by Lotes A-E. 
+Scope: (1) WebSocket JWT field-name mismatch (3.6), (2) x-client-ip header propagation (3.5), (3) 
+/api/internal/backup-status protection (3.2), (4) trustHost in auth.ts (3.1), (5) console.log leaks in API routes 
+(Section 2), (6) .gitignore for tool-results/.claude (3.7). READ-ONLY audit — no files modified.
+worklog.md:16122:- Read `mini-services/notifications-service/index.ts` (420 lines) end-to-end — confirmed 
+`verifyJwt()` at L75-119 verifies HS256 signature with `crypto.timingSafeEqual` (no timing side-channel), checks 
+`payload.exp`, and returns `payload.id || payload.sub || null` at L114.
+worklog.md:16123:- Grepped `src/lib/auth.ts` for `token.` assignments — confirmed NextAuth `jwt({ token, user })` 
+callback sets `token.id = user.id` at L841 (no `token.userId` is ever assigned).
+worklog.md:16124:- Grepped entire `src/` for `token.userId|jwt.userId|payload.userId` → 0 hits. The audit prompt's 
+hypothesis ("signed with `userId`") does NOT match current code.
+worklog.md:16125:- Read `src/app/api/me/ws-token/route.ts` (52 lines) — found the smoking-gun fix comment at L42-44: 
+`SEC FIX (H-003): was { userId: user.id, ws: true } but the notifications-service verifies payload.id || payload.sub. 
+Changed to use 'sub' claim (standard JWT claim for subject/user ID).` Current code at L45-49 signs with `{ sub: 
+user.id, ws: true }` + `expiresIn: '5m'`. Verifies `NEXTAUTH_SECRET` length ≥32 chars at L33 (S-L-001 fix).
+worklog.md:16126:- Read `src/components/novsmm/dashboard-notifications.tsx` L50-90 — confirmed frontend fetches 
+`/api/me/ws-token` and passes the JWT via `socket.io` `auth.token` handshake (NOT query string — R-L-004 fix). Matches 
+`io.use()` middleware at notifications-service L215-229 which reads `socket.handshake.auth.token`.
+worklog.md:16130:- Read `src/app/api/internal/backup-status/route.ts` (127 lines) end-to-end. POST handler L33-104: 
+(1) extracts clientIp from `x-client-ip || x-forwarded-for first entry || ""` L43-46, (2) checks against `127.0.0.1 / 
+::1 / ::ffff:127.0.0.1 / 10.x / 192.168.x / 172.16-31.x` allowlist L50-58, (3) treats `""`/unknown as FORBIDDEN 
+L60-63, (4) requires Bearer token match against `INTERNAL_API_TOKEN` env var with `constantTimeEqual()` L70-78, (5) 
+fails closed if `INTERNAL_API_TOKEN` not set L67-69. GET handler L106-113 is an unauthenticated health check that 
+returns only `{ endpoint, method: "POST", configured: Boolean(INTERNAL_TOKEN) }` — no sensitive data exposed.
+worklog.md:16141:- Listed tracked `.md` files at repo root → 28+ audit/report files (OWASP_AUDIT_REPORT.md, 
+SECURITY_AUDIT.md, EXHAUSTIVE_AUDIT_FINAL.md, worklog.md, audit-report.md, ASVS_AUDIT_REPORT.md, 
+DEVOPS_AUDIT_REPORT.md, etc.) are committed. Repo is private so not public-leaked, but they expose vulnerability 
+details to every developer/contractor with read access.
+worklog.md:16152:| 1 | §3.6 WebSocket JWT mismatch | MAS-001 | HIGH (was) | ✅ FIXED | 
+`src/app/api/me/ws-token/route.ts:42-49` — JWT signing migrated from `{ userId: user.id, ws: true }` → `{ sub: 
+user.id, ws: true }` (H-003 fix). Verifier at `mini-services/notifications-service/index.ts:114` reads `payload.id 
+\|\| payload.sub` — both align. |
+worklog.md:16154:| 3 | §3.2 /api/internal/backup-status | MAS-003 | LOW | ✅ CONFIRMED PROTECTED | POST handler 
+requires localhost/private-IP allowlist + Bearer `INTERNAL_API_TOKEN` (constant-time compare, fail-closed if unset). 
+GET health check leaks only `Boolean(INTERNAL_TOKEN)` — informational, no data exposure. |
+worklog.md:16161:## Finding MAS-001 — WebSocket JWT field-name mismatch (Section 3.6)
+worklog.md:16165:- **Description:** The audit's hypothesis was that the WebSocket JWT was signed with a `userId` field 
+but the notifications-service verifier read `payload.id`/`payload.sub`, creating a mismatch. Investigation confirms 
+this WAS the bug, and the fix has already been applied.
+worklog.md:16173:  // Changed to use 'sub' claim (standard JWT claim for subject/user ID).
+worklog.md:16174:  const token = jwt.sign(
+worklog.md:16184:  Greps for `token.userId|jwt.userId|payload.userId` across `src/` → 0 hits. The mismatch is fully 
+closed.
+worklog.md:16192:- **Recommendation:** No action — finding closed. Optional: add an integration test (`bun test`) that 
+signs a token with `userId` field and confirms `verifyJwt()` returns null, to prevent regression.
+worklog.md:16200:- **Description:** The audit's concern was that `x-client-ip` was set on `res.headers` (response) 
+which doesn't propagate to route handlers, breaking the IP allowlist on API keys and the IP-based brute-force lockout. 
+The fix has been applied in all three middleware branches.
+worklog.md:16237:- **Description:** POST handler is protected by (1) localhost/private-network IP allowlist and (2) 
+Bearer `INTERNAL_API_TOKEN`. GET handler is an unauthenticated health check that leaks only whether the token is 
+configured (`configured: Boolean(INTERNAL_TOKEN)`).
+worklog.md:16274:    strategy: "jwt",
+worklog.md:16309:  - Both were added in commit `8cc9c73 Add detailed OAuth callback logging` (intentional diagnostic).
+worklog.md:16551:- **No HIGH-severity leaks found:** No `console.log` of raw passwords, API keys, JWTs, session 
+cookies, or full secrets in `src/app/api/`. The `logger.ts` REDACTED_FIELDS list (L31-58) covers these if migrated to 
+pino.
+worklog.md:16584:    | `src/app/api/admin/impersonate/stop/route.ts` | Called by an admin who is currently 
+impersonating a user. At call time, the session is the IMPERSONATED user's session (session.user.role = impersonated 
+user's role, NOT "admin"), so `requireAdmin()` would FAIL. The handler validates `user.realAdminId` (L24) to confirm 
+this is a genuine impersonation session, then mints a fresh admin JWT. **Correct design.** |
+worklog.md:16641:     - `webhooks/{mercadopago,nowpayments,paypal}/route.ts` — test signature verification (valid + 
+invalid), idempotency (same `txnPublicId` twice → only one credit), race condition (two concurrent webhooks for same 
+txn → only one credit), amount mismatch, unknown event types.
+worklog.md:16645:     - `admin/refunds/route.ts` — test full-refund + partial-refund + double-refund prevention + 
+provider-API-failure-after-db-commit (the comment at L66-68 explicitly calls out this risk).
+worklog.md:16826:  1. **`user:{userId}`** — JWT session-token enrichment cache in `src/lib/auth.ts:952`, 30s TTL. 
+Populates `session.user.balance/role/status/currency/...` on every authenticated request without hitting the DB.
+worklog.md:16834:  Three routes correctly invalidate the user (JWT) cache:
+worklog.md:16889:  - L266-271: `<noscript>` fallback for users without JS
+worklog.md:17004:- **Description:** `src/components/novsmm/stats.tsx` initializes ALL stat counters to **0** as the 
+fallback when `/api/status` is unreachable or returns no `stats` field. The endpoint is currently returning HTTP 500 
+(because the database is unreachable in this sandbox — confirmed via `/api/health/db` returning 503 "Database 
+unreachable"). As a result, live visitors to `http://localhost:3000/` right now see:
+worklog.md:17042:  1. **(P1)** Replace the zero DEFAULTS in `stats.tsx` L34-41 with realistic marketing-floor 
+constants — the same numbers the Hero already uses as fallbacks, plus the values shown in the section's own copy 
+("6,300+ services, 1,200 orders/min, 99.99% uptime"):
+worklog.md:17095:  - admin-panel.tsx (17 modals — task said ~15, found 17): "Confirm role change", "Impersonate user", 
+"Service form", "API provider form", "Configure payment credentials", "Add payment method", "Role form", "Generate API 
+key", "Edit IP allowlist", "Issue license", "Add currency", "Add language", "Promotion form", "Coupon form", "Create 
+manual order", "Edit email template", "Edit content"
+worklog.md:17250:- Read worklog tail (A11Y-MODALS, P001-MIGRATION) for context — confirmed payment-logo.tsx previously 
+only had ONE real entry (NowPayments hexagon which was INVENTED/random) and fell back to WhatsApp/manual via a 
+separate branch; PayPal & Mercado Pago were missing entirely and rendered as a generic card-outline fallback icon.
+worklog.md:17271:  - Matching logic: exact match → partial/contains match → manual/whatsapp/zelle/wire fallback → 
+crypto abbreviation fallback (btc/eth/usdt) → generic card-outline fallback (only if nothing matches).
+worklog.md:17305:- Read worklog.md tail (lines 16897-17298) — recovered context: prior audits (AUDIT-SEC-1, 
+MASTER-AUDIT-SEC-REMAINING, MASTER-AUDIT-CODE-QUALITY) confirmed webhook signature verification, race-safe 
+`updateMany` for debits, and IP-allowlist fail-closed fix (S-C-001). W-1 = "webhook double-credit race" originally 
+fixed with conditional `updateMany WHERE status:"pending"` inside interactive `$transaction` (worklog L4100-4213, 
+L5964, L12777, L14475).
+worklog.md:17330:| LOW | 4 | SEC-1d-005 (MP external_reference no-op), SEC-1d-008 (webhook URL guessable + IP 
+allowlist off by default), SEC-1d-013 (in-memory rate limit only), SEC-1d-014 (rate-limit bypass via IP/key rotation), 
+SEC-1d-020 (withdraw `destination` no length cap) |
+worklog.md:17661:### SEC-1d-008 — Webhook URL is guessable; IP allowlist off by default
+worklog.md:17668:  The IP allowlist (`checkWebhookIp` helper) is OPTIONAL — it's skipped when `WEBHOOK_IP_ALLOWLIST` 
+env var is unset. In the current `.env` it is unset, so the allowlist is disabled.
+worklog.md:17673:- **Recommendation:** In production, set 
+`WEBHOOK_IP_ALLOWLIST=<paypal-cidrs>,<mp-cidrs>,<nowpayments-cidrs>` to enable the second layer. Without it, a 
+successful signature-secret leak (e.g., via DB read access) immediately enables forged webhooks from any IP.
+worklog.md:17690:  1. Switch `api-key-auth.ts:142` from `checkApiRateLimit` (in-memory) to `checkRateLimit` from 
+`src/lib/rate-limit.ts` (Redis-backed with in-memory fallback). This is safe because api-key-auth runs on the Node.js 
+runtime (not Edge).
+worklog.md:17723:  2. Validate `method` against a known enum 
+(`["paypal","usdt_trc20","usdt_erc20","bank_transfer","zelle","wire"]` etc.) — server-side enforced allowlist.
+worklog.md:17759:   - `images.remotePatterns` — empty / commented out ✅ (no SSRF vector; comments explicitly warn 
+against `hostname: "**"`)
+worklog.md:17794:   - **CORS** for /api/v1/* and /api/docs — allowlist-based via `API_CORS_ALLOWLIST` env var. No 
+`Access-Control-Allow-Origin: *`. Preflight OPTIONS returns 403 if origin not on allowlist. ✅
+worklog.md:17831:   - NOTE: the file is committed to the public GitHub repo (see SEC-1e-001), which means an attacker 
+can see the env-loading logic. Not a leak per se, but it tells them which env vars the app expects (NEXTAUTH_SECRET, 
+DATABASE_URL, LICENSE_ENCRYPTION_KEY, etc.) — useful for targeted attacks once they have read access to the production 
+.env.
+worklog.md:17845:   - Optional: `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `FACEBOOK_CLIENT_*`, `GITHUB_CLIENT_*`, 
+`TWITTER_CLIENT_*`, `SMTP_*`, `API_CORS_ALLOWLIST`
+worklog.md:17859:    - IP allowlist: localhost (127.0.0.1, ::1, ::ffff:127.0.0.1) + private ranges (10.x, 192.168.x, 
+172.16-31.x). `clientIp === "unknown"` is FORBIDDEN (not allowed). ✅
+worklog.md:17907:    - `NEXTAUTH_SECRET` and `LICENSE_ENCRYPTION_KEY` use GitHub secrets with fallback to dummy CI 
+values ✅
+worklog.md:18184:  - `nginx.conf`, `Caddyfile` — reverse-proxy config, TLS cipher suites, rate-limit zones, Cloudflare 
+IP allowlist
+worklog.md:18190:  1. Read the auth logic to find subtle flaws (e.g. the NextAuth CSRF check, the license-validation 
+bcrypt path, the IP-allowlist bypass conditions)
+worklog.md:18199:  2. **(P1 — immediate)** Rotate ALL secrets that were ever committed to the repo (even if .env is 
+gitignored, secrets may have been committed in git history before .gitignore was added, or in audit reports / debug 
+logs / sample scripts). At minimum: `NEXTAUTH_SECRET`, `LICENSE_ENCRYPTION_KEY`, `INTERNAL_API_TOKEN`, 
+`METRICS_BASIC_AUTH`, `NOTIFICATIONS_SERVICE_SECRET`, `HUNTSMM_API_KEY`, `POSTGRES_PASSWORD`, `REDIS_PASSWORD`. Run 
+`git log -p -- .env*` and `git log -p -- '*.md' | grep -iE '(secret|password|key|token).*='` to find any leaked values.
+worklog.md:18200:  3. **(P2)** After making the repo private, run `git filter-repo` or BFG Repo-Cleaner to purge any 
+large secret-bearing blobs from git history (just deleting them in a new commit doesn't remove them from old commits — 
+anyone who already cloned the repo still has them).
+worklog.md:18202:  5. **(P3)** Add a `git secrets` pre-commit hook to scan for accidental secret commits in the future.
+worklog.md:18309:  - **Business/PR leak:** The landing page's marketing copy advertises "6,300+ services, 1,200 
+orders/min, 99.99% uptime" and the Stats section shows marketing-floor fallback numbers (18,400 users, 173,000 
+orders/24h, $4.1M revenue). But the real numbers — exposed by `/api/status` — are: **6 total users, 0 orders in the 
+last 24 hours, 2 orders ever, $0 revenue, 1 order/min**. A competitor, journalist, or prospective customer can `curl` 
+this endpoint and immediately see that the platform is essentially unused, contradicting the marketing claims. This is 
+a trust-destroying leak for a SaaS whose primary conversion lever is social-proof numbers.
+worklog.md:18350:  - `redis.connected: false` → tells attacker Redis is NOT in use. This is significant operational 
+intel: it means the in-memory rate limiter is the only thing throttling brute-force attempts (no cross-instance 
+Redis-backed limiter), so an attacker who distributes requests across multiple Node instances (if the app is scaled 
+horizontally) gets N× the per-instance rate limit. Also tells attacker that any feature relying on Redis (sessions if 
+using Redis session store, BullMQ queues if using Redis queue, caching if using Redis cache) is currently degraded or 
+running in fallback mode.
+worklog.md:18351:  - `timestamp` → leaks server-side UTC time. Useful for timing-attack tuning against time-based 
+tokens (TOTP, JWT `iat`/`exp` skew windows, signed-URL time windows).
+worklog.md:18387:  2. **(P2)** Alternatively, if the operator needs the explanatory message for ops tooling (so they 
+get a clear error when they forget to set the env var), keep the message but only return it for requests from 
+localhost / private IPs (same logic as `/api/internal/backup-status`'s IP allowlist). Public requests get a 404.
+worklog.md:18401:  - An attacker who knows the version is `1.0.0` can check the (public) GitHub repo's `package.json` 
+(which has `"version": "1.0.0"`) to confirm the production deployment matches the latest commit on `main`. If a CVE is 
+announced for a dependency in a specific version range, the attacker can immediately check whether NOVSMM is 
+vulnerable by hitting this endpoint.
+worklog.md:18435:  - Low severity because: (a) security-through-obscurity is not real security — every one of these 
+routes is already protected by auth or HMAC or IP allowlist, and (b) the same info is in the public repo's 
+`src/app/api/` directory listing.
+worklog.md:18510:- ✅ **CORS allowlist** for `/api/v1/*` and `/api/docs` (no `Access-Control-Allow-Origin: *`)
+worklog.md:18597:8. **SEC-1e-001 (public repo) is the highest-impact finding.** Even though the repo doesn't contain 
+real secrets (`.env` is gitignored, `.env.example` has empty values), it contains the full application logic + infra 
+config + prior audit reports. An attacker studying the public repo can find vulnerabilities faster than if the repo 
+were private. Combined with SEC-1e-002 (HTTP not redirected), an attacker who finds an XSS or SSRF vuln in the public 
+source code can exploit it on first-time HTTP visitors who haven't yet received HSTS — a particularly dangerous 
+combination. Fix SEC-1e-001 and SEC-1e-002 first.
+worklog.md:18608:- Read `src/lib/auth.ts` (1180 lines) — JWT callback re-fetches role/balance/status from DB on EVERY 
+request (cache 30s). passwordChangedAt check invalidates sessions on password change/suspension/account deletion. 
+Impersonation provider requires admin email + bcrypt password verify + target user active + NOT admin. JWT is signed 
+with NEXTAUTH_SECRET.
+worklog.md:18615:- Read api-key-auth.ts — validates Bearer token via SHA-256 lookupHash + bcrypt compare, checks 
+user.status === "active", checks expiresAt (auto-revokes), checks ipAllowlist (fail-closed per S-C-001 fix), enforces 
+60/min per-key rate limit, checks permission via split-CSV exact match (Z-2 fix).
+worklog.md:18619:- Verified S-H-001 fix in /api/admin/settings PATCH: ADMIN_SETTINGS_ALLOWLIST (24 keys), rejects 
+unknown keys with 422.
+worklog.md:18629:  2. signIn("impersonate", {adminEmail, adminPassword, targetUserId}): NextAuth credentials provider 
+in auth.ts (L418-469) — bcrypt-verifies admin password, validates admin role + active status, validates target active 
++ NOT admin, audit-logs "impersonate", returns user object with `realAdminId/Email/Name` preserved in JWT (signed).
+worklog.md:18630:  3. POST /api/admin/impersonate/stop: requireAuth + `user.realAdminId` check (L24) — rejects 
+non-impersonation sessions with 400. Validates admin still exists + active. Mints fresh JWT with NEXTAUTH_SECRET 
+(requires ≥16 chars). Audit-logs "impersonate_stop".
+worklog.md:18631:  - An impersonated user CANNOT escalate to admin via /impersonate/stop because the `realAdminId` 
+claim is in the JWT (signed with NEXTAUTH_SECRET — not forgeable). The stop route re-validates the admin exists + is 
+active in DB before minting the new admin JWT.
+worklog.md:18636:### SEC-1b-001 — Impersonate-stop cookie-name condition mismatches auth.ts (LOW)
+worklog.md:18652:  In production, auth.ts ALWAYS writes `__Secure-next-auth.session-token`. The stop route writes 
+`__Secure-` ONLY if `NEXTAUTH_URL` is set AND starts with `https`. If `NEXTAUTH_URL` is missing, empty, or set to a 
+non-https URL in production (misconfiguration), the stop route writes the new admin JWT to `next-auth.session-token` 
+(no `__Secure-` prefix), while NextAuth continues to read from `__Secure-next-auth.session-token`. The browser ends up 
+with two cookies; NextAuth sees the OLD impersonation cookie and ignores the new admin cookie. "Return to admin" 
+silently fails — the admin is stuck as the impersonated user until they manually clear cookies and re-login.
+worklog.md:18662:  #    but writes the new admin JWT to "next-auth.session-token" (no __Secure- prefix)
+worklog.md:18663:  # 5. Browser now has TWO cookies: __Secure-next-auth.session-token (impersonation JWT, still valid)
+worklog.md:18664:  #    and next-auth.session-token (new admin JWT, ignored by NextAuth)
+worklog.md:18667:- **Impact:** Admin locked into impersonation session until they clear cookies. Not an authz bypass — 
+the new admin JWT IS valid, it's just written to the wrong cookie name. Availability/UX bug under misconfiguration.
+worklog.md:18681:- **Description:** Three call sites that sign/verify JWTs with NEXTAUTH_SECRET use three different 
+minimum-length thresholds:
+worklog.md:18684:  - NextAuth's main JWT encoder (via `authOptions` in `src/lib/auth.ts`) — no explicit length check; 
+NextAuth itself accepts any non-empty string
+worklog.md:18685:  If NEXTAUTH_SECRET is set to a weak value like `"novsmm-secret-2024"` (19 chars), the ws-token 
+route rejects (correct), but the impersonate-stop route accepts and signs a fresh admin JWT with the weak secret. An 
+attacker with offline access to a JWT could brute-force the secret faster than expected. More importantly: the WS 
+service token (5-min TTL, scoped to userId only) gets stronger protection than the impersonation admin-session JWT 
+(24h TTL, full admin identity).
+worklog.md:18716:  curl -b "next-auth.session-token=<userA-jwt>" \
+worklog.md:18745:  1. **PATCH /api/admin/users `{ id: <selfOrLastAdminId>, status: "suspended" }`** → suspends the 
+only active admin. The jwt callback kills their session after a 60s grace period (auth.ts L892-900). No one can 
+administer the platform afterward.
+worklog.md:18759:  curl -X PATCH -b "next-auth.session-token=<admin-jwt>" \
+worklog.md:18766:  curl -X POST -b "next-auth.session-token=<admin-jwt>" \
+worklog.md:18772:  curl -X POST -b "next-auth.session-token=<admin-jwt>" \
+worklog.md:18835:### SEC-1b-006 — JWT role claim cached 30s in Redis (INFORMATIONAL)
+worklog.md:18839:- **Description:** `src/lib/auth.ts` jwt callback (L952-1016) caches the user's `role`, `balance`, 
+`status`, etc. in Redis under `user:{userId}` with a 30s TTL. On every request, the JWT callback reads from the cache 
+instead of the DB. After an admin demotes a user via `/api/admin/users` PATCH, the user retains their old role in 
+their JWT for up to 30s — a window of elevated access. This is mitigated by explicit `cacheInvalidate("user:{id}")` 
+calls in:
+worklog.md:18916:  The 30s JWT cache window (SEC-1b-006) applies here too: a user demoted from "provider" to "user" 
+retains provider access for up to 30s. Mitigated by `cacheInvalidate("user:{id}")` in `/api/admin/users` PATCH.
+worklog.md:18923:- **S-C-001** (API key IP allowlist bypass when IP="unknown") — VERIFIED FIXED in 
+`src/lib/api-key-auth.ts:121-123`. Fail-closed: `if (clientIp === "unknown") return null;`
+worklog.md:18926:- **S-H-001** (/api/admin/settings PATCH accepts any key) — VERIFIED FIXED. 
+`ADMIN_SETTINGS_ALLOWLIST` (24 keys) rejects unknown keys including `2fa:*`, `notif_prefs:*`, `oauth:*` 
+(settings/route.ts:22-70, 99-116).
+worklog.md:18949:- **Impersonation safety** — admin password required (bcrypt), target user must be active + NOT 
+admin, audit logs (impersonate_attempt + impersonate + impersonate_stop), realAdminId preserved in signed JWT, stop 
+route re-validates admin exists + active. An impersonated user cannot call admin routes (their session role is the 
+impersonated user's role). An impersonated user cannot forge realAdminId (signed JWT). SAFE.
+worklog.md:18952:- **JWT claim trust** — JWT `role` claim is NOT trusted; re-validated against DB on every request 
+(30s cache). passwordChangedAt check invalidates stale sessions. Account suspension kills session after 60s grace. 
+SAFE.
+worklog.md:18973:Task: Injection / XSS / SSRF / path traversal static audit
+worklog.md:18981:**0 Critical / 0 High / 0 Medium / 11 Low (defense-in-depth gaps)** — the codebase is in remarkably 
+good shape for injection / XSS / SSRF / path traversal. Every category of attack in the brief was either fully 
+mitigated by existing controls or only had low-severity, admin-only / self-attack defense-in-depth gaps.
+worklog.md:18989:- **SSRF protection on outbound webhooks is comprehensive** — registration-time + delivery-time 
+validation, DNS resolution at fetch time (defeats DNS rebinding), manual redirect handling with re-validation (max 5 
+hops), 1MB response body cap, IP blocklist covering loopback/private/CGNAT/link-local (incl. AWS metadata 
+169.254.169.254)/IPv6 ULA/link-local/IPv4-mapped IPv6/0.0.0.0/8/multicast/reserved.
+worklog.md:19008:| SEC-1c-007 | Low | SSRF (TOCTOU window) | Suspected | `/api/admin/providers/[id]/sync` calls 
+`validateUrlSafe()` once, then `getHuntSmmServices()` uses `fetch(apiUrl)` directly (not `safeFetch`) — DNS-rebinding 
+window + auto-followed redirects aren't re-validated. Admin-only. |
+worklog.md:19011:| SEC-1c-010 | Low | File upload extension allowlist | Confirmed | `/api/uploads` POST has no 
+extension allowlist — only MIME check. `sanitizeFilename()` preserves the original extension (only strips 
+non-`[a-zA-Z0-9._-]` chars). Defense-in-depth gap (see SEC-1c-009 for why this isn't directly exploitable). |
+worklog.md:19153:- **Category:** SSRF (CWE-918)
+worklog.md:19173:  5. AWS metadata response is parsed as JSON, throws (not an array), caught by the route's catch 
+block → 502 returned. Metadata is NOT exfiltrated to the attacker (no path to leak the response body back). But the 
+SSRF request itself was made — could hit internal services that have side effects (e.g., Redis `CONFIG SET` via a 
+Gopher protocol adapter, though `fetch()` only supports http/https).
+worklog.md:19231:- **Recommendation:** Add an extension allowlist alongside the MIME check:
+worklog.md:19239:### SEC-1c-010 — `/api/uploads` POST: no extension allowlist
+worklog.md:19244:- **Description:** `sanitizeFilename()` preserves the original extension (it only strips 
+non-`[a-zA-Z0-9._-]` characters). Combined with SEC-1c-009, an attacker can store files with arbitrary extensions 
+(`.html`, `.svg`, `.js`, `.exe`, `.php`, etc.) as long as they forge the MIME type. The current rendering mitigation 
+(MIME_MAP excludes dangerous types) prevents exploitation, but a defense-in-depth extension allowlist would make the 
+protection explicit.
+worklog.md:19322:- **I-1 (provider sync SSRF via `includes("huntsmm.com")` substring)**: replaced with strict 
+`ALLOWED_HOSTS` hostname allowlist + `validateUrlSafe()` (`src/app/api/admin/providers/[id]/sync/route.ts:124-152`). 
+Fix-verified. (Note: SEC-1c-007 above is a residual TOCTOU concern, not the same issue.)
+worklog.md:19328:- **Caddyfile `?XTransformPort=` SSRF**: removed; nginx.conf replaces Caddy with explicit path 
+routing (no wildcard port forwarding). Fix-verified by prior DevOps audit.
+worklog.md:19336:- `src/lib/outbound-webhook.ts` (447 lines — SSRF guard + dispatcher)
+worklog.md:19343:- `src/middleware.ts` (545 lines — rate limit, security headers, CORS allowlist)
+worklog.md:19352:- `src/app/api/admin/webhooks/outbound/route.ts` (180 lines — SSRF guard, verified)
+worklog.md:19403:NOVSMM's injection / XSS / SSRF / path traversal posture is strong. The codebase has no raw SQL, no 
+command-injection sinks, no user-input-fed `dangerouslySetInnerHTML`, comprehensive SSRF protection on outbound 
+webhooks, strict Zod schemas on every admin mutating endpoint, and `nosniff` + nonce-based CSP on all responses. The 
+11 findings are all P3 defense-in-depth gaps where the existing mitigations (React auto-escaping, JSON Content-Type, 
+MIME_MAP excludes dangerous types, admin-only access) already prevent exploitation. The recommended fixes bring 
+consistency to the sanitization layer and close narrow TOCTOU / CSV-formula / extension-bypass windows that could 
+become exploitable if the rendering layer changes in the future.
+worklog.md:19414:- Read /home/z/my-project/worklog.md tail (lines 12765–17298) to recover context from prior audits: 
+original SEC audit (25 findings S-C-001..S-L-006), DevOps audit (H-001..H-008), MAS remaining-scope audit 
+(MAS-001..006), MACQ code-quality audit (MACQ-001..006). Confirmed the relevant previously-fixed issues to re-verify: 
+S-C-001 (API-key IP allowlist fail-closed), S-C-002 (2FA storage format), S-H-004 (XFF spoofing), S-M-002 
+(forgot-password timing), S-L-001 (ws-token secret length), S-L-003 (2fa:pending expiry), MAS-002 (x-client-ip 
+propagation), MAS-004 (trustHost removed).
+worklog.md:19417:- Tested vectors: (1) brute-force/rate-limiting on login/register/forgot/verify-2fa — analyzed 
+middleware RATE_LIMITS table + auth.ts trackFailedAttempt; (2) user enumeration via /forgot-password (timing) + 
+/register (response body); (3) session cookie flags (httpOnly/Secure/SameSite/expiry); (4) session invalidation on 
+password change / 2FA toggle / account delete; (5) session fixation (JWT rotation); (6) 2FA bypass (pending-token 
+reuse, race setup↔verify, backup-code single-use, disable without password); (7) OAuth signIn callback email_verified 
+enforcement; (8) impersonation provider 2FA + brute-force.
+worklog.md:19426:1. **S-C-001 — API key IP allowlist bypass when IP is "unknown"** — ✅ FIX VERIFIED
+worklog.md:19428:   - Code: `if (clientIp === "unknown") { return null; // Allowlist configured but IP unknown — 
+fail-closed }`
+worklog.md:19429:   - The previous `&& clientIp !== "unknown"` anti-pattern (which skipped the allowlist for unknown 
+IPs) is gone. Now fail-closed.
+worklog.md:19431:2. **S-C-002 — 2FA storage format mismatch (setup/verify wrote plain JSON, login expected 
+AES-encrypted)** — ✅ FIX VERIFIED
+worklog.md:19480:  7. NextAuth proceeds to issue a JWT for `user.id = victim.id`. Attacker is now logged in as the 
+victim.
+worklog.md:19541:  7. NextAuth issues a JWT for the target user. Attacker is now logged in as the target user.
+worklog.md:19599:- **Title:** /api/auth/callback/impersonate is not in the middleware RATE_LIMITS allowlist and the 
+provider's authorize function never calls trackFailedAttempt, allowing unlimited password brute-force against the admin
+worklog.md:19717:  The middleware (src/middleware.ts:314-537) runs on all /api/ routes and injects `x-client-ip` via 
+`NextResponse.next({ request: { headers } })`. So in production, `req.headers.get("x-client-ip")` returns the resolved 
+IP (cf-connecting-ip priority, or xff[last] if TRUST_PROXY, or "unknown"). The `||` fallback to `x-forwarded-for[0]` 
+is only reached if middleware didn't run OR didn't set x-client-ip.
+worklog.md:19719:  However, the fallback `x-forwarded-for[0]` is the FIRST entry — which is client-controlled and 
+forgeable. The middleware's resolveClientIp (src/middleware.ts:33-60) explicitly takes the LAST entry (trusted proxy) 
+and rejects the first entry as forgeable. The register route's fallback contradicts this.
+worklog.md:19721:  In dev mode (NODE_ENV !== "production"), middleware's resolveClientIp also takes xff[0] 
+(src/middleware.ts:54-57) — so the register route's fallback is consistent with dev behavior. But the production 
+fallback is dangerous: if middleware is somehow bypassed (e.g., a future matcher change, a Next.js routing edge case, 
+or the request reaching the Node port directly bypassing the proxy), the register route would trust xff[0].
+worklog.md:19749:  Note: in production WITH middleware running, x-client-ip is set by middleware (to cf-connecting-ip 
+or "unknown"), so the fallback is not reached. The vulnerability only manifests if middleware is bypassed or in dev 
+mode.
+worklog.md:20052:- **Session expiration:** ✅ A-5 fix in place: `maxAge: 24 * 60 * 60` (24h, src/lib/auth.ts:688). 
+Absolute expiration (not sliding) — the jwt callback does NOT extend `token.exp` on each request, so the session 
+expires 24h after login regardless of activity. This is the correct behavior for a financial app.
+worklog.md:20054:- **Session invalidation on password change / 2FA toggle / account delete:** ✅ All four routes 
+(src/app/api/me/password/route.ts:73-79, src/app/api/me/2fa/verify/route.ts:89-92, 
+src/app/api/me/2fa/disable/route.ts:113-116, src/app/api/me/delete/route.ts:89-105) bump `passwordChangedAt` to `new 
+Date()`. The jwt callback (src/lib/auth.ts:871-905) checks `token.iat < passwordChangedAt` and returns `{}` (killing 
+the session) if the token was issued before the bump. The /api/me/sessions DELETE route 
+(src/app/api/me/sessions/route.ts:94-97) also uses this pattern for "revoke all sessions". Solid.
+worklog.md:20056:- **Session fixation:** ✅ Not exploitable. NextAuth v4 with JWT strategy issues a new JWT (with new 
+`iat` and `jti`) on every signin. The previous session cookie is overwritten. There's no server-side session ID that 
+could be fixed.
+worklog.md:20215:- Fallback lookup: `findFirst({ where: { reference: paymentId } })` — legacy behavior for backward 
+compatibility (handles webhook retries where a previous call already updated reference to paymentId)
+worklog.md:20217:- The external_reference mismatch check (line 207) is preserved as defense-in-depth: if the txn was 
+found via the legacy fallback AND MP returned an external_reference that doesn't match txn.publicId, reject (someone 
+is trying to credit the wrong transaction)
+worklog.md:20218:- The `updateMany` inside `$transaction` (W-1 fix) still sets `reference: paymentId` on success — 
+this is correct: it overwrites the `mercadopago:<preferenceId>` placeholder with the actual MP payment ID, so future 
+webhook retries match via the legacy fallback immediately
+worklog.md:20223:  - Fallback lookup: `reference === paymentId` → "pi_<timestamp>" ≠ "1312345678" → null
+worklog.md:20235:- `src/app/api/webhooks/mercadopago/route.ts` — reconciliation logic (primary + fallback lookup, 
+audit logging)
+worklog.md:20240:- The fix is backward-compatible (legacy reference-match preserved as fallback) and defense-in-depth 
+is maintained (external_reference mismatch still rejected).
+worklog.md:20262:     - Fallback to backup code: bcrypt.compare against hashed codes, rotate (single-use) on match
+worklog.md:20281:  - 3 adminTwoFactor references in pushed commit ✓
+worklog.md:20282:  - 4 needs2fa references in pushed commit ✓
+worklog.md:20285:  - git ls-remote confirms GitHub has the commit ✓
+worklog.md:20288:- Agent Browser: page loads cleanly, no page errors (the hydration warning is a pre-existing Next.js 
+dev overlay artifact unrelated to this change — verified it exists on production novsmm.shop too, which predates this 
+commit)
+worklog.md:20298:- The fix is deployed to GitHub (commit d5c4814, pushed to origin/main).
+worklog.md:20313:  3. `host` header is present (or NEXTAUTH_URL host fallback) — needed to construct the redirect URL
+worklog.md:20337:- Agent Browser: page loads cleanly, no new console errors (the pre-existing Next.js dev overlay 
+hydration warning is unrelated — it exists on production too and predates this commit)
+worklog.md:20339:  - SEC-1e-002 marker: 1 occurrence in pushed commit ✓
+worklog.md:20344:  - git ls-remote confirms GitHub has the commit ✓
+worklog.md:20358:- The fix is deployed to GitHub (commit e9f0abc, pushed to origin/main).
+worklog.md:20427:  - git ls-remote confirms GitHub has the commit ✓
+worklog.md:20428:  - MOB-002 markers in pushed commit: 7 ✓
+worklog.md:20527:  - git ls-remote confirms GitHub has the commit ✓
+worklog.md:20528:  - SEC-1d-012 markers in pushed commit: 3 ✓
+worklog.md:20793:  - admin-panel.tsx L732, L904, L4178 (type=password) — admin impersonate, 2FA, IP allowlist 
+passwords — NO inputMode (irrelevant for password) BUT NO autoComplete="current-password" either
+worklog.md:21248:MOB-1d-010 (INFORMATIONAL) — Hydration mismatch warning (pre-existing, no user impact)
+worklog.md:21262:  1. Font stylesheet FOUC prevention: Next.js loads fonts with `media="print"` then JS swaps to 
+`media="all"` after load — causes a harmless media attr mismatch.
+worklog.md:21263:  2. CSP nonce mismatch: Server-rendered HTML has nonce="X", client hydration sees nonce="" (Next.js 
+known issue with RSC streams + nonces).
+worklog.md:21265:- Recommendation: Optional — for the nonce mismatch, use `next/script` with proper nonce handling. 
+For the font media attr, this is intentional FOUC prevention — leave as-is.
+worklog.md:21489:  (c) Inline the critical CSS for the H1 (font-family, font-size, line-height) directly in a 
+`<style>` tag in the head — currently it's in the CSS chunk that loads asynchronously, so the H1 may paint with 
+fallback font first, then re-paint with Inter (counted as a separate LCP event).
+worklog.md:21659:    1. Production is running an OLDER version of the code (the next.config.ts change hasn't been 
+deployed). This is likely — recent commits in the worklog (SEC-1d-006-FIX, SEC-1a-002-FIX, SEC-1e-002-FIX, 
+MOB-002-FIX, SEC-1d-012-FIX) modified other files, not next.config.ts, so the deployed version may still have the old 
+cache config.
+worklog.md:21720:  (c) Skip the Google Fonts CSS entirely on mobile — use system-ui fonts (already in the body style 
+as fallback: `'Inter', system-ui, -apple-system, sans-serif`). The visual difference is minimal on mobile (most users 
+can't tell Inter from system-ui on a 390px-wide screen).
+worklog.md:21927:  - P-005 (cache invalidation): out of scope for mobile audit (already fixed per recent commits)
+worklog.md:22026:    (a) The deletion was reverted in a later commit (regression), or
+
+

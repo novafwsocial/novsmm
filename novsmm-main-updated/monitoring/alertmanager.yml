@@ -1,0 +1,130 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# AlertManager Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+# Configura el webhook de Slack/Discord para recibir alertas.
+#
+# IMPORTANTE: AlertManager no soporta sustitución de variables de entorno
+# nativamente. Se debe usar el flag --config.expand-env al iniciar
+# AlertManager, o reemplazar manualmente el valor de SLACK_WEBHOOK_URL.
+#
+# SLACK:
+#   1. Crea un webhook en https://api.slack.com/messaging/webhooks
+#   2. Setea la variable de entorno SLACK_WEBHOOK_URL en .env
+#   3. El script monitor-setup.sh reemplaza el placeholder antes de iniciar
+#
+# DISCORD:
+#   1. Server Settings → Integrations → Webhooks → New Webhook
+#   2. Mismo flujo que Slack (Discord acepta Slack webhooks)
+#
+# EMAIL FALLBACK (P1-068):
+#   Setea SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, ALERT_EMAIL_TO en .env
+#   Si no se configuran, el receiver "email" es un no-op (no envía nada).
+#
+# ESCALATION POLICY (P1-067):
+#   Critical alerts → Slack #novsmm-alerts (immediate)
+#   If not resolved in 1h → escalate to email + Slack #novsmm-critical-oncall
+#   This prevents alert fatigue from masking persistent critical issues.
+# ═══════════════════════════════════════════════════════════════════════════
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: "slack"
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 1h
+  routes:
+    # Critical alerts: immediate Slack (route 1) + escalation after 1h (route 2).
+    # `continue: true` on route 1 means the alert also matches route 2.
+    # Route 2's group_wait: 1h delays its first notification → escalation effect.
+    - matchers:
+        - severity = "critical"
+      receiver: "slack-critical"
+      group_wait: 10s
+      repeat_interval: 30m
+      continue: true
+
+    - matchers:
+        - severity = "critical"
+      receiver: "escalation"
+      group_wait: 1h
+      repeat_interval: 30m
+
+    # Warning alerts: Slack only
+    - matchers:
+        - severity = "warning"
+      receiver: "slack"
+      group_wait: 5m
+      repeat_interval: 4h
+
+receivers:
+  # Alertas no críticas (warnings)
+  - name: "slack"
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#novsmm-alerts"
+        send_resolved: true
+        title: "⚠️ {{ .CommonLabels.alertname }}"
+        text: "{{ .CommonAnnotations.description }}"
+
+  # Alertas críticas (Slack inmediato)
+  - name: "slack-critical"
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#novsmm-alerts"
+        send_resolved: true
+        title: "🚨 CRITICAL: {{ .CommonLabels.alertname }}"
+        text: "{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}"
+
+  # P1-067: Escalation — after 1h, also email + dedicated oncall Slack channel
+  - name: "escalation"
+    slack_configs:
+      - api_url: "${SLACK_WEBHOOK_URL}"
+        channel: "#novsmm-critical-oncall"
+        send_resolved: true
+        title: "🔥 ESCALATED (1h+): {{ .CommonLabels.alertname }}"
+        text: "Critical alert {{ .CommonLabels.alertname }} has been firing for > 1h.\n{{ .CommonAnnotations.summary }}\n{{ .CommonAnnotations.description }}"
+    email_configs:
+      - to: "${ALERT_EMAIL_TO:oncall@novsmm.com}"
+        from: "${SMTP_FROM:alerts@novsmm.com}"
+        smarthost: "${SMTP_HOST:localhost}:${SMTP_PORT:587}"
+        auth_username: "${SMTP_USER:}"
+        auth_password: "${SMTP_PASS:}"
+        require_tls: true
+        send_resolved: true
+        headers:
+          Subject: "🔥 ESCALATED: {{ .CommonLabels.alertname }} on NOVSMM"
+
+  # P1-068: Email fallback — catches any alert that doesn't match a route
+  # (e.g., if Slack webhook is down, email still delivers)
+  - name: "email-fallback"
+    email_configs:
+      - to: "${ALERT_EMAIL_TO:oncall@novsmm.com}"
+        from: "${SMTP_FROM:alerts@novsmm.com}"
+        smarthost: "${SMTP_HOST:localhost}:${SMTP_PORT:587}"
+        auth_username: "${SMTP_USER:}"
+        auth_password: "${SMTP_PASS:}"
+        require_tls: true
+        send_resolved: true
+        headers:
+          Subject: "⚠️ NOVSMM Alert: {{ .CommonLabels.alertname }}"
+
+# P2-066: Inhibit rules — suppress child alerts when parent is firing
+inhibit_rules:
+  # If NovsmmDown is firing, suppress individual service alerts (they're
+  # downstream of the app being down)
+  - source_matchers:
+      - alertname = "NovsmmDown"
+    target_matchers:
+      - severity = "warning"
+    equal: ["instance"]
+
+  # If PostgresDown is firing, suppress high-latency DB alerts (they're
+  # symptoms of the DB being down)
+  - source_matchers:
+      - alertname = "PostgresDown"
+    target_matchers:
+      - alertname =~ "NovsmmHighLatency|NovsmmHighErrorRate"
+    equal: ["instance"]

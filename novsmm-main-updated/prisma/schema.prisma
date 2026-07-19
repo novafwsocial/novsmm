@@ -1,0 +1,909 @@
+// NOVSMM — schema (PostgreSQL production)
+// This schema uses portable Prisma types (String, Float, Json) that work
+// across SQLite and PostgreSQL. The provider is set to "postgresql" for
+// production deployments. For local dev with SQLite, change provider to
+// "sqlite" and use a file-based DATABASE_URL.
+// Json type: PostgreSQL stores as JSONB; SQLite stores as TEXT.
+// prisma/schema.postgres.prisma is a legacy comparison file only and must not
+// replace this canonical schema; it does not contain the current model set.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────── NextAuth required tables ───────────
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  // FIX (OAuth): username was String @unique (NOT NULL, no default).
+  // PrismaAdapter.createUser() runs BEFORE our signIn callback and tries
+  // to create a User from the OAuth profile — but it can't set username.
+  // The creation fails → OAuth login fails silently.
+  // Now username is optional (String?) with a unique constraint that
+  // allows nulls. The signIn callback generates a username after creation.
+  username      String?   @unique
+  passwordHash  String?
+  image         String?
+  role          String    @default("user") // user | reseller | agency | admin
+  plan          String    @default("free") // free | starter | growth | enterprise
+  country       String    @default("Mexico")
+  currency      String    @default("USD")
+  language      String    @default("English")
+  status        String    @default("active") // active | suspended | pending
+  balance       Float     @default(0)
+  heldBalance   Float     @default(0)
+  lifetimeEarnings Float  @default(0)
+  // SECURITY (OWASP A07-1 + A04-5, P1/P2): timestamp of the last password
+  // change, password reset, OR account deletion-trigger. The NextAuth `jwt`
+  // callback compares `token.iat` (issued-at, in seconds) against this
+  // timestamp — if the token was issued before this timestamp, the session
+  // is treated as stale and the user must re-authenticate. This closes the
+  // "stolen-session-cookie persists after password rotation" hole.
+  // Also bumped on 2FA enable/disable and account self-deletion.
+  passwordChangedAt DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  accounts      Account[]
+  sessions      Session[]
+  orders        Order[]
+  transactions  Transaction[]
+  notifications Notification[]
+  tickets       Ticket[]
+  auditLogs     AuditLog[]
+  apiKeys       ApiKey[]
+  favorites     Favorite[]
+  loyaltyPoints LoyaltyPoint[]
+  achievements  Achievement[]
+  smmSubscriptions SmmSubscription[]
+  outboundWebhooks OutboundWebhook[]
+  smmChildPanels ChildPanel[]
+  invoices       Invoice[]
+  pushSubscriptions PushSubscription[]
+  serviceReviews ServiceReview[]
+  subscriptions  Subscription[]
+  sentTeamInvites TeamInvite[] @relation("TeamInviteInviter")
+  receivedTeamInvites TeamInvite[] @relation("TeamInviteInvitee")
+
+  // Sub-accounts belong to a parent user and inherit only the permissions
+  // explicitly stored in subAccountPermissions.
+  parentAccountId       String?
+  subAccountPermissions String?
+  parentAccount         User?  @relation("UserSubAccounts", fields: [parentAccountId], references: [id], onDelete: SetNull)
+  subAccounts           User[] @relation("UserSubAccounts")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model VerificationToken {
+  identifier String
+  // SECURITY (OWASP A02-3, P2): the `token` column stores a SHA-256 HASH of
+  // the actual reset-token, never the plaintext. The user-supplied token
+  // (from the email link) is hashed on lookup so anyone with read access
+  // to the DB (DBA, backup snapshot, replica, SQL injection) can't recover
+  // valid reset tokens and take over accounts. Same pattern as ApiKey.
+  //
+  // The `@@unique([identifier, token])` constraint still holds — the hash
+  // is still unique per (identifier, token) pair.
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// User invoices. Amounts are stored as snapshot values so historical invoices
+// do not change when prices or tax settings change.
+model Invoice {
+  id        String   @id @default(cuid())
+  publicId  String   @unique
+  userId    String
+  type      String
+  amount    Float
+  tax       Float    @default(0)
+  total     Float
+  currency  String   @default("USD")
+  status    String   @default("paid")
+  description String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+// Browser Web Push subscriptions. One browser endpoint can only belong to
+// one user, while a user may register several devices.
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, endpoint])
+  @@index([userId])
+}
+
+// ─────────── Business models ───────────
+model Provider {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  apiUrl    String
+  apiKey    String?
+  status    String   @default("healthy") // healthy | degraded | down
+  latency   Int      @default(0)
+  services  Service[]
+  serviceProviders ServiceProvider[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Service {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  platform     String
+  category     String   @default("general")
+  description  String   @default("")
+  quality      String   @default("standard") // standard | hq | premium | real
+  deliveryTime String   @default("0-1h") // estimated delivery window
+  cost         Float
+  price        Float
+  minQty       Int      @default(1)
+  maxQty       Int      @default(100000)
+  status       String   @default("active") // active | paused | deleted
+  rate         String   @default("0/d")
+  providerId   String?
+  provider     Provider? @relation(fields: [providerId], references: [id])
+  orders       Order[]
+  favorites    Favorite[]
+  smmSubscriptions SmmSubscription[]
+  serviceProviders ServiceProvider[]
+  reviews      ServiceReview[]
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // SERVICE-AVAILABILITY: tags for marking services as unavailable or new.
+  //   "unavailable" → service no longer exists in provider catalog (no refills)
+  //   "new" → service was just added in the latest sync
+  //   null → normal service
+  availabilityTag String?
+  lastSyncedAt    DateTime?
+
+  @@index([platform])
+  @@index([status])
+  @@index([status, platform, price])
+}
+
+// Verified buyer reviews. The compound unique key enforces one editable review
+// per user and service at the database boundary.
+model ServiceReview {
+  id        String   @id @default(cuid())
+  serviceId String
+  userId    String
+  rating    Int
+  comment   String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, userId])
+  @@index([serviceId, createdAt])
+  @@index([userId])
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // A-10432 style
+  userId          String
+  serviceId       String?
+  serviceName     String   // snapshot at order time
+  platform        String   // snapshot
+  quantity        Int
+  unitCost        Float
+  unitPrice       Float
+  totalCost       Float
+  totalPrice      Float
+  profit          Float
+  status          String   @default("processing") // pending | processing | in_progress | partial | completed | cancelled
+  progress        Int      @default(0) // 0-100
+  priority        String   @default("standard") // standard | priority | highest
+  providerId      String?
+  providerName    String?
+  link            String?
+  eta             String   @default("—")
+  flag            String   @default("🌍")
+  // JSON-encoded drip-feed configuration. Populated when the user opted to
+  // split delivery into chunks (e.g. 1000 followers over 10 days).
+  // Shape: { totalQuantity:number, chunks:number, perChunk:number, delayMinutes:number, startDate:string }
+  // NOTE: Using Json type — works on SQLite (stored as TEXT) and PostgreSQL (stored as JSONB with GIN index)
+  dripFeedConfig  Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  completedAt     DateTime?
+
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service? @relation(fields: [serviceId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([serviceId])
+  @@index([createdAt])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  // P-004: 3-col composite for dashboard queries "user's orders by status, sorted by date"
+  @@index([userId, status, createdAt])
+}
+
+model Transaction {
+  id          String   @id @default(cuid())
+  publicId    String   @unique // TX-8842 style
+  userId      String
+  type        String   // topup | withdrawal | sale | fee | referral | held | release
+  amount      Float    // positive = credit, negative = debit
+  description String
+  status      String   @default("completed") // pending | completed | failed
+  method      String?  // stripe | paypal | mercadopago | nowpayments | manual (BROAD-FIX-BATCH-1: canonical 5 methods)
+  reference   String?  // external txn id / payment intent
+  orderId     String?
+  createdAt   DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@index([reference])
+  @@index([createdAt])
+  @@index([userId, type])
+  @@index([userId, status])
+  @@index([userId, createdAt])
+  // P-004: 3-col composite for dashboard queries "user's transactions by type, sorted by date"
+  @@index([userId, type, createdAt])
+}
+
+model PaymentMethod {
+  id         String   @id @default(cuid())
+  name       String   @unique
+  glyph      String   @default("$")
+  tone       String   @default("")
+  settleTime String   @default("Instant")
+  fee        String   @default("0%")
+  currencies String   @default("USD")
+  status     String   @default("active") // active | maintenance | disabled
+  sortOrder  Int      @default(0)
+  config     Json?   // JSON: API keys, webhook secrets, etc.
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([status])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String?
+  type      String   // order | sale | marketplace | ticket | recharge | withdrawal | referral | system
+  title     String
+  message   String
+  amount    Float?
+  severity  String   @default("info") // info | success | warning
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([read])
+  @@index([createdAt])
+  @@index([userId, read])
+  @@index([userId, createdAt])
+}
+
+model Ticket {
+  id        String   @id @default(cuid())
+  publicId  String   @unique // T-201 style
+  userId    String
+  subject   String
+  status    String   @default("open") // open | waiting | resolved | closed
+  priority  String   @default("medium") // low | medium | high
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages TicketMessage[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+}
+
+model TicketMessage {
+  id        String   @id @default(cuid())
+  ticketId  String
+  sender    String   // user | support
+  text      String
+  createdAt DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String   // create | update | delete | login | logout | suspend
+  entity    String   // user | service | provider | payment_method | order | etc.
+  entityId  String?
+  metadata  Json?   // JSON object (stored as JsonB on PostgreSQL)
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entity])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Setting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+}
+
+// ─────────── API Keys (reseller integrations) ───────────
+model ApiKey {
+  id          String   @id @default(cuid())
+  publicId    String   @unique // nvsk_... prefix
+  keyHash     String   @unique // bcrypt hash of the full key (never store plaintext)
+  lookupHash  String?  @unique // SHA-256 of the full key for O(1) lookup (replaces bcrypt-scan)
+  name        String   // label e.g. "Production key"
+  userId      String
+  permissions String   @default("read,order") // comma-separated: read,order,wallet,marketplace
+  ipAllowlist String?  // comma-separated allowed IPs (null = any IP allowed) — P1 security
+  status      String   @default("active") // active | revoked
+  lastUsedAt  DateTime?
+  lastUsedIp  String?
+  createdAt   DateTime @default(now())
+  expiresAt   DateTime? // ASVS V13.1.3: 90-day default expiry enforced at creation
+  revokedAt   DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([lookupHash])
+  @@index([expiresAt])
+}
+
+// ─────────── Licenses (panel rental / sale system) ───────────
+model License {
+  id            String   @id @default(cuid())
+  licenseKey    String   @unique // encrypted, validated server-side
+  licenseHash   String   @unique // bcrypt hash for lookup
+  lookupHash    String?  @unique // SHA-256 of the plaintext key for O(1) lookup (replaces bcrypt-scan)
+  customerName  String
+  customerEmail String
+  customerId    String?  // linked user
+  plan          String   @default("reseller") // reseller | agency | enterprise | white_label
+  status        String   @default("active") // active | suspended | expired | revoked
+  domain        String?  // allowed domain (for white-label)
+  ipAllowlist   String?  // comma-separated allowed IPs
+  maxUsers      Int      @default(1)
+  maxOrders     Int      @default(10000)
+  issuedAt      DateTime @default(now())
+  expiresAt     DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([status])
+  @@index([customerEmail])
+  @@index([customerId])
+  @@index([lookupHash])
+}
+
+// ─────────── Currencies (admin-managed) ───────────
+model Currency {
+  id        String  @id @default(cuid())
+  code      String  @unique // USD, EUR, MXN...
+  name      String
+  symbol    String
+  rate      Float   @default(1.0) // rate vs USD (for conversion)
+  status    String  @default("active") // active | disabled
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ─────────── Languages (admin-managed) ───────────
+model Language {
+  id        String  @id @default(cuid())
+  code      String  @unique // en, es, pt, fr (BROAD-FIX-BATCH-1: de removed — no i18n pack)
+  name      String
+  nativeName String
+  flag      String  @default("🌍")
+  status    String  @default("active") // active | disabled
+  sortOrder Int     @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+}
+
+// ─────────── Webhook logs (payment providers) ───────────
+model WebhookLog {
+  id        String   @id @default(cuid())
+  provider  String   // stripe | paypal | mercadopago | nowpayments | manual (BROAD-FIX-BATCH-1: aurora → nowpayments)
+  eventType String   // payment.intent.succeeded, etc.
+  payload   String   // raw JSON body
+  signature String?
+  status    String   @default("received") // received | processed | failed
+  error     String?
+  createdAt DateTime @default(now())
+
+  @@index([provider])
+  @@index([status])
+  @@index([createdAt])
+}
+
+// ─────────── Promotions (temporary discounts) ───────────
+model Promotion {
+  id          String   @id @default(cuid())
+  name        String
+  description String   @default("")
+  serviceId   String?  // null = applies to all services
+  discount    Float    // percentage 0-100
+  startsAt    DateTime
+  endsAt      DateTime
+  status      String   @default("scheduled") // scheduled | active | ended | cancelled
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([status])
+  @@index([serviceId])
+  @@index([status, startsAt, endsAt])
+}
+
+// ─────────── Roles & Permissions ───────────
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique // admin | supervisor | support | moderator | reseller | agency | user
+  description String   @default("")
+  color       String   @default("#64748b")
+  isSystem    Boolean  @default(false) // system roles can't be deleted
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  permissions Permission[]
+}
+
+model Permission {
+  id        String   @id @default(cuid())
+  roleId    String
+  resource  String   // user | order | service | wallet | ticket | provider | payment_method | license | api_key | currency | language | notification | setting | webhook | refund | coupon
+  actions   String   @default("read") // comma-separated: read,create,update,delete,approve
+  createdAt DateTime @default(now())
+
+  role Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, resource])
+  @@index([roleId])
+}
+
+// ─────────── Offers (marketplace sell) ───────────
+model Offer {
+  id         String   @id @default(cuid())
+  userId     String
+  serviceId  String
+  price      Float    // reseller's price per 1000
+  cost       Float    // original cost (for margin calc)
+  margin     Float    // percentage margin
+  status     String   @default("active") // active | paused | sold
+  sales      Int      @default(0)
+  earnings   Float    @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([serviceId])
+  @@index([userId, status])
+  @@index([status, sales])
+}
+
+// ─────────── Referrals ───────────
+model Referral {
+  id           String   @id @default(cuid())
+  referrerId   String   // user who referred
+  referredId   String?  // user who was referred (null until they sign up)
+  referredEmail String  // email of the referred person
+  code         String   @unique // unique referral code
+  status       String   @default("pending") // pending | completed | rewarded
+  earnings     Float    @default(0)
+  createdAt    DateTime @default(now())
+  completedAt  DateTime?
+
+  @@index([referrerId])
+  @@index([code])
+}
+
+// ─────────── Coupons ───────────
+model Coupon {
+  id          String   @id @default(cuid())
+  code        String   @unique
+  type        String   @default("percent") // percent | fixed
+  value       Float    // percentage (0-100) or fixed amount in USD
+  maxUses     Int      @default(100)
+  usedCount   Int      @default(0)
+  status      String   @default("active") // active | disabled | expired
+  expiresAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([code])
+  @@index([status])
+}
+
+// ─────────── Favorites ───────────
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  serviceId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, serviceId])
+  @@index([userId])
+  @@index([serviceId])
+}
+
+// ─────────── Ticket attachments ───────────
+model TicketAttachment {
+  id        String   @id @default(cuid())
+  messageId String
+  filename  String
+  url       String
+  mimeType  String
+  size      Int
+  createdAt DateTime @default(now())
+
+  @@index([messageId])
+}
+
+// ─────────── Payment intents (real payment tracking) ───────────
+model PaymentIntent {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // pi_...
+  userId          String
+  amount          Float
+  currency        String   @default("USD")
+  method          String   // stripe | paypal | mercadopago | nowpayments | manual (BROAD-FIX-BATCH-1: aurora → nowpayments)
+  providerIntentId String? // stripe payment_intent_id, MP preference_id
+  status          String   @default("pending") // pending | succeeded | failed | refunded
+  description     String?
+  metadata        Json?  // JSON (stored as JsonB on PostgreSQL)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([providerIntentId])
+}
+
+// ─────────── Loyalty Points (awarded for orders, referrals, etc.) ───────────
+model LoyaltyPoint {
+  id        String   @id @default(cuid())
+  userId    String
+  points    Int
+  reason    String   // order_completed | referral | daily_login | achievement
+  orderId   String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([orderId])
+  @@index([userId, createdAt])
+}
+
+// ─────────── Achievements (auto-unlocked milestones) ───────────
+model Achievement {
+  id         String   @id @default(cuid())
+  userId     String
+  type       String   // first_order | 10_orders | 100_orders | 100_spent | 1000_spent | first_referral | 10_referrals | early_adopter | loyal_customer | big_spender
+  unlockedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type])
+  @@index([userId])
+}
+
+// ─────────── Sequence counter (atomic public-ID generation) ───────────
+// Replaces the previous `db.<table>.count() + offset` pattern that caused
+// race conditions on concurrent inserts and full-table scans at scale.
+// Each prefix (e.g. "A", "TX", "T", "INV") gets its own row. nextPublicId()
+// atomically increments lastValue via an interactive transaction and returns
+// the formatted public ID. See src/lib/ids.ts.
+model Sequence {
+  id         String @id        // e.g. "A", "TX", "T", "INV"
+  lastValue  Int    @default(0)
+  prefix     String             // display prefix (same as id, kept for clarity)
+  updatedAt  DateTime @updatedAt
+}
+
+// ─────────── SMM Subscriptions (auto-likes on new posts) ───────────
+// Different from the removed SaaS `Subscription` model (team-seats billing).
+// SMM subscriptions are "auto-deliver X likes to every new post for N days" —
+// a standard SMM panel feature. The worker checks for new posts periodically
+// and auto-creates orders.
+model SmmSubscription {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // SUB-XXXXX style
+  userId          String
+  serviceId       String
+  serviceName     String   // snapshot
+  platform        String   // snapshot
+  username        String   // social media handle to monitor (e.g. @username)
+  link            String?  // profile URL
+  // Quantity range per post (provider delivers random amount in [min, max])
+  minQuantity     Int
+  maxQuantity     Int
+  posts           Int      // total number of posts to cover
+  postsProcessed  Int      @default(0) // how many posts have been delivered
+  delayMinutes    Int      @default(0) // delay between post detection and delivery
+  expiry          DateTime // when the subscription ends
+  status          String   @default("active") // active | paused | completed | expired | cancelled
+  lastCheckedAt   DateTime? // last time the worker checked for new posts
+  lastPostUrl     String?  // URL of the last detected post (dedup)
+  totalSpent      Float    @default(0) // cumulative cost of auto-orders
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  service Service @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([userId, status])
+  @@index([expiry])
+}
+
+// ─────────── Service-Provider mapping (multi-provider with priority) ───────────
+// Allows a service to have multiple providers with priority ordering.
+// If provider at priority 1 fails, fulfillment tries priority 2, etc.
+model ServiceProvider {
+  id          String  @id @default(cuid())
+  serviceId   String
+  providerId  String
+  priority    Int     @default(1) // 1 = primary, 2 = first fallback, etc.
+  providerServiceId String? // the service ID at this provider (for API calls)
+  cost        Float?  // cost at this provider (may differ per provider)
+  createdAt   DateTime @default(now())
+
+  service Service  @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  provider Provider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, providerId])
+  @@index([serviceId, priority])
+  @@index([providerId])
+}
+
+// ─────────── Child Panels (white-label sub-panels, self-service) ───────────
+// When a user purchases a child panel, a subdomain + API key are auto-provisioned.
+// The child panel runs the same NOVSMM UI on a subdomain, using the parent's
+// catalog and fulfilling via the parent's providers. The parent earns a margin.
+model ChildPanel {
+  id              String   @id @default(cuid())
+  publicId        String   @unique // CP-XXXXX style
+  userId          String  // owner (the reseller who purchased)
+  name            String  // panel display name
+  subdomain       String  @unique // e.g. "acme" → acme.novsmm.shop
+  apiKey          String  // encrypted API key for the child panel to call parent API
+  apiKeyHash      String  @unique // bcrypt hash for lookup
+  lookupHash      String? @unique // SHA-256 for O(1) lookup
+  plan            String   @default("reseller") // reseller | agency | enterprise
+  markupPercent   Float    @default(20) // markup over parent prices
+  status          String   @default("active") // active | suspended | expired | cancelled
+  monthlyFee      Float    // charged monthly
+  paidUntil       DateTime // when the current billing period ends
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@index([subdomain])
+  @@index([lookupHash])
+}
+
+// ─────────── Email Templates (admin-editable) ───────────
+// DB-backed email templates with {{variable}} interpolation.
+// Seeded on first boot with the DEFAULT_TEMPLATES list from
+// src/lib/email-templates.ts. Admin can edit subject/body and
+// toggle isActive. notify.createNotification() looks up a
+// template by `key` (mapped from the notif type) and renders it.
+model EmailTemplate {
+  id        String   @id @default(cuid())
+  key       String   @unique // e.g. "order_completed", "ticket_reply", "welcome"
+  name      String   // display name
+  subject   String   // subject line (supports {{variables}})
+  body      String   // email body (supports {{variables}})
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([key])
+  @@index([isActive])
+}
+
+// ─────────── CMS Content (blog posts + FAQ) ───────────
+// Single polymorphic table for blog_post | faq | announcement | page.
+// Public /api/cms route returns only status:"published" items.
+// Admin /api/admin/cms route returns all (including drafts).
+// `body` is stored as markdown — rendered to HTML client-side.
+model CmsContent {
+  id          String    @id @default(cuid())
+  type        String    // "blog_post" | "faq" | "announcement" | "page"
+  slug        String    @unique // URL slug
+  title       String
+  excerpt     String    @default("") // short summary for cards/lists
+  body        String    @default("") // full content (markdown)
+  category    String    @default("general")
+  tags        String    @default("") // comma-separated
+  status      String    @default("draft") // draft | published | archived
+  authorId    String?   // linked admin user
+  sortOrder   Int       @default(0) // for FAQ ordering
+  views       Int       @default(0)
+  publishedAt DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([type, status])
+  @@index([slug])
+  @@index([category])
+}
+
+// ─────────── Canned Ticket Replies (admin/support) ───────────
+// Saved responses that admin/support can insert into ticket replies.
+// The dropdown in dashboard-tickets.tsx fetches these via /api/canned-replies.
+// `usageCount` is incremented every time a reply is inserted (analytics).
+model CannedReply {
+  id         String   @id @default(cuid())
+  title      String   // short label
+  body       String   // the canned response text
+  category   String   @default("general") // e.g. "refund", "howto", "greeting"
+  language   String   @default("en")
+  createdBy  String?  // admin user ID
+  usageCount Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([category])
+  @@index([language])
+}
+
+// ─────────── Outbound Webhooks (user-configured) ───────────
+model OutboundWebhook {
+  id          String   @id @default(cuid())
+  userId      String
+  url         String
+  secret      String
+  events      String   // comma-separated: order.completed,order.failed,etc.
+  isActive    Boolean  @default(true)
+  lastStatus  String?  // last delivery HTTP status
+  lastError   String?  // last error message
+  lastFiredAt DateTime? // last time webhook was triggered
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isActive])
+}
+
+// ─────────── Outbound Webhook additional fields ───────────
+// Plan-based workspace subscriptions used by team-seat invite endpoints.
+// This is intentionally separate from SmmSubscription, which represents
+// recurring post-delivery orders.
+model Subscription {
+  id                   String   @id @default(cuid())
+  publicId             String?  @unique
+  userId               String
+  plan                 String   @default("free")
+  status               String   @default("active")
+  amount               Float    @default(0)
+  currency             String   @default("USD")
+  seatsLimit           Int      @default(1)
+  seatsUsed            Int      @default(1)
+  currentPeriodStart   DateTime?
+  currentPeriodEnd     DateTime?
+  cancelAtPeriodEnd    Boolean  @default(false)
+  stripeSubscriptionId String?  @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([currentPeriodEnd])
+}
+
+// Opaque, single-use invitation records for team workspaces.
+model TeamInvite {
+  id         String   @id @default(cuid())
+  email      String
+  inviterId  String
+  inviteeId  String?
+  token      String   @unique
+  status     String   @default("pending")
+  message    String?
+  expiresAt  DateTime
+  acceptedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  inviter User  @relation("TeamInviteInviter", fields: [inviterId], references: [id], onDelete: Cascade)
+  invitee User? @relation("TeamInviteInvitee", fields: [inviteeId], references: [id], onDelete: SetNull)
+
+  @@index([inviterId, status])
+  @@index([email, status])
+  @@index([expiresAt])
+}
+
+// Already defined above, these are referenced in the route

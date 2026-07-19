@@ -1,0 +1,92 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# Prometheus Configuration
+# ═══════════════════════════════════════════════════════════════════════════
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Alert rules
+rule_files:
+  - alerts.yml
+
+# AlertManager
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# Scrape targets
+scrape_configs:
+  # NOVSMM app metrics
+  - job_name: "novsmm"
+    metrics_path: /api/metrics
+    static_configs:
+      - targets: ["web:3000"]
+        labels:
+          service: "novsmm-web"
+
+  # Node exporter (system metrics)
+  - job_name: "node"
+    static_configs:
+      - targets: ["node-exporter:9100"]
+        labels:
+          service: "node"
+
+  # PostgreSQL exporter (direct DB monitoring)
+  - job_name: "postgres"
+    static_configs:
+      - targets: ["postgres-exporter:9187"]
+        labels:
+          service: "postgres"
+
+  # Redis exporter (direct Redis monitoring)
+  - job_name: "redis"
+    static_configs:
+      - targets: ["redis-exporter:9121"]
+        labels:
+          service: "redis"
+
+  # Blackbox exporter — SSL cert expiry probe (P1-063)
+  # Probes the public HTTPS endpoint. The SslCertExpiringSoon / SslCertExpired
+  # alerts use the probe_ssl_earliest_cert_expiry metric emitted by this job.
+  #
+  # NOTE: Prometheus does NOT support env var substitution in its config.
+  # Replace the target below with your production domain (e.g. https://novsmm.com)
+  # before deploying. The monitor-setup.sh script can do this automatically.
+  - job_name: "blackbox-ssl"
+    metrics_path: /probe
+    params:
+      module: [http_ssl]
+    static_configs:
+      - targets:
+          - "https://localhost"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Blackbox exporter — HTTP availability probe (external endpoint check)
+  - job_name: "blackbox-http"
+    metrics_path: /probe
+    params:
+      module: [http_2xx]
+    static_configs:
+      - targets:
+          - "https://localhost/api/health/live"
+    relabel_configs:
+      - source_labels: [__address__]
+        target_label: __param_target
+      - source_labels: [__address__]
+        target_label: instance
+      - target_label: __address__
+        replacement: blackbox-exporter:9115
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

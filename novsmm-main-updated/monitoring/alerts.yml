@@ -1,0 +1,160 @@
+# ═══════════════════════════════════════════════════════════════════════════
+# NOVSMM — Prometheus Alert Rules
+# ═══════════════════════════════════════════════════════════════════════════
+
+groups:
+  # ── Critical alerts (page on-call) ──
+  - name: novsmm-critical
+    rules:
+      - alert: NovsmmDown
+        expr: up{job="novsmm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "NOVSMM is down"
+          description: "NOVSMM has been down for more than 1 minute."
+
+      - alert: PostgresDown
+        expr: pg_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is down"
+          description: "PostgreSQL has been unreachable for more than 1 minute."
+
+      - alert: RedisDown
+        expr: redis_up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Redis is down"
+          description: "Redis has been unreachable for more than 1 minute."
+
+      - alert: BackupFailure
+        expr: time() - novsmm_backup_last_success_timestamp > 86400
+        for: 1h
+        labels:
+          severity: critical
+        annotations:
+          summary: "Backup has not succeeded in 24h"
+          description: "Last successful backup was more than 24 hours ago."
+
+      - alert: NovsmmHighErrorRate
+        expr: rate(novsmm_http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High error rate (5xx)"
+          description: "5xx error rate is {{ $value }} per second for 2 minutes."
+
+      - alert: NovsmmHighLatency
+        expr: histogram_quantile(0.95, rate(novsmm_http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High p95 latency"
+          description: "p95 latency is {{ $value }}s for 5 minutes."
+
+      - alert: NovsmmQueueBacklog
+        expr: rate(novsmm_queue_jobs_total{status="failed"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue jobs failing"
+          description: "Queue failure rate is {{ $value }}/s."
+
+  # ── Infrastructure alerts ──
+  - name: infrastructure
+    rules:
+      - alert: HighDiskUsage
+        expr: (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk usage > 90%"
+          description: "Disk usage on {{ $labels.instance }} is {{ $value }}%."
+
+      - alert: HighMemoryUsage
+        expr: (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 > 90
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Memory usage > 90%"
+          description: "Memory usage is {{ $value }}% — OOM kill imminent."
+
+      - alert: HighCPUUsage
+        expr: 100 - (avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 80
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "CPU usage > 80%"
+          description: "CPU usage is {{ $value }}% for 10 minutes."
+
+      - alert: DiskSpaceLow
+        expr: node_filesystem_avail_bytes{mountpoint="/"} < 5 * 1024 * 1024 * 1024
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space < 5GB"
+          description: "Only {{ $value | humanize }} bytes left on disk."
+
+      # P1-063: SSL certificate expiry — requires blackbox_exporter probing
+      # the public HTTPS endpoint (see prometheus.yml job "blackbox-ssl").
+      - alert: SslCertExpiringSoon
+        expr: probe_ssl_earliest_cert_expiry - time() < 86400 * 14
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "SSL cert expiring in < 14 days"
+          description: "SSL certificate for {{ $labels.instance }} expires in {{ $value | humanize }} seconds. Renew now."
+
+      - alert: SslCertExpired
+        expr: probe_ssl_earliest_cert_expiry - time() < 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SSL cert EXPIRED"
+          description: "SSL certificate for {{ $labels.instance }} has expired. Browsers will block access."
+
+      # P1-064: Queue backlog depth — separate from failure rate.
+      # NovsmmQueueBacklog catches failure *rate*; this catches accumulated
+      # backlog *depth* (jobs stuck waiting, worker overwhelmed or down).
+      - alert: NovsmmQueueBacklogHigh
+        expr: novsmm_queue_depth > 100
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Queue backlog high"
+          description: "Queue {{ $labels.queue }} has {{ $value }} jobs waiting for > 10 minutes."
+
+      - alert: NovsmmQueueBacklogCritical
+        expr: novsmm_queue_depth > 1000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Queue backlog CRITICAL"
+          description: "Queue {{ $labels.queue }} has {{ $value }} jobs waiting — workers may be down."
+
+      # P1-065: Container restart loop — detects crash-looping services.
+      - alert: ContainerRestartLoop
+        expr: increase(novsmm_container_restarts_total[10m]) > 3
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Container restart loop"
+          description: "Container {{ $labels.container }} restarted {{ $value }} times in 10 minutes."
