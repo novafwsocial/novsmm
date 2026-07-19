@@ -4,13 +4,13 @@ import { createPortal } from "react-dom";
 import { useEffect, useState } from "react";
 import { Menu, X, ArrowRight, Wallet } from "lucide-react";
 import { useSession } from "next-auth/react";
-import { Logo } from "./logo";
-import { Magnetic } from "./magnetic";
-import { useApp } from "./app-store";
+import { Logo } from "@/components/novsmm/logo";
+import { Magnetic } from "@/components/novsmm/magnetic";
+import { useApp } from "@/components/novsmm/app-store";
 import { cn } from "@/lib/utils";
-import { useLanguage } from "./language-provider";
-import { LanguageSwitcher } from "./language-switcher";
-import { scrollToAnchorWhenReady } from "./scroll-utils";
+import { useLanguage } from "@/components/novsmm/language-provider";
+import { LanguageSwitcher } from "@/components/novsmm/language-switcher";
+import { scrollToAnchorWhenReady } from "@/components/novsmm/scroll-utils";
 
 // A2-M-004 FIX: removed the top-level static NAV_LINKS — the dynamic
 // one inside Navbar() (with i18n translations) is the single source.

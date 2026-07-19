@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useLanguage } from "./language-provider";
+import { useLanguage } from "@/components/novsmm/language-provider";
 import {
   ArrowRight,
   Play,
@@ -12,10 +12,10 @@ import {
   CheckCircle2,
   Sparkles,
 } from "lucide-react";
-import { Magnetic } from "./magnetic";
-import { Counter } from "./counter";
-import { HeroDashboard } from "./hero-dashboard";
-import { useApp } from "./app-store";
+import { Magnetic } from "@/components/novsmm/magnetic";
+import { Counter } from "@/components/novsmm/counter";
+import { HeroDashboard } from "@/components/novsmm/hero-dashboard";
+import { useApp } from "@/components/novsmm/app-store";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
 import { motion } from "framer-motion";
 
