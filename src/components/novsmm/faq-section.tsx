@@ -491,8 +491,8 @@ export function FAQSection() {
 
         <Reveal delay={0.2}>
           <div
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-12 flex flex-col items-center justify-center gap-3 rounded-2xl border border-border/60 bg-muted/20 px-6 py-7 text-center sm:flex-row sm:text-left"
+            className="mt-12 flex flex-col items-center justify-center gap-3 rounded-2xl border border-border/60 bg-muted/20 px-6 py-7 text-center sm:flex-row sm:text-left fm-fade-up"
+            style={{ animationDuration: "0.7s" }}
           >
             <div>
               <h3 className="text-base font-semibold tracking-tight">

@@ -143,7 +143,7 @@ export function DashboardProfile() {
               )}
             >
               {activeSection === t.id && (
-                <span className="absolute inset-0 rounded-full bg-primary" className="absolute inset-0 rounded-full bg-primary" />
+                <span className="absolute inset-0 rounded-full bg-primary" />
               )}
               <t.icon className="relative h-3.5 w-3.5" />
               <span className="relative">{t.label}</span>
