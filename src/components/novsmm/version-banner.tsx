@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { motion } from "framer-motion";
 import { X, Sparkles, CheckCircle2, AlertTriangle, Info, Gift } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -25,11 +24,8 @@ const TYPE_STYLES = {
 };
 
 /**
- * VersionAnnouncementBanner — shows a dismissible announcement banner
- * when the admin publishes a new version update.
- *
- * The banner is shown once per version (dismissed state stored in localStorage).
- * Falls back to showing the current version badge if no active announcement.
+ * VersionAnnouncementBanner — shows a dismissible announcement banner.
+ * Migrated from framer-motion to CSS (fm-fade-up).
  */
 export function VersionAnnouncementBanner() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
@@ -40,7 +36,6 @@ export function VersionAnnouncementBanner() {
       .then((r) => r.json())
       .then((data) => {
         setVersionInfo(data);
-        // Check if this announcement was already dismissed
         if (data.announcement) {
           const dismissedKey = `novsmm_announcement_${data.announcement.version}_${data.announcement.date}`;
           const stored = localStorage.getItem(dismissedKey);
@@ -65,11 +60,9 @@ export function VersionAnnouncementBanner() {
   const Icon = style.icon;
 
   return (
-      <motion.div
-        initial={{ opacity: 0, y: -20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.3 }}
-        className={cn("fixed left-1/2 top-16 z-[60] w-[min(600px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border p-4 shadow-lg backdrop-blur-md", style.bg, style.border)}
+      <div
+        className={cn("fm-fade-up fixed left-1/2 top-16 z-[60] w-[min(600px,calc(100vw-2rem))] -translate-x-1/2 rounded-2xl border p-4 shadow-lg backdrop-blur-md", style.bg, style.border)}
+        style={{ animationDuration: "0.3s" }}
       >
         <div className="flex items-start gap-3">
           <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-lg", style.bg, style.text)}>
@@ -92,7 +85,7 @@ export function VersionAnnouncementBanner() {
             <X className="h-4 w-4" />
           </button>
         </div>
-      </motion.div>
+      </div>
   );
 }
 

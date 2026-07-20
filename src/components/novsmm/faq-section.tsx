@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+
 import {
   HelpCircle,
   PackageCheck,
@@ -490,10 +490,7 @@ export function FAQSection() {
         </Reveal>
 
         <Reveal delay={0.2}>
-          <motion.div
-            initial={{ opacity: 0, y: 12 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
+          <div
             transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
             className="mt-12 flex flex-col items-center justify-center gap-3 rounded-2xl border border-border/60 bg-muted/20 px-6 py-7 text-center sm:flex-row sm:text-left"
           >
@@ -512,7 +509,7 @@ export function FAQSection() {
             >
               Start free
             </button>
-          </motion.div>
+          </div>
         </Reveal>
       </div>
     </section>

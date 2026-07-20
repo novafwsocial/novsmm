@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+
 import { useState, useEffect } from "react";
 import {
   User,
@@ -143,7 +143,7 @@ export function DashboardProfile() {
               )}
             >
               {activeSection === t.id && (
-                <motion.span layoutId="profile-tab" className="absolute inset-0 rounded-full bg-primary" transition={{ type: "spring", stiffness: 400, damping: 30 }} />
+                <span className="absolute inset-0 rounded-full bg-primary" className="absolute inset-0 rounded-full bg-primary" />
               )}
               <t.icon className="relative h-3.5 w-3.5" />
               <span className="relative">{t.label}</span>
@@ -658,7 +658,7 @@ function NotificationsSection() {
             <div key={c.key} className="flex items-center justify-between rounded-xl border border-border/60 bg-background p-3.5">
               <div><div className="text-sm font-medium text-foreground">{c.label}</div><div className="text-xs text-muted-foreground">{c.desc}</div></div>
               <button onClick={() => toggle(c.key)} className={cn("relative h-6 w-11 rounded-full transition-colors", prefs[c.key] ? "bg-primary" : "bg-muted")}>
-                <motion.span layout transition={{ type: "spring", stiffness: 500, damping: 30 }} className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-background nov-ring", prefs[c.key] ? "left-[22px]" : "left-0.5")} />
+                <span className={cn("absolute top-0.5 h-5 w-5 rounded-full bg-background nov-ring", prefs[c.key] ? "left-[22px]" : "left-0.5")} />
               </button>
             </div>
           ))}

@@ -1,6 +1,6 @@
 "use client";
 
-import { motion } from "framer-motion";
+
 import { Calendar, User, ArrowRight, Newspaper } from "lucide-react";
 
 type BlogPost = {
@@ -31,14 +31,11 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
   return (
     <div className="mt-10 flex flex-col gap-6">
       {posts.map((post, i) => (
-        <motion.a
+        <a
           key={post.id}
           href={`/blog/${post.slug}`}
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5, delay: i * 0.08 }}
-          className="group flex flex-col gap-3 rounded-2xl border border-border/60 bg-background p-5 transition-shadow hover:shadow-md sm:flex-row sm:items-start sm:gap-5 sm:p-6"
+          className="group fm-fade-up flex flex-col gap-3 rounded-2xl border border-border/60 bg-background p-5 transition-shadow hover:shadow-md sm:flex-row sm:items-start sm:gap-5 sm:p-6" style={{ animationDuration: "0.5s", animationDelay: `${i * 0.08}s` }}
+          
         >
           <div className="flex-1">
             {post.category && (
@@ -72,7 +69,7 @@ export function BlogList({ posts }: { posts: BlogPost[] }) {
             </div>
           </div>
           <ArrowRight className="hidden h-5 w-5 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1 group-hover:text-primary sm:block" />
-        </motion.a>
+        </a>
       ))}
     </div>
   );
