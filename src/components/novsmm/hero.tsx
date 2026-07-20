@@ -16,7 +16,6 @@ import { Counter } from "./counter";
 import { HeroDashboard } from "./hero-dashboard";
 import { useApp } from "./app-store";
 import { useCachedFetch } from "@/hooks/use-cached-fetch";
-import { motion, useScroll, useTransform } from "framer-motion";
 
 export function Hero() {
   const { setView } = useApp();
@@ -30,25 +29,16 @@ export function Hero() {
     }
   }, [statusData]);
 
-  const { scrollY } = useScroll();
-  const yHero = useTransform(scrollY, [0, 500], [0, 150]);
-  const opacityHero = useTransform(scrollY, [0, 300], [1, 0]);
-
   return (
     <section
       id="hero"
       className="nov-anchor-section relative overflow-hidden bg-background pt-24 pb-12 sm:pt-40 sm:pb-32"
     >
-      <motion.div 
-        className="mx-auto max-w-7xl px-4 sm:px-8"
-        style={{ y: yHero, opacity: opacityHero }}
-      >
+      <div className="mx-auto max-w-7xl px-4 sm:px-8">
         {/* Eyebrow */}
-        <motion.div
-          className="flex justify-center"
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 100, damping: 20 }}
+        <div
+          className="flex justify-center fm-fade-up"
+          style={{ animationDuration: "0.6s" }}
         >
           <a
             href="#stats"
@@ -64,34 +54,28 @@ export function Hero() {
             </span>
             <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-1" />
           </a>
-        </motion.div>
+        </div>
 
         {/* Headline */}
-        <motion.h1
-          className="mx-auto mt-6 max-w-5xl text-center text-[clamp(2.25rem,8vw,5.5rem)] font-bold leading-[1.03] tracking-tight text-foreground text-balance sm:mt-8 sm:text-[clamp(2.5rem,7vw,5.5rem)]"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.1 }}
+        <h1
+          className="mx-auto mt-6 max-w-5xl text-center text-[clamp(2.25rem,8vw,5.5rem)] font-bold leading-[1.03] tracking-tight text-foreground text-balance sm:mt-8 sm:text-[clamp(2.5rem,7vw,5.5rem)] fm-fade-up"
+          style={{ animationDuration: "0.7s", animationDelay: "0.1s" }}
         >
           {t("landing.hero.title")} <br className="hidden sm:block" />
           <span className="text-foreground">{t("landing.hero.titleHighlight")}</span> {t("landing.hero.titleEnd")}
-        </motion.h1>
+        </h1>
 
-        <motion.p
-          className="mx-auto mt-4 max-w-2xl text-center text-base font-light leading-relaxed text-muted-foreground text-pretty sm:mt-6 sm:text-2xl"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.2 }}
+        <p
+          className="mx-auto mt-4 max-w-2xl text-center text-base font-light leading-relaxed text-muted-foreground text-pretty sm:mt-6 sm:text-2xl fm-fade-up"
+          style={{ animationDuration: "0.7s", animationDelay: "0.2s" }}
         >
           {t("landing.hero.subtitle")}
-        </motion.p>
+        </p>
 
         {/* CTAs */}
-        <motion.div
-          className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:mt-10 sm:flex-row sm:items-center sm:gap-4"
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 100, damping: 20, delay: 0.3 }}
+        <div
+          className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:mt-10 sm:flex-row sm:items-center sm:gap-4 fm-fade-up"
+          style={{ animationDuration: "0.7s", animationDelay: "0.3s" }}
         >
           <Magnetic as="button" strength={0.3} onClick={() => setView("register")}>
             <span className="inline-flex w-full items-center justify-center gap-2 rounded-full bg-primary px-8 py-4 text-sm font-semibold uppercase tracking-wide text-primary-foreground sm:w-auto">
@@ -105,14 +89,12 @@ export function Hero() {
               {t("landing.hero.signIn")}
             </span>
           </Magnetic>
-        </motion.div>
+        </div>
 
         {/* Trust line */}
-        <motion.div
-          className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 text-center text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground sm:mt-6 sm:gap-x-6 sm:text-xs"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ delay: 0.5, duration: 1 }}
+        <div
+          className="mt-5 flex flex-wrap items-center justify-center gap-x-4 gap-y-3 text-center text-[10px] font-mono uppercase tracking-[0.2em] text-muted-foreground sm:mt-6 sm:gap-x-6 sm:text-xs fm-fade-up"
+          style={{ animationDuration: "1s", animationDelay: "0.5s" }}
         >
           {[
             t("landing.hero.noCardRequired"),
@@ -124,14 +106,12 @@ export function Hero() {
               {t}
             </span>
           ))}
-        </motion.div>
+        </div>
 
         {/* Dashboard preview — Layered Card (Black) */}
-        <motion.div
-          className="relative mx-auto mt-14 max-w-6xl sm:mt-20"
-          initial={{ opacity: 0, scale: 0.95, y: 60 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          transition={{ type: "spring", stiffness: 80, damping: 20, delay: 0.4 }}
+        <div
+          className="relative mx-auto mt-14 max-w-6xl sm:mt-20 fm-scale-in"
+          style={{ animationDuration: "0.8s", animationDelay: "0.4s" }}
         >
           {/* Floating stat chips — strict B&W pill geometry */}
           <FloatingChip
@@ -139,35 +119,43 @@ export function Hero() {
             delay={0.6}
             icon={<Wallet className="h-4 w-4 text-primary" />}
             label="Balance"
-            value={<>$<Counter to={8420.5} decimals={2} duration={2.4} /></>}
+            value={
+              <>
+                $<Counter to={8420.5} decimals={2} from={8420.5} duration={2.4} />
+              </>
+            }
           />
           <FloatingChip
-            className="absolute -right-6 top-32 hidden sm:flex"
+            className="absolute -right-6 top-24 hidden sm:flex"
             delay={0.8}
-            icon={<TrendingUp className="h-4 w-4 text-primary" />}
-            label="Growth"
-            value={<Counter to={312} suffix="+%" duration={2} />}
+            icon={<TrendingUp className="h-4 w-4 text-emerald-500" />}
+            label="Today"
+            value={<Counter to={312} suffix="+%" from={312} duration={2} />}
           />
           <FloatingChip
-            className="absolute -left-10 bottom-16 hidden lg:flex"
+            className="absolute -left-8 bottom-10 hidden lg:flex"
             delay={1.0}
             icon={<Zap className="h-4 w-4 text-primary" />}
-            label="Avg. Start"
-            value={<><Counter to={1.4} decimals={1} duration={2} />s</>}
+            label="Avg. start"
+            value={<><Counter to={1.4} decimals={1} from={1.4} duration={2} />s</>}
           />
           <FloatingChip
-            className="absolute -right-12 bottom-32 hidden lg:flex"
+            className="absolute -right-8 bottom-24 hidden lg:flex"
             delay={1.2}
-            icon={<Activity className="h-4 w-4 text-primary" />}
-            label="Active"
-            value={<Counter to={242} duration={2.2} />}
+            icon={<Activity className="h-4 w-4 text-emerald-500" />}
+            label="Active services"
+            value={<Counter to={242} from={242} duration={2.2} />}
           />
 
-          <div className="relative overflow-hidden rounded-xl border-2 border-border bg-primary text-primary-foreground p-2">
-            <HeroDashboard />
-          </div>
-        </motion.div>
-      </motion.div>
+          <HeroDashboard />
+
+          {/* glow under dashboard */}
+          <div
+            aria-hidden
+            className="pointer-events-none absolute -bottom-8 left-1/2 h-40 w-3/4 -translate-x-1/2 rounded-full bg-primary/5 blur-[80px]"
+          />
+        </div>
+      </div>
     </section>
   );
 }
@@ -186,24 +174,19 @@ function FloatingChip({
   delay?: number;
 }) {
   return (
-    <motion.div
-      className={`z-20 items-center gap-3 rounded-full border border-border bg-background px-5 py-3 shadow-none ${className ?? ""}`}
-      initial={{ opacity: 0, y: 20, scale: 0.9 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ type: "spring", stiffness: 100, damping: 15, delay }}
-      whileHover={{ y: -5, transition: { type: "spring", stiffness: 300 } }}
+    <div
+      className={`z-20 items-center gap-2.5 rounded-2xl border border-border/60 bg-background/95 px-3.5 py-2.5 nov-ring backdrop-blur-xl fm-fade-up ${className ?? ""}`}
+      style={{ animationDuration: "0.5s", animationDelay: `${delay}s` }}
     >
-      <span className="flex h-8 w-8 items-center justify-center rounded-full bg-muted text-foreground">
-        {icon}
-      </span>
-      <span className="flex flex-col">
-        <span className="font-mono text-[10px] font-bold uppercase tracking-widest text-muted-foreground">
+      {icon}
+      <div className="flex flex-col">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
           {label}
         </span>
-        <span className="font-sans text-sm font-bold text-foreground tabular-nums">
+        <span className="text-sm font-semibold tabular-nums text-foreground">
           {value}
         </span>
-      </span>
-    </motion.div>
+      </div>
+    </div>
   );
 }
