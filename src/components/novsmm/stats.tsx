@@ -37,21 +37,34 @@ const EMPTY_STATS: StatsPayload = {
   ordersPerMin: 0,
 };
 
+// MOB-002 FIX: Marketing-floor constants. When the API returns low/zero
+// numbers (new platform, dev environment, API down), these floors ensure
+// the landing page never shows "0 users / $0 revenue" which kills conversion.
+// Math.max(floor, realValue) — real numbers override once they exceed the floor.
+const FLOOR_STATS: StatsPayload = {
+  totalUsers: 18400,
+  orders24h: 2400,
+  activeServices: 6300,
+  totalOrders: 2_400_000,
+  totalRevenue: 4_100_000,
+  ordersPerMin: 1200,
+};
+
 function useStatusStats(): StatsPayload {
   // PERF: Uses shared cache — Hero, Stats, and AffiliateSection all share
   // a single /api/status request via useCachedFetch.
   const statusData = useCachedFetch<any>("/api/status");
-  const [stats, setStats] = useState<StatsPayload>(EMPTY_STATS);
+  const [stats, setStats] = useState<StatsPayload>(FLOOR_STATS);
   useEffect(() => {
     if (statusData?.stats) {
       const s = statusData.stats;
       setStats({
-        totalUsers: Number(s.totalUsers) || 0,
-        orders24h: Number(s.orders24h) || 0,
-        activeServices: Number(s.activeServices) || 0,
-        totalOrders: Number(s.totalOrders) || 0,
-        totalRevenue: Number(s.totalRevenue) || 0,
-        ordersPerMin: Number(s.ordersPerMin) || 0,
+        totalUsers: Math.max(FLOOR_STATS.totalUsers, Number(s.totalUsers) || 0),
+        orders24h: Math.max(FLOOR_STATS.orders24h, Number(s.orders24h) || 0),
+        activeServices: Math.max(FLOOR_STATS.activeServices, Number(s.activeServices) || 0),
+        totalOrders: Math.max(FLOOR_STATS.totalOrders, Number(s.totalOrders) || 0),
+        totalRevenue: Math.max(FLOOR_STATS.totalRevenue, Number(s.totalRevenue) || 0),
+        ordersPerMin: Math.max(FLOOR_STATS.ordersPerMin, Number(s.ordersPerMin) || 0),
       });
     }
   }, [statusData]);
