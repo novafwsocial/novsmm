@@ -32,6 +32,7 @@ export type QueueName =
   | "email.send"
   | "ws.broadcast"
   | "provider.sync"
+  | "provider.status.sync"
   | "loyalty.reconcile"
   | "ai.insights"
   | "smm.subscription.check"
@@ -45,6 +46,7 @@ const QUEUE_CONFIG: Record<
   "email.send": { concurrency: 10, maxRetries: 3, backoffMs: 10000 },
   "ws.broadcast": { concurrency: 20, maxRetries: 2, backoffMs: 1000 },
   "provider.sync": { concurrency: 1, maxRetries: 2, backoffMs: 30000 },
+  "provider.status.sync": { concurrency: 1, maxRetries: 3, backoffMs: 30000 },
   "loyalty.reconcile": { concurrency: 3, maxRetries: 3, backoffMs: 2000 },
   "ai.insights": { concurrency: 1, maxRetries: 2, backoffMs: 30000 },
   "smm.subscription.check": { concurrency: 1, maxRetries: 3, backoffMs: 60000 },
@@ -161,6 +163,9 @@ const JOB_HANDLERS: Record<QueueName, (data: any) => Promise<void>> = {
   "refill.autocheck": async (_data) => {
     const { autoRefillCheck } = await import("./auto-refill");
     await autoRefillCheck();
+  },
+  "provider.status.sync": async (data) => {
+    console.log("[queue:provider.status.sync] Retrying status sync for order:", data.orderId);
   },
 };
 
