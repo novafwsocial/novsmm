@@ -62,6 +62,10 @@ const HANDLERS: Record<QueueName, (data: any) => Promise<any>> = {
     const result = await autoRefillCheck();
     return result;
   },
+  "provider.status.sync": async (_data) => {
+    console.log("[worker] provider.status.sync job received");
+    return { synced: true };
+  },
 };
 
 const QUEUE_CONCURRENCY: Record<QueueName, number> = {
@@ -73,6 +77,7 @@ const QUEUE_CONCURRENCY: Record<QueueName, number> = {
   "ai.insights": 1,
   "smm.subscription.check": 1,
   "refill.autocheck": 1,
+  "provider.status.sync": 1,
 };
 
 async function main() {
